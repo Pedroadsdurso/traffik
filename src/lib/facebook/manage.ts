@@ -23,6 +23,11 @@ export async function setEntityStatus(fbId: string, status: "ACTIVE" | "PAUSED",
   await graphPost(`/${fbId}`, { status, access_token: accessToken });
 }
 
+/** Ajusta o orçamento diário (em reais) de uma campanha/conjunto. */
+export async function updateDailyBudget(fbId: string, budgetReais: number, accessToken: string): Promise<void> {
+  await graphPost(`/${fbId}`, { daily_budget: String(Math.round(budgetReais * 100)), access_token: accessToken });
+}
+
 /** Cria uma campanha básica (nasce pausada por segurança). */
 export async function createCampaign(
   fbAccountId: string,

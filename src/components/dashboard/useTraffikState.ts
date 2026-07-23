@@ -14,7 +14,14 @@ import {
   updateEventRule,
   type PixelConfigDTO,
 } from "@/lib/actions/pixels";
-import type { PixelEventType, PurchaseSendMode, PurchaseValueMode } from "@/generated/prisma/enums";
+import {
+  createRule,
+  deleteRule,
+  listRules,
+  toggleRule,
+  type RuleDTO,
+} from "@/lib/actions/rules";
+import type { PixelEventType, PurchaseSendMode, PurchaseValueMode, RuleAction, RuleLevel } from "@/generated/prisma/enums";
 import {
   createWebhook,
   deleteWebhook,
@@ -34,7 +41,6 @@ import {
   initialDespesas,
   initialGateways,
   initialPixelEvents,
-  initialRules,
 } from "./mockData";
 import type {
   AdAccount,
@@ -45,7 +51,6 @@ import type {
   Gateway,
   MetricKey,
   PixelEvent,
-  Rule,
   Status,
   TabKey,
   TestLogEntry,
@@ -63,7 +68,9 @@ interface RuleForm {
   value: string;
   window: string;
   action: string;
+  budgetPct: string;
   freq: string;
+  dailyLimit: string;
   active: boolean;
 }
 
@@ -134,7 +141,10 @@ interface State {
   pixelId: string;
   testEvent: string;
   testLog: TestLogEntry[];
-  rules: Rule[];
+  rules: RuleDTO[];
+  ruleBusy: boolean;
+  ruleRunBusy: boolean;
+  ruleRunResult: string | null;
   ruleForm: RuleForm;
   notif: NotifState;
   utmUrl: string;
@@ -160,6 +170,7 @@ function initialState(
   prefs?: DashboardPrefsDTO | null,
   initialProfiles: AdProfileDTO[] = [],
   initialPixels: PixelConfigDTO[] = [],
+  initialRulesDTO: RuleDTO[] = [],
 ): State {
   const order = prefs?.order?.length
     ? (prefs.order.filter((k) => DEFAULT_METRIC_ORDER.includes(k as MetricKey)) as MetricKey[])
@@ -227,8 +238,11 @@ function initialState(
     pixelId: "284910375562481",
     testEvent: "Purchase",
     testLog: [],
-    rules: initialRules,
-    ruleForm: { name: "", product: "todos", account: "todas", level: "campanha", metric: "CPA", op: ">", value: "50", window: "3h", action: "pausar", freq: "30min", active: true },
+    rules: initialRulesDTO,
+    ruleBusy: false,
+    ruleRunBusy: false,
+    ruleRunResult: null,
+    ruleForm: { name: "", product: "todos", account: "todas", level: "campanha", metric: "CPA", op: ">", value: "50", window: "hoje", action: "pausar", budgetPct: "20", freq: "30min", dailyLimit: "10", active: true },
     notif: { newSale: true, showValue: true, showProduct: true, channel: "whatsapp", reports: [{ time: "08:00", on: true }, { time: "12:00", on: true }, { time: "18:00", on: false }, { time: "23:00", on: true }] },
     utmUrl: "https://seusite.com.br/checkout",
     utmSource: "facebook",
@@ -275,6 +289,7 @@ export function useTraffikState(
     dashboardPrefs?: DashboardPrefsDTO | null;
     initialProfiles?: AdProfileDTO[];
     initialPixels?: PixelConfigDTO[];
+    initialRules?: RuleDTO[];
   } = {},
 ) {
   const brandName = opts.brandName || "Traffik";
@@ -282,7 +297,7 @@ export function useTraffikState(
   const trackingId = opts.trackingId || "SEU_ID";
   const appUrl = (opts.appUrl || "https://app.traffik.io").replace(/\/+$/, "");
 
-  const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks, opts.dashboardPrefs, opts.initialProfiles, opts.initialPixels));
+  const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks, opts.dashboardPrefs, opts.initialProfiles, opts.initialPixels, opts.initialRules));
 
   function set(patch: Partial<State>) {
     setS((st) => ({ ...st, ...patch }));
@@ -738,9 +753,31 @@ export function useTraffikState(
     remove: () => setS((st) => ({ ...st, fees: { ...st.fees, despesas: st.fees.despesas.filter((_, j) => j !== i) } })),
   }));
 
+  const LEVEL_LABEL: Record<RuleLevel, string> = { CAMPAIGN: "Campanha", ADSET: "Conjunto", AD: "Anúncio" };
+  const RULE_STATUS_LABEL: Record<string, string> = { SUCESSO: "Executou", SEM_ACAO: "Sem ação", ERRO: "Erro" };
   const rules = s.rules.map((r) => ({
-    ...r,
-    toggle: () => setS((st) => ({ ...st, rules: st.rules.map((x) => (x.id === r.id ? { ...x, on: !x.on } : x)) })),
+    id: r.id,
+    name: r.name,
+    summary: r.summary,
+    levelLabel: LEVEL_LABEL[r.level],
+    freq: `A cada ${r.frequencyMin} min`,
+    on: r.active,
+    lastRunLabel: r.lastRunAt ? elapsed(new Date(r.lastRunAt).getTime()) : "nunca",
+    logs: r.logs.map((l) => ({
+      id: l.id,
+      statusLabel: RULE_STATUS_LABEL[l.status] ?? l.status,
+      statusTag: l.status === "SUCESSO" ? "tag tag-accent" : l.status === "ERRO" ? "tag tag-neutral" : "tag tag-neutral",
+      message: l.message ?? "",
+      timeLabel: elapsed(new Date(l.ranAt).getTime()),
+    })),
+    toggle: async () => {
+      const res = await toggleRule(r.id);
+      setS((st) => ({ ...st, rules: st.rules.map((x) => (x.id === r.id ? { ...x, active: res.active } : x)) }));
+    },
+    remove: async () => {
+      await deleteRule(r.id);
+      setS((st) => ({ ...st, rules: st.rules.filter((x) => x.id !== r.id) }));
+    },
   }));
 
   const reports = s.notif.reports.map((rp, i) => ({
@@ -973,15 +1010,55 @@ export function useTraffikState(
     finance: { revenue: brl(revenue), spend: brl(spend), gateway: brl(feesGatewayCost), tax: brl(feesTaxCost), despesas: brl(feesDespesasTotal), profit: brl(feesProfit), margin: pct(feesMargin) },
 
     rules,
-    addRule: () =>
-      setS((st) => {
-        const f = st.ruleForm;
-        const actionLabel: Record<string, string> = { pausar: "pausar", aumentar: "aumentar orçamento 20%", reduzir: "reduzir orçamento 20%", notificar: "notificar" };
-        const summary = "Se " + f.metric + " " + f.op + " " + f.value + " em " + f.window + " → " + actionLabel[f.action];
-        const freqLabel: Record<string, string> = { "15min": "A cada 15 min", "30min": "A cada 30 min", "1h": "A cada 1h" };
-        const name = f.name || f.metric + " " + f.op + " " + f.value;
-        return { ...st, rules: [{ id: Date.now(), name, summary, freq: freqLabel[f.freq], on: f.active }, ...st.rules], ruleForm: { ...f, name: "", value: "" } };
-      }),
+    ruleBusy: s.ruleBusy,
+    ruleRunBusy: s.ruleRunBusy,
+    ruleRunResult: s.ruleRunResult,
+    ruleAccountOptions: (ao?.accounts ?? []).map((a) => ({ id: a.id, name: a.name })),
+    addRule: async () => {
+      const f = s.ruleForm;
+      const levelMap: Record<string, RuleLevel> = { campanha: "CAMPAIGN", conjunto: "ADSET", anuncio: "AD" };
+      const actionMap: Record<string, RuleAction> = { pausar: "PAUSAR", ativar: "ATIVAR", aumentar: "AJUSTAR_ORCAMENTO", reduzir: "AJUSTAR_ORCAMENTO" };
+      const metricMap: Record<string, "cpa" | "roas" | "ctr" | "gasto" | "vendas"> = { CPA: "cpa", ROAS: "roas", CTR: "ctr", Gasto: "gasto", Vendas: "vendas" };
+      const action = actionMap[f.action];
+      const pct = parseFloat(f.budgetPct) || 0;
+      const actionParams =
+        action === "AJUSTAR_ORCAMENTO" ? { tipo: "percentual", valor: f.action === "reduzir" ? -Math.abs(pct) : Math.abs(pct) } : null;
+      set({ ruleBusy: true });
+      try {
+        const created = await createRule({
+          name: f.name || `${f.metric} ${f.op} ${f.value}`,
+          targetProduct: f.product === "todos" ? null : f.product,
+          adAccountIds: f.account === "todas" ? [] : [f.account],
+          level: levelMap[f.level],
+          action,
+          actionParams,
+          conditions: [{ metrica: metricMap[f.metric], operador: f.op as ">" | "<" | "=", valor: parseFloat(f.value) || 0 }],
+          calcPeriod: f.window,
+          frequencyMin: parseInt(f.freq, 10) || 30,
+          dailyRunLimit: parseInt(f.dailyLimit, 10) || 10,
+          active: f.active,
+        });
+        setS((st) => ({ ...st, rules: [created, ...st.rules], ruleBusy: false, ruleForm: { ...st.ruleForm, name: "", value: "" } }));
+      } catch {
+        set({ ruleBusy: false });
+      }
+    },
+    runRules: async () => {
+      set({ ruleRunBusy: true, ruleRunResult: null });
+      try {
+        const res = await fetch("/api/rules/run", { method: "POST" });
+        const json = await res.json();
+        if (res.ok) {
+          // Recarrega as regras para trazer os logs novos.
+          const fresh = await listRules();
+          setS((st) => ({ ...st, ruleRunBusy: false, rules: fresh, ruleRunResult: `${json.evaluated} regra(s) avaliada(s), ${json.acted} com ação.` }));
+        } else {
+          set({ ruleRunBusy: false, ruleRunResult: json.error ?? "Falha ao executar." });
+        }
+      } catch {
+        set({ ruleRunBusy: false, ruleRunResult: "Erro de rede." });
+      }
+    },
     ruleForm: s.ruleForm,
     onRuleLevelCampanha: () => setNested("ruleForm", "level", "campanha"),
     onRuleLevelConjunto: () => setNested("ruleForm", "level", "conjunto"),
@@ -994,7 +1071,9 @@ export function useTraffikState(
     onRuleValue: (e: React.ChangeEvent<HTMLInputElement>) => setNested("ruleForm", "value", e.target.value),
     onRuleWindow: (e: React.ChangeEvent<HTMLSelectElement>) => setNested("ruleForm", "window", e.target.value),
     onRuleAction: (e: React.ChangeEvent<HTMLSelectElement>) => setNested("ruleForm", "action", e.target.value),
+    onRuleBudgetPct: (e: React.ChangeEvent<HTMLInputElement>) => setNested("ruleForm", "budgetPct", e.target.value),
     onRuleFreq: (e: React.ChangeEvent<HTMLSelectElement>) => setNested("ruleForm", "freq", e.target.value),
+    onRuleDailyLimit: (e: React.ChangeEvent<HTMLInputElement>) => setNested("ruleForm", "dailyLimit", e.target.value),
     onRuleActive: () => setS((st) => ({ ...st, ruleForm: { ...st.ruleForm, active: !st.ruleForm.active } })),
 
     notif: { newSale: s.notif.newSale, showValue: s.notif.showValue, showProduct: s.notif.showProduct, channel: s.notif.channel, preview: notifPreview },
