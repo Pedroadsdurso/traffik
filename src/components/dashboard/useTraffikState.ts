@@ -15,6 +15,12 @@ import {
   type PixelConfigDTO,
 } from "@/lib/actions/pixels";
 import {
+  markAllNotificationsRead,
+  updateNotificationSettings,
+  type NotificationDTO,
+  type NotificationSettingsDTO,
+} from "@/lib/actions/notifications";
+import {
   createRule,
   deleteRule,
   listRules,
@@ -74,13 +80,19 @@ interface RuleForm {
   active: boolean;
 }
 
-interface NotifState {
-  newSale: boolean;
-  showValue: boolean;
-  showProduct: boolean;
-  channel: string;
-  reports: { time: string; on: boolean }[];
-}
+const DEFAULT_NOTIF_SETTINGS: NotificationSettingsDTO = {
+  notifyPendingSale: true,
+  notifyApprovedSale: true,
+  showValue: true,
+  showProductName: true,
+  showUtmCampaign: true,
+  showDashboardName: false,
+  report08: false,
+  report12: false,
+  report18: false,
+  report23: true,
+  reportPattern: "STATUS_LUCRO",
+};
 
 interface State {
   activeTab: TabKey;
@@ -146,7 +158,10 @@ interface State {
   ruleRunBusy: boolean;
   ruleRunResult: string | null;
   ruleForm: RuleForm;
-  notif: NotifState;
+  notifSettings: NotificationSettingsDTO;
+  notifications: NotificationDTO[];
+  notifUnread: number;
+  notifOpen: boolean;
   utmUrl: string;
   utmSource: string;
   utmMedium: string;
@@ -171,6 +186,8 @@ function initialState(
   initialProfiles: AdProfileDTO[] = [],
   initialPixels: PixelConfigDTO[] = [],
   initialRulesDTO: RuleDTO[] = [],
+  initialNotifSettings: NotificationSettingsDTO = DEFAULT_NOTIF_SETTINGS,
+  initialNotifications: NotificationDTO[] = [],
 ): State {
   const order = prefs?.order?.length
     ? (prefs.order.filter((k) => DEFAULT_METRIC_ORDER.includes(k as MetricKey)) as MetricKey[])
@@ -243,7 +260,10 @@ function initialState(
     ruleRunBusy: false,
     ruleRunResult: null,
     ruleForm: { name: "", product: "todos", account: "todas", level: "campanha", metric: "CPA", op: ">", value: "50", window: "hoje", action: "pausar", budgetPct: "20", freq: "30min", dailyLimit: "10", active: true },
-    notif: { newSale: true, showValue: true, showProduct: true, channel: "whatsapp", reports: [{ time: "08:00", on: true }, { time: "12:00", on: true }, { time: "18:00", on: false }, { time: "23:00", on: true }] },
+    notifSettings: initialNotifSettings,
+    notifications: initialNotifications,
+    notifUnread: initialNotifications.filter((n) => !n.read).length,
+    notifOpen: false,
     utmUrl: "https://seusite.com.br/checkout",
     utmSource: "facebook",
     utmMedium: "cpc",
@@ -290,6 +310,8 @@ export function useTraffikState(
     initialProfiles?: AdProfileDTO[];
     initialPixels?: PixelConfigDTO[];
     initialRules?: RuleDTO[];
+    initialNotifSettings?: NotificationSettingsDTO;
+    initialNotifications?: NotificationDTO[];
   } = {},
 ) {
   const brandName = opts.brandName || "Traffik";
@@ -297,7 +319,7 @@ export function useTraffikState(
   const trackingId = opts.trackingId || "SEU_ID";
   const appUrl = (opts.appUrl || "https://app.traffik.io").replace(/\/+$/, "");
 
-  const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks, opts.dashboardPrefs, opts.initialProfiles, opts.initialPixels, opts.initialRules));
+  const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks, opts.dashboardPrefs, opts.initialProfiles, opts.initialPixels, opts.initialRules, opts.initialNotifSettings, opts.initialNotifications));
 
   function set(patch: Partial<State>) {
     setS((st) => ({ ...st, ...patch }));
@@ -368,6 +390,26 @@ export function useTraffikState(
     })();
     return () => { active = false; controller.abort(); };
   }, [s.creativesPeriod, s.creativesSort, s.adsRefreshKey]);
+
+  // Notificações: polling do sino a cada 15s.
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    async function load() {
+      try {
+        const res = await fetch("/api/notifications", { signal: controller.signal });
+        if (!res.ok) return;
+        const data = (await res.json()) as { items: NotificationDTO[]; unread: number };
+        if (active) setS((st) => ({ ...st, notifications: data.items, notifUnread: data.unread }));
+      } catch {
+        /* abortado ou erro de rede */
+      }
+    }
+    load();
+    if (!liveUpdates) return () => { active = false; controller.abort(); };
+    const t = setInterval(load, 15000);
+    return () => { active = false; controller.abort(); clearInterval(t); };
+  }, [liveUpdates]);
 
   const persistPrefs = useCallback((order: MetricKey[], visible: Record<MetricKey, boolean>) => {
     saveDashboardPrefs({ order, visible }).catch(() => {});
@@ -780,15 +822,38 @@ export function useTraffikState(
     },
   }));
 
-  const reports = s.notif.reports.map((rp, i) => ({
-    time: rp.time,
-    on: rp.on,
-    toggle: () => setS((st) => ({ ...st, notif: { ...st.notif, reports: st.notif.reports.map((x, j) => (j === i ? { ...x, on: !x.on } : x)) } })),
+  // ── Notificações (Fase 12) ──
+  const ns = s.notifSettings;
+  const setSetting = (patch: Partial<NotificationSettingsDTO>) => {
+    setS((st) => ({ ...st, notifSettings: { ...st.notifSettings, ...patch } }));
+    updateNotificationSettings(patch).catch(() => {});
+  };
+  const REPORT_TIMES: { key: "report08" | "report12" | "report18" | "report23"; time: string }[] = [
+    { key: "report08", time: "08:00" },
+    { key: "report12", time: "12:00" },
+    { key: "report18", time: "18:00" },
+    { key: "report23", time: "23:00" },
+  ];
+  const reports = REPORT_TIMES.map((r) => ({
+    time: r.time,
+    on: ns[r.key],
+    toggle: () => setSetting({ [r.key]: !ns[r.key] }),
   }));
   const previewParts = ["Nova venda aprovada"];
-  if (s.notif.showValue) previewParts.push("R$ 497,00");
-  if (s.notif.showProduct) previewParts.push("Método Foco 3.0");
+  if (ns.showValue) previewParts.push("R$ 497,00");
+  if (ns.showProductName) previewParts.push("Método Foco 3.0");
+  if (ns.showUtmCampaign) previewParts.push("lancamento-metodo-foco");
   const notifPreview = previewParts.join(" · ");
+
+  const NOTIF_ICON: Record<string, string> = { VENDA_APROVADA: "💰", VENDA_PENDENTE: "⏳", RELATORIO: "📊", REGRA_EXECUTADA: "⚙️", SISTEMA: "🔔" };
+  const notifItems = s.notifications.map((n) => ({
+    id: n.id,
+    icon: NOTIF_ICON[n.type] ?? "🔔",
+    title: n.title,
+    content: n.content,
+    read: n.read,
+    timeLabel: elapsed(new Date(n.timestamp).getTime()),
+  }));
 
   // Monta a URL preservando a query já existente e ignorando UTMs vazios.
   const generatedLink = (() => {
@@ -1076,12 +1141,35 @@ export function useTraffikState(
     onRuleDailyLimit: (e: React.ChangeEvent<HTMLInputElement>) => setNested("ruleForm", "dailyLimit", e.target.value),
     onRuleActive: () => setS((st) => ({ ...st, ruleForm: { ...st.ruleForm, active: !st.ruleForm.active } })),
 
-    notif: { newSale: s.notif.newSale, showValue: s.notif.showValue, showProduct: s.notif.showProduct, channel: s.notif.channel, preview: notifPreview },
-    toggleNewSale: () => setNested("notif", "newSale", !s.notif.newSale),
-    toggleShowValue: () => setNested("notif", "showValue", !s.notif.showValue),
-    toggleShowProduct: () => setNested("notif", "showProduct", !s.notif.showProduct),
-    onNotifChannel: (e: React.ChangeEvent<HTMLSelectElement>) => setNested("notif", "channel", e.target.value),
+    notif: {
+      notifyPendingSale: ns.notifyPendingSale,
+      notifyApprovedSale: ns.notifyApprovedSale,
+      showValue: ns.showValue,
+      showProductName: ns.showProductName,
+      showUtmCampaign: ns.showUtmCampaign,
+      showDashboardName: ns.showDashboardName,
+      reportPattern: ns.reportPattern,
+      preview: notifPreview,
+    },
+    toggleNotifyPending: () => setSetting({ notifyPendingSale: !ns.notifyPendingSale }),
+    toggleNotifyApproved: () => setSetting({ notifyApprovedSale: !ns.notifyApprovedSale }),
+    toggleShowValue: () => setSetting({ showValue: !ns.showValue }),
+    toggleShowProduct: () => setSetting({ showProductName: !ns.showProductName }),
+    toggleShowUtm: () => setSetting({ showUtmCampaign: !ns.showUtmCampaign }),
+    toggleShowDashboard: () => setSetting({ showDashboardName: !ns.showDashboardName }),
+    onReportPattern: (e: React.ChangeEvent<HTMLSelectElement>) => setSetting({ reportPattern: e.target.value as NotificationSettingsDTO["reportPattern"] }),
     reports,
+
+    // Sino de notificações
+    notifItems,
+    notifUnread: s.notifUnread,
+    notifOpen: s.notifOpen,
+    toggleNotifOpen: () => setS((st) => ({ ...st, notifOpen: !st.notifOpen })),
+    closeNotif: () => set({ notifOpen: false }),
+    markAllRead: async () => {
+      setS((st) => ({ ...st, notifications: st.notifications.map((n) => ({ ...n, read: true })), notifUnread: 0 }));
+      await markAllNotificationsRead();
+    },
 
     snippetText,
     trackingId,
