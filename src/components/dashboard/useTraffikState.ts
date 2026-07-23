@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { saveDashboardPrefs, type DashboardPrefsDTO } from "@/lib/actions/dashboardPrefs";
 import {
   createWebhook,
   deleteWebhook,
   toggleWebhook,
   type WebhookRowDTO,
 } from "@/lib/actions/webhooks";
+import type { DashboardData } from "@/lib/dashboard/metrics";
 import { brl, brl0, buildPoints, elapsed, pct, roasFmt } from "@/lib/format";
 import {
   initialAccounts,
@@ -15,13 +17,9 @@ import {
   initialCampaigns,
   initialCreatives,
   initialDespesas,
-  initialFeed,
-  initialFunnel,
   initialGateways,
   initialPixelEvents,
-  initialProducts,
   initialRules,
-  initialSources,
 } from "./mockData";
 import type {
   AdAccount,
@@ -29,7 +27,6 @@ import type {
   AdSet,
   Campaign,
   Despesa,
-  FeedItem,
   Gateway,
   MetricKey,
   PixelEvent,
@@ -75,9 +72,8 @@ interface State {
   dashSource: string;
   adsSearch: string;
   adsStatus: string;
-  kpi: { revenue: number; spend: number; sales: number; ctr: number };
-  chartRevenue: number[];
-  chartSpend: number[];
+  dashData: DashboardData | null;
+  dashLoading: boolean;
   metricOrder: MetricKey[];
   metricVisible: Record<MetricKey, boolean>;
   campaigns: Campaign[];
@@ -107,10 +103,25 @@ interface State {
   utmContent: string;
   snippetCopied: boolean;
   linkCopied: boolean;
-  feed: FeedItem[];
 }
 
-function initialState(initialWebhooks: WebhookRowDTO[] = []): State {
+const DEFAULT_METRIC_ORDER: MetricKey[] = [
+  "faturamento", "gasto", "roas", "roi", "margem", "vendas",
+  "cpa", "ticket", "ctr", "pendentes", "reembolsadas", "chargeback",
+];
+const DEFAULT_METRIC_VISIBLE: Record<MetricKey, boolean> = {
+  faturamento: true, gasto: true, roas: true, roi: true, margem: true, vendas: true,
+  cpa: true, ticket: true, ctr: false, pendentes: false, reembolsadas: false, chargeback: false,
+};
+
+function initialState(initialWebhooks: WebhookRowDTO[] = [], prefs?: DashboardPrefsDTO | null): State {
+  const order = prefs?.order?.length
+    ? (prefs.order.filter((k) => DEFAULT_METRIC_ORDER.includes(k as MetricKey)) as MetricKey[])
+    : DEFAULT_METRIC_ORDER;
+  // Garante que nenhuma métrica nova fique de fora de uma preferência antiga.
+  const fullOrder = [...order, ...DEFAULT_METRIC_ORDER.filter((k) => !order.includes(k))];
+  const visible = { ...DEFAULT_METRIC_VISIBLE, ...(prefs?.visible ?? {}) } as Record<MetricKey, boolean>;
+
   return {
     activeTab: "dashboard",
     adsSub: "campaigns",
@@ -123,14 +134,10 @@ function initialState(initialWebhooks: WebhookRowDTO[] = []): State {
     dashSource: "todas",
     adsSearch: "",
     adsStatus: "todos",
-    kpi: { revenue: 18420, spend: 4820, sales: 63, ctr: 2.9 },
-    chartRevenue: [820, 860, 910, 780, 940, 1020, 980, 1100, 1150, 1080, 1200, 1260, 1180, 1320, 1400, 1350, 1480, 1520, 1460, 1580],
-    chartSpend: [210, 230, 250, 220, 260, 280, 270, 300, 310, 290, 320, 330, 300, 340, 360, 350, 370, 380, 360, 390],
-    metricOrder: ["faturamento", "gasto", "roas", "roi", "margem", "vendas", "cpa", "ticket", "ctr", "pendentes", "reembolsadas", "chargeback"],
-    metricVisible: {
-      faturamento: true, gasto: true, roas: true, roi: true, margem: true, vendas: true,
-      cpa: true, ticket: true, ctr: false, pendentes: false, reembolsadas: false, chargeback: false,
-    },
+    dashData: null,
+    dashLoading: true,
+    metricOrder: fullOrder,
+    metricVisible: visible,
     campaigns: initialCampaigns,
     adsets: initialAdsets,
     ads: initialAds,
@@ -158,7 +165,6 @@ function initialState(initialWebhooks: WebhookRowDTO[] = []): State {
     utmContent: "criativo-vsl-ana",
     snippetCopied: false,
     linkCopied: false,
-    feed: initialFeed(),
   };
 }
 
@@ -184,12 +190,6 @@ const TITLES: Record<TabKey, [string, string]> = {
   utm: ["Rastreamento UTM", "Instale o pixel e gere links com parâmetros UTM"],
 };
 
-const PERIOD_MULT: Record<DashPeriod, number> = { hoje: 1, "7d": 6.4, "30d": 27, custom: 6.4 };
-
-function jitter(v: number, pctAmount: number): number {
-  return Math.max(0, v * (1 + (Math.random() - 0.5) * pctAmount));
-}
-
 const UP_PATH = "M32 176 L96 112 L136 144 L224 64 M176 64 L224 64 L224 112";
 const DOWN_PATH = "M32 80 L96 144 L136 112 L224 192 M176 192 L224 192 L224 144";
 
@@ -200,6 +200,7 @@ export function useTraffikState(
     trackingId?: string;
     appUrl?: string;
     initialWebhooks?: WebhookRowDTO[];
+    dashboardPrefs?: DashboardPrefsDTO | null;
   } = {},
 ) {
   const brandName = opts.brandName || "Traffik";
@@ -207,42 +208,7 @@ export function useTraffikState(
   const trackingId = opts.trackingId || "SEU_ID";
   const appUrl = (opts.appUrl || "https://app.traffik.io").replace(/\/+$/, "");
 
-  const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks));
-  const nextFeedId = useRef(6);
-
-  useEffect(() => {
-    if (!liveUpdates) return;
-    const t = setInterval(() => {
-      if (Math.random() < 0.6) {
-        setS((st) => {
-          const isSale = Math.random() < 0.4;
-          const camp = st.campaigns[Math.floor(Math.random() * st.campaigns.length)];
-          const sources = ["Facebook", "Instagram"];
-          const item: FeedItem = {
-            id: nextFeedId.current++,
-            type: isSale ? "venda" : "clique",
-            source: sources[Math.floor(Math.random() * sources.length)],
-            campaign: camp.name.split(" — ")[0],
-            value: isSale ? Math.round(197 + Math.random() * 800) : undefined,
-            ts: Date.now(),
-          };
-          return { ...st, feed: [item, ...st.feed].slice(0, 6) };
-        });
-      }
-      setS((st) => ({
-        ...st,
-        kpi: {
-          revenue: jitter(st.kpi.revenue, 0.04),
-          spend: jitter(st.kpi.spend, 0.03),
-          sales: Math.max(1, Math.round(jitter(st.kpi.sales, 0.06))),
-          ctr: Math.max(0.5, jitter(st.kpi.ctr, 0.05)),
-        },
-        chartRevenue: [...st.chartRevenue.slice(1), jitter(st.chartRevenue[st.chartRevenue.length - 1], 0.08)],
-        chartSpend: [...st.chartSpend.slice(1), jitter(st.chartSpend[st.chartSpend.length - 1], 0.08)],
-      }));
-    }, 3000);
-    return () => clearInterval(t);
-  }, [liveUpdates]);
+  const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks, opts.dashboardPrefs));
 
   function set(patch: Partial<State>) {
     setS((st) => ({ ...st, ...patch }));
@@ -251,100 +217,169 @@ export function useTraffikState(
     setS((st) => ({ ...st, [key]: { ...(st[key] as object), [sub]: val } }));
   }
 
-  const mult = PERIOD_MULT[s.dashPeriod] || 1;
-  const revenue = s.kpi.revenue * mult;
-  const spend = s.kpi.spend * mult;
-  const sales = Math.round(s.kpi.sales * mult);
-  const ticket = sales ? revenue / sales : 0;
-  const cpa = sales ? spend / sales : 0;
-  const roas = spend ? revenue / spend : 0;
-  const gatewayPct = s.fees.gateways.reduce((a, g) => a + g.pct, 0) / s.fees.gateways.length;
-  const gatewayCost = (revenue * gatewayPct) / 100;
-  const taxCost = (revenue * s.fees.taxPct) / 100;
-  const despesasTotal = s.fees.despesas.reduce((a, d) => a + d.value, 0) * (mult / 6.4);
-  const profit = revenue - spend - gatewayCost - taxCost - despesasTotal;
-  const totalCost = spend + gatewayCost + taxCost + despesasTotal;
-  const roi = totalCost ? (profit / totalCost) * 100 : 0;
-  const margin = revenue ? (profit / revenue) * 100 : 0;
-  const pendentes = Math.round(sales * 0.11);
-  const reembolsadas = Math.round(sales * 0.04);
-  const chargeback = 0.4;
+  // Busca as métricas reais e faz polling a cada 15s; refaz ao mudar um filtro.
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    async function load() {
+      const qs = new URLSearchParams({
+        period: s.dashPeriod,
+        account: s.dashAccount,
+        product: s.dashProduct,
+        source: s.dashSource,
+      });
+      try {
+        const res = await fetch(`/api/dashboard?${qs.toString()}`, { signal: controller.signal });
+        if (!res.ok) return;
+        const data = (await res.json()) as DashboardData;
+        if (active) setS((st) => ({ ...st, dashData: data, dashLoading: false }));
+      } catch {
+        /* abortado ou erro de rede — mantém dados anteriores */
+      }
+    }
+    load();
+    if (!liveUpdates) return () => { active = false; controller.abort(); };
+    const t = setInterval(load, 15000);
+    return () => { active = false; controller.abort(); clearInterval(t); };
+  }, [s.dashPeriod, s.dashAccount, s.dashProduct, s.dashSource, liveUpdates]);
+
+  const persistPrefs = useCallback((order: MetricKey[], visible: Record<MetricKey, boolean>) => {
+    saveDashboardPrefs({ order, visible }).catch(() => {});
+  }, []);
+
+  const d = s.dashData;
+  const k = d?.kpis;
+  const revenue = k?.revenue ?? 0;
+  const spend = k?.spend ?? 0;
+  const sales = k?.sales ?? 0;
+  const ticket = k?.ticket ?? 0;
+  const cpa = k?.cpa ?? 0;
+  const roas = k?.roas ?? 0;
+  const roi = k?.roi ?? 0;
+  const margin = k?.margin ?? 0;
+  const ctr = k?.ctr ?? 0;
+  const pendentes = k?.pendentes ?? 0;
+  const reembolsadas = k?.reembolsadas ?? 0;
+  const chargebackRate = k?.chargebackRate ?? 0;
 
   const A = "var(--color-accent-300)";
   const N = "var(--color-neutral-400)";
+  function fmtDelta(v: number | null | undefined): string {
+    if (v === null || v === undefined || !isFinite(v)) return "vs. período anterior";
+    const sign = v >= 0 ? "+" : "";
+    return `${sign}${v.toFixed(1).replace(".", ",")}% vs. período ant.`;
+  }
+  function trendOf(key: string, invert = false) {
+    const dv = d?.deltas?.[key] ?? null;
+    const good = dv === null ? true : invert ? dv <= 0 : dv >= 0;
+    return { trendColor: good ? A : N, trendPath: (dv ?? 0) >= 0 ? UP_PATH : DOWN_PATH, trendLabel: fmtDelta(dv) };
+  }
+
   const reg: Record<MetricKey, { label: string; value: string; trendColor: string; trendPath: string; trendLabel: string }> = {
-    faturamento: { label: "Faturamento", value: brl(revenue), trendColor: A, trendPath: UP_PATH, trendLabel: "+4,2% vs. período ant." },
-    gasto: { label: "Gasto total", value: brl(spend), trendColor: N, trendPath: DOWN_PATH, trendLabel: "+2,1% vs. período ant." },
-    roas: { label: "ROAS", value: roasFmt(roas), trendColor: A, trendPath: UP_PATH, trendLabel: "acima da meta (3x)" },
-    roi: { label: "ROI", value: roi.toFixed(0) + "%", trendColor: A, trendPath: UP_PATH, trendLabel: "sobre custo total" },
-    margem: { label: "Margem de lucro", value: pct(margin), trendColor: A, trendPath: UP_PATH, trendLabel: "líquida" },
-    vendas: { label: "Vendas", value: String(sales), trendColor: A, trendPath: UP_PATH, trendLabel: "aprovadas" },
-    cpa: { label: "CPA", value: brl(cpa), trendColor: N, trendPath: DOWN_PATH, trendLabel: "-1,8% vs. período ant." },
-    ticket: { label: "Ticket médio", value: brl(ticket), trendColor: A, trendPath: UP_PATH, trendLabel: "+3,0% vs. período ant." },
-    ctr: { label: "CTR", value: pct(s.kpi.ctr), trendColor: A, trendPath: UP_PATH, trendLabel: "+0,3pp vs. período ant." },
+    faturamento: { label: "Faturamento", value: brl(revenue), ...trendOf("revenue") },
+    gasto: { label: "Gasto total", value: brl(spend), ...trendOf("spend", true) },
+    roas: { label: "ROAS", value: roasFmt(roas), ...trendOf("roas") },
+    roi: { label: "ROI", value: roi.toFixed(0) + "%", ...trendOf("roi") },
+    margem: { label: "Margem de lucro", value: pct(margin), ...trendOf("margem") },
+    vendas: { label: "Vendas", value: String(sales), ...trendOf("sales") },
+    cpa: { label: "CPA", value: brl(cpa), ...trendOf("cpa", true) },
+    ticket: { label: "Ticket médio", value: brl(ticket), ...trendOf("ticket") },
+    ctr: { label: "CTR", value: pct(ctr), ...trendOf("ctr") },
     pendentes: { label: "Vendas pendentes", value: String(pendentes), trendColor: N, trendPath: DOWN_PATH, trendLabel: "aguardando pgto." },
     reembolsadas: { label: "Reembolsadas", value: String(reembolsadas), trendColor: N, trendPath: DOWN_PATH, trendLabel: "no período" },
-    chargeback: { label: "Taxa de chargeback", value: pct(chargeback), trendColor: A, trendPath: UP_PATH, trendLabel: "dentro do saudável" },
+    chargeback: { label: "Taxa de chargeback", value: pct(chargebackRate), trendColor: A, trendPath: UP_PATH, trendLabel: "sobre eventos de venda" },
   };
-  const kpiCards = s.metricOrder.filter((k) => s.metricVisible[k]).map((k) => reg[k]);
-  const metricList = s.metricOrder.map((k, i) => ({
-    key: k,
-    label: reg[k].label,
-    on: !!s.metricVisible[k],
-    toggle: () => setS((st) => ({ ...st, metricVisible: { ...st.metricVisible, [k]: !st.metricVisible[k] } })),
-    moveUp: () =>
-      setS((st) => {
-        if (i === 0) return st;
-        const o = [...st.metricOrder];
-        [o[i - 1], o[i]] = [o[i], o[i - 1]];
-        return { ...st, metricOrder: o };
-      }),
-    moveDown: () =>
-      setS((st) => {
-        if (i === st.metricOrder.length - 1) return st;
-        const o = [...st.metricOrder];
-        [o[i + 1], o[i]] = [o[i], o[i + 1]];
-        return { ...st, metricOrder: o };
-      }),
+  const kpiCards = s.metricOrder.filter((key) => s.metricVisible[key]).map((key) => reg[key]);
+  const metricList = s.metricOrder.map((key, i) => ({
+    key,
+    label: reg[key].label,
+    on: !!s.metricVisible[key],
+    toggle: () => {
+      const visible = { ...s.metricVisible, [key]: !s.metricVisible[key] };
+      set({ metricVisible: visible });
+      persistPrefs(s.metricOrder, visible);
+    },
+    moveUp: () => {
+      if (i === 0) return;
+      const o = [...s.metricOrder];
+      [o[i - 1], o[i]] = [o[i], o[i - 1]];
+      set({ metricOrder: o });
+      persistPrefs(o, s.metricVisible);
+    },
+    moveDown: () => {
+      if (i === s.metricOrder.length - 1) return;
+      const o = [...s.metricOrder];
+      [o[i + 1], o[i]] = [o[i], o[i + 1]];
+      set({ metricOrder: o });
+      persistPrefs(o, s.metricVisible);
+    },
   }));
 
   const W = 600, H = 180, PAD = 12;
-  const combinedMax = Math.max(...s.chartRevenue, ...s.chartSpend) * 1.15;
-  const revenueLine = buildPoints(s.chartRevenue, combinedMax, W, H, PAD);
-  const spendLine = buildPoints(s.chartSpend, combinedMax, W, H, PAD);
+  const cr = d?.chart.revenue?.length ? d.chart.revenue : [0, 0];
+  const cs = d?.chart.spend?.length ? d.chart.spend : [0, 0];
+  const combinedMax = Math.max(1, ...cr, ...cs) * 1.15;
+  const revenueLine = buildPoints(cr.length > 1 ? cr : [...cr, ...cr], combinedMax, W, H, PAD);
+  const spendLine = buildPoints(cs.length > 1 ? cs : [...cs, ...cs], combinedMax, W, H, PAD);
   const lastPt = revenueLine.split(" ").pop()!.split(",");
   const chart = { revenueLine, spendLine, revenueArea: "0," + H + " " + revenueLine + " " + W + "," + H, lastX: lastPt[0], lastY: lastPt[1] };
-  const chartPeriodLabel = { hoje: "Hoje · por hora", "7d": "Últimos 7 dias", "30d": "Últimos 30 dias", custom: "Período personalizado" }[s.dashPeriod];
+  const chartPeriodLabel = d?.chart.periodLabel ?? "Últimos 7 dias";
 
-  const prodMax = Math.max(...initialProducts.map((p) => p.total));
-  const products = initialProducts.map((p) => ({
+  const prodMax = Math.max(1, ...(d?.products ?? []).map((p) => p.total));
+  const products = (d?.products ?? []).map((p) => ({
     name: p.name,
-    sales: Math.round((p.sales * mult) / 6.4) || p.sales,
-    totalLabel: brl0((p.total * mult) / 6.4),
+    sales: p.sales,
+    totalLabel: brl0(p.total),
     barWidth: Math.round((p.total / prodMax) * 100) + "%",
   }));
-  const srcTotal = initialSources.reduce((a, x) => a + x.total, 0);
-  const srcMax = Math.max(...initialSources.map((x) => x.total));
-  const sources = initialSources.map((x) => ({
+  const srcTotal = (d?.sources ?? []).reduce((a, x) => a + x.total, 0) || 1;
+  const srcMax = Math.max(1, ...(d?.sources ?? []).map((x) => x.total));
+  const sources = (d?.sources ?? []).map((x) => ({
     name: x.name,
-    totalLabel: brl0((x.total * mult) / 6.4),
+    totalLabel: brl0(x.total),
     pctLabel: Math.round((x.total / srcTotal) * 100) + "%",
     barWidth: Math.round((x.total / srcMax) * 100) + "%",
   }));
-  const fb = initialFunnel;
+  const payTotal = (d?.payments ?? []).reduce((a, x) => a + x.total, 0) || 1;
+  const payMax = Math.max(1, ...(d?.payments ?? []).map((x) => x.total));
+  const payments = (d?.payments ?? []).map((x) => ({
+    name: x.name,
+    count: x.count,
+    totalLabel: brl0(x.total),
+    pctLabel: Math.round((x.total / payTotal) * 100) + "%",
+    barWidth: Math.round((x.total / payMax) * 100) + "%",
+  }));
+
+  const fn = d?.funnel ?? { cliques: 0, checkouts: 0, vendas: 0 };
+  const maxF = Math.max(1, fn.cliques, fn.checkouts, fn.vendas);
+  const funH = (n: number) => Math.max(24, Math.round((n / maxF) * 120)) + "px";
+  const rate = (a: number, b: number) => (b ? ((a / b) * 100).toFixed(1).replace(".", ",") : "0") + "%";
   const funnel = [
-    { label: "Cliques", count: Math.round((fb.cliques * mult) / 6.4).toLocaleString("pt-BR"), height: "120px", color: "var(--color-accent-800)", hasRate: false, rate: "" },
-    { label: "Checkouts iniciados", count: Math.round((fb.checkouts * mult) / 6.4).toLocaleString("pt-BR"), height: "72px", color: "var(--color-accent-600)", hasRate: true, rate: ((fb.checkouts / fb.cliques) * 100).toFixed(1).replace(".", ",") + "%" },
-    { label: "Vendas", count: Math.round((fb.vendas * mult) / 6.4).toLocaleString("pt-BR"), height: "38px", color: "var(--color-accent)", hasRate: true, rate: ((fb.vendas / fb.checkouts) * 100).toFixed(1).replace(".", ",") + "%" },
+    { label: "Cliques", count: fn.cliques.toLocaleString("pt-BR"), height: funH(fn.cliques), color: "var(--color-accent-800)", hasRate: false, rate: "" },
+    { label: "Checkouts iniciados", count: fn.checkouts.toLocaleString("pt-BR"), height: funH(fn.checkouts), color: "var(--color-accent-600)", hasRate: true, rate: rate(fn.checkouts, fn.cliques) },
+    { label: "Vendas", count: fn.vendas.toLocaleString("pt-BR"), height: funH(fn.vendas), color: "var(--color-accent)", hasRate: true, rate: rate(fn.vendas, fn.checkouts) },
   ];
 
-  const feed = s.feed.map((f) => ({
-    ...f,
+  const feed = (d?.activity ?? []).map((f) => ({
+    id: f.id,
+    type: f.type,
+    source: f.source,
+    campaign: f.campaign,
     tagClass: f.type === "venda" ? "tag tag-accent" : "tag tag-outline",
     typeLabel: f.type === "venda" ? "Venda" : "Clique",
-    valueLabel: f.value ? brl(f.value) : "—",
+    valueLabel: f.value != null ? brl(f.value) : "—",
     timeLabel: elapsed(f.ts),
   }));
+
+  const filterOptions = d?.filterOptions ?? { accounts: [], products: [], sources: [] };
+
+  // Resumo financeiro da tela de Taxas (mock até a Fase 13), sobre o faturamento real.
+  const feesGatewayPct = s.fees.gateways.reduce((a, g) => a + g.pct, 0) / (s.fees.gateways.length || 1);
+  const feesGatewayCost = (revenue * feesGatewayPct) / 100;
+  const feesTaxCost = (revenue * s.fees.taxPct) / 100;
+  const feesDespesasTotal = s.fees.despesas.reduce((a, dd) => a + dd.value, 0);
+  const feesProfit = revenue - spend - feesGatewayCost - feesTaxCost - feesDespesasTotal;
+  const feesMargin = revenue ? (feesProfit / revenue) * 100 : 0;
 
   const statusTag = (st: Status) => (st === "ativo" ? "tag tag-accent" : "tag tag-neutral");
   const statusLabel = (st: Status) => (st === "ativo" ? "Ativo" : "Pausado");
@@ -469,7 +504,11 @@ export function useTraffikState(
     onDashProduct: (e: React.ChangeEvent<HTMLSelectElement>) => set({ dashProduct: e.target.value }),
     onDashSource: (e: React.ChangeEvent<HTMLSelectElement>) => set({ dashSource: e.target.value }),
 
-    kpiCards, chart, chartPeriodLabel, products, sources, funnel, feed, metricList,
+    kpiCards, chart, chartPeriodLabel, products, sources, payments, funnel, feed, metricList,
+    dashLoading: s.dashLoading,
+    filterAccounts: filterOptions.accounts,
+    filterProducts: filterOptions.products,
+    filterSources: filterOptions.sources,
 
     editDashOpen: s.editDashOpen,
     openEditDash: () => set({ editDashOpen: true }),
@@ -543,7 +582,7 @@ export function useTraffikState(
         if (!st.newDespesaName || !v) return st;
         return { ...st, fees: { ...st.fees, despesas: [...st.fees.despesas, { name: st.newDespesaName, value: v }] }, newDespesaName: "", newDespesaValue: "" };
       }),
-    finance: { revenue: brl(revenue), spend: brl(spend), gateway: brl(gatewayCost), tax: brl(taxCost), despesas: brl(despesasTotal), profit: brl(profit), margin: pct(margin) },
+    finance: { revenue: brl(revenue), spend: brl(spend), gateway: brl(feesGatewayCost), tax: brl(feesTaxCost), despesas: brl(feesDespesasTotal), profit: brl(feesProfit), margin: pct(feesMargin) },
 
     rules,
     addRule: () =>

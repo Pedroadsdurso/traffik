@@ -19,27 +19,27 @@ export function DashboardView({ v }: { v: TraffikView }) {
             <span style={sx("font-size:10px;text-transform:uppercase;letter-spacing:.08em;opacity:.5")}>Conta de anúncio</span>
             <select className="input" style={sx("width:auto")} value={v.dashAccount} onChange={v.onDashAccount}>
               <option value="todas">Todas as contas</option>
-              <option value="metodofoco">Método Foco Cursos</option>
-              <option value="mentoria">Mentoria Alta Renda</option>
+              {v.filterAccounts.map((a) => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
             </select>
           </div>
           <div style={sx("display:flex;flex-direction:column;gap:3px")}>
             <span style={sx("font-size:10px;text-transform:uppercase;letter-spacing:.08em;opacity:.5")}>Produto</span>
             <select className="input" style={sx("width:auto")} value={v.dashProduct} onChange={v.onDashProduct}>
               <option value="todos">Todos os produtos</option>
-              <option value="metodo">Método Foco 3.0</option>
-              <option value="mentoria">Mentoria Alta Renda</option>
-              <option value="ebook">E-book Gatilhos</option>
+              {v.filterProducts.map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
             </select>
           </div>
           <div style={sx("display:flex;flex-direction:column;gap:3px")}>
             <span style={sx("font-size:10px;text-transform:uppercase;letter-spacing:.08em;opacity:.5")}>Fonte de tráfego</span>
             <select className="input" style={sx("width:auto")} value={v.dashSource} onChange={v.onDashSource}>
               <option value="todas">Todas as fontes</option>
-              <option value="facebook">Facebook</option>
-              <option value="instagram">Instagram</option>
-              <option value="google">Google</option>
-              <option value="organico">Orgânico</option>
+              {v.filterSources.map((src) => (
+                <option key={src} value={src}>{src}</option>
+              ))}
             </select>
           </div>
         </div>
@@ -133,6 +133,27 @@ export function DashboardView({ v }: { v: TraffikView }) {
       </div>
 
       <div className="card">
+        <div className="card-kicker">Vendas por pagamento</div>
+        {v.payments.length === 0 ? (
+          <div className="text-muted" style={sx("font-size:13px;padding:var(--space-2) 0")}>Nenhuma venda aprovada no período.</div>
+        ) : (
+          <div style={sx("display:flex;flex-direction:column;gap:var(--space-3);margin-top:var(--space-2)")}>
+            {v.payments.map((p) => (
+              <div key={p.name} style={sx("display:flex;flex-direction:column;gap:5px")}>
+                <div style={sx("display:flex;justify-content:space-between;font-size:13px")}>
+                  <span>{p.name} <span className="text-muted">· {p.count} vendas</span></span>
+                  <span style={sx("font-variant-numeric:tabular-nums")}>{p.totalLabel} · {p.pctLabel}</span>
+                </div>
+                <div style={sx("height:6px;border-radius:3px;background:var(--color-neutral-800);overflow:hidden")}>
+                  <div style={sx(`height:100%;background:var(--color-accent-2-500);width:${p.barWidth}`)} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="card">
         <div className="card-kicker">Funil de conversão</div>
         <div style={sx("display:flex;align-items:flex-end;gap:var(--space-4);margin-top:var(--space-3)")}>
           {v.funnel.map((stage) => (
@@ -153,15 +174,23 @@ export function DashboardView({ v }: { v: TraffikView }) {
             <tr><th>Evento</th><th>Origem</th><th>Campanha</th><th>Valor</th><th>Quando</th></tr>
           </thead>
           <tbody>
-            {v.feed.map((f) => (
-              <tr key={f.id}>
-                <td><span className={f.tagClass}>{f.typeLabel}</span></td>
-                <td>{f.source}</td>
-                <td className="text-muted">{f.campaign}</td>
-                <td style={sx("font-variant-numeric:tabular-nums")}>{f.valueLabel}</td>
-                <td className="text-muted">{f.timeLabel}</td>
+            {v.feed.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="text-muted" style={sx("padding:var(--space-3);font-size:13px")}>
+                  {v.dashLoading ? "Carregando atividade…" : "Nenhum clique ou venda no período. Use o checkout de teste para gerar dados."}
+                </td>
               </tr>
-            ))}
+            ) : (
+              v.feed.map((f) => (
+                <tr key={f.id}>
+                  <td><span className={f.tagClass}>{f.typeLabel}</span></td>
+                  <td>{f.source}</td>
+                  <td className="text-muted">{f.campaign}</td>
+                  <td style={sx("font-variant-numeric:tabular-nums")}>{f.valueLabel}</td>
+                  <td className="text-muted">{f.timeLabel}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
