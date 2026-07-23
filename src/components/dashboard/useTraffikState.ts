@@ -15,6 +15,12 @@ import {
   type PixelConfigDTO,
 } from "@/lib/actions/pixels";
 import {
+  createExpense,
+  deleteExpense,
+  updateExpense,
+  type ExpenseDTO,
+} from "@/lib/actions/expenses";
+import {
   markAllNotificationsRead,
   updateNotificationSettings,
   type NotificationDTO,
@@ -44,8 +50,6 @@ import {
   initialAdsets,
   initialCampaigns,
   initialCreatives,
-  initialDespesas,
-  initialGateways,
   initialPixelEvents,
 } from "./mockData";
 import type {
@@ -53,8 +57,6 @@ import type {
   AdItem,
   AdSet,
   Campaign,
-  Despesa,
-  Gateway,
   MetricKey,
   PixelEvent,
   Status,
@@ -141,9 +143,13 @@ interface State {
   ads: AdItem[];
   accounts: AdAccount[];
   creatives: typeof initialCreatives;
-  fees: { gateways: Gateway[]; taxPct: number; despesas: Despesa[] };
+  expenses: ExpenseDTO[];
   newDespesaName: string;
   newDespesaValue: string;
+  newGatewayMethod: string;
+  newGatewayPct: string;
+  newTaxName: string;
+  newTaxPct: string;
   webhooks: WebhookRowDTO[];
   newWebhookPlatform: string;
   newWebhookName: string;
@@ -188,6 +194,7 @@ function initialState(
   initialRulesDTO: RuleDTO[] = [],
   initialNotifSettings: NotificationSettingsDTO = DEFAULT_NOTIF_SETTINGS,
   initialNotifications: NotificationDTO[] = [],
+  initialExpenses: ExpenseDTO[] = [],
 ): State {
   const order = prefs?.order?.length
     ? (prefs.order.filter((k) => DEFAULT_METRIC_ORDER.includes(k as MetricKey)) as MetricKey[])
@@ -243,9 +250,13 @@ function initialState(
     ads: initialAds,
     accounts: initialAccounts,
     creatives: initialCreatives,
-    fees: { gateways: initialGateways, taxPct: 6, despesas: initialDespesas },
+    expenses: initialExpenses,
     newDespesaName: "",
     newDespesaValue: "",
+    newGatewayMethod: "PIX",
+    newGatewayPct: "",
+    newTaxName: "",
+    newTaxPct: "",
     webhooks: initialWebhooks,
     newWebhookPlatform: "KIRVANO",
     newWebhookName: "",
@@ -312,6 +323,7 @@ export function useTraffikState(
     initialRules?: RuleDTO[];
     initialNotifSettings?: NotificationSettingsDTO;
     initialNotifications?: NotificationDTO[];
+    initialExpenses?: ExpenseDTO[];
   } = {},
 ) {
   const brandName = opts.brandName || "Traffik";
@@ -319,7 +331,7 @@ export function useTraffikState(
   const trackingId = opts.trackingId || "SEU_ID";
   const appUrl = (opts.appUrl || "https://app.traffik.io").replace(/\/+$/, "");
 
-  const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks, opts.dashboardPrefs, opts.initialProfiles, opts.initialPixels, opts.initialRules, opts.initialNotifSettings, opts.initialNotifications));
+  const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks, opts.dashboardPrefs, opts.initialProfiles, opts.initialPixels, opts.initialRules, opts.initialNotifSettings, opts.initialNotifications, opts.initialExpenses));
 
   function set(patch: Partial<State>) {
     setS((st) => ({ ...st, ...patch }));
@@ -541,13 +553,54 @@ export function useTraffikState(
 
   const filterOptions = d?.filterOptions ?? { accounts: [], products: [], sources: [] };
 
-  // Resumo financeiro da tela de Taxas (mock até a Fase 13), sobre o faturamento real.
-  const feesGatewayPct = s.fees.gateways.reduce((a, g) => a + g.pct, 0) / (s.fees.gateways.length || 1);
-  const feesGatewayCost = (revenue * feesGatewayPct) / 100;
-  const feesTaxCost = (revenue * s.fees.taxPct) / 100;
-  const feesDespesasTotal = s.fees.despesas.reduce((a, dd) => a + dd.value, 0);
-  const feesProfit = revenue - spend - feesGatewayCost - feesTaxCost - feesDespesasTotal;
-  const feesMargin = revenue ? (feesProfit / revenue) * 100 : 0;
+  // ── Taxas e Despesas (Fase 13) ── resumo vem do dashboard real.
+  const feesExp = d?.expenses ?? { gateway: 0, tax: 0, recurring: 0, total: 0 };
+  const PAYMENT_LABEL: Record<string, string> = { PIX: "Pix", CARTAO: "Cartão", BOLETO: "Boleto", OUTRO: "Todas", "": "Todas" };
+  const gatewayExpenses = s.expenses
+    .filter((e) => e.type === "TAXA_GATEWAY")
+    .map((e) => ({
+      id: e.id,
+      name: e.name,
+      methodLabel: PAYMENT_LABEL[e.paymentMethod ?? ""] ?? "Todas",
+      amountStr: String(e.amount),
+      unit: e.calc === "PERCENTUAL" ? "%" : "R$",
+      onChange: (ev: React.ChangeEvent<HTMLInputElement>) => {
+        const amount = parseFloat(ev.target.value) || 0;
+        setS((st) => ({ ...st, expenses: st.expenses.map((x) => (x.id === e.id ? { ...x, amount } : x)) }));
+      },
+      commit: (ev: React.FocusEvent<HTMLInputElement>) => updateExpense(e.id, { amount: parseFloat(ev.target.value) || 0 }).catch(() => {}),
+      remove: async () => {
+        await deleteExpense(e.id);
+        setS((st) => ({ ...st, expenses: st.expenses.filter((x) => x.id !== e.id) }));
+      },
+    }));
+  const taxExpenses = s.expenses
+    .filter((e) => e.type === "IMPOSTO")
+    .map((e) => ({
+      id: e.id,
+      name: e.name,
+      amountStr: String(e.amount),
+      onChange: (ev: React.ChangeEvent<HTMLInputElement>) => {
+        const amount = parseFloat(ev.target.value) || 0;
+        setS((st) => ({ ...st, expenses: st.expenses.map((x) => (x.id === e.id ? { ...x, amount } : x)) }));
+      },
+      commit: (ev: React.FocusEvent<HTMLInputElement>) => updateExpense(e.id, { amount: parseFloat(ev.target.value) || 0 }).catch(() => {}),
+      remove: async () => {
+        await deleteExpense(e.id);
+        setS((st) => ({ ...st, expenses: st.expenses.filter((x) => x.id !== e.id) }));
+      },
+    }));
+  const despesaRows = s.expenses
+    .filter((e) => e.type === "DESPESA_RECORRENTE")
+    .map((e) => ({
+      id: e.id,
+      name: e.name,
+      valueLabel: brl0(e.amount),
+      remove: async () => {
+        await deleteExpense(e.id);
+        setS((st) => ({ ...st, expenses: st.expenses.filter((x) => x.id !== e.id) }));
+      },
+    }));
 
   // Perfis do Facebook conectados (reais), com contas expansíveis e toggles.
   const trackedAccounts = s.adProfiles.reduce((a, p) => a + p.accounts.filter((ac) => ac.trackingEnabled).length, 0);
@@ -781,18 +834,6 @@ export function useTraffikState(
     label: ["Contas", "Webhooks", "Pixel", "Testes"][i],
     checked: s.fbSub === k,
     go: () => set({ fbSub: k }),
-  }));
-
-  const gatewayRows = s.fees.gateways.map((g, i) => ({
-    name: g.name,
-    pctStr: String(g.pct),
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
-      setS((st) => ({ ...st, fees: { ...st.fees, gateways: st.fees.gateways.map((x, j) => (j === i ? { ...x, pct: parseFloat(e.target.value) || 0 } : x)) } })),
-  }));
-  const despesaRows = s.fees.despesas.map((d, i) => ({
-    name: d.name,
-    valueLabel: brl0(d.value),
-    remove: () => setS((st) => ({ ...st, fees: { ...st.fees, despesas: st.fees.despesas.filter((_, j) => j !== i) } })),
   }));
 
   const LEVEL_LABEL: Record<RuleLevel, string> = { CAMPAIGN: "Campanha", ADSET: "Conjunto", AD: "Anúncio" };
@@ -1058,21 +1099,53 @@ export function useTraffikState(
     fireTest: () =>
       setS((st) => ({ ...st, testLog: [{ event: st.testEvent, status: "200 OK", time: new Date().toLocaleTimeString("pt-BR") }, ...st.testLog].slice(0, 6) })),
 
-    gatewayRows,
-    taxPctStr: String(s.fees.taxPct),
-    onTaxPct: (e: React.ChangeEvent<HTMLInputElement>) => setNested("fees", "taxPct", parseFloat(e.target.value) || 0),
+    gatewayExpenses,
+    taxExpenses,
     despesaRows,
+    // Novo gateway
+    newGatewayMethod: s.newGatewayMethod,
+    newGatewayPct: s.newGatewayPct,
+    onNewGatewayMethod: (e: React.ChangeEvent<HTMLSelectElement>) => set({ newGatewayMethod: e.target.value }),
+    onNewGatewayPct: (e: React.ChangeEvent<HTMLInputElement>) => set({ newGatewayPct: e.target.value }),
+    addGateway: async () => {
+      const amount = parseFloat(s.newGatewayPct) || 0;
+      if (!amount) return;
+      const method = s.newGatewayMethod as ExpenseDTO["paymentMethod"];
+      const label = PAYMENT_LABEL[method ?? ""] ?? "Todas";
+      const created = await createExpense({ name: `Taxa ${label}`, type: "TAXA_GATEWAY", calc: "PERCENTUAL", amount, paymentMethod: method });
+      setS((st) => ({ ...st, expenses: [...st.expenses, created], newGatewayPct: "" }));
+    },
+    // Novo imposto
+    newTaxName: s.newTaxName,
+    newTaxPct: s.newTaxPct,
+    onNewTaxName: (e: React.ChangeEvent<HTMLInputElement>) => set({ newTaxName: e.target.value }),
+    onNewTaxPct: (e: React.ChangeEvent<HTMLInputElement>) => set({ newTaxPct: e.target.value }),
+    addTax: async () => {
+      const amount = parseFloat(s.newTaxPct) || 0;
+      if (!amount) return;
+      const created = await createExpense({ name: s.newTaxName.trim() || "Imposto", type: "IMPOSTO", calc: "PERCENTUAL", amount });
+      setS((st) => ({ ...st, expenses: [...st.expenses, created], newTaxName: "", newTaxPct: "" }));
+    },
+    // Nova despesa recorrente
     newDespesaName: s.newDespesaName,
     newDespesaValue: s.newDespesaValue,
     onNewDespesaName: (e: React.ChangeEvent<HTMLInputElement>) => set({ newDespesaName: e.target.value }),
     onNewDespesaValue: (e: React.ChangeEvent<HTMLInputElement>) => set({ newDespesaValue: e.target.value }),
-    addDespesa: () =>
-      setS((st) => {
-        const v = parseFloat(st.newDespesaValue) || 0;
-        if (!st.newDespesaName || !v) return st;
-        return { ...st, fees: { ...st.fees, despesas: [...st.fees.despesas, { name: st.newDespesaName, value: v }] }, newDespesaName: "", newDespesaValue: "" };
-      }),
-    finance: { revenue: brl(revenue), spend: brl(spend), gateway: brl(feesGatewayCost), tax: brl(feesTaxCost), despesas: brl(feesDespesasTotal), profit: brl(feesProfit), margin: pct(feesMargin) },
+    addDespesa: async () => {
+      const amount = parseFloat(s.newDespesaValue) || 0;
+      if (!s.newDespesaName.trim() || !amount) return;
+      const created = await createExpense({ name: s.newDespesaName.trim(), type: "DESPESA_RECORRENTE", calc: "FIXO", amount, recurrence: "MENSAL" });
+      setS((st) => ({ ...st, expenses: [...st.expenses, created], newDespesaName: "", newDespesaValue: "" }));
+    },
+    finance: {
+      revenue: brl(revenue),
+      spend: brl(spend),
+      gateway: brl(feesExp.gateway),
+      tax: brl(feesExp.tax),
+      despesas: brl(feesExp.recurring),
+      profit: brl(revenue - spend - feesExp.total),
+      margin: pct(revenue ? ((revenue - spend - feesExp.total) / revenue) * 100 : 0),
+    },
 
     rules,
     ruleBusy: s.ruleBusy,

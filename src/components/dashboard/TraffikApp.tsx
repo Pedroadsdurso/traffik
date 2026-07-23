@@ -2,6 +2,7 @@
 
 import type { DashboardPrefsDTO } from "@/lib/actions/dashboardPrefs";
 import type { AdProfileDTO } from "@/lib/actions/facebook";
+import type { ExpenseDTO } from "@/lib/actions/expenses";
 import type { NotificationDTO, NotificationSettingsDTO } from "@/lib/actions/notifications";
 import type { PixelConfigDTO } from "@/lib/actions/pixels";
 import type { RuleDTO } from "@/lib/actions/rules";
@@ -32,6 +33,7 @@ export function TraffikApp({
   initialRules,
   initialNotifSettings,
   initialNotifications,
+  initialExpenses,
 }: {
   brandName?: string;
   liveUpdates?: boolean;
@@ -45,8 +47,9 @@ export function TraffikApp({
   initialRules?: RuleDTO[];
   initialNotifSettings?: NotificationSettingsDTO;
   initialNotifications?: NotificationDTO[];
+  initialExpenses?: ExpenseDTO[];
 }) {
-  const v = useTraffikState({ brandName, liveUpdates, trackingId, appUrl, initialWebhooks, dashboardPrefs, initialProfiles, initialPixels, initialRules, initialNotifSettings, initialNotifications });
+  const v = useTraffikState({ brandName, liveUpdates, trackingId, appUrl, initialWebhooks, dashboardPrefs, initialProfiles, initialPixels, initialRules, initialNotifSettings, initialNotifications, initialExpenses });
 
   return (
     <div style={sx("min-height:100vh;display:flex;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)")}>

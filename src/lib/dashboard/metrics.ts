@@ -31,6 +31,7 @@ export interface DashboardData {
   };
   deltas: Record<string, number | null>;
   chart: { labels: string[]; revenue: number[]; spend: number[]; periodLabel: string; granularity: "hour" | "day" };
+  expenses: { gateway: number; tax: number; recurring: number; total: number };
   products: { name: string; total: number; sales: number }[];
   sources: { name: string; total: number }[];
   payments: { name: string; total: number; count: number }[];
@@ -193,6 +194,7 @@ export async function computeDashboard(userId: string, filters: DashboardFilters
     },
     deltas,
     chart,
+    expenses: summary.expenses,
     products: summary.products,
     sources: summary.sources,
     payments: summary.payments,
@@ -277,10 +279,12 @@ function summarize(w: Window) {
 
   const funnel = { cliques: clicksCount, checkouts: totalSalesEvents, vendas: salesCount };
 
+  const expenses = { gateway: exp.gateway, tax: exp.tax, recurring: exp.recurring, total: exp.total };
+
   return {
     revenue, salesCount, pendentes, reembolsadas, chargebackRate,
     spend, clicksCount, ticket, cpa, roas, ctr, profit, roi, margin,
-    products, sources, payments, funnel,
+    expenses, products, sources, payments, funnel,
   };
 }
 
