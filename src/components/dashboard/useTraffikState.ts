@@ -81,6 +81,9 @@ interface State {
   adsStatus: string;
   dashData: DashboardData | null;
   dashLoading: boolean;
+  refreshKey: number;
+  syncBusy: boolean;
+  syncResult: string | null;
   metricOrder: MetricKey[];
   metricVisible: Record<MetricKey, boolean>;
   campaigns: Campaign[];
@@ -149,6 +152,9 @@ function initialState(
     adsStatus: "todos",
     dashData: null,
     dashLoading: true,
+    refreshKey: 0,
+    syncBusy: false,
+    syncResult: null,
     metricOrder: fullOrder,
     metricVisible: visible,
     campaigns: initialCampaigns,
@@ -255,7 +261,7 @@ export function useTraffikState(
     if (!liveUpdates) return () => { active = false; controller.abort(); };
     const t = setInterval(load, 15000);
     return () => { active = false; controller.abort(); clearInterval(t); };
-  }, [s.dashPeriod, s.dashAccount, s.dashProduct, s.dashSource, liveUpdates]);
+  }, [s.dashPeriod, s.dashAccount, s.dashProduct, s.dashSource, s.refreshKey, liveUpdates]);
 
   const persistPrefs = useCallback((order: MetricKey[], visible: Record<MetricKey, boolean>) => {
     saveDashboardPrefs({ order, visible }).catch(() => {});
@@ -575,6 +581,27 @@ export function useTraffikState(
 
     connectHref: "/api/auth/facebook",
     adProfiles,
+    syncBusy: s.syncBusy,
+    syncResult: s.syncResult,
+    runSync: async () => {
+      set({ syncBusy: true, syncResult: null });
+      try {
+        const res = await fetch("/api/sync/facebook", { method: "POST" });
+        const json = await res.json();
+        if (res.ok) {
+          setS((st) => ({
+            ...st,
+            syncBusy: false,
+            syncResult: `Sincronizado: ${json.campaigns} campanhas, ${json.ads} anúncios, ${json.metrics} dias de métricas${json.errors?.length ? ` (${json.errors.length} erro(s))` : ""}.`,
+            refreshKey: st.refreshKey + 1,
+          }));
+        } else {
+          set({ syncBusy: false, syncResult: json.error ?? "Falha na sincronização." });
+        }
+      } catch (e) {
+        set({ syncBusy: false, syncResult: "Erro de rede: " + String(e) });
+      }
+    },
     fbTabs,
     fbSub: s.fbSub,
 

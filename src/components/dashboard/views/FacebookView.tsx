@@ -17,6 +17,15 @@ export function FacebookView({ v }: { v: TraffikView }) {
 
       {v.fbSub === "contas" && (
         <div style={sx("display:flex;flex-direction:column;gap:var(--space-3);max-width:760px")}>
+          {v.fbConnected && (
+            <div style={sx("display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap")}>
+              <button className="btn btn-primary" type="button" onClick={v.runSync} disabled={v.syncBusy}>
+                {v.syncBusy ? "Sincronizando…" : "Sincronizar agora"}
+              </button>
+              {v.syncResult && <span className="text-muted" style={sx("font-size:13px")}>{v.syncResult}</span>}
+            </div>
+          )}
+
           {!v.fbConnected && (
             <div className="card elev-sm">
               <div className="card-title">Conectar conta do Facebook Ads</div>
