@@ -17,10 +17,13 @@ export function UtmView({ v }: { v: TraffikView }) {
           </svg>
           {v.snippetCopyLabel}
         </button>
-        <ol style={sx("margin:var(--space-4) 0 0;padding-left:18px;font-size:13px;opacity:.85;display:flex;flex-direction:column;gap:8px")}>
+        <p style={sx("margin:var(--space-2) 0 0;font-size:12px;opacity:.6")}>
+          Seu ID de rastreamento: <code>{v.trackingId}</code>
+        </p>
+        <ol style={sx("margin:var(--space-3) 0 0;padding-left:18px;font-size:13px;opacity:.85;display:flex;flex-direction:column;gap:8px")}>
           <li>Cole o snippet acima antes do <code>&lt;/head&gt;</code> do seu site ou checkout.</li>
-          <li>O pixel salva utm_source, utm_medium, utm_campaign, utm_content e fbclid em cookie por até 30 dias.</li>
-          <li>Aponte o webhook da sua plataforma de pagamento para <code>api.traffik.io/webhooks/vendas</code>.</li>
+          <li>O pixel salva utm_source, utm_medium, utm_campaign, utm_content, utm_term e fbclid em cookie por até 30 dias.</li>
+          <li>No checkout, envie <code>window.getTrackingData().click_id</code> junto da venda (ou configure o webhook da sua plataforma na aba Integrações).</li>
           <li>Cada venda recebida é cruzada automaticamente com o clique de origem salvo.</li>
         </ol>
       </div>

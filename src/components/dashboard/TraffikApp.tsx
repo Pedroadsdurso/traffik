@@ -17,12 +17,16 @@ export function TraffikApp({
   brandName = "Traffik",
   liveUpdates = true,
   user,
+  trackingId,
+  appUrl,
 }: {
   brandName?: string;
   liveUpdates?: boolean;
   user?: SidebarUser;
+  trackingId?: string;
+  appUrl?: string;
 }) {
-  const v = useTraffikState({ brandName, liveUpdates });
+  const v = useTraffikState({ brandName, liveUpdates, trackingId, appUrl });
 
   return (
     <div style={sx("min-height:100vh;display:flex;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)")}>

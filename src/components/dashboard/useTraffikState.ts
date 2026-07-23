@@ -185,9 +185,13 @@ function jitter(v: number, pctAmount: number): number {
 const UP_PATH = "M32 176 L96 112 L136 144 L224 64 M176 64 L224 64 L224 112";
 const DOWN_PATH = "M32 80 L96 144 L136 112 L224 192 M176 192 L224 192 L224 144";
 
-export function useTraffikState(opts: { brandName?: string; liveUpdates?: boolean } = {}) {
+export function useTraffikState(
+  opts: { brandName?: string; liveUpdates?: boolean; trackingId?: string; appUrl?: string } = {},
+) {
   const brandName = opts.brandName || "Traffik";
   const liveUpdates = opts.liveUpdates !== false;
+  const trackingId = opts.trackingId || "SEU_ID";
+  const appUrl = (opts.appUrl || "https://app.traffik.io").replace(/\/+$/, "");
 
   const [s, setS] = useState<State>(initialState);
   const nextFeedId = useRef(6);
@@ -400,13 +404,34 @@ export function useTraffikState(opts: { brandName?: string; liveUpdates?: boolea
     toggle: () => setS((st) => ({ ...st, pixelEvents: st.pixelEvents.map((x, j) => (j === i ? { ...x, on: !x.on } : x)) })),
   }));
 
-  const generatedLink =
-    s.utmUrl +
-    "?utm_source=" + encodeURIComponent(s.utmSource) +
-    "&utm_medium=" + encodeURIComponent(s.utmMedium) +
-    "&utm_campaign=" + encodeURIComponent(s.utmCampaign) +
-    "&utm_content=" + encodeURIComponent(s.utmContent);
-  const snippetText = `<script src="https://cdn.traffik.io/pixel.js" data-account="TRK-48291" async></script>`;
+  // Monta a URL preservando a query já existente e ignorando UTMs vazios.
+  const generatedLink = (() => {
+    const base = (s.utmUrl || "").trim();
+    if (!base) return "";
+    const utmPairs: [string, string][] = [
+      ["utm_source", s.utmSource],
+      ["utm_medium", s.utmMedium],
+      ["utm_campaign", s.utmCampaign],
+      ["utm_content", s.utmContent],
+    ];
+    try {
+      const url = new URL(base);
+      for (const [k, val] of utmPairs) {
+        if (val && val.trim()) url.searchParams.set(k, val.trim());
+      }
+      return url.toString();
+    } catch {
+      // Fallback quando a URL ainda está incompleta enquanto o usuário digita.
+      const query = utmPairs
+        .filter(([, val]) => val && val.trim())
+        .map(([k, val]) => `${k}=${encodeURIComponent(val.trim())}`)
+        .join("&");
+      const sep = base.includes("?") ? "&" : "?";
+      return query ? `${base}${sep}${query}` : base;
+    }
+  })();
+
+  const snippetText = `<script src="${appUrl}/pixel.js" data-account="${trackingId}" async></script>`;
 
   return {
     brandName,
@@ -519,6 +544,8 @@ export function useTraffikState(opts: { brandName?: string; liveUpdates?: boolea
     reports,
 
     snippetText,
+    trackingId,
+    appUrl,
     snippetCopyLabel: s.snippetCopied ? "Copiado!" : "Copiar snippet",
     copySnippet: () => {
       navigator.clipboard.writeText(snippetText);
