@@ -13,6 +13,7 @@ import {
   toggleWebhook,
   type WebhookRowDTO,
 } from "@/lib/actions/webhooks";
+import type { AdsOverview } from "@/lib/ads/overview";
 import type { DashboardData } from "@/lib/dashboard/metrics";
 import { brl, brl0, buildPoints, elapsed, pct, roasFmt } from "@/lib/format";
 import {
@@ -79,6 +80,18 @@ interface State {
   dashSource: string;
   adsSearch: string;
   adsStatus: string;
+  adsPeriod: "hoje" | "7d" | "30d";
+  adsAccount: string;
+  adsData: AdsOverview | null;
+  adsLoading: boolean;
+  adsRefreshKey: number;
+  adsBusyId: string | null;
+  newCampaignOpen: boolean;
+  newCampaignAccount: string;
+  newCampaignName: string;
+  newCampaignObjective: string;
+  newCampaignBudget: string;
+  newCampaignBusy: boolean;
   dashData: DashboardData | null;
   dashLoading: boolean;
   refreshKey: number;
@@ -150,6 +163,18 @@ function initialState(
     dashSource: "todas",
     adsSearch: "",
     adsStatus: "todos",
+    adsPeriod: "7d",
+    adsAccount: "todas",
+    adsData: null,
+    adsLoading: true,
+    adsRefreshKey: 0,
+    adsBusyId: null,
+    newCampaignOpen: false,
+    newCampaignAccount: "",
+    newCampaignName: "",
+    newCampaignObjective: "OUTCOME_TRAFFIC",
+    newCampaignBudget: "",
+    newCampaignBusy: false,
     dashData: null,
     dashLoading: true,
     refreshKey: 0,
@@ -262,6 +287,25 @@ export function useTraffikState(
     const t = setInterval(load, 15000);
     return () => { active = false; controller.abort(); clearInterval(t); };
   }, [s.dashPeriod, s.dashAccount, s.dashProduct, s.dashSource, s.refreshKey, liveUpdates]);
+
+  // Gerenciador de anúncios: busca sob demanda (período/conta) — status e busca
+  // são filtrados no cliente para não refazer a cada tecla.
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    (async () => {
+      const qs = new URLSearchParams({ period: s.adsPeriod, account: s.adsAccount });
+      try {
+        const res = await fetch(`/api/ads?${qs.toString()}`, { signal: controller.signal });
+        if (!res.ok) return;
+        const data = (await res.json()) as AdsOverview;
+        if (active) setS((st) => ({ ...st, adsData: data, adsLoading: false }));
+      } catch {
+        /* abortado ou erro de rede */
+      }
+    })();
+    return () => { active = false; controller.abort(); };
+  }, [s.adsPeriod, s.adsAccount, s.adsRefreshKey]);
 
   const persistPrefs = useCallback((order: MetricKey[], visible: Record<MetricKey, boolean>) => {
     saveDashboardPrefs({ order, visible }).catch(() => {});
@@ -438,30 +482,107 @@ export function useTraffikState(
     })),
   }));
 
-  const statusTag = (st: Status) => (st === "ativo" ? "tag tag-accent" : "tag tag-neutral");
-  const statusLabel = (st: Status) => (st === "ativo" ? "Ativo" : "Pausado");
-  function decoRow<T extends { status: Status; spend: number; cpa: number; ctr: number; roas: number }>(a: T) {
-    return { ...a, statusTag: statusTag(a.status), statusLabel: statusLabel(a.status), spendLabel: brl(a.spend), cpaLabel: brl(a.cpa), ctrLabel: pct(a.ctr), roasLabel: roasFmt(a.roas) };
-  }
-  const matchFilter = (name: string, st: string) => name.toLowerCase().includes(s.adsSearch.toLowerCase()) && (s.adsStatus === "todos" || st === s.adsStatus);
+  // ── Gerenciador de anúncios (dados reais sincronizados) ──
+  const adsStatusInfo = (st: string) => {
+    if (st === "ACTIVE") return { tag: "tag tag-accent", label: "Ativo", active: true };
+    if (st === "ARCHIVED") return { tag: "tag tag-neutral", label: "Arquivado", active: false };
+    return { tag: "tag tag-neutral", label: "Pausado", active: false };
+  };
+  const ctrLabel = (impr: number, clk: number) => (impr ? pct((clk / impr) * 100) : "—");
+  const cpaLabel = (spd: number, res: number) => (res ? brl(spd / res) : "—");
+  const roasLabel = (rev: number, spd: number) => (spd ? roasFmt(rev / spd) : "—");
+  const adsMatch = (name: string, st: string) =>
+    name.toLowerCase().includes(s.adsSearch.toLowerCase()) &&
+    (s.adsStatus === "todos" || (s.adsStatus === "ativo" ? st === "ACTIVE" : st !== "ACTIVE"));
 
-  const campaignsView = s.campaigns.map((c) => ({
-    ...decoRow(c),
-    budgetLabel: brl(c.budget),
-    toggleIconPath: c.status === "ativo" ? "M88 64 h28 v128 h-28 Z M140 64 h28 v128 h-28 Z" : "M96 72 L96 184 L192 128 Z",
-    toggle: () => setS((st) => ({ ...st, campaigns: st.campaigns.map((x) => (x.id === c.id ? { ...x, status: x.status === "ativo" ? "pausado" : "ativo" } : x)) })),
-  }));
-  const filteredCampaigns = campaignsView.filter((c) => matchFilter(c.name, c.status));
-  const filteredAdsets = s.adsets.map(decoRow).filter((a) => matchFilter(a.name, a.status));
-  const filteredAds = s.ads.map((a, i) => ({ ...decoRow(a), slotId: "ad-" + i })).filter((a) => matchFilter(a.name, a.status));
-  const accounts = s.accounts.map((a) => ({
-    ...a,
+  const toggleEntity = (type: "campaign" | "adset" | "ad", id: string) => async () => {
+    set({ adsBusyId: id });
+    try {
+      await fetch("/api/ads/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, id }),
+      });
+    } finally {
+      setS((st) => ({ ...st, adsBusyId: null, adsRefreshKey: st.adsRefreshKey + 1 }));
+    }
+  };
+
+  const ao = s.adsData;
+  const filteredCampaigns = (ao?.campaigns ?? [])
+    .filter((c) => adsMatch(c.name, c.status))
+    .map((c) => {
+      const info = adsStatusInfo(c.status);
+      return {
+        id: c.id,
+        name: c.name,
+        statusTag: info.tag,
+        statusLabel: info.label,
+        budgetLabel: c.dailyBudget != null ? brl(c.dailyBudget) : "—",
+        spendLabel: brl(c.spend),
+        results: c.results,
+        cpaLabel: cpaLabel(c.spend, c.results),
+        ctrLabel: ctrLabel(c.impressions, c.clicks),
+        roasLabel: roasLabel(c.revenue, c.spend),
+        busy: s.adsBusyId === c.id,
+        toggleIconPath: info.active ? "M88 64 h28 v128 h-28 Z M140 64 h28 v128 h-28 Z" : "M96 72 L96 184 L192 128 Z",
+        toggle: toggleEntity("campaign", c.id),
+      };
+    });
+
+  const filteredAdsets = (ao?.adSets ?? [])
+    .filter((a) => adsMatch(a.name, a.status))
+    .map((a) => {
+      const info = adsStatusInfo(a.status);
+      return {
+        id: a.id,
+        name: a.name,
+        campaign: a.campaignName,
+        statusTag: info.tag,
+        statusLabel: info.label,
+        spendLabel: brl(a.spend),
+        results: a.results,
+        cpaLabel: cpaLabel(a.spend, a.results),
+        ctrLabel: ctrLabel(a.impressions, a.clicks),
+        roasLabel: roasLabel(a.revenue, a.spend),
+        busy: s.adsBusyId === a.id,
+        toggle: toggleEntity("adset", a.id),
+        toggleIconPath: info.active ? "M88 64 h28 v128 h-28 Z M140 64 h28 v128 h-28 Z" : "M96 72 L96 184 L192 128 Z",
+      };
+    });
+  const filteredAds = (ao?.ads ?? [])
+    .filter((a) => adsMatch(a.name, a.status))
+    .map((a) => {
+      const info = adsStatusInfo(a.status);
+      return {
+        slotId: a.id,
+        id: a.id,
+        name: a.name,
+        format: a.format,
+        thumbnailUrl: a.thumbnailUrl,
+        campaign: a.campaignName,
+        statusTag: info.tag,
+        statusLabel: info.label,
+        spendLabel: brl(a.spend),
+        results: a.results,
+        cpaLabel: cpaLabel(a.spend, a.results),
+        ctrLabel: ctrLabel(a.impressions, a.clicks),
+        roasLabel: roasLabel(a.revenue, a.spend),
+        busy: s.adsBusyId === a.id,
+        toggle: toggleEntity("ad", a.id),
+        toggleIconPath: info.active ? "M88 64 h28 v128 h-28 Z M140 64 h28 v128 h-28 Z" : "M96 72 L96 184 L192 128 Z",
+      };
+    });
+  const accounts = (ao?.accounts ?? []).map((a) => ({
+    id: a.id,
+    name: a.name,
+    actId: "act_" + a.fbAccountId,
     spendLabel: brl0(a.spend),
-    roasLabel: roasFmt(a.roas),
+    revenueLabel: brl0(a.revenue),
+    campaigns: a.campaigns,
+    roasLabel: roasLabel(a.revenue, a.spend),
     trackingTag: a.tracking ? "tag tag-accent" : "tag tag-neutral",
     trackingLabel: a.tracking ? "Rastreando" : "Pausado",
-    trackingOn: a.tracking,
-    toggleTracking: () => setS((st) => ({ ...st, accounts: st.accounts.map((x) => (x.id === a.id ? { ...x, tracking: !x.tracking } : x)) })),
   }));
   const creatives = s.creatives.map((c) => ({ ...c, slotId: "creative-" + c.id, spendLabel: brl(c.spend), ctrLabel: pct(c.ctr), roasLabel: roasFmt(c.roas) }));
 
@@ -575,9 +696,54 @@ export function useTraffikState(
     adsSub: s.adsSub,
     adsSearch: s.adsSearch,
     adsStatus: s.adsStatus,
+    adsPeriod: s.adsPeriod,
+    adsAccount: s.adsAccount,
+    adsLoading: s.adsLoading,
     onAdsSearch: (e: React.ChangeEvent<HTMLInputElement>) => set({ adsSearch: e.target.value }),
     onAdsStatus: (e: React.ChangeEvent<HTMLSelectElement>) => set({ adsStatus: e.target.value }),
+    onAdsPeriod: (e: React.ChangeEvent<HTMLSelectElement>) => set({ adsPeriod: e.target.value as "hoje" | "7d" | "30d" }),
+    onAdsAccount: (e: React.ChangeEvent<HTMLSelectElement>) => set({ adsAccount: e.target.value }),
+    adsAccountOptions: (ao?.accounts ?? []).map((a) => ({ id: a.id, name: a.name })),
     filteredCampaigns, filteredAdsets, filteredAds, accounts, creatives,
+
+    // Criar campanha
+    newCampaignOpen: s.newCampaignOpen,
+    newCampaignAccount: s.newCampaignAccount,
+    newCampaignName: s.newCampaignName,
+    newCampaignObjective: s.newCampaignObjective,
+    newCampaignBudget: s.newCampaignBudget,
+    newCampaignBusy: s.newCampaignBusy,
+    openNewCampaign: () =>
+      set({ newCampaignOpen: true, newCampaignAccount: (ao?.accounts ?? [])[0]?.id ?? "", newCampaignName: "", newCampaignBudget: "" }),
+    closeNewCampaign: () => set({ newCampaignOpen: false }),
+    onNewCampaignAccount: (e: React.ChangeEvent<HTMLSelectElement>) => set({ newCampaignAccount: e.target.value }),
+    onNewCampaignName: (e: React.ChangeEvent<HTMLInputElement>) => set({ newCampaignName: e.target.value }),
+    onNewCampaignObjective: (e: React.ChangeEvent<HTMLSelectElement>) => set({ newCampaignObjective: e.target.value }),
+    onNewCampaignBudget: (e: React.ChangeEvent<HTMLInputElement>) => set({ newCampaignBudget: e.target.value }),
+    createCampaign: async () => {
+      if (!s.newCampaignAccount || !s.newCampaignName.trim()) return;
+      set({ newCampaignBusy: true });
+      try {
+        const res = await fetch("/api/ads/campaign", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            accountId: s.newCampaignAccount,
+            name: s.newCampaignName.trim(),
+            objective: s.newCampaignObjective,
+            dailyBudget: s.newCampaignBudget ? parseFloat(s.newCampaignBudget) : undefined,
+          }),
+        });
+        if (res.ok) {
+          setS((st) => ({ ...st, newCampaignBusy: false, newCampaignOpen: false, adsRefreshKey: st.adsRefreshKey + 1 }));
+        } else {
+          const j = await res.json().catch(() => ({}));
+          setS((st) => ({ ...st, newCampaignBusy: false, syncResult: j.error ?? "Falha ao criar campanha." }));
+        }
+      } catch {
+        set({ newCampaignBusy: false });
+      }
+    },
 
     connectHref: "/api/auth/facebook",
     adProfiles,
