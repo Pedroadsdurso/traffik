@@ -49,6 +49,9 @@ const DEFAULTS: NotificationSettingsDTO = {
 
 export async function getNotificationSettings(): Promise<NotificationSettingsDTO> {
   const userId = await requireUserId();
+  // Sessão órfã (usuário removido) não deve derrubar o dashboard.
+  const exists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+  if (!exists) return DEFAULTS;
   const row = await prisma.notificationSettings.upsert({
     where: { userId },
     update: {},
