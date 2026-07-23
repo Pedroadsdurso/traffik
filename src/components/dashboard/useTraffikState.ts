@@ -1,6 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {
+  createWebhook,
+  deleteWebhook,
+  toggleWebhook,
+  type WebhookRowDTO,
+} from "@/lib/actions/webhooks";
 import { brl, brl0, buildPoints, elapsed, pct, roasFmt } from "@/lib/format";
 import {
   initialAccounts,
@@ -16,7 +22,6 @@ import {
   initialProducts,
   initialRules,
   initialSources,
-  initialWebhooks,
 } from "./mockData";
 import type {
   AdAccount,
@@ -32,7 +37,6 @@ import type {
   Status,
   TabKey,
   TestLogEntry,
-  WebhookRow,
 } from "./types";
 
 type DashPeriod = "hoje" | "7d" | "30d" | "custom";
@@ -84,9 +88,11 @@ interface State {
   fees: { gateways: Gateway[]; taxPct: number; despesas: Despesa[] };
   newDespesaName: string;
   newDespesaValue: string;
-  webhooks: WebhookRow[];
+  webhooks: WebhookRowDTO[];
   newWebhookPlatform: string;
-  newWebhookUrl: string;
+  newWebhookName: string;
+  webhookBusy: boolean;
+  copiedWebhookId: string | null;
   pixelEvents: PixelEvent[];
   pixelId: string;
   testEvent: string;
@@ -104,7 +110,7 @@ interface State {
   feed: FeedItem[];
 }
 
-function initialState(): State {
+function initialState(initialWebhooks: WebhookRowDTO[] = []): State {
   return {
     activeTab: "dashboard",
     adsSub: "campaigns",
@@ -134,8 +140,10 @@ function initialState(): State {
     newDespesaName: "",
     newDespesaValue: "",
     webhooks: initialWebhooks,
-    newWebhookPlatform: "Kirvano",
-    newWebhookUrl: "",
+    newWebhookPlatform: "KIRVANO",
+    newWebhookName: "",
+    webhookBusy: false,
+    copiedWebhookId: null,
     pixelEvents: initialPixelEvents,
     pixelId: "284910375562481",
     testEvent: "Purchase",
@@ -186,14 +194,20 @@ const UP_PATH = "M32 176 L96 112 L136 144 L224 64 M176 64 L224 64 L224 112";
 const DOWN_PATH = "M32 80 L96 144 L136 112 L224 192 M176 192 L224 192 L224 144";
 
 export function useTraffikState(
-  opts: { brandName?: string; liveUpdates?: boolean; trackingId?: string; appUrl?: string } = {},
+  opts: {
+    brandName?: string;
+    liveUpdates?: boolean;
+    trackingId?: string;
+    appUrl?: string;
+    initialWebhooks?: WebhookRowDTO[];
+  } = {},
 ) {
   const brandName = opts.brandName || "Traffik";
   const liveUpdates = opts.liveUpdates !== false;
   const trackingId = opts.trackingId || "SEU_ID";
   const appUrl = (opts.appUrl || "https://app.traffik.io").replace(/\/+$/, "");
 
-  const [s, setS] = useState<State>(initialState);
+  const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks));
   const nextFeedId = useRef(6);
 
   useEffect(() => {
@@ -476,15 +490,35 @@ export function useTraffikState(
 
     webhooks: s.webhooks,
     newWebhookPlatform: s.newWebhookPlatform,
-    newWebhookUrl: s.newWebhookUrl,
+    newWebhookName: s.newWebhookName,
+    webhookBusy: s.webhookBusy,
     onNewWebhookPlatform: (e: React.ChangeEvent<HTMLSelectElement>) => set({ newWebhookPlatform: e.target.value }),
-    onNewWebhookUrl: (e: React.ChangeEvent<HTMLInputElement>) => set({ newWebhookUrl: e.target.value }),
-    addWebhook: () =>
-      setS((st) => ({
-        ...st,
-        webhooks: [...st.webhooks, { platform: st.newWebhookPlatform, url: st.newWebhookUrl || "api.traffik.io/wh/" + st.newWebhookPlatform.toLowerCase().replace(/ /g, "") + "/48291", status: "Ativo" }],
-        newWebhookUrl: "",
-      })),
+    onNewWebhookName: (e: React.ChangeEvent<HTMLInputElement>) => set({ newWebhookName: e.target.value }),
+    addWebhook: async () => {
+      set({ webhookBusy: true });
+      try {
+        const created = await createWebhook({ platform: s.newWebhookPlatform, name: s.newWebhookName });
+        setS((st) => ({ ...st, webhooks: [...st.webhooks, created], newWebhookName: "", webhookBusy: false }));
+      } catch {
+        set({ webhookBusy: false });
+      }
+    },
+    toggleWebhook: async (id: string) => {
+      const updated = await toggleWebhook(id);
+      setS((st) => ({ ...st, webhooks: st.webhooks.map((w) => (w.id === id ? updated : w)) }));
+    },
+    removeWebhook: async (id: string) => {
+      await deleteWebhook(id);
+      setS((st) => ({ ...st, webhooks: st.webhooks.filter((w) => w.id !== id) }));
+    },
+    copiedWebhookId: s.copiedWebhookId,
+    copyWebhookUrl: (id: string, url: string) => {
+      navigator.clipboard.writeText(url);
+      set({ copiedWebhookId: id });
+      setTimeout(() => set({ copiedWebhookId: null }), 1500);
+    },
+    webhookPlatformLabel: (p: string) =>
+      ({ KIRVANO: "Kirvano", HOTMART: "Hotmart", KIWIFY: "Kiwify", CUSTOM: "Custom" })[p] ?? p,
 
     pixelEvents,
     pixelId: s.pixelId,

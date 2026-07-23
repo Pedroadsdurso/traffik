@@ -1,5 +1,6 @@
 "use client";
 
+import type { WebhookRowDTO } from "@/lib/actions/webhooks";
 import { sx } from "@/lib/sx";
 import { EditDashboardDrawer } from "./EditDashboardDrawer";
 import { Sidebar, type SidebarUser } from "./Sidebar";
@@ -19,14 +20,16 @@ export function TraffikApp({
   user,
   trackingId,
   appUrl,
+  initialWebhooks,
 }: {
   brandName?: string;
   liveUpdates?: boolean;
   user?: SidebarUser;
   trackingId?: string;
   appUrl?: string;
+  initialWebhooks?: WebhookRowDTO[];
 }) {
-  const v = useTraffikState({ brandName, liveUpdates, trackingId, appUrl });
+  const v = useTraffikState({ brandName, liveUpdates, trackingId, appUrl, initialWebhooks });
 
   return (
     <div style={sx("min-height:100vh;display:flex;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)")}>
