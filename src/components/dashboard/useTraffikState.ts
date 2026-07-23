@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { saveDashboardPrefs, type DashboardPrefsDTO } from "@/lib/actions/dashboardPrefs";
 import {
+  disconnectProfile,
+  toggleAccountTracking,
+  type AdProfileDTO,
+} from "@/lib/actions/facebook";
+import {
   createWebhook,
   deleteWebhook,
   toggleWebhook,
@@ -65,6 +70,8 @@ interface State {
   adsSub: "campaigns" | "adsets" | "ads" | "accounts";
   fbSub: "contas" | "webhooks" | "pixel" | "testes";
   fbConnected: boolean;
+  adProfiles: AdProfileDTO[];
+  expandedProfiles: Record<string, boolean>;
   editDashOpen: boolean;
   dashPeriod: DashPeriod;
   dashAccount: string;
@@ -114,7 +121,11 @@ const DEFAULT_METRIC_VISIBLE: Record<MetricKey, boolean> = {
   cpa: true, ticket: true, ctr: false, pendentes: false, reembolsadas: false, chargeback: false,
 };
 
-function initialState(initialWebhooks: WebhookRowDTO[] = [], prefs?: DashboardPrefsDTO | null): State {
+function initialState(
+  initialWebhooks: WebhookRowDTO[] = [],
+  prefs?: DashboardPrefsDTO | null,
+  initialProfiles: AdProfileDTO[] = [],
+): State {
   const order = prefs?.order?.length
     ? (prefs.order.filter((k) => DEFAULT_METRIC_ORDER.includes(k as MetricKey)) as MetricKey[])
     : DEFAULT_METRIC_ORDER;
@@ -126,7 +137,9 @@ function initialState(initialWebhooks: WebhookRowDTO[] = [], prefs?: DashboardPr
     activeTab: "dashboard",
     adsSub: "campaigns",
     fbSub: "contas",
-    fbConnected: false,
+    fbConnected: initialProfiles.length > 0,
+    adProfiles: initialProfiles,
+    expandedProfiles: {},
     editDashOpen: false,
     dashPeriod: "7d",
     dashAccount: "todas",
@@ -201,6 +214,7 @@ export function useTraffikState(
     appUrl?: string;
     initialWebhooks?: WebhookRowDTO[];
     dashboardPrefs?: DashboardPrefsDTO | null;
+    initialProfiles?: AdProfileDTO[];
   } = {},
 ) {
   const brandName = opts.brandName || "Traffik";
@@ -208,7 +222,7 @@ export function useTraffikState(
   const trackingId = opts.trackingId || "SEU_ID";
   const appUrl = (opts.appUrl || "https://app.traffik.io").replace(/\/+$/, "");
 
-  const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks, opts.dashboardPrefs));
+  const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks, opts.dashboardPrefs, opts.initialProfiles));
 
   function set(patch: Partial<State>) {
     setS((st) => ({ ...st, ...patch }));
@@ -381,6 +395,43 @@ export function useTraffikState(
   const feesProfit = revenue - spend - feesGatewayCost - feesTaxCost - feesDespesasTotal;
   const feesMargin = revenue ? (feesProfit / revenue) * 100 : 0;
 
+  // Perfis do Facebook conectados (reais), com contas expansíveis e toggles.
+  const trackedAccounts = s.adProfiles.reduce((a, p) => a + p.accounts.filter((ac) => ac.trackingEnabled).length, 0);
+  const adProfiles = s.adProfiles.map((p) => ({
+    id: p.id,
+    name: p.name,
+    email: p.email,
+    pictureUrl: p.pictureUrl,
+    accountCount: p.accounts.length,
+    expanded: s.expandedProfiles[p.id] ?? true,
+    toggleExpanded: () =>
+      setS((st) => ({ ...st, expandedProfiles: { ...st.expandedProfiles, [p.id]: !(st.expandedProfiles[p.id] ?? true) } })),
+    disconnect: async () => {
+      await disconnectProfile(p.id);
+      setS((st) => ({ ...st, adProfiles: st.adProfiles.filter((x) => x.id !== p.id) }));
+    },
+    accounts: p.accounts.map((ac) => ({
+      id: ac.id,
+      name: ac.name,
+      fbAccountId: ac.fbAccountId,
+      currency: ac.currency,
+      statusTag: ac.status === "ACTIVE" ? "tag tag-accent" : "tag tag-neutral",
+      statusLabel: ac.status === "ACTIVE" ? "Ativa" : ac.status === "PAUSED" ? "Pausada" : "—",
+      trackingOn: ac.trackingEnabled,
+      toggleTracking: async () => {
+        const updated = await toggleAccountTracking(ac.id);
+        setS((st) => ({
+          ...st,
+          adProfiles: st.adProfiles.map((pr) =>
+            pr.id === p.id
+              ? { ...pr, accounts: pr.accounts.map((a2) => (a2.id === ac.id ? { ...a2, trackingEnabled: updated.trackingEnabled } : a2)) }
+              : pr,
+          ),
+        }));
+      },
+    })),
+  }));
+
   const statusTag = (st: Status) => (st === "ativo" ? "tag tag-accent" : "tag tag-neutral");
   const statusLabel = (st: Status) => (st === "ativo" ? "Ativo" : "Pausado");
   function decoRow<T extends { status: Status; spend: number; cpa: number; ctr: number; roas: number }>(a: T) {
@@ -492,8 +543,8 @@ export function useTraffikState(
     pageSubtitle: TITLES[s.activeTab][1],
     activeTab: s.activeTab,
 
-    fbConnected: s.fbConnected,
-    activeAccountCount: s.accounts.filter((a) => a.tracking).length + " contas",
+    fbConnected: s.adProfiles.length > 0,
+    activeAccountCount: trackedAccounts + " contas",
 
     dashPeriod: s.dashPeriod,
     dashAccount: s.dashAccount,
@@ -522,8 +573,8 @@ export function useTraffikState(
     onAdsStatus: (e: React.ChangeEvent<HTMLSelectElement>) => set({ adsStatus: e.target.value }),
     filteredCampaigns, filteredAdsets, filteredAds, accounts, creatives,
 
-    connectFacebook: () => set({ fbConnected: true }),
-    disconnectFacebook: () => set({ fbConnected: false }),
+    connectHref: "/api/auth/facebook",
+    adProfiles,
     fbTabs,
     fbSub: s.fbSub,
 
