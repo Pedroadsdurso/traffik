@@ -29,7 +29,7 @@ interface Props {
 
 export function TestCheckout({ trackingId, appUrl, webhookUrl }: Props) {
   const [clickId, setClickId] = useState<string | null>(null);
-  const [product, setProduct] = useState("Método Foco 3.0");
+  const [product, setProduct] = useState("Produto de teste");
   const [value, setValue] = useState("497");
   const [status, setStatus] = useState("aprovada");
   const [payment, setPayment] = useState("pix");

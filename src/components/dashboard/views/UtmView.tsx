@@ -33,7 +33,7 @@ export function UtmView({ v }: { v: TraffikView }) {
         <div className="card-title">Monte sua URL com UTMs</div>
         <div className="field" style={sx("margin-top:var(--space-3)")}>
           <label>URL de destino</label>
-          <input className="input" value={v.utmUrl} onChange={v.onUtmUrl} />
+          <input className="input" placeholder="https://seusite.com.br/checkout" value={v.utmUrl} onChange={v.onUtmUrl} />
         </div>
         <div style={sx("display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);margin-top:var(--space-3)")}>
           <div className="field">
@@ -53,11 +53,11 @@ export function UtmView({ v }: { v: TraffikView }) {
         <div style={sx("display:grid;grid-template-columns:1fr 1fr;gap:var(--space-3);margin-top:var(--space-3)")}>
           <div className="field">
             <label>utm_campaign</label>
-            <input className="input" value={v.utmCampaign} onChange={v.onUtmCampaign} />
+            <input className="input" placeholder="nome-da-campanha" value={v.utmCampaign} onChange={v.onUtmCampaign} />
           </div>
           <div className="field">
             <label>utm_content</label>
-            <input className="input" value={v.utmContent} onChange={v.onUtmContent} />
+            <input className="input" placeholder="nome-do-criativo" value={v.utmContent} onChange={v.onUtmContent} />
           </div>
         </div>
         <div className="field" style={sx("margin-top:var(--space-3)")}>

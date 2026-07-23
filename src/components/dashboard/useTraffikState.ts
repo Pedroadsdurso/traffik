@@ -44,25 +44,7 @@ import type { CreativeRow } from "@/lib/ads/creatives";
 import type { AdsOverview } from "@/lib/ads/overview";
 import type { DashboardData } from "@/lib/dashboard/metrics";
 import { brl, brl0, buildPoints, elapsed, pct, roasFmt } from "@/lib/format";
-import {
-  initialAccounts,
-  initialAds,
-  initialAdsets,
-  initialCampaigns,
-  initialCreatives,
-  initialPixelEvents,
-} from "./mockData";
-import type {
-  AdAccount,
-  AdItem,
-  AdSet,
-  Campaign,
-  MetricKey,
-  PixelEvent,
-  Status,
-  TabKey,
-  TestLogEntry,
-} from "./types";
+import type { MetricKey, TabKey } from "./types";
 
 type DashPeriod = "hoje" | "7d" | "30d" | "custom";
 
@@ -138,11 +120,6 @@ interface State {
   syncResult: string | null;
   metricOrder: MetricKey[];
   metricVisible: Record<MetricKey, boolean>;
-  campaigns: Campaign[];
-  adsets: AdSet[];
-  ads: AdItem[];
-  accounts: AdAccount[];
-  creatives: typeof initialCreatives;
   expenses: ExpenseDTO[];
   newDespesaName: string;
   newDespesaValue: string;
@@ -155,10 +132,10 @@ interface State {
   newWebhookName: string;
   webhookBusy: boolean;
   copiedWebhookId: string | null;
-  pixelEvents: PixelEvent[];
-  pixelId: string;
-  testEvent: string;
-  testLog: TestLogEntry[];
+  testPixelId: string;
+  testEventCode: string;
+  testBusy: boolean;
+  testResult: string | null;
   rules: RuleDTO[];
   ruleBusy: boolean;
   ruleRunBusy: boolean;
@@ -245,11 +222,6 @@ function initialState(
     syncResult: null,
     metricOrder: fullOrder,
     metricVisible: visible,
-    campaigns: initialCampaigns,
-    adsets: initialAdsets,
-    ads: initialAds,
-    accounts: initialAccounts,
-    creatives: initialCreatives,
     expenses: initialExpenses,
     newDespesaName: "",
     newDespesaValue: "",
@@ -262,24 +234,24 @@ function initialState(
     newWebhookName: "",
     webhookBusy: false,
     copiedWebhookId: null,
-    pixelEvents: initialPixelEvents,
-    pixelId: "284910375562481",
-    testEvent: "Purchase",
-    testLog: [],
+    testPixelId: "",
+    testEventCode: "",
+    testBusy: false,
+    testResult: null,
     rules: initialRulesDTO,
     ruleBusy: false,
     ruleRunBusy: false,
     ruleRunResult: null,
-    ruleForm: { name: "", product: "todos", account: "todas", level: "campanha", metric: "CPA", op: ">", value: "50", window: "hoje", action: "pausar", budgetPct: "20", freq: "30min", dailyLimit: "10", active: true },
+    ruleForm: { name: "", product: "todos", account: "todas", level: "campanha", metric: "CPA", op: ">", value: "50", window: "hoje", action: "pausar", budgetPct: "20", freq: "30", dailyLimit: "10", active: true },
     notifSettings: initialNotifSettings,
     notifications: initialNotifications,
     notifUnread: initialNotifications.filter((n) => !n.read).length,
     notifOpen: false,
-    utmUrl: "https://seusite.com.br/checkout",
+    utmUrl: "",
     utmSource: "facebook",
     utmMedium: "cpc",
-    utmCampaign: "lancamento-metodo-foco",
-    utmContent: "criativo-vsl-ana",
+    utmCampaign: "",
+    utmContent: "",
     snippetCopied: false,
     linkCopied: false,
   };
@@ -880,10 +852,11 @@ export function useTraffikState(
     on: ns[r.key],
     toggle: () => setSetting({ [r.key]: !ns[r.key] }),
   }));
+  // Prévia ilustrativa (não são dados reais) — usa rótulos genéricos.
   const previewParts = ["Nova venda aprovada"];
-  if (ns.showValue) previewParts.push("R$ 497,00");
-  if (ns.showProductName) previewParts.push("Método Foco 3.0");
-  if (ns.showUtmCampaign) previewParts.push("lancamento-metodo-foco");
+  if (ns.showValue) previewParts.push("R$ 0,00");
+  if (ns.showProductName) previewParts.push("Seu produto");
+  if (ns.showUtmCampaign) previewParts.push("sua-campanha");
   const notifPreview = previewParts.join(" · ");
 
   const NOTIF_ICON: Record<string, string> = { VENDA_APROVADA: "💰", VENDA_PENDENTE: "⏳", RELATORIO: "📊", REGRA_EXECUTADA: "⚙️", SISTEMA: "🔔" };
@@ -1093,11 +1066,33 @@ export function useTraffikState(
         set({ pixelBusy: false });
       }
     },
-    testEvent: s.testEvent,
-    onTestEvent: (e: React.ChangeEvent<HTMLSelectElement>) => set({ testEvent: e.target.value }),
-    testLog: s.testLog,
-    fireTest: () =>
-      setS((st) => ({ ...st, testLog: [{ event: st.testEvent, status: "200 OK", time: new Date().toLocaleTimeString("pt-BR") }, ...st.testLog].slice(0, 6) })),
+    // Teste real de evento pela Conversions API
+    testPixelOptions: s.pixels.filter((px) => px.hasToken).map((px) => ({ id: px.id, name: px.name })),
+    testPixelId: s.testPixelId,
+    onTestPixel: (e: React.ChangeEvent<HTMLSelectElement>) => set({ testPixelId: e.target.value }),
+    testEventCode: s.testEventCode,
+    onTestEventCode: (e: React.ChangeEvent<HTMLInputElement>) => set({ testEventCode: e.target.value }),
+    testBusy: s.testBusy,
+    testResult: s.testResult,
+    runPixelTest: async () => {
+      const pixelId = s.testPixelId || s.pixels.find((px) => px.hasToken)?.id;
+      if (!pixelId) {
+        set({ testResult: "Configure um pixel com token da CAPI antes de testar." });
+        return;
+      }
+      set({ testBusy: true, testResult: null });
+      try {
+        const res = await fetch("/api/pixel/test", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pixelConfigId: pixelId, testEventCode: s.testEventCode || undefined }),
+        });
+        const json = await res.json();
+        set({ testBusy: false, testResult: res.ok ? `✅ Evento Purchase enviado ao Facebook${json.testEventCode ? ` (test_event_code: ${json.testEventCode})` : ""}.` : `⚠️ ${json.error ?? "Falha ao enviar."}` });
+      } catch (e) {
+        set({ testBusy: false, testResult: "Erro de rede: " + String(e) });
+      }
+    },
 
     gatewayExpenses,
     taxExpenses,
