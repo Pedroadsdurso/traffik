@@ -1,0 +1,566 @@
+// Traffik — schema completo
+// Rastreamento de cliques/UTM, vendas via webhook, integração Facebook Ads,
+// regras de automação, notificações e taxas.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────────── Enums ─────────────────────────────
+
+enum SaleStatus {
+  PENDENTE
+  APROVADA
+  REEMBOLSADA
+  CHARGEBACK
+  CANCELADA
+}
+
+enum PaymentMethod {
+  PIX
+  CARTAO
+  BOLETO
+  OUTRO
+}
+
+enum WebhookPlatform {
+  KIRVANO
+  HOTMART
+  KIWIFY
+  CUSTOM
+}
+
+enum EntityStatus {
+  ACTIVE
+  PAUSED
+  ARCHIVED
+  DELETED
+  UNKNOWN
+}
+
+enum RuleLevel {
+  CAMPAIGN
+  ADSET
+  AD
+}
+
+enum RuleAction {
+  ATIVAR
+  PAUSAR
+  AJUSTAR_ORCAMENTO
+}
+
+enum RuleRunStatus {
+  SUCESSO
+  SEM_ACAO
+  ERRO
+}
+
+enum PixelEventType {
+  LEAD
+  ADD_TO_CART
+  INITIATE_CHECKOUT
+  PURCHASE
+}
+
+enum PurchaseSendMode {
+  TODAS
+  APENAS_APROVADAS
+}
+
+enum PurchaseValueMode {
+  VALOR_DA_VENDA
+  VALOR_FIXO
+}
+
+enum ExpenseType {
+  TAXA_GATEWAY
+  IMPOSTO
+  DESPESA_RECORRENTE
+}
+
+enum ExpenseCalc {
+  PERCENTUAL
+  FIXO
+}
+
+enum ExpenseRecurrence {
+  UNICA
+  DIARIA
+  SEMANAL
+  MENSAL
+  ANUAL
+}
+
+enum NotificationType {
+  VENDA_PENDENTE
+  VENDA_APROVADA
+  RELATORIO
+  REGRA_EXECUTADA
+  SISTEMA
+}
+
+enum ReportPattern {
+  STATUS_LUCRO
+  RESUMO_DETALHADO
+  NOTIFICACOES_CRIATIVAS
+}
+
+// ───────────────────────────── Usuário ─────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  name         String?
+  email        String   @unique
+  passwordHash String
+  image        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  adProfiles           AdProfile[]
+  adAccounts           AdAccount[]
+  clicks               Click[]
+  sales                Sale[]
+  webhooks             Webhook[]
+  pixelConfigs         PixelConfig[]
+  automationRules      AutomationRule[]
+  notifications        Notification[]
+  expenses             Expense[]
+  notificationSettings NotificationSettings?
+  dashboardPreference  DashboardPreference?
+}
+
+// ─────────────────── Facebook: perfis, contas, estrutura ───────────────────
+
+/// Perfil do Facebook conectado via OAuth. Um perfil pode expor várias
+/// contas de anúncio — reflete o padrão "Mary Barbosa (19)" da interface.
+model AdProfile {
+  id             String    @id @default(cuid())
+  fbUserId       String
+  name           String
+  email          String?
+  pictureUrl     String?
+  accessToken    String
+  tokenExpiresAt DateTime?
+  connectedAt    DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  userId     String
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  adAccounts AdAccount[]
+
+  @@unique([userId, fbUserId])
+  @@index([userId])
+}
+
+model AdAccount {
+  id          String       @id @default(cuid())
+  fbAccountId String
+  name        String
+  currency    String       @default("BRL")
+  timezone    String?
+  status      EntityStatus @default(ACTIVE)
+  /// Toggle individual de rastreamento na tela de Contas.
+  trackingEnabled Boolean  @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  adProfileId String?
+  adProfile   AdProfile? @relation(fields: [adProfileId], references: [id], onDelete: SetNull)
+
+  campaigns    Campaign[]
+  adSets       AdSet[]
+  ads          Ad[]
+  pixelConfigs PixelConfig[]
+
+  @@unique([userId, fbAccountId])
+  @@index([userId])
+  @@index([adProfileId])
+}
+
+model Campaign {
+  id             String       @id @default(cuid())
+  fbCampaignId   String
+  name           String
+  status         EntityStatus @default(UNKNOWN)
+  objective      String?
+  dailyBudget    Decimal?     @db.Decimal(14, 2)
+  lifetimeBudget Decimal?     @db.Decimal(14, 2)
+  startTime      DateTime?
+  stopTime       DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  adAccountId String
+  adAccount   AdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  adSets      AdSet[]
+  ads         Ad[]
+
+  @@unique([adAccountId, fbCampaignId])
+  @@index([adAccountId])
+}
+
+model AdSet {
+  id               String       @id @default(cuid())
+  fbAdSetId        String
+  name             String
+  status           EntityStatus @default(UNKNOWN)
+  dailyBudget      Decimal?     @db.Decimal(14, 2)
+  lifetimeBudget   Decimal?     @db.Decimal(14, 2)
+  optimizationGoal String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  adAccountId String
+  adAccount   AdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  campaignId  String
+  campaign    Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  ads         Ad[]
+
+  @@unique([adAccountId, fbAdSetId])
+  @@index([campaignId])
+  @@index([adAccountId])
+}
+
+model Ad {
+  id        String       @id @default(cuid())
+  fbAdId    String
+  name      String
+  status    EntityStatus @default(UNKNOWN)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  adAccountId String
+  adAccount   AdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  campaignId  String
+  campaign    Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  adSetId     String
+  adSet       AdSet     @relation(fields: [adSetId], references: [id], onDelete: Cascade)
+
+  creative     Creative?
+  dailyMetrics DailyAdMetric[]
+
+  @@unique([adAccountId, fbAdId])
+  @@index([campaignId])
+  @@index([adSetId])
+  @@index([adAccountId])
+}
+
+model Creative {
+  id           String   @id @default(cuid())
+  fbCreativeId String?
+  name         String?
+  title        String?
+  body         String?
+  thumbnailUrl String?
+  imageUrl     String?
+  videoId      String?
+  callToAction String?
+  linkUrl      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  adId String @unique
+  ad   Ad     @relation(fields: [adId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────── Métricas diárias sincronizadas ───────────────────
+
+model DailyAdMetric {
+  id          String   @id @default(cuid())
+  date        DateTime @db.Date
+  spend       Decimal  @default(0) @db.Decimal(14, 2)
+  impressions Int      @default(0)
+  clicks      Int      @default(0)
+  ctr         Float    @default(0)
+  cpc         Decimal  @default(0) @db.Decimal(14, 4)
+  cpm         Decimal  @default(0) @db.Decimal(14, 4)
+  reach       Int      @default(0)
+  frequency   Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  adId String
+  ad   Ad     @relation(fields: [adId], references: [id], onDelete: Cascade)
+
+  @@unique([adId, date])
+  @@index([date])
+  @@index([adId])
+}
+
+// ─────────────────── Rastreamento de tráfego ───────────────────
+
+model Click {
+  id String @id @default(cuid())
+  /// UUID público exposto ao navegador e devolvido pelo checkout.
+  clickId     String   @unique @default(uuid())
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmContent  String?
+  utmTerm     String?
+  fbclid      String?
+  gclid       String?
+  ttclid      String?
+  url         String?
+  referrer    String?
+  ip          String?
+  userAgent   String?
+  country     String?
+  timestamp   DateTime @default(now())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sales  Sale[]
+
+  @@index([clickId])
+  @@index([utmCampaign])
+  @@index([timestamp])
+  @@index([userId, timestamp])
+  @@index([fbclid])
+  @@index([ip])
+}
+
+model Sale {
+  id            String        @id @default(cuid())
+  externalId    String?
+  value         Decimal       @db.Decimal(14, 2)
+  currency      String        @default("BRL")
+  product       String
+  productId     String?
+  status        SaleStatus    @default(PENDENTE)
+  paymentMethod PaymentMethod @default(OUTRO)
+  buyerEmail    String?
+  buyerName     String?
+  buyerPhone    String?
+  country       String?
+  /// Como o clique de origem foi encontrado: "direct" | "ip" | "none".
+  matchMethod   String?
+  rawPayload    Json?
+  timestamp     DateTime      @default(now())
+  approvedAt    DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clickId   String?
+  click     Click?   @relation(fields: [clickId], references: [id], onDelete: SetNull)
+  webhookId String?
+  webhook   Webhook? @relation(fields: [webhookId], references: [id], onDelete: SetNull)
+
+  notifications Notification[]
+
+  @@unique([userId, externalId])
+  @@index([clickId])
+  @@index([timestamp])
+  @@index([userId, timestamp])
+  @@index([status])
+  @@index([buyerEmail])
+}
+
+// ─────────────────── Integrações ───────────────────
+
+model Webhook {
+  id   String @id @default(cuid())
+  name String
+  /// Segmento público da URL: /api/webhook/sale/{token}
+  token       String          @unique @default(uuid())
+  platform    WebhookPlatform @default(CUSTOM)
+  active      Boolean         @default(true)
+  secret      String?
+  lastEventAt DateTime?
+  eventCount  Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sales  Sale[]
+
+  @@index([userId])
+  @@index([token])
+}
+
+model PixelConfig {
+  id      String @id @default(cuid())
+  name    String
+  /// ID do pixel na Meta.
+  pixelId String
+  /// Token da Conversions API para envio server-side.
+  accessToken String?
+  provider    String   @default("META")
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId      String
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  adAccountId String?
+  adAccount   AdAccount? @relation(fields: [adAccountId], references: [id], onDelete: SetNull)
+
+  eventRules PixelEventRule[]
+
+  @@index([userId])
+  @@index([adAccountId])
+}
+
+model PixelEventRule {
+  id        String         @id @default(cuid())
+  eventType PixelEventType
+  enabled   Boolean        @default(false)
+  /// Regra de detecção no cliente, ex.: { "tipo": "contem_texto", "valor": "COMPRAR AGORA" }
+  detection Json?
+
+  // Específicos do evento Purchase
+  sendMode      PurchaseSendMode?  @default(APENAS_APROVADAS)
+  valueMode     PurchaseValueMode? @default(VALOR_DA_VENDA)
+  fixedValue    Decimal?           @db.Decimal(14, 2)
+  targetProduct String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  pixelConfigId String
+  pixelConfig   PixelConfig @relation(fields: [pixelConfigId], references: [id], onDelete: Cascade)
+
+  @@unique([pixelConfigId, eventType])
+  @@index([pixelConfigId])
+}
+
+// ─────────────────── Automação ───────────────────
+
+model AutomationRule {
+  id            String    @id @default(cuid())
+  name          String
+  targetProduct String?
+  /// IDs de AdAccount alvo; vazio = todas as contas do usuário.
+  adAccountIds  String[]  @default([])
+  level         RuleLevel @default(CAMPAIGN)
+  nameFilter    String?
+  action        RuleAction
+  /// Parâmetros da ação, ex.: { "tipo": "percentual", "valor": 20 }
+  actionParams  Json?
+  /// Condições avaliadas, ex.: [{ "metrica": "cpa", "operador": ">", "valor": 50 }]
+  conditions    Json      @default("[]")
+  /// Janela de cálculo: "hoje" | "ontem" | "ultimas_3h" | "ultimos_7d" ...
+  calcPeriod    String    @default("hoje")
+  /// Frequência de checagem em minutos.
+  frequencyMin  Int       @default(30)
+  dailyRunLimit Int       @default(10)
+  active        Boolean   @default(true)
+  lastRunAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  userId String
+  user   User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs   AutomationRuleLog[]
+
+  @@index([userId])
+  @@index([active])
+}
+
+model AutomationRuleLog {
+  id     String        @id @default(cuid())
+  ranAt  DateTime      @default(now())
+  status RuleRunStatus
+  /// Entidades avaliadas e o que foi feito com cada uma.
+  details  Json?
+  message  String?
+  affected Int    @default(0)
+
+  ruleId String
+  rule   AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId, ranAt])
+}
+
+// ─────────────────── Notificações ───────────────────
+
+model Notification {
+  id      String           @id @default(cuid())
+  type    NotificationType
+  title   String
+  content String
+  /// Dados extras usados para renderizar o card da notificação.
+  data      Json?
+  read      Boolean  @default(false)
+  timestamp DateTime @default(now())
+
+  userId String
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  saleId String?
+  sale   Sale?   @relation(fields: [saleId], references: [id], onDelete: SetNull)
+
+  @@index([userId, read])
+  @@index([userId, timestamp])
+}
+
+model NotificationSettings {
+  id String @id @default(cuid())
+
+  // Notificações de venda
+  notifyPendingSale  Boolean @default(true)
+  notifyApprovedSale Boolean @default(true)
+  showValue          Boolean @default(true)
+  showProductName    Boolean @default(true)
+  showUtmCampaign    Boolean @default(true)
+  showDashboardName  Boolean @default(false)
+
+  // Notificações de relatório (horários fixos)
+  report08      Boolean       @default(false)
+  report12      Boolean       @default(false)
+  report18      Boolean       @default(false)
+  report23      Boolean       @default(true)
+  reportPattern ReportPattern @default(STATUS_LUCRO)
+
+  timezone  String   @default("America/Sao_Paulo")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────── Taxas e despesas ───────────────────
+
+model Expense {
+  id   String      @id @default(cuid())
+  name String
+  type ExpenseType
+  calc ExpenseCalc @default(PERCENTUAL)
+  /// Percentual (0–100) quando calc = PERCENTUAL; valor absoluto quando FIXO.
+  amount        Decimal        @db.Decimal(14, 4)
+  /// Restringe a taxa a uma forma de pagamento; null = todas.
+  paymentMethod PaymentMethod?
+  recurrence    ExpenseRecurrence @default(UNICA)
+  active        Boolean           @default(true)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+}
+
+// ─────────────────── Preferências de UI ───────────────────
+
+model DashboardPreference {
+  id String @id @default(cuid())
+  /// Visibilidade de cada card/seção do dashboard, ex.: { "roas": true, "funil": false }
+  visibility Json     @default("{}")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
