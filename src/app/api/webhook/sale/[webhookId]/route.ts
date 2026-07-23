@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { prisma } from "@/lib/prisma";
+import { dispatchPurchaseEvents } from "@/lib/webhook/dispatchPixel";
 import { matchClick } from "@/lib/webhook/matchClick";
 import { normalizeSale } from "@/lib/webhook/normalizeSale";
 
@@ -75,6 +76,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ webhookId:
     where: { id: webhook.id },
     data: { eventCount: { increment: 1 }, lastEventAt: new Date() },
   });
+
+  // Dispara o evento Purchase para a Conversions API (Fase 10).
+  await dispatchPurchaseEvents(sale.id);
 
   return Response.json({
     ok: true,

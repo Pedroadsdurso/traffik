@@ -30,10 +30,10 @@ export function CreativesView({ v }: { v: TraffikView }) {
           {v.creativesLoading ? "Carregando criativos…" : "Nenhum criativo sincronizado. Sincronize suas contas em Facebook Ads."}
         </div>
       ) : (
-        <div style={sx("display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:var(--space-4)")}>
+        <div style={sx("display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:var(--space-4)")}>
           {v.creatives.map((cr) => (
             <div className="card" style={sx("padding:0;overflow:hidden")} key={cr.id}>
-              <div style={{ position: "relative", width: "100%", aspectRatio: "16/9", background: "var(--color-bg)" }}>
+              <div style={{ position: "relative", width: "100%", aspectRatio: "16/9", maxHeight: "180px", background: "var(--color-bg)" }}>
                 {cr.thumbnailUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={cr.thumbnailUrl} alt={cr.name} style={sx("width:100%;height:100%;object-fit:cover")} />

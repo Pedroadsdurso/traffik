@@ -8,6 +8,14 @@ import {
   type AdProfileDTO,
 } from "@/lib/actions/facebook";
 import {
+  createPixel,
+  deletePixel,
+  togglePixel,
+  updateEventRule,
+  type PixelConfigDTO,
+} from "@/lib/actions/pixels";
+import type { PixelEventType, PurchaseSendMode, PurchaseValueMode } from "@/generated/prisma/enums";
+import {
   createWebhook,
   deleteWebhook,
   toggleWebhook,
@@ -74,6 +82,11 @@ interface State {
   fbConnected: boolean;
   adProfiles: AdProfileDTO[];
   expandedProfiles: Record<string, boolean>;
+  pixels: PixelConfigDTO[];
+  newPixelName: string;
+  newPixelId: string;
+  newPixelToken: string;
+  pixelBusy: boolean;
   editDashOpen: boolean;
   dashPeriod: DashPeriod;
   dashAccount: string;
@@ -146,6 +159,7 @@ function initialState(
   initialWebhooks: WebhookRowDTO[] = [],
   prefs?: DashboardPrefsDTO | null,
   initialProfiles: AdProfileDTO[] = [],
+  initialPixels: PixelConfigDTO[] = [],
 ): State {
   const order = prefs?.order?.length
     ? (prefs.order.filter((k) => DEFAULT_METRIC_ORDER.includes(k as MetricKey)) as MetricKey[])
@@ -161,6 +175,11 @@ function initialState(
     fbConnected: initialProfiles.length > 0,
     adProfiles: initialProfiles,
     expandedProfiles: {},
+    pixels: initialPixels,
+    newPixelName: "",
+    newPixelId: "",
+    newPixelToken: "",
+    pixelBusy: false,
     editDashOpen: false,
     dashPeriod: "7d",
     dashAccount: "todas",
@@ -255,6 +274,7 @@ export function useTraffikState(
     initialWebhooks?: WebhookRowDTO[];
     dashboardPrefs?: DashboardPrefsDTO | null;
     initialProfiles?: AdProfileDTO[];
+    initialPixels?: PixelConfigDTO[];
   } = {},
 ) {
   const brandName = opts.brandName || "Traffik";
@@ -262,7 +282,7 @@ export function useTraffikState(
   const trackingId = opts.trackingId || "SEU_ID";
   const appUrl = (opts.appUrl || "https://app.traffik.io").replace(/\/+$/, "");
 
-  const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks, opts.dashboardPrefs, opts.initialProfiles));
+  const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks, opts.dashboardPrefs, opts.initialProfiles, opts.initialPixels));
 
   function set(patch: Partial<State>) {
     setS((st) => ({ ...st, ...patch }));
@@ -509,6 +529,74 @@ export function useTraffikState(
     })),
   }));
 
+  // ── Pixels / Conversions API (Fase 10) ──
+  const EVENT_LABELS: Record<PixelEventType, { label: string; desc: string }> = {
+    LEAD: { label: "Lead", desc: "Cadastro / formulário enviado" },
+    ADD_TO_CART: { label: "Add to Cart", desc: "Produto adicionado ao carrinho" },
+    INITIATE_CHECKOUT: { label: "Initiate Checkout", desc: "Checkout iniciado" },
+    PURCHASE: { label: "Purchase", desc: "Compra confirmada (enviado via servidor)" },
+  };
+  const patchRule = (pixelId: string, eventType: PixelEventType, patch: Partial<{ enabled: boolean; detection: { tipo?: string; valor?: string } | null; sendMode: PurchaseSendMode; valueMode: PurchaseValueMode; fixedValue: number | null; targetProduct: string | null }>) =>
+    setS((st) => ({
+      ...st,
+      pixels: st.pixels.map((px) =>
+        px.id === pixelId ? { ...px, rules: px.rules.map((r) => (r.eventType === eventType ? { ...r, ...patch } : r)) } : px,
+      ),
+    }));
+
+  const pixels = s.pixels.map((px) => ({
+    id: px.id,
+    name: px.name,
+    pixelId: px.pixelId,
+    enabled: px.enabled,
+    hasToken: px.hasToken,
+    toggle: async () => {
+      const r = await togglePixel(px.id);
+      setS((st) => ({ ...st, pixels: st.pixels.map((x) => (x.id === px.id ? { ...x, enabled: r.enabled } : x)) }));
+    },
+    remove: async () => {
+      await deletePixel(px.id);
+      setS((st) => ({ ...st, pixels: st.pixels.filter((x) => x.id !== px.id) }));
+    },
+    rules: px.rules.map((r) => ({
+      eventType: r.eventType,
+      label: EVENT_LABELS[r.eventType].label,
+      desc: EVENT_LABELS[r.eventType].desc,
+      enabled: r.enabled,
+      detectionText: r.detection?.valor ?? "",
+      sendMode: r.sendMode ?? "APENAS_APROVADAS",
+      valueMode: r.valueMode ?? "VALOR_DA_VENDA",
+      fixedValue: r.fixedValue != null ? String(r.fixedValue) : "",
+      targetProduct: r.targetProduct ?? "",
+      toggle: () => {
+        const enabled = !r.enabled;
+        patchRule(px.id, r.eventType, { enabled });
+        updateEventRule(px.id, r.eventType, { enabled }).catch(() => {});
+      },
+      onDetection: (e: React.ChangeEvent<HTMLInputElement>) => {
+        const valor = e.target.value;
+        patchRule(px.id, r.eventType, { detection: valor ? { tipo: "contem_texto", valor } : null });
+      },
+      commitDetection: (e: React.FocusEvent<HTMLInputElement>) => {
+        updateEventRule(px.id, r.eventType, { detectionText: e.target.value || null }).catch(() => {});
+      },
+      onSendMode: (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const sendMode = e.target.value as PurchaseSendMode;
+        patchRule(px.id, r.eventType, { sendMode });
+        updateEventRule(px.id, r.eventType, { sendMode }).catch(() => {});
+      },
+      onValueMode: (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const valueMode = e.target.value as PurchaseValueMode;
+        patchRule(px.id, r.eventType, { valueMode });
+        updateEventRule(px.id, r.eventType, { valueMode }).catch(() => {});
+      },
+      onFixedValue: (e: React.ChangeEvent<HTMLInputElement>) => patchRule(px.id, r.eventType, { fixedValue: e.target.value ? parseFloat(e.target.value) : null }),
+      commitFixedValue: (e: React.FocusEvent<HTMLInputElement>) => updateEventRule(px.id, r.eventType, { fixedValue: e.target.value ? parseFloat(e.target.value) : null }).catch(() => {}),
+      onTargetProduct: (e: React.ChangeEvent<HTMLInputElement>) => patchRule(px.id, r.eventType, { targetProduct: e.target.value }),
+      commitTargetProduct: (e: React.FocusEvent<HTMLInputElement>) => updateEventRule(px.id, r.eventType, { targetProduct: e.target.value || null }).catch(() => {}),
+    })),
+  }));
+
   // ── Gerenciador de anúncios (dados reais sincronizados) ──
   const adsStatusInfo = (st: string) => {
     if (st === "ACTIVE") return { tag: "tag tag-accent", label: "Ativo", active: true };
@@ -664,11 +752,6 @@ export function useTraffikState(
   if (s.notif.showValue) previewParts.push("R$ 497,00");
   if (s.notif.showProduct) previewParts.push("Método Foco 3.0");
   const notifPreview = previewParts.join(" · ");
-
-  const pixelEvents = s.pixelEvents.map((pe, i) => ({
-    ...pe,
-    toggle: () => setS((st) => ({ ...st, pixelEvents: st.pixelEvents.map((x, j) => (j === i ? { ...x, on: !x.on } : x)) })),
-  }));
 
   // Monta a URL preservando a query já existente e ignorando UTMs vazios.
   const generatedLink = (() => {
@@ -849,9 +932,24 @@ export function useTraffikState(
     webhookPlatformLabel: (p: string) =>
       ({ KIRVANO: "Kirvano", HOTMART: "Hotmart", KIWIFY: "Kiwify", CUSTOM: "Custom" })[p] ?? p,
 
-    pixelEvents,
-    pixelId: s.pixelId,
-    onPixelId: (e: React.ChangeEvent<HTMLInputElement>) => set({ pixelId: e.target.value }),
+    pixels,
+    newPixelName: s.newPixelName,
+    newPixelId: s.newPixelId,
+    newPixelToken: s.newPixelToken,
+    pixelBusy: s.pixelBusy,
+    onNewPixelName: (e: React.ChangeEvent<HTMLInputElement>) => set({ newPixelName: e.target.value }),
+    onNewPixelId: (e: React.ChangeEvent<HTMLInputElement>) => set({ newPixelId: e.target.value }),
+    onNewPixelToken: (e: React.ChangeEvent<HTMLInputElement>) => set({ newPixelToken: e.target.value }),
+    addPixel: async () => {
+      if (!s.newPixelId.trim()) return;
+      set({ pixelBusy: true });
+      try {
+        const created = await createPixel({ name: s.newPixelName, pixelId: s.newPixelId, accessToken: s.newPixelToken });
+        setS((st) => ({ ...st, pixels: [...st.pixels, created], newPixelName: "", newPixelId: "", newPixelToken: "", pixelBusy: false }));
+      } catch {
+        set({ pixelBusy: false });
+      }
+    },
     testEvent: s.testEvent,
     onTestEvent: (e: React.ChangeEvent<HTMLSelectElement>) => set({ testEvent: e.target.value }),
     testLog: s.testLog,
