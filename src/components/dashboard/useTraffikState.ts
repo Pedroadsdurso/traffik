@@ -13,6 +13,7 @@ import {
   toggleWebhook,
   type WebhookRowDTO,
 } from "@/lib/actions/webhooks";
+import type { CreativeRow } from "@/lib/ads/creatives";
 import type { AdsOverview } from "@/lib/ads/overview";
 import type { DashboardData } from "@/lib/dashboard/metrics";
 import { brl, brl0, buildPoints, elapsed, pct, roasFmt } from "@/lib/format";
@@ -92,6 +93,10 @@ interface State {
   newCampaignObjective: string;
   newCampaignBudget: string;
   newCampaignBusy: boolean;
+  creativesPeriod: "hoje" | "7d" | "30d";
+  creativesSort: "roas" | "ctr" | "spend" | "sales";
+  creativesData: CreativeRow[] | null;
+  creativesLoading: boolean;
   dashData: DashboardData | null;
   dashLoading: boolean;
   refreshKey: number;
@@ -175,6 +180,10 @@ function initialState(
     newCampaignObjective: "OUTCOME_TRAFFIC",
     newCampaignBudget: "",
     newCampaignBusy: false,
+    creativesPeriod: "7d",
+    creativesSort: "roas",
+    creativesData: null,
+    creativesLoading: true,
     dashData: null,
     dashLoading: true,
     refreshKey: 0,
@@ -306,6 +315,24 @@ export function useTraffikState(
     })();
     return () => { active = false; controller.abort(); };
   }, [s.adsPeriod, s.adsAccount, s.adsRefreshKey]);
+
+  // Ranking de criativos.
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    (async () => {
+      const qs = new URLSearchParams({ period: s.creativesPeriod, sort: s.creativesSort });
+      try {
+        const res = await fetch(`/api/creatives?${qs.toString()}`, { signal: controller.signal });
+        if (!res.ok) return;
+        const data = (await res.json()) as { creatives: CreativeRow[] };
+        if (active) setS((st) => ({ ...st, creativesData: data.creatives, creativesLoading: false }));
+      } catch {
+        /* abortado ou erro de rede */
+      }
+    })();
+    return () => { active = false; controller.abort(); };
+  }, [s.creativesPeriod, s.creativesSort, s.adsRefreshKey]);
 
   const persistPrefs = useCallback((order: MetricKey[], visible: Record<MetricKey, boolean>) => {
     saveDashboardPrefs({ order, visible }).catch(() => {});
@@ -584,7 +611,19 @@ export function useTraffikState(
     trackingTag: a.tracking ? "tag tag-accent" : "tag tag-neutral",
     trackingLabel: a.tracking ? "Rastreando" : "Pausado",
   }));
-  const creatives = s.creatives.map((c) => ({ ...c, slotId: "creative-" + c.id, spendLabel: brl(c.spend), ctrLabel: pct(c.ctr), roasLabel: roasFmt(c.roas) }));
+  const creatives = (s.creativesData ?? []).map((c) => ({
+    id: c.id,
+    slotId: "creative-" + c.id,
+    name: c.name,
+    campaign: c.campaign,
+    thumbnailUrl: c.thumbnailUrl,
+    format: c.format,
+    best: c.best,
+    sales: c.sales,
+    spendLabel: brl(c.spend),
+    ctrLabel: c.ctr ? pct(c.ctr) : "—",
+    roasLabel: c.spend ? roasFmt(c.roas) : "—",
+  }));
 
   const adsTabs = (["campaigns", "adsets", "ads", "accounts"] as const).map((k, i) => ({
     key: k,
@@ -705,6 +744,13 @@ export function useTraffikState(
     onAdsAccount: (e: React.ChangeEvent<HTMLSelectElement>) => set({ adsAccount: e.target.value }),
     adsAccountOptions: (ao?.accounts ?? []).map((a) => ({ id: a.id, name: a.name })),
     filteredCampaigns, filteredAdsets, filteredAds, accounts, creatives,
+
+    // Ranking de criativos
+    creativesPeriod: s.creativesPeriod,
+    creativesSort: s.creativesSort,
+    creativesLoading: s.creativesLoading,
+    onCreativesPeriod: (e: React.ChangeEvent<HTMLSelectElement>) => set({ creativesPeriod: e.target.value as "hoje" | "7d" | "30d" }),
+    onCreativesSort: (e: React.ChangeEvent<HTMLSelectElement>) => set({ creativesSort: e.target.value as "roas" | "ctr" | "spend" | "sales" }),
 
     // Criar campanha
     newCampaignOpen: s.newCampaignOpen,
