@@ -16,6 +16,9 @@ declare module "next-auth" {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  // Atrás do proxy da Vercel o host precisa ser confiável, senão auth() lança
+  // UntrustedHost e derruba toda página que checa sessão.
+  trustHost: true,
   // Credentials exige JWT: a sessão em banco do adapter não é usada aqui.
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
