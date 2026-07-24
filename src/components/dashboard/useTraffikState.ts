@@ -39,8 +39,16 @@ import {
   createWebhook,
   deleteWebhook,
   toggleWebhook,
+  updateWebhook,
   type WebhookRowDTO,
 } from "@/lib/actions/webhooks";
+import {
+  createApiCredential,
+  deleteApiCredential,
+  revealApiCredential,
+  revokeApiCredential,
+  type ApiCredentialDTO,
+} from "@/lib/actions/apiCredentials";
 import type { CreativeRow } from "@/lib/ads/creatives";
 import type { AdsOverview } from "@/lib/ads/overview";
 import type { DashboardData } from "@/lib/dashboard/metrics";
@@ -130,10 +138,23 @@ interface State {
   newTaxName: string;
   newTaxPct: string;
   webhooks: WebhookRowDTO[];
-  newWebhookPlatform: string;
-  newWebhookName: string;
   webhookBusy: boolean;
   copiedWebhookId: string | null;
+  // Modal "Adicionar Webhook" (bloco esquerdo)
+  webhookModalOpen: boolean;
+  webhookGatewaySearch: string;
+  webhookGateway: string;
+  webhookEditId: string | null;
+  kirvanoToken: string;
+  kirvanoName: string;
+  // Credenciais de API (bloco direito)
+  apiCredentials: ApiCredentialDTO[];
+  credModalOpen: boolean;
+  newCredName: string;
+  credBusy: boolean;
+  createdCredKey: string | null;
+  revealedKeys: Record<string, string>;
+  copiedCredId: string | null;
   testPixelId: string;
   testEventCode: string;
   testBusy: boolean;
@@ -174,6 +195,7 @@ function initialState(
   initialNotifSettings: NotificationSettingsDTO = DEFAULT_NOTIF_SETTINGS,
   initialNotifications: NotificationDTO[] = [],
   initialExpenses: ExpenseDTO[] = [],
+  initialApiCredentials: ApiCredentialDTO[] = [],
 ): State {
   const order = prefs?.order?.length
     ? (prefs.order.filter((k) => DEFAULT_METRIC_ORDER.includes(k as MetricKey)) as MetricKey[])
@@ -233,10 +255,21 @@ function initialState(
     newTaxName: "",
     newTaxPct: "",
     webhooks: initialWebhooks,
-    newWebhookPlatform: "KIRVANO",
-    newWebhookName: "",
     webhookBusy: false,
     copiedWebhookId: null,
+    webhookModalOpen: false,
+    webhookGatewaySearch: "",
+    webhookGateway: "KIRVANO",
+    webhookEditId: null,
+    kirvanoToken: "",
+    kirvanoName: "",
+    apiCredentials: initialApiCredentials,
+    credModalOpen: false,
+    newCredName: "",
+    credBusy: false,
+    createdCredKey: null,
+    revealedKeys: {},
+    copiedCredId: null,
     testPixelId: "",
     testEventCode: "",
     testBusy: false,
@@ -299,6 +332,7 @@ export function useTraffikState(
     initialNotifSettings?: NotificationSettingsDTO;
     initialNotifications?: NotificationDTO[];
     initialExpenses?: ExpenseDTO[];
+    initialApiCredentials?: ApiCredentialDTO[];
   } = {},
 ) {
   const brandName = opts.brandName || "Traffik";
@@ -306,7 +340,7 @@ export function useTraffikState(
   const trackingId = opts.trackingId || "SEU_ID";
   const appUrl = (opts.appUrl || "https://app.traffik.io").replace(/\/+$/, "");
 
-  const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks, opts.dashboardPrefs, opts.initialProfiles, opts.initialPixels, opts.initialRules, opts.initialNotifSettings, opts.initialNotifications, opts.initialExpenses));
+  const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks, opts.dashboardPrefs, opts.initialProfiles, opts.initialPixels, opts.initialRules, opts.initialNotifSettings, opts.initialNotifications, opts.initialExpenses, opts.initialApiCredentials));
 
   function set(patch: Partial<State>) {
     setS((st) => ({ ...st, ...patch }));
@@ -1050,21 +1084,9 @@ export function useTraffikState(
     fbTabs,
     fbSub: s.fbSub,
 
+    // ───────────── Webhooks (bloco esquerdo) ─────────────
     webhooks: s.webhooks,
-    newWebhookPlatform: s.newWebhookPlatform,
-    newWebhookName: s.newWebhookName,
     webhookBusy: s.webhookBusy,
-    onNewWebhookPlatform: (e: React.ChangeEvent<HTMLSelectElement>) => set({ newWebhookPlatform: e.target.value }),
-    onNewWebhookName: (e: React.ChangeEvent<HTMLInputElement>) => set({ newWebhookName: e.target.value }),
-    addWebhook: async () => {
-      set({ webhookBusy: true });
-      try {
-        const created = await createWebhook({ platform: s.newWebhookPlatform, name: s.newWebhookName });
-        setS((st) => ({ ...st, webhooks: [...st.webhooks, created], newWebhookName: "", webhookBusy: false }));
-      } catch {
-        set({ webhookBusy: false });
-      }
-    },
     toggleWebhook: async (id: string) => {
       const updated = await toggleWebhook(id);
       setS((st) => ({ ...st, webhooks: st.webhooks.map((w) => (w.id === id ? updated : w)) }));
@@ -1081,6 +1103,87 @@ export function useTraffikState(
     },
     webhookPlatformLabel: (p: string) =>
       ({ KIRVANO: "Kirvano", HOTMART: "Hotmart", KIWIFY: "Kiwify", CUSTOM: "Custom" })[p] ?? p,
+
+    // Modal "Adicionar Webhook" / editar
+    webhookModalOpen: s.webhookModalOpen,
+    webhookGatewaySearch: s.webhookGatewaySearch,
+    webhookGateway: s.webhookGateway,
+    webhookEditId: s.webhookEditId,
+    kirvanoToken: s.kirvanoToken,
+    kirvanoName: s.kirvanoName,
+    openWebhookModal: () =>
+      set({ webhookModalOpen: true, webhookEditId: null, webhookGateway: "KIRVANO", webhookGatewaySearch: "", kirvanoToken: "", kirvanoName: "" }),
+    openEditWebhook: (w: WebhookRowDTO) =>
+      set({ webhookModalOpen: true, webhookEditId: w.id, webhookGateway: w.platform, kirvanoToken: "", kirvanoName: w.name }),
+    closeWebhookModal: () => set({ webhookModalOpen: false }),
+    onWebhookGatewaySearch: (e: React.ChangeEvent<HTMLInputElement>) => set({ webhookGatewaySearch: e.target.value }),
+    selectWebhookGateway: (g: string) => set({ webhookGateway: g }),
+    onKirvanoToken: (e: React.ChangeEvent<HTMLInputElement>) => set({ kirvanoToken: e.target.value }),
+    onKirvanoName: (e: React.ChangeEvent<HTMLInputElement>) => set({ kirvanoName: e.target.value }),
+    saveWebhook: async () => {
+      set({ webhookBusy: true });
+      try {
+        if (s.webhookEditId) {
+          const updated = await updateWebhook({ id: s.webhookEditId, name: s.kirvanoName, secret: s.kirvanoToken });
+          setS((st) => ({
+            ...st,
+            webhooks: st.webhooks.map((w) => (w.id === updated.id ? updated : w)),
+            webhookBusy: false,
+            webhookModalOpen: false,
+          }));
+        } else {
+          const created = await createWebhook({ platform: s.webhookGateway, name: s.kirvanoName, secret: s.kirvanoToken });
+          setS((st) => ({ ...st, webhooks: [...st.webhooks, created], webhookBusy: false, webhookModalOpen: false }));
+        }
+      } catch {
+        set({ webhookBusy: false });
+      }
+    },
+
+    // ───────────── Credenciais de API (bloco direito) ─────────────
+    apiCredentials: s.apiCredentials,
+    credModalOpen: s.credModalOpen,
+    newCredName: s.newCredName,
+    credBusy: s.credBusy,
+    createdCredKey: s.createdCredKey,
+    revealedKeys: s.revealedKeys,
+    copiedCredId: s.copiedCredId,
+    openCredModal: () => set({ credModalOpen: true, newCredName: "", createdCredKey: null }),
+    closeCredModal: () => set({ credModalOpen: false, createdCredKey: null }),
+    onNewCredName: (e: React.ChangeEvent<HTMLInputElement>) => set({ newCredName: e.target.value }),
+    createCredential: async () => {
+      set({ credBusy: true });
+      try {
+        const created = await createApiCredential(s.newCredName);
+        const { key, ...dto } = created;
+        setS((st) => ({ ...st, apiCredentials: [dto, ...st.apiCredentials], createdCredKey: key, credBusy: false }));
+      } catch {
+        set({ credBusy: false });
+      }
+    },
+    revealCredential: async (id: string) => {
+      const { key } = await revealApiCredential(id);
+      setS((st) => ({ ...st, revealedKeys: { ...st.revealedKeys, [id]: key } }));
+    },
+    hideCredential: (id: string) =>
+      setS((st) => {
+        const next = { ...st.revealedKeys };
+        delete next[id];
+        return { ...st, revealedKeys: next };
+      }),
+    revokeCredential: async (id: string) => {
+      const updated = await revokeApiCredential(id);
+      setS((st) => ({ ...st, apiCredentials: st.apiCredentials.map((c) => (c.id === id ? updated : c)) }));
+    },
+    deleteCredential: async (id: string) => {
+      await deleteApiCredential(id);
+      setS((st) => ({ ...st, apiCredentials: st.apiCredentials.filter((c) => c.id !== id) }));
+    },
+    copyCredKey: (id: string, key: string) => {
+      navigator.clipboard.writeText(key);
+      set({ copiedCredId: id });
+      setTimeout(() => set({ copiedCredId: null }), 1500);
+    },
 
     pixels,
     newPixelName: s.newPixelName,

@@ -7,6 +7,7 @@ import type { ExpenseDTO } from "@/lib/actions/expenses";
 import type { AdProfileDTO } from "@/lib/actions/facebook";
 import type { NotificationDTO, NotificationSettingsDTO } from "@/lib/actions/notifications";
 import type { PixelConfigDTO } from "@/lib/actions/pixels";
+import type { ApiCredentialDTO } from "@/lib/actions/apiCredentials";
 import type { RuleDTO } from "@/lib/actions/rules";
 import type { WebhookRowDTO } from "@/lib/actions/webhooks";
 import { sx } from "@/lib/sx";
@@ -21,6 +22,7 @@ export function DashboardShell({
   trackingId,
   appUrl,
   initialWebhooks,
+  initialApiCredentials,
   dashboardPrefs,
   initialProfiles,
   initialPixels,
@@ -34,6 +36,7 @@ export function DashboardShell({
   trackingId?: string;
   appUrl?: string;
   initialWebhooks?: WebhookRowDTO[];
+  initialApiCredentials?: ApiCredentialDTO[];
   dashboardPrefs?: DashboardPrefsDTO | null;
   initialProfiles?: AdProfileDTO[];
   initialPixels?: PixelConfigDTO[];
@@ -47,6 +50,7 @@ export function DashboardShell({
     trackingId,
     appUrl,
     initialWebhooks,
+    initialApiCredentials,
     dashboardPrefs,
     initialProfiles,
     initialPixels,

@@ -17,14 +17,14 @@ export interface NormalizedSale {
   ip: string | null;
 }
 
-type Json = Record<string, unknown>;
+export type Json = Record<string, unknown>;
 
-function isObj(v: unknown): v is Json {
+export function isObj(v: unknown): v is Json {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
 /** Lê a primeira chave presente, aceitando caminhos aninhados "a.b.c". */
-function pick(obj: Json, keys: string[]): unknown {
+export function pick(obj: Json, keys: string[]): unknown {
   for (const key of keys) {
     if (key.includes(".")) {
       let cur: unknown = obj;
@@ -43,14 +43,14 @@ function pick(obj: Json, keys: string[]): unknown {
   return undefined;
 }
 
-function toStr(v: unknown, max = 512): string | null {
+export function toStr(v: unknown, max = 512): string | null {
   if (v === undefined || v === null) return null;
   const s = String(v).trim();
   return s ? s.slice(0, max) : null;
 }
 
 /** Converte "1.234,56" | "1,234.56" | "R$ 197,00" | centavos em número. */
-function toNumber(v: unknown): number {
+export function toNumber(v: unknown): number {
   if (typeof v === "number") return v;
   if (typeof v !== "string") return 0;
   let s = v.replace(/[^\d.,-]/g, "");
@@ -74,7 +74,7 @@ function mapStatus(raw: unknown): SaleStatus {
   return "PENDENTE";
 }
 
-function mapPayment(raw: unknown): PaymentMethod {
+export function mapPayment(raw: unknown): PaymentMethod {
   const s = String(raw ?? "").toLowerCase();
   if (/pix/.test(s)) return "PIX";
   if (/cart|card|credit|debit/.test(s)) return "CARTAO";

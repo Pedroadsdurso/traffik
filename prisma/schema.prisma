@@ -127,6 +127,7 @@ model User {
   clicks               Click[]
   sales                Sale[]
   webhooks             Webhook[]
+  apiCredentials       ApiCredential[]
   pixelConfigs         PixelConfig[]
   automationRules      AutomationRule[]
   notifications        Notification[]
@@ -371,10 +372,12 @@ model Sale {
 model Webhook {
   id   String @id @default(cuid())
   name String
-  /// Segmento público da URL: /api/webhook/sale/{token}
+  /// Segmento público da URL: /api/webhook/sale/{token} (ou ?id={token} na Kirvano)
   token       String          @unique @default(uuid())
   platform    WebhookPlatform @default(CUSTOM)
   active      Boolean         @default(true)
+  /// Token de segurança configurado pelo usuário no painel do gateway
+  /// (ex.: Kirvano). Validado a cada evento recebido.
   secret      String?
   lastEventAt DateTime?
   eventCount  Int             @default(0)
@@ -387,6 +390,25 @@ model Webhook {
 
   @@index([userId])
   @@index([token])
+}
+
+/// Chave de API própria da Traffik: autentica o envio de eventos de venda
+/// por qualquer sistema externo (integração genérica — bloco direito da aba
+/// Webhooks). A chave completa é guardada para permitir "revelar".
+model ApiCredential {
+  id         String    @id @default(cuid())
+  name       String
+  key        String    @unique
+  revoked    Boolean   @default(false)
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([key])
 }
 
 model PixelConfig {
