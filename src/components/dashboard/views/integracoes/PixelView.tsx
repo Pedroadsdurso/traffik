@@ -1,93 +1,354 @@
-import { sx } from "@/lib/sx";
-import type { TraffikView } from "../../useTraffikState";
+"use client";
 
-export function PixelView({ v }: { v: TraffikView }) {
+import { useEffect, useState } from "react";
+
+import {
+  createPixel,
+  deletePixel,
+  listPixels,
+  listTrackedProducts,
+  togglePixel,
+  updatePixel,
+  type DetectionType,
+  type PixelConfigDTO,
+  type PixelFormInput,
+} from "@/lib/actions/pixels";
+import { pixelScript } from "@/lib/pixel/script";
+import { sx } from "@/lib/sx";
+
+/** `savedToken` marca um pixel já persistido cujo token fica no servidor (nunca volta ao cliente). */
+type MetaDraft = { pixelId: string; accessToken: string; nickname: string; savedToken?: boolean };
+type Form = {
+  name: string;
+  metaPixels: MetaDraft[];
+  lead: boolean;
+  addToCart: boolean;
+  ic: { enabled: boolean; type: DetectionType; value: string };
+  purchase: { enabled: boolean; sendMode: string; valueMode: string; fixedValue: string; targetProduct: string };
+};
+
+const EMPTY_FORM: Form = {
+  name: "",
+  metaPixels: [],
+  lead: false,
+  addToCart: false,
+  ic: { enabled: false, type: "contem_texto", value: "" },
+  purchase: { enabled: true, sendMode: "APENAS_APROVADAS", valueMode: "VALOR_DA_VENDA", fixedValue: "", targetProduct: "" },
+};
+
+function formToInput(f: Form): PixelFormInput {
+  return {
+    name: f.name,
+    metaPixels: f.metaPixels.map((m) => ({ pixelId: m.pixelId, accessToken: m.accessToken, nickname: m.nickname })),
+    lead: f.lead,
+    addToCart: f.addToCart,
+    initiateCheckout: { enabled: f.ic.enabled, detectionType: f.ic.type, detectionValue: f.ic.value },
+    purchase: {
+      enabled: f.purchase.enabled,
+      sendMode: f.purchase.sendMode as PixelFormInput["purchase"]["sendMode"],
+      valueMode: f.purchase.valueMode as PixelFormInput["purchase"]["valueMode"],
+      fixedValue: f.purchase.valueMode === "VALOR_FIXO" ? parseFloat(f.purchase.fixedValue) || 0 : null,
+      targetProduct: f.purchase.targetProduct || null,
+    },
+  };
+}
+
+function dtoToForm(px: PixelConfigDTO): Form {
+  const ic = px.rules.find((r) => r.eventType === "INITIATE_CHECKOUT");
+  const pu = px.rules.find((r) => r.eventType === "PURCHASE");
+  return {
+    name: px.name,
+    metaPixels: px.metaPixels.map((m) => ({ pixelId: m.pixelId, accessToken: "", nickname: m.nickname ?? "", savedToken: m.hasToken })),
+    lead: px.rules.find((r) => r.eventType === "LEAD")?.enabled ?? false,
+    addToCart: px.rules.find((r) => r.eventType === "ADD_TO_CART")?.enabled ?? false,
+    ic: { enabled: ic?.enabled ?? false, type: (ic?.detectionType as DetectionType) ?? "contem_texto", value: ic?.detectionValue ?? "" },
+    purchase: {
+      enabled: pu?.enabled ?? true,
+      sendMode: pu?.sendMode ?? "APENAS_APROVADAS",
+      valueMode: pu?.valueMode ?? "VALOR_DA_VENDA",
+      fixedValue: pu?.fixedValue != null ? String(pu.fixedValue) : "",
+      targetProduct: pu?.targetProduct ?? "",
+    },
+  };
+}
+
+function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
+  return <button className="sw" role="switch" aria-checked={on} onClick={onClick} type="button" />;
+}
+
+export function PixelView() {
+  const [pixels, setPixels] = useState<PixelConfigDTO[]>([]);
+  const [products, setProducts] = useState<string[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+  const [form, setForm] = useState<Form>(EMPTY_FORM);
+  const [meta, setMeta] = useState<MetaDraft>({ pixelId: "", accessToken: "", nickname: "" });
+  const [metaOpen, setMetaOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [scriptFor, setScriptFor] = useState<PixelConfigDTO | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    listPixels().then(setPixels).catch(() => {});
+    listTrackedProducts().then(setProducts).catch(() => {});
+  }, []);
+
+  function openNew() {
+    setForm(EMPTY_FORM);
+    setEditId(null);
+    setMeta({ pixelId: "", accessToken: "", nickname: "" });
+    setMetaOpen(false);
+    setError(null);
+    setModalOpen(true);
+  }
+  function openEdit(px: PixelConfigDTO) {
+    setForm(dtoToForm(px));
+    setEditId(px.id);
+    setMeta({ pixelId: "", accessToken: "", nickname: "" });
+    setMetaOpen(false);
+    setError(null);
+    setModalOpen(true);
+  }
+  function addMeta() {
+    if (!meta.pixelId.trim()) return;
+    setForm((f) => ({ ...f, metaPixels: [...f.metaPixels, meta] }));
+    setMeta({ pixelId: "", accessToken: "", nickname: "" });
+    setMetaOpen(false);
+  }
+  function removeMeta(i: number) {
+    setForm((f) => ({ ...f, metaPixels: f.metaPixels.filter((_, j) => j !== i) }));
+  }
+
+  async function save() {
+    if (form.metaPixels.length === 0) {
+      setError("Adicione ao menos um pixel da Meta.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const input = formToInput(form);
+      const saved = editId ? await updatePixel(editId, input) : await createPixel(input);
+      setPixels((list) => (editId ? list.map((p) => (p.id === saved.id ? saved : p)) : [...list, saved]));
+      setModalOpen(false);
+      setScriptFor(saved); // mostra o script gerado
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Não foi possível salvar. Saia e entre novamente se persistir.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function toggle(id: string) {
+    const r = await togglePixel(id);
+    setPixels((list) => list.map((p) => (p.id === id ? { ...p, enabled: r.enabled } : p)));
+  }
+  async function remove(id: string) {
+    await deletePixel(id);
+    setPixels((list) => list.filter((p) => p.id !== id));
+  }
+
+  function scriptText(px: PixelConfigDTO): string {
+    const ic = px.rules.find((r) => r.eventType === "INITIATE_CHECKOUT");
+    return pixelScript({
+      configId: px.id,
+      apiBase: typeof window !== "undefined" ? window.location.origin : "",
+      lead: px.rules.find((r) => r.eventType === "LEAD")?.enabled ?? false,
+      addToCart: px.rules.find((r) => r.eventType === "ADD_TO_CART")?.enabled ?? false,
+      initiateCheckout: {
+        enabled: ic?.enabled ?? false,
+        type: (ic?.detectionType as DetectionType) ?? undefined,
+        value: ic?.detectionValue ?? undefined,
+      },
+    });
+  }
+
   return (
-    <div style={sx("display:flex;flex-direction:column;gap:var(--space-3);max-width:760px")}>
+    <div style={sx("display:flex;flex-direction:column;gap:var(--space-3);max-width:920px")}>
       <div className="card">
-        <div className="card-kicker">Conversions API</div>
-        <div className="card-title">Adicionar Pixel</div>
-        <p className="card-body">Envie eventos server-side para o seu pixel da Meta. Pegue o ID e o token da CAPI no <em>Gerenciador de Eventos → Configurações</em>.</p>
-        <div style={sx("display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2);margin-top:var(--space-2)")}>
-          <div className="field"><label>Nome</label><input className="input" placeholder="Ex.: Pixel principal" value={v.newPixelName} onChange={v.onNewPixelName} /></div>
-          <div className="field"><label>Pixel ID</label><input className="input" placeholder="Ex.: 284910375562481" value={v.newPixelId} onChange={v.onNewPixelId} /></div>
-          <div className="field" style={sx("grid-column:1/-1")}><label>Token da Conversions API</label><input className="input" type="password" placeholder="EAAG..." value={v.newPixelToken} onChange={v.onNewPixelToken} /></div>
+        <div style={sx("display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-2)")}>
+          <div>
+            <div className="card-kicker">Pixel</div>
+            <div className="card-title">Pixels da Meta + Conversions API</div>
+            <p className="card-body" style={sx("margin:4px 0 0")}>
+              Cadastre um pixel, configure quais eventos disparar e gere o script para instalar no seu site.
+            </p>
+          </div>
+          <button className="btn btn-primary" type="button" onClick={openNew} style={sx("white-space:nowrap")}>
+            + Adicionar Pixel
+          </button>
         </div>
-        <button className="btn btn-primary" type="button" onClick={v.addPixel} disabled={v.pixelBusy || !v.newPixelId.trim()} style={sx("width:fit-content;margin-top:var(--space-2)")}>
-          {v.pixelBusy ? "Adicionando…" : "Adicionar Pixel"}
-        </button>
       </div>
 
-      {v.pixels.length === 0 ? (
-        <div className="card text-muted" style={sx("font-size:13px")}>Nenhum pixel configurado ainda.</div>
+      {pixels.length === 0 ? (
+        <div className="card text-muted" style={sx("font-size:13px")}>Nenhum pixel cadastrado ainda.</div>
       ) : (
-        v.pixels.map((px) => (
+        pixels.map((px) => (
           <div className="card" key={px.id}>
-            <div style={sx("display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)")}>
+            <div style={sx("display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);flex-wrap:wrap")}>
               <div>
                 <div style={sx("display:flex;align-items:center;gap:8px")}>
                   <span className="card-title" style={sx("font-size:15px")}>{px.name}</span>
-                  {!px.hasToken && <span className="tag tag-neutral">sem token CAPI</span>}
+                  <span className={px.enabled ? "tag tag-accent" : "tag tag-neutral"}>{px.enabled ? "Ativo" : "Inativo"}</span>
                 </div>
-                <div className="card-meta">Pixel ID: {px.pixelId}</div>
+                <div className="card-meta">
+                  {px.metaPixels.length} pixel(s) da Meta ·{" "}
+                  {px.rules.filter((r) => r.enabled).map((r) => r.eventType).join(", ") || "sem eventos"}
+                </div>
               </div>
               <div style={sx("display:flex;align-items:center;gap:10px")}>
-                <button className="sw" role="switch" aria-checked={px.enabled} onClick={px.toggle} />
-                <button className="btn btn-ghost" type="button" onClick={px.remove}>Remover</button>
+                <Toggle on={px.enabled} onClick={() => toggle(px.id)} />
+                <button className="btn btn-secondary" type="button" onClick={() => setScriptFor(px)}>Ver script</button>
+                <button className="btn btn-ghost" type="button" onClick={() => openEdit(px)}>Editar</button>
+                <button className="btn btn-ghost" type="button" onClick={() => remove(px.id)}>Remover</button>
               </div>
-            </div>
-
-            <div style={sx("display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-2)")}>
-              {px.rules.map((r) => (
-                <div key={r.eventType} style={sx("padding:var(--space-3);border-radius:var(--radius-md);background:var(--color-bg)")}>
-                  <div style={sx("display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)")}>
-                    <div>
-                      <div style={sx("font-size:14px")}>{r.label}</div>
-                      <div className="text-muted" style={sx("font-size:12px")}>{r.desc}</div>
-                    </div>
-                    <button className="sw" role="switch" aria-checked={r.enabled} onClick={r.toggle} />
-                  </div>
-
-                  {r.enabled && r.eventType !== "PURCHASE" && (
-                    <div className="field" style={sx("margin-top:var(--space-2)")}>
-                      <label>Regra de detecção (contém texto)</label>
-                      <input className="input" placeholder='Ex.: "COMPRAR AGORA"' value={r.detectionText} onChange={r.onDetection} onBlur={r.commitDetection} />
-                    </div>
-                  )}
-
-                  {r.enabled && r.eventType === "PURCHASE" && (
-                    <div style={sx("display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2);margin-top:var(--space-2)")}>
-                      <div className="field">
-                        <label>Enviar</label>
-                        <select className="input" value={r.sendMode} onChange={r.onSendMode}>
-                          <option value="APENAS_APROVADAS">Apenas vendas aprovadas</option>
-                          <option value="TODAS">Todas as vendas</option>
-                        </select>
-                      </div>
-                      <div className="field">
-                        <label>Valor do evento</label>
-                        <select className="input" value={r.valueMode} onChange={r.onValueMode}>
-                          <option value="VALOR_DA_VENDA">Valor da venda</option>
-                          <option value="VALOR_FIXO">Valor fixo</option>
-                        </select>
-                      </div>
-                      {r.valueMode === "VALOR_FIXO" && (
-                        <div className="field">
-                          <label>Valor fixo (R$)</label>
-                          <input className="input" inputMode="decimal" value={r.fixedValue} onChange={r.onFixedValue} onBlur={r.commitFixedValue} />
-                        </div>
-                      )}
-                      <div className="field" style={sx("grid-column:1/-1")}>
-                        <label>Produto alvo (opcional — vazio = qualquer)</label>
-                        <input className="input" placeholder="Ex.: Método Foco 3.0" value={r.targetProduct} onChange={r.onTargetProduct} onBlur={r.commitTargetProduct} />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
             </div>
           </div>
         ))
+      )}
+
+      {modalOpen && (
+        <div className="dialog-backdrop" onClick={() => setModalOpen(false)}>
+          <div className="dialog" onClick={(e) => e.stopPropagation()} style={sx("max-width:640px;max-height:88vh;overflow-y:auto")}>
+            <div className="dialog-title">{editId ? "Editar Pixel" : "Adicionar Pixel"}</div>
+            <div className="dialog-body" style={sx("display:flex;flex-direction:column;gap:var(--space-3)")}>
+              <div className="field">
+                <label>Nome do pixel</label>
+                <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex.: Pixel principal" />
+              </div>
+              <div className="field">
+                <label>Tipo</label>
+                <select className="input" value="META" disabled>
+                  <option value="META">Meta (Facebook)</option>
+                </select>
+              </div>
+
+              {/* Pixels da Meta */}
+              <div style={sx("border:1px solid var(--color-border);border-radius:10px;padding:var(--space-3);display:flex;flex-direction:column;gap:8px")}>
+                <div style={sx("display:flex;align-items:center;justify-content:space-between")}>
+                  <span style={sx("font-weight:600;font-size:13px")}>Pixels da Meta</span>
+                  {!metaOpen && <button className="btn btn-secondary" type="button" onClick={() => setMetaOpen(true)} style={sx("padding:6px 10px;font-size:12px")}>Adicionar</button>}
+                </div>
+                {form.metaPixels.map((m, i) => (
+                  <div key={i} style={sx("display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12.5px;background:var(--color-bg);border-radius:8px;padding:8px 10px")}>
+                    <span style={sx("font-family:ui-monospace,monospace")}>{m.pixelId}{m.nickname ? ` · ${m.nickname}` : ""}{m.accessToken ? " · token" : m.savedToken ? " · token salvo" : " · sem token"}</span>
+                    <button className="btn btn-ghost" type="button" onClick={() => removeMeta(i)} style={sx("padding:4px 8px;font-size:11px")}>remover</button>
+                  </div>
+                ))}
+                {metaOpen && (
+                  <div style={sx("display:flex;flex-direction:column;gap:8px;background:var(--color-bg);border-radius:8px;padding:10px")}>
+                    <input className="input" placeholder="ID do pixel" value={meta.pixelId} onChange={(e) => setMeta({ ...meta, pixelId: e.target.value })} />
+                    <input className="input" placeholder="Token de acesso (CAPI)" value={meta.accessToken} onChange={(e) => setMeta({ ...meta, accessToken: e.target.value })} />
+                    <input className="input" placeholder="Apelido (opcional)" value={meta.nickname} onChange={(e) => setMeta({ ...meta, nickname: e.target.value })} />
+                    <div style={sx("display:flex;gap:8px;justify-content:flex-end")}>
+                      <button className="btn btn-ghost" type="button" onClick={() => setMetaOpen(false)}>Fechar</button>
+                      <button className="btn btn-primary" type="button" onClick={addMeta} disabled={!meta.pixelId.trim()}>Confirmar</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Regras simples */}
+              <div style={sx("display:flex;align-items:center;justify-content:space-between")}>
+                <div><div style={sx("font-weight:600;font-size:13px")}>Regra de Lead</div><div className="text-muted" style={sx("font-size:11.5px")}>Dispara no envio de formulários</div></div>
+                <Toggle on={form.lead} onClick={() => setForm({ ...form, lead: !form.lead })} />
+              </div>
+              <div style={sx("display:flex;align-items:center;justify-content:space-between")}>
+                <div><div style={sx("font-weight:600;font-size:13px")}>Regra de Add To Cart</div><div className="text-muted" style={sx("font-size:11.5px")}>Clique em botões de carrinho/comprar</div></div>
+                <Toggle on={form.addToCart} onClick={() => setForm({ ...form, addToCart: !form.addToCart })} />
+              </div>
+
+              {/* Initiate Checkout */}
+              <div style={sx("border:1px solid var(--color-border);border-radius:10px;padding:var(--space-3);display:flex;flex-direction:column;gap:8px")}>
+                <div style={sx("display:flex;align-items:center;justify-content:space-between")}>
+                  <span style={sx("font-weight:600;font-size:13px")}>Regra de Initiate Checkout</span>
+                  <Toggle on={form.ic.enabled} onClick={() => setForm({ ...form, ic: { ...form.ic, enabled: !form.ic.enabled } })} />
+                </div>
+                {form.ic.enabled && (
+                  <>
+                    <div className="field">
+                      <label>Regra de detecção</label>
+                      <select className="input" value={form.ic.type} onChange={(e) => setForm({ ...form, ic: { ...form.ic, type: e.target.value as DetectionType } })}>
+                        <option value="contem_texto">Contém texto</option>
+                        <option value="contem_css">Contém CSS</option>
+                        <option value="contem_url">Contém URL</option>
+                      </select>
+                    </div>
+                    <input className="input" value={form.ic.value} onChange={(e) => setForm({ ...form, ic: { ...form.ic, value: e.target.value } })}
+                      placeholder={form.ic.type === "contem_texto" ? "Ex.: COMPRAR AGORA" : form.ic.type === "contem_css" ? "Ex.: .btn-checkout" : "Ex.: /checkout"} />
+                  </>
+                )}
+              </div>
+
+              {/* Purchase */}
+              <div style={sx("border:1px solid var(--color-border);border-radius:10px;padding:var(--space-3);display:flex;flex-direction:column;gap:8px")}>
+                <div style={sx("display:flex;align-items:center;justify-content:space-between")}>
+                  <span style={sx("font-weight:600;font-size:13px")}>Regra de Purchase</span>
+                  <Toggle on={form.purchase.enabled} onClick={() => setForm({ ...form, purchase: { ...form.purchase, enabled: !form.purchase.enabled } })} />
+                </div>
+                {form.purchase.enabled && (
+                  <>
+                    <div className="field">
+                      <label>Configuração de envio</label>
+                      <select className="input" value={form.purchase.sendMode} onChange={(e) => setForm({ ...form, purchase: { ...form.purchase, sendMode: e.target.value } })}>
+                        <option value="APENAS_APROVADAS">Apenas aprovadas</option>
+                        <option value="TODAS">Aprovadas e pendentes</option>
+                      </select>
+                    </div>
+                    <div className="field">
+                      <label>Valor do envio</label>
+                      <select className="input" value={form.purchase.valueMode} onChange={(e) => setForm({ ...form, purchase: { ...form.purchase, valueMode: e.target.value } })}>
+                        <option value="VALOR_DA_VENDA">Valor da venda</option>
+                        <option value="VALOR_FIXO">Comissão (valor fixo)</option>
+                      </select>
+                    </div>
+                    {form.purchase.valueMode === "VALOR_FIXO" && (
+                      <div className="field">
+                        <label>Valor fixo (R$)</label>
+                        <input className="input" inputMode="decimal" value={form.purchase.fixedValue} onChange={(e) => setForm({ ...form, purchase: { ...form.purchase, fixedValue: e.target.value } })} placeholder="Ex.: 47.00" />
+                      </div>
+                    )}
+                    <div className="field">
+                      <label>Produto</label>
+                      <select className="input" value={form.purchase.targetProduct} onChange={(e) => setForm({ ...form, purchase: { ...form.purchase, targetProduct: e.target.value } })}>
+                        <option value="">Todos os produtos</option>
+                        {products.map((p) => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {error && <p style={sx("margin:0;font-size:12.5px;color:var(--color-danger,#f87171)")}>{error}</p>}
+            </div>
+            <div className="dialog-actions">
+              <button className="btn btn-secondary" type="button" onClick={() => setModalOpen(false)}>Cancelar</button>
+              <button className="btn btn-primary" type="button" onClick={save} disabled={busy || form.metaPixels.length === 0}>
+                {busy ? "Salvando…" : "Salvar dados"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {scriptFor && (
+        <div className="dialog-backdrop" onClick={() => setScriptFor(null)}>
+          <div className="dialog" onClick={(e) => e.stopPropagation()} style={sx("max-width:680px")}>
+            <div className="dialog-title">Script do pixel — {scriptFor.name}</div>
+            <div className="dialog-body" style={sx("display:flex;flex-direction:column;gap:var(--space-2)")}>
+              <p className="card-body" style={sx("margin:0")}>Cole este script antes do <code>&lt;/head&gt;</code> do seu site. Ele reporta os eventos configurados à Conversions API.</p>
+              <pre style={sx("background:var(--color-bg,#0b0b0f);border:1px solid var(--color-border);border-radius:8px;padding:var(--space-3);font-size:11px;font-family:ui-monospace,monospace;overflow:auto;max-height:320px;margin:0")}>
+                {scriptText(scriptFor)}
+              </pre>
+            </div>
+            <div className="dialog-actions">
+              <button className="btn btn-secondary" type="button" onClick={() => { navigator.clipboard.writeText(scriptText(scriptFor)); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>
+                {copied ? "Copiado!" : "Copiar script"}
+              </button>
+              <button className="btn btn-primary" type="button" onClick={() => setScriptFor(null)}>Concluir</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

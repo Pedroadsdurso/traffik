@@ -29,36 +29,46 @@ export async function dispatchPurchaseEvents(saleId: string): Promise<void> {
       where: {
         userId: sale.userId,
         enabled: true,
-        accessToken: { not: null },
         eventRules: { some: { eventType: "PURCHASE", enabled: true } },
       },
-      include: { eventRules: { where: { eventType: "PURCHASE" } } },
+      include: { eventRules: { where: { eventType: "PURCHASE" } }, metaPixels: true },
     });
 
     for (const px of pixels) {
       const rule = px.eventRules[0];
-      if (!rule || !rule.enabled || !px.accessToken) continue;
+      if (!rule || !rule.enabled) continue;
       if (rule.sendMode === "APENAS_APROVADAS" && sale.status !== "APROVADA") continue;
       if (rule.targetProduct && rule.targetProduct.trim() && rule.targetProduct.toLowerCase() !== sale.product.toLowerCase()) {
         continue;
       }
       const value = rule.valueMode === "VALOR_FIXO" ? Number(rule.fixedValue ?? 0) : Number(sale.value);
 
-      const result = await sendPurchaseEvent({
-        pixelId: px.pixelId,
-        accessToken: px.accessToken,
-        value,
-        currency: sale.currency,
-        eventId: sale.id, // dedup com o pixel do navegador
-        email: sale.buyerEmail,
-        phone: sale.buyerPhone,
-        country: sale.country,
-        fbclid: sale.click?.fbclid,
-        clientIp: sale.click?.ip,
-        clientUserAgent: sale.click?.userAgent,
-        eventSourceUrl: sale.click?.url,
-      });
-      if (!result.ok) console.error(`[CAPI] pixel ${px.pixelId}: ${result.error}`);
+      // Dispara para cada pixel da Meta com token (fallback ao legado da Fase 10).
+      const targets =
+        px.metaPixels.length > 0
+          ? px.metaPixels
+          : px.pixelId
+            ? [{ pixelId: px.pixelId, accessToken: px.accessToken }]
+            : [];
+
+      for (const mp of targets) {
+        if (!mp.accessToken) continue;
+        const result = await sendPurchaseEvent({
+          pixelId: mp.pixelId,
+          accessToken: mp.accessToken,
+          value,
+          currency: sale.currency,
+          eventId: sale.id, // dedup com o pixel do navegador
+          email: sale.buyerEmail,
+          phone: sale.buyerPhone,
+          country: sale.country,
+          fbclid: sale.click?.fbclid,
+          clientIp: sale.click?.ip,
+          clientUserAgent: sale.click?.userAgent,
+          eventSourceUrl: sale.click?.url,
+        });
+        if (!result.ok) console.error(`[CAPI] pixel ${mp.pixelId}: ${result.error}`);
+      }
     }
   } catch (e) {
     console.error("[dispatchPurchaseEvents]", e);

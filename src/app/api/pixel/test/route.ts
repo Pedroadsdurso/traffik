@@ -18,14 +18,19 @@ export async function POST(req: NextRequest) {
 
   const pixel = await prisma.pixelConfig.findFirst({
     where: { id: body.pixelConfigId, userId: session.user.id },
-    select: { pixelId: true, accessToken: true },
+    select: { pixelId: true, accessToken: true, metaPixels: true },
   });
   if (!pixel) return Response.json({ error: "Pixel não encontrado." }, { status: 404 });
-  if (!pixel.accessToken) return Response.json({ error: "Pixel sem token da Conversions API." }, { status: 400 });
+
+  // Usa o primeiro pixel da Meta com token (fallback ao legado da Fase 10).
+  const target =
+    pixel.metaPixels.find((m) => m.accessToken) ??
+    (pixel.pixelId && pixel.accessToken ? { pixelId: pixel.pixelId, accessToken: pixel.accessToken } : null);
+  if (!target?.accessToken) return Response.json({ error: "Pixel sem token da Conversions API." }, { status: 400 });
 
   const result = await sendPurchaseEvent({
-    pixelId: pixel.pixelId,
-    accessToken: pixel.accessToken,
+    pixelId: target.pixelId,
+    accessToken: target.accessToken,
     value: 1,
     currency: "BRL",
     eventId: "test-" + Date.now(),

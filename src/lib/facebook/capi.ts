@@ -10,11 +10,15 @@ function hash(value: string | null | undefined): string | undefined {
   return createHash("sha256").update(normalized).digest("hex");
 }
 
-export interface PurchaseEventInput {
+/** Nomes de evento aceitos pela Conversions API que a Traffik dispara. */
+export type CapiEventName = "Purchase" | "Lead" | "AddToCart" | "InitiateCheckout";
+
+export interface ServerEventInput {
+  eventName: CapiEventName;
   pixelId: string;
   accessToken: string;
-  value: number;
-  currency: string;
+  value?: number;
+  currency?: string;
   eventId: string; // deduplicação com o pixel do navegador
   eventTime?: number; // epoch em segundos
   email?: string | null;
@@ -27,11 +31,21 @@ export interface PurchaseEventInput {
   testEventCode?: string | null;
 }
 
+export type PurchaseEventInput = Omit<ServerEventInput, "eventName" | "value" | "currency"> & {
+  value: number;
+  currency: string;
+};
+
+/** Wrapper de compatibilidade: dispara um Purchase. */
+export function sendPurchaseEvent(input: PurchaseEventInput): Promise<{ ok: boolean; error?: string }> {
+  return sendServerEvent({ ...input, eventName: "Purchase" });
+}
+
 /**
- * Envia um evento Purchase para a Conversions API do Facebook (server-side).
- * Retorna { ok, error? } sem lançar, para não derrubar o fluxo do webhook.
+ * Envia um evento server-side para a Conversions API do Facebook.
+ * Retorna { ok, error? } sem lançar, para não derrubar o fluxo chamador.
  */
-export async function sendPurchaseEvent(input: PurchaseEventInput): Promise<{ ok: boolean; error?: string }> {
+export async function sendServerEvent(input: ServerEventInput): Promise<{ ok: boolean; error?: string }> {
   const userData: Record<string, unknown> = {};
   const em = hash(input.email);
   const ph = hash(input.phone?.replace(/\D/g, ""));
@@ -44,13 +58,17 @@ export async function sendPurchaseEvent(input: PurchaseEventInput): Promise<{ ok
   // fbc é derivado do fbclid: fb.1.<timestamp>.<fbclid>
   if (input.fbclid) userData.fbc = `fb.1.${Math.floor(Date.now() / 1000)}.${input.fbclid}`;
 
+  const customData: Record<string, unknown> = {};
+  if (input.currency) customData.currency = input.currency;
+  if (input.value != null) customData.value = input.value;
+
   const event: Record<string, unknown> = {
-    event_name: "Purchase",
+    event_name: input.eventName,
     event_time: input.eventTime ?? Math.floor(Date.now() / 1000),
     event_id: input.eventId,
     action_source: "website",
     user_data: userData,
-    custom_data: { currency: input.currency, value: input.value },
+    custom_data: customData,
   };
   if (input.eventSourceUrl) event.event_source_url = input.eventSourceUrl;
 

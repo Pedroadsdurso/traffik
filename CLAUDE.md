@@ -47,6 +47,7 @@ src/
     api/
       track/click                   # captura de cliques (pixel.js)
       webhook/sale/[webhookId]      # recebe vendas dos gateways
+      pixel/event                   # eventos do script de pixel próprio → CAPI (CORS)
       dashboard  ads  ads/status  ads/campaign  creatives  notifications  pixel/test
       sync/facebook  rules/run
       cron/{sync-facebook,run-rules,reports}   # Vercel Cron (CRON_SECRET)
@@ -68,6 +69,8 @@ src/
     dashboard/metrics.ts            # computeDashboard (KPIs reais)
     ads/{overview,creatives}.ts     # dados do gerenciador e ranking de criativos
     facebook/{graph,sync,manage,capi}.ts
+    utm/{parse,scripts}.ts          # parser reverso dos UTMs/xcod + scripts instaláveis
+    pixel/script.ts                 # gerador do script de pixel próprio (Bloco 12)
     webhook/{normalizeSale,matchClick,dispatchPixel,dispatchNotification}.ts
     rules/engine.ts  reports/generate.ts
   generated/prisma/                 # cliente Prisma gerado (GITIGNORED)
@@ -143,8 +146,8 @@ Logins: `teste@traffik.io` / `traffik123` (vazio) · `pedrodurso8@gmail.com` /
 | 9 | Integrações › Anúncios (vitrine de perfis) | ✅ **Feito** |
 | 10 | Integrações › Webhooks (Kirvano + credenciais de API) | ✅ **Feito** |
 | 11 | Integrações › UTMs (códigos xcod + scripts) | ✅ **Feito** |
-| 12 | Integrações › Pixel (script próprio) | ⏳ pendente (**próximo**) |
-| 13 | Integrações › Testes (central de diagnóstico) | ⏳ pendente |
+| 12 | Integrações › Pixel (script próprio) | ✅ **Feito** |
+| 13 | Integrações › Testes (central de diagnóstico) | ⏳ pendente (**próximo**) |
 
 Ordem recomendada do roteiro: 1 → 9,10,11,12,13 → 2 → 3,4 → 5 → 6,7 → 8.
 
@@ -266,6 +269,67 @@ separador `_dbca9cc2b39f_`, Cartpanda com `cid=<userId>`). Build + tsc limpos.
 - O nível **conjunto (AdSet)** não recebeu atribuição por id (só campanha e anúncio);
   não foi pedido, mas o parser já extrai `adsetId` se precisar.
 
+### Bloco 12 — Integrações › Pixel
+Feito:
+- **Schema:** nova tabela **`MetaPixel`** (`pixelId`, `accessToken`, `nickname`,
+  FK `pixelConfigId` com `onDelete: Cascade`) — migration `20260724174646`. Um
+  "Pixel" da Traffik (`PixelConfig`) agora dispara para **vários pixels da Meta**.
+  `PixelConfig.pixelId`/`accessToken` viraram **opcionais** (legado da Fase 10;
+  todo o código faz fallback para eles quando `metaPixels` está vazio).
+- **`PixelView` autocontida** (mesmo padrão da `UtmsView` do Bloco 11): busca por
+  server action, estado local, **sem `v`**. Popup "Adicionar Pixel" com nome, tipo
+  (Meta, único), bloco "Pixels da Meta" (Adicionar → ID/Token/Apelido → Confirmar/
+  Fechar, múltiplos), toggles de **Lead** e **Add To Cart**, **Initiate Checkout**
+  com regra de detecção (contém texto / CSS / URL) e **Purchase** (envio: apenas
+  aprovadas ou aprovadas+pendentes; valor: valor da venda ou comissão fixa; produto:
+  lista vinda de `listTrackedProducts()` = `Sale.product` distinct). Lista com nome,
+  nº de pixels Meta, status, toggle, **Ver script**, editar e remover.
+- **Script próprio (`src/lib/pixel/script.ts`)**: gerador que embute `configId`,
+  `apiBase` e as regras. Lê o `fbclid` (via `window.traffik.getData()` do script do
+  Bloco 11, cookie `traffik_track` ou querystring), dispara **Lead** no `submit`,
+  **AddToCart** em clique com cara de carrinho e **InitiateCheckout** conforme a
+  regra escolhida; expõe `window.traffikPixel.track()`. Exibido em bloco de código
+  com **Copiar** logo após salvar.
+- **`POST /api/pixel/event`** (novo, **CORS liberado** — roda em site de terceiro):
+  valida config + regra habilitada e repassa para a **CAPI de cada `MetaPixel`** com
+  token. Purchase **não** passa aqui (é server-side, no webhook).
+- **`capi.ts` generalizado:** `sendPurchaseEvent` virou wrapper de **`sendServerEvent`**
+  (aceita `event_name` Purchase/Lead/AddToCart/InitiateCheckout; `value`/`currency`
+  opcionais). `dispatchPixel.ts` e `/api/pixel/test` agora **iteram os `metaPixels`**.
+- **Limpeza:** todo o CRUD de pixel saiu do `useTraffikState` (~113 linhas mortas da
+  Fase 10); o hook só mantém `s.pixels` para o seletor da aba Testes.
+
+**Testado ponta a ponta (dev server + DB + navegador):** criação do pixel pela UI
+(1 pixel Meta + Lead + IC "contém texto: COMPRAR AGORA" + Purchase) → linhas corretas
+em `PixelConfig`/`MetaPixel`/`PixelEventRule` (detection = `{"tipo":"contem_texto",
+"valor":"COMPRAR AGORA"}`); `/api/pixel/event` → Lead e InitiateCheckout chegam na
+**CAPI real do Facebook** (rejeitada só pelo token falso: *"Malformed access token"*),
+AddToCart retorna `skipped: regra desabilitada`, evento inválido → 400, preflight
+OPTIONS → 204 com `access-control-allow-origin: *`; **Purchase** disparado por venda
+aprovada em `/api/webhook/ingest` também chega na CAPI; delete do `PixelConfig`
+**cascateia** o `MetaPixel`. `tsc --noEmit` e `next build` limpos.
+
+**Corrigido durante a verificação:**
+- `pixel/page.tsx` ainda passava `v={useTraffik()}` para a `PixelView` (que virou
+  autocontida) → **erro de tipo**; agora é `<PixelView />`.
+- **Editar um pixel apagava os tokens da CAPI.** O token nunca volta ao cliente, então
+  o form reenviava vazio e o `updatePixel` (que faz delete+recreate dos `MetaPixel`)
+  gravava `null`. Renomear o pixel zerava o token. Agora `updatePixel` **preserva o
+  token existente** casando por `pixelId` quando o form não traz um novo, e a UI
+  mostra **"token salvo"** em vez de "sem token".
+
+**Incompleto / TODO no Bloco 12:**
+- **Só Meta.** O select de tipo existe mas tem uma opção só (o roteiro pediu assim).
+- **AddToCart usa heurística fixa** (regex de "carrinho/comprar" no texto/classe) —
+  o roteiro só pediu Ativado/Desativado, sem regra de detecção configurável.
+- **`MetaPixel.accessToken` fica em texto puro** (mesmo trade-off do `ApiCredential`
+  do Bloco 10) — é necessário para o envio server-side.
+- **Sem dedup com o pixel do navegador para Lead/AddToCart/IC**: o `eventId` é gerado
+  aleatoriamente no cliente. Só o Purchase deduplica de verdade (usa `sale.id`).
+- O `apiBase` do script é `window.location.origin` no momento da geração → em dev sai
+  `http://localhost:3000`. **Precisa regerar o script depois do deploy da Vercel.**
+- A **aba Testes ainda usa `v.pixels`** do contexto (Bloco 13 vai refazer).
+
 ---
 
 ## Decisões técnicas relevantes
@@ -321,9 +385,11 @@ abandonado (auto-expira).
 
 1. **Resolver o deploy da Vercel** (fix acima) para que os Blocos 1, 9 e 10 fiquem de
    fato no ar — senão seguimos construindo às cegas em produção.
-2. Depois, **Bloco 12** (Integrações › Pixel): popup "Adicionar Pixel" (nome, tipo
-   Meta, múltiplos pixels Meta com ID+token+apelido, regras de Lead/AddToCart/
-   InitiateCheckout com detecção por texto/CSS/URL, regra de Purchase com envio/valor/
-   produto); ao salvar **gera um script de pixel próprio** que escuta os eventos na
-   página e reporta ao backend → CAPI. Já existe base da Fase 10 (`capi.ts`,
-   `actions/pixels.ts`, `PixelConfig`/`PixelEventRule`) para reaproveitar.
+2. Depois, **Bloco 13** (Integrações › Testes): central de diagnóstico — teste de
+   pixel (dispara evento e mostra se o Facebook confirmou), teste de webhook (últimos
+   payloads crus por gateway, com timestamp e status — **exige guardar os payloads
+   recebidos**, que hoje não são persistidos), teste de tracking (cola uma URL com
+   UTMs e mostra como o `parse.ts` do Bloco 11 a interpretaria) e checklist de
+   instalação (conta FB, conta de anúncio ativa, webhook, script de UTM, pixel).
+   A `TestesView` atual ainda consome `v.pixels` do `useTraffikState` — provavelmente
+   vira autocontida como a `UtmsView`/`PixelView`.

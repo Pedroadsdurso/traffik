@@ -417,9 +417,9 @@ model ApiCredential {
 model PixelConfig {
   id      String @id @default(cuid())
   name    String
-  /// ID do pixel na Meta.
-  pixelId String
-  /// Token da Conversions API para envio server-side.
+  /// ID do pixel na Meta (legado Fase 10 — agora os pixels ficam em MetaPixel).
+  pixelId String?
+  /// Token da Conversions API para envio server-side (legado — ver MetaPixel).
   accessToken String?
   provider    String   @default("META")
   enabled     Boolean  @default(true)
@@ -431,10 +431,26 @@ model PixelConfig {
   adAccountId String?
   adAccount   AdAccount? @relation(fields: [adAccountId], references: [id], onDelete: SetNull)
 
+  metaPixels MetaPixel[]
   eventRules PixelEventRule[]
 
   @@index([userId])
   @@index([adAccountId])
+}
+
+/// Um pixel da Meta vinculado a um PixelConfig. Um "Pixel" da Traffik pode
+/// disparar para vários pixels da Meta ao mesmo tempo (Bloco 12).
+model MetaPixel {
+  id          String   @id @default(cuid())
+  pixelId     String
+  accessToken String?
+  nickname    String?
+  createdAt   DateTime @default(now())
+
+  pixelConfigId String
+  pixelConfig   PixelConfig @relation(fields: [pixelConfigId], references: [id], onDelete: Cascade)
+
+  @@index([pixelConfigId])
 }
 
 model PixelEventRule {
