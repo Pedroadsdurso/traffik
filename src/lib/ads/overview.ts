@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { splitPipe } from "@/lib/utm/parse";
 
 export interface AdsFilters {
   period: "hoje" | "7d" | "30d";
@@ -122,16 +123,20 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
     metByAd.set(m.adId, cur);
   }
 
-  // Resultados por nome de campanha (atribuição best-effort via utm_campaign)
+  // Atribuição por campanha: preferimos o id do Facebook extraído do
+  // utm_campaign (`nome|id`, Bloco 11); caímos no nome para cliques antigos.
+  const resultsByCampaignId = new Map<string, { results: number; revenue: number }>();
   const resultsByName = new Map<string, { results: number; revenue: number }>();
   for (const s of sales) {
-    const name = s.click?.utmCampaign;
-    if (!name) continue;
-    const key = name.toLowerCase();
-    const cur = resultsByName.get(key) ?? { results: 0, revenue: 0 };
-    cur.results += 1;
-    cur.revenue += num(s.value);
-    resultsByName.set(key, cur);
+    const { name, id } = splitPipe(s.click?.utmCampaign);
+    const bump = (map: Map<string, { results: number; revenue: number }>, key: string) => {
+      const cur = map.get(key) ?? { results: 0, revenue: 0 };
+      cur.results += 1;
+      cur.revenue += num(s.value);
+      map.set(key, cur);
+    };
+    if (id) bump(resultsByCampaignId, id);
+    else if (name) bump(resultsByName, name.toLowerCase());
   }
 
   // Anúncios
@@ -177,7 +182,13 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
 
   const campaignRows: CampaignRow[] = campaigns.map((c) => {
     const agg = sumAds(adsByCampaign.get(c.id));
-    const attr = resultsByName.get(c.name.toLowerCase()) ?? { results: 0, revenue: 0 };
+    // Soma id + nome: cada venda está em só um dos mapas (ver creatives.ts).
+    const byId = resultsByCampaignId.get(c.fbCampaignId);
+    const byName = resultsByName.get(c.name.toLowerCase());
+    const attr = {
+      results: (byId?.results ?? 0) + (byName?.results ?? 0),
+      revenue: (byId?.revenue ?? 0) + (byName?.revenue ?? 0),
+    };
     return {
       id: c.id,
       fbId: c.fbCampaignId,

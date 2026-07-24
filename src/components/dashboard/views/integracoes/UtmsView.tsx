@@ -1,0 +1,174 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+import { getUtmCodes, type UtmCodesDTO } from "@/lib/actions/utm";
+import { backRedirectScript, utmScript } from "@/lib/utm/scripts";
+import { sx } from "@/lib/sx";
+
+type Destino = "hotmart" | "cartpanda" | "outros";
+const DESTINOS: { id: Destino; label: string }[] = [
+  { id: "hotmart", label: "Hotmart" },
+  { id: "cartpanda", label: "Cartpanda" },
+  { id: "outros", label: "Outros" },
+];
+
+function download(filename: string, content: string) {
+  const blob = new Blob([content], { type: "text/javascript;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ─────────────────────────── Bloco 1: Códigos ───────────────────────────
+
+function CodigosBlock({ codes }: { codes: UtmCodesDTO | null }) {
+  const [open, setOpen] = useState(false);
+  const [dest, setDest] = useState<Destino>("hotmart");
+  const [copied, setCopied] = useState(false);
+
+  const code = codes ? codes[dest] : "";
+
+  function copy() {
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  return (
+    <div className="card" style={sx("display:flex;flex-direction:column;gap:var(--space-3)")}>
+      <div style={sx("display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-2)")}>
+        <div>
+          <div className="card-kicker">Códigos</div>
+          <div className="card-title">Parâmetros para o Facebook Ads</div>
+          <p className="card-body" style={sx("margin:4px 0 0")}>
+            Cole estes parâmetros no campo <strong>“Parâmetros de URL”</strong> do seu anúncio. O Facebook
+            preenche campanha/conjunto/anúncio automaticamente, e nós cruzamos a venda com o criativo.
+          </p>
+        </div>
+        <button className="btn btn-primary" type="button" onClick={() => setOpen(true)} disabled={!codes} style={sx("white-space:nowrap")}>
+          Ver opções
+        </button>
+      </div>
+
+      {open && codes && (
+        <div className="dialog-backdrop" onClick={() => setOpen(false)}>
+          <div className="dialog" onClick={(e) => e.stopPropagation()} style={sx("max-width:640px")}>
+            <div className="dialog-title">Parâmetros de URL</div>
+            <div className="dialog-body" style={sx("display:flex;flex-direction:column;gap:var(--space-3)")}>
+              <div style={sx("display:flex;gap:8px")}>
+                {DESTINOS.map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => setDest(d.id)}
+                    style={sx(
+                      `flex:1;padding:8px;border-radius:9px;font-size:13px;cursor:pointer;border:1px solid ${dest === d.id ? "var(--color-accent,#a78bfa)" : "var(--color-border)"};background:${dest === d.id ? "var(--color-accent-soft,rgba(139,92,246,.12))" : "transparent"};color:var(--color-text)`,
+                    )}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
+              <pre
+                style={sx("background:var(--color-bg,#0b0b0f);border:1px solid var(--color-border);border-radius:8px;padding:var(--space-3);font-size:11.5px;font-family:ui-monospace,monospace;overflow-x:auto;white-space:pre-wrap;word-break:break-all;margin:0;max-height:220px;overflow-y:auto")}
+              >
+                {code}
+              </pre>
+              <p className="text-muted" style={sx("font-size:11.5px;margin:0")}>
+                {dest === "hotmart"
+                  ? "O xcod concatena tudo com um separador único da sua conta, usado no parsing reverso."
+                  : dest === "cartpanda"
+                    ? "O cid identifica sua conta na Traffik para atribuição."
+                    : "Formato genérico de UTMs para qualquer plataforma."}
+              </p>
+            </div>
+            <div className="dialog-actions">
+              <button className="btn btn-secondary" type="button" onClick={() => setOpen(false)}>Fechar</button>
+              <button className="btn btn-primary" type="button" onClick={copy}>{copied ? "Copiado!" : "Copiar"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────── Bloco 2: Scripts ───────────────────────────
+
+function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
+  const [backUrl, setBackUrl] = useState("");
+
+  function baixarUtm() {
+    if (!codes) return;
+    const apiBase = typeof window !== "undefined" ? window.location.origin : "";
+    download("traffik-utm.js", utmScript(codes.accountId, apiBase));
+  }
+  function baixarBack() {
+    download("traffik-back-redirect.js", backRedirectScript(backUrl));
+  }
+
+  return (
+    <div className="card" style={sx("display:flex;flex-direction:column;gap:var(--space-4)")}>
+      <div>
+        <div className="card-kicker">Scripts</div>
+        <div className="card-title">Instale na sua página de vendas</div>
+      </div>
+
+      <div style={sx("display:flex;flex-direction:column;gap:var(--space-2)")}>
+        <div style={sx("font-size:14px;font-weight:600")}>Script de UTMs</div>
+        <p className="card-body" style={sx("margin:0")}>
+          Captura UTMs + fbclid, salva em cookie de 30 dias, propaga para os links de checkout e envia o
+          clique para a Traffik. Cole no <code>&lt;head&gt;</code> do seu site.
+        </p>
+        <button className="btn btn-primary" type="button" onClick={baixarUtm} disabled={!codes} style={sx("width:fit-content")}>
+          Baixar traffik-utm.js
+        </button>
+      </div>
+
+      <div style={sx("border-top:1px solid var(--color-border);padding-top:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)")}>
+        <div style={sx("font-size:14px;font-weight:600")}>Script de Back Redirect</div>
+        <p className="card-body" style={sx("margin:0")}>
+          Ao clicar em “voltar”, redireciona o visitante para a URL abaixo preservando os UTMs.
+        </p>
+        <div className="field">
+          <label>URL de destino</label>
+          <input className="input" value={backUrl} onChange={(e) => setBackUrl(e.target.value)} placeholder="https://seusite.com/oferta-especial" />
+        </div>
+        <button className="btn btn-secondary" type="button" onClick={baixarBack} disabled={!backUrl.trim()} style={sx("width:fit-content")}>
+          Baixar traffik-back-redirect.js
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────── View ───────────────────────────
+
+export function UtmsView() {
+  const [codes, setCodes] = useState<UtmCodesDTO | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getUtmCodes()
+      .then((c) => {
+        if (alive) setCodes(c);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  return (
+    <div style={sx("display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:var(--space-4);align-items:start")}>
+      <CodigosBlock codes={codes} />
+      <ScriptsBlock codes={codes} />
+    </div>
+  );
+}

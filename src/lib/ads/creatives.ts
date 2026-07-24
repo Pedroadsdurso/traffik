@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { splitPipe } from "@/lib/utm/parse";
 
 export type CreativePeriod = "hoje" | "7d" | "30d";
 export type CreativeSort = "roas" | "ctr" | "spend" | "sales";
@@ -41,6 +42,7 @@ export async function computeCreatives(
       where: { adAccount: { userId }, creative: { isNot: null } },
       select: {
         id: true,
+        fbAdId: true,
         name: true,
         campaign: { select: { name: true } },
         creative: { select: { name: true, title: true, thumbnailUrl: true, imageUrl: true, videoId: true } },
@@ -66,19 +68,32 @@ export async function computeCreatives(
     metByAd.set(m.adId, cur);
   }
 
-  const salesByContent = new Map<string, { sales: number; revenue: number }>();
+  // Atribuição venda→anúncio: preferimos casar pelo id do Facebook extraído do
+  // utm_content (`nome|id`, Bloco 11); caímos no nome para cliques antigos.
+  const salesByAdId = new Map<string, { sales: number; revenue: number }>();
+  const salesByName = new Map<string, { sales: number; revenue: number }>();
   for (const s of sales) {
-    const key = s.click?.utmContent?.toLowerCase();
-    if (!key) continue;
-    const cur = salesByContent.get(key) ?? { sales: 0, revenue: 0 };
-    cur.sales += 1;
-    cur.revenue += num(s.value);
-    salesByContent.set(key, cur);
+    const { name, id } = splitPipe(s.click?.utmContent);
+    const bump = (map: Map<string, { sales: number; revenue: number }>, key: string) => {
+      const cur = map.get(key) ?? { sales: 0, revenue: 0 };
+      cur.sales += 1;
+      cur.revenue += num(s.value);
+      map.set(key, cur);
+    };
+    if (id) bump(salesByAdId, id);
+    else if (name) bump(salesByName, name.toLowerCase());
   }
 
   const rows: CreativeRow[] = ads.map((a) => {
     const met = metByAd.get(a.id) ?? { spend: 0, impressions: 0, clicks: 0 };
-    const attr = salesByContent.get(a.name.toLowerCase()) ?? { sales: 0, revenue: 0 };
+    // Cada venda cai em exatamente um mapa (por id se tiver, senão por nome),
+    // então somamos os dois sem risco de contar a mesma venda duas vezes.
+    const byId = salesByAdId.get(a.fbAdId);
+    const byName = salesByName.get(a.name.toLowerCase());
+    const attr = {
+      sales: (byId?.sales ?? 0) + (byName?.sales ?? 0),
+      revenue: (byId?.revenue ?? 0) + (byName?.revenue ?? 0),
+    };
     const ctr = met.impressions ? (met.clicks / met.impressions) * 100 : 0;
     const roas = met.spend ? attr.revenue / met.spend : 0;
     return {

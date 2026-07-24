@@ -1,8 +1,5 @@
-"use client";
-
-import { useTraffik } from "@/components/dashboard/TraffikContext";
-import { UtmView } from "@/components/dashboard/views/UtmView";
+import { UtmsView } from "@/components/dashboard/views/integracoes/UtmsView";
 
 export default function UtmsPage() {
-  return <UtmView v={useTraffik()} />;
+  return <UtmsView />;
 }
