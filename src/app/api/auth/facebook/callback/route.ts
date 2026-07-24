@@ -14,7 +14,7 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
   const appUrl = getAppUrl();
-  const dash = (status: string) => NextResponse.redirect(`${appUrl}/dashboard?fb=${status}`);
+  const dash = (status: string) => NextResponse.redirect(`${appUrl}/dashboard/integracoes/anuncios?fb=${status}`);
 
   const session = await auth();
   if (!session?.user?.id) return NextResponse.redirect(`${appUrl}/login`);

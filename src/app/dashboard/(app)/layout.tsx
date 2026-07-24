@@ -1,5 +1,7 @@
+import type { ReactNode } from "react";
+
 import { auth } from "@/auth";
-import { TraffikApp } from "@/components/dashboard/TraffikApp";
+import { DashboardShell } from "@/components/dashboard/DashboardShell";
 import { loadDashboardPrefs } from "@/lib/actions/dashboardPrefs";
 import { listExpenses } from "@/lib/actions/expenses";
 import { listAdProfiles } from "@/lib/actions/facebook";
@@ -9,7 +11,7 @@ import { listRules } from "@/lib/actions/rules";
 import { listWebhooks } from "@/lib/actions/webhooks";
 import { getAppUrl } from "@/lib/appUrl";
 
-export default async function DashboardPage() {
+export default async function AppLayout({ children }: { children: ReactNode }) {
   const session = await auth();
   const [webhooks, prefs, profiles, pixels, rules, notifSettings, notifications, expenses] = await Promise.all([
     listWebhooks(),
@@ -21,8 +23,9 @@ export default async function DashboardPage() {
     listNotifications(),
     listExpenses(),
   ]);
+
   return (
-    <TraffikApp
+    <DashboardShell
       user={{ name: session?.user?.name, email: session?.user?.email }}
       trackingId={session?.user?.id}
       appUrl={getAppUrl()}
@@ -34,6 +37,8 @@ export default async function DashboardPage() {
       initialNotifSettings={notifSettings}
       initialNotifications={notifications.items}
       initialExpenses={expenses}
-    />
+    >
+      {children}
+    </DashboardShell>
   );
 }
