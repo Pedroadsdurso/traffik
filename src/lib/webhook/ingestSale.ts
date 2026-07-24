@@ -57,10 +57,14 @@ export async function ingestSale(
       ? await prisma.sale.upsert({
           where: { userId_externalId: { userId: ctx.userId, externalId: data.externalId } },
           update: {
+            // O status sempre reflete o último evento (gerada→paga→reembolso…).
             status: saleData.status,
-            value: saleData.value,
-            paymentMethod: saleData.paymentMethod,
-            approvedAt: saleData.approvedAt,
+            // Eventos posteriores (ex.: reembolso) podem vir com payload esparso;
+            // não sobrescrevemos o valor/pagamento já conhecidos com 0/OUTRO.
+            ...(saleData.value > 0 ? { value: saleData.value } : {}),
+            ...(saleData.paymentMethod !== "OUTRO" ? { paymentMethod: saleData.paymentMethod } : {}),
+            // Preserva o carimbo de aprovação: só grava quando aprova, nunca zera.
+            ...(saleData.status === "APROVADA" ? { approvedAt: new Date() } : {}),
             // Só melhora o match; nunca sobrescreve um clique já vinculado por nada.
             ...(match.clickId ? { clickId: match.clickId, matchMethod: match.method } : {}),
             rawPayload: rawPayload as object,
