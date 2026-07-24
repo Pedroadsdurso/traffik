@@ -551,6 +551,63 @@ abandonado (auto-expira).
 
 ---
 
+## ⚡ Performance — o que estava lento e por quê
+
+Medido em 24/07/2026 com o dev server e o Supabase real. **A latência de ida e
+volta ao banco é ~99ms** (us-east-1). Esse é o custo unitário: qualquer caminho
+com N queries **em série** custa N × 99ms. Otimizar aqui é sempre "reduzir o
+número de round-trips sequenciais", não micro-otimizar SQL.
+
+| | Antes | Depois |
+|---|---|---|
+| `GET /dashboard` (render do layout) | 811–874ms | **~283ms** |
+| `GET /api/dashboard` | 383ms → 1520ms sob polling | **~222ms** |
+| `GET /api/notifications` | 400ms → 1315ms sob polling | **~117ms** |
+
+**As três causas, em ordem de impacto:**
+
+1. **`getNotificationSettings` fazia uma ESCRITA a cada page load.** Eram 3 round-trips
+   em série (checar usuário → `upsert`), ~630ms, e como roda no `Promise.all` do
+   layout, **segurava sozinho o layout inteiro** (os outros 8 terminavam em ~230ms).
+   Virou leitura pura: `findUnique` e só cria a linha se realmente faltar.
+2. **`auth()` batia no banco a cada chamada.** O callback `session` resolve o id pelo
+   e-mail (auto-cura de sessão do commit `a08d0e9`) — e **um page load chama `auth()`
+   ~10x** (o guard + cada server action do layout). Agora tem duas camadas de cache em
+   `src/auth.ts`: `cache()` do React (colapsa as ~10 de um request em 1) + um TTL de
+   5 min em memória (evita repetir entre requests). A auto-cura continua valendo, só
+   que com defasagem de até 5 min.
+3. **O polling não parava em aba escondida.** `setInterval` de 15s seguia rodando em
+   background; a contenção era o que fazia as mesmas rotas irem de ~380ms para ~1.4s.
+   O helper `startPolling` (em `useTraffikState.ts`) só roda com
+   `document.visibilityState === "visible"` e **revalida ao voltar** para a aba.
+
+**Percepção de fluidez** (o "não está fluido" era em boa parte falta de feedback):
+- O design tinha `:hover`/`:active` **sem transição nenhuma** — trocavam de forma seca.
+  `globals.css` ganhou um bloco "Movimento" com tokens (`--dur-fast`, `--dur-base`,
+  `--ease-out`), transições em `.btn`/`.input`/`.nav-item`/`.tag`/links, recuo tátil no
+  clique, animação de entrada dos diálogos e `.skeleton`.
+- **`(app)/loading.tsx`**: antes o clique num link não mostrava nada até o servidor
+  responder. Agora aparece um esqueleto na hora (o shell fica no layout e é preservado
+  entre rotas irmãs).
+- **`.page-enter`** no `DashboardShell`, com `key={pathname}` — sem a key o React
+  reaproveita o nó e a animação não redispara.
+- Tudo dentro de `@media (prefers-reduced-motion: reduce)`.
+
+> **Não adotado (de propósito):** o Next 16 tem `unstable_instant` +
+> `cacheComponents` para navegação realmente instantânea
+> (`node_modules/next/dist/docs/01-app/02-guides/instant-navigation.md`). Exige ligar
+> Cache Components e reestruturar as páginas com `use cache` + `<Suspense>` nos lugares
+> certos, e a API está marcada como **draft**. Fica como opção quando o roteiro v2
+> estiver fechado.
+
+**O que NÃO foi otimizado:** o layout continua buscando os 9 conjuntos de dados em
+**toda** navegação, mesmo os que a página aberta não usa (ex.: `listExpenses` numa tela
+de Integrações). Com o `Promise.all` isso custa ~230ms — o tempo do mais lento, não a
+soma —, então o ganho de separar por rota seria pequeno perto do risco de refatorar o
+`useTraffikState`. Reavaliar se o `Promise.all` passar de ~400ms.
+
+---
+
 ## Dívidas técnicas conhecidas
 
 Registradas de propósito — **não são bugs esquecidos**, são decisões tomadas.

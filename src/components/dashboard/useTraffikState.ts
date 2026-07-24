@@ -300,6 +300,43 @@ const TITLES: Record<TabKey, [string, string]> = {
 const UP_PATH = "M32 176 L96 112 L136 144 L224 64 M176 64 L224 64 L224 112";
 const DOWN_PATH = "M32 80 L96 144 L136 112 L224 192 M176 192 L224 192 L224 144";
 
+/**
+ * Liga um `setInterval` que só roda com a **aba visível**, e revalida na hora em
+ * que ela volta ao primeiro plano.
+ *
+ * Antes o polling continuava em abas de fundo: cada usuário com o painel aberto
+ * em segundo plano mantinha o servidor ocupado indefinidamente, e a contenção
+ * fazia as mesmas rotas irem de ~380ms para ~1.4s. Devolve o teardown.
+ */
+function startPolling(load: () => void, intervalMs: number): () => void {
+  let timer: ReturnType<typeof setInterval> | null = null;
+  const start = () => {
+    if (timer === null) timer = setInterval(load, intervalMs);
+  };
+  const stop = () => {
+    if (timer !== null) {
+      clearInterval(timer);
+      timer = null;
+    }
+  };
+  const onVisibility = () => {
+    if (document.visibilityState === "visible") {
+      load(); // dados podem ter envelhecido enquanto a aba estava escondida
+      start();
+    } else {
+      stop();
+    }
+  };
+
+  if (document.visibilityState === "visible") start();
+  document.addEventListener("visibilitychange", onVisibility);
+
+  return () => {
+    stop();
+    document.removeEventListener("visibilitychange", onVisibility);
+  };
+}
+
 export function useTraffikState(
   opts: {
     brandName?: string;
@@ -353,8 +390,8 @@ export function useTraffikState(
     }
     load();
     if (!liveUpdates) return () => { active = false; controller.abort(); };
-    const t = setInterval(load, 15000);
-    return () => { active = false; controller.abort(); clearInterval(t); };
+    const stop = startPolling(load, 15000);
+    return () => { active = false; controller.abort(); stop(); };
   }, [s.dashPeriod, s.dashAccount, s.dashProduct, s.dashSource, s.refreshKey, liveUpdates]);
 
   // Gerenciador de anúncios: busca sob demanda (período/conta) — status e busca
@@ -410,8 +447,8 @@ export function useTraffikState(
     }
     load();
     if (!liveUpdates) return () => { active = false; controller.abort(); };
-    const t = setInterval(load, 15000);
-    return () => { active = false; controller.abort(); clearInterval(t); };
+    const stop = startPolling(load, 15000);
+    return () => { active = false; controller.abort(); stop(); };
   }, [liveUpdates]);
 
   const persistPrefs = useCallback((order: MetricKey[], visible: Record<MetricKey, boolean>) => {

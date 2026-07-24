@@ -2,6 +2,8 @@
 
 import type { ReactNode } from "react";
 
+import { usePathname } from "next/navigation";
+
 import type { DashboardPrefsDTO } from "@/lib/actions/dashboardPrefs";
 import type { ExpenseDTO } from "@/lib/actions/expenses";
 import type { AdProfileDTO } from "@/lib/actions/facebook";
@@ -46,6 +48,10 @@ export function DashboardShell({
   initialExpenses?: ExpenseDTO[];
   children: ReactNode;
 }) {
+  // A `key` pelo pathname remonta o nó a cada rota, disparando a animação de
+  // entrada de novo — sem isso o React reaproveita o nó e nada anima.
+  const pathname = usePathname();
+
   const v = useTraffikState({
     trackingId,
     appUrl,
@@ -66,7 +72,9 @@ export function DashboardShell({
         <Sidebar user={user} />
         <div style={sx("flex:1;min-width:0;padding:var(--space-8);display:flex;flex-direction:column;gap:var(--space-6);overflow:auto")}>
           <Header />
-          {children}
+          <div key={pathname} className="page-enter" style={sx("display:flex;flex-direction:column;gap:var(--space-6)")}>
+            {children}
+          </div>
         </div>
         <EditDashboardDrawer v={v} />
       </div>

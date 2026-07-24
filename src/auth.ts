@@ -1,8 +1,42 @@
+import { cache } from "react";
+
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 
 import { prisma } from "@/lib/prisma";
+
+/**
+ * Resolve o id do usuário pelo e-mail — a auto-cura de sessões obsoletas
+ * (ver commit a08d0e9). O problema é que o callback `session` roda a cada
+ * `auth()`, e um carregamento de página chama `auth()` ~10x (o guard + cada
+ * server action do layout): eram 10 idas ao banco de ~100ms só para redescobrir
+ * o mesmo id. São duas camadas de cache:
+ *
+ * 1. `cache()` do React — colapsa as ~10 chamadas de UM request em uma só.
+ * 2. TTL em memória — evita repetir a query a cada request. O mapa e-mail→id é
+ *    praticamente imutável, então uma janela curta de defasagem é inofensiva:
+ *    no pior caso (usuário removido/recriado) volta a errar por até TTL_MS e
+ *    depois se auto-cura sozinho, exatamente como antes.
+ *
+ * Em serverless o mapa vive por instância quente, o que é o comportamento
+ * desejado. É pequeno por natureza (uma entrada por usuário ativo).
+ */
+const TTL_MS = 5 * 60_000;
+const idCache = new Map<string, { id: string; exp: number }>();
+
+const resolveUserIdByEmail = cache(async (email: string): Promise<string | null> => {
+  const hit = idCache.get(email);
+  if (hit && hit.exp > Date.now()) return hit.id;
+
+  const dbUser = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (!dbUser) {
+    idCache.delete(email);
+    return null;
+  }
+  idCache.set(email, { id: dbUser.id, exp: Date.now() + TTL_MS });
+  return dbUser.id;
+});
 
 declare module "next-auth" {
   interface Session {
@@ -64,12 +98,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       // o id atual pelo e-mail (índice único) a cada sessão, com fallback ao
       // `sub`. Evita o clássico "exige relogin" após trocar de banco.
       if (typeof token.email === "string") {
-        const dbUser = await prisma.user.findUnique({
-          where: { email: token.email },
-          select: { id: true },
-        });
-        if (dbUser) {
-          session.user.id = dbUser.id;
+        const id = await resolveUserIdByEmail(token.email);
+        if (id) {
+          session.user.id = id;
           return session;
         }
       }

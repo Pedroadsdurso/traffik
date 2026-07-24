@@ -47,16 +47,30 @@ const DEFAULTS: NotificationSettingsDTO = {
   reportPattern: "STATUS_LUCRO",
 };
 
+/**
+ * Lê as preferências de notificação. Roda no layout, ou seja, **em todo
+ * carregamento de página** — por isso é caminho de leitura pura.
+ *
+ * Antes eram 3 idas ao banco em série (checar usuário → upsert) e, pior, uma
+ * ESCRITA a cada page load mesmo sem nada mudar: ~630ms, segurando sozinho o
+ * `Promise.all` do layout. Agora o caso comum é **uma** leitura; só cria a linha
+ * quando ela realmente não existe.
+ */
 export async function getNotificationSettings(): Promise<NotificationSettingsDTO> {
   const userId = await requireUserId();
-  // Sessão órfã (usuário removido) não deve derrubar o dashboard.
-  const exists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
-  if (!exists) return DEFAULTS;
-  const row = await prisma.notificationSettings.upsert({
-    where: { userId },
-    update: {},
-    create: { userId },
-  });
+
+  let row = await prisma.notificationSettings.findUnique({ where: { userId } });
+  if (!row) {
+    try {
+      row = await prisma.notificationSettings.create({ data: { userId } });
+    } catch {
+      // Sessão órfã (usuário removido → viola a FK) ou corrida com outra
+      // request criando a mesma linha. Nenhum dos dois deve derrubar o dashboard.
+      row = await prisma.notificationSettings.findUnique({ where: { userId } });
+      if (!row) return DEFAULTS;
+    }
+  }
+
   return {
     notifyPendingSale: row.notifyPendingSale,
     notifyApprovedSale: row.notifyApprovedSale,
