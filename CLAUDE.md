@@ -79,6 +79,7 @@ src/
     rules/engine.ts  reports/generate.ts
   generated/prisma/                 # cliente Prisma gerado (GITIGNORED)
 prisma/{schema.prisma, seed.ts, migrations/}
+.github/workflows/cron.yml          # agendamento das rotinas (substitui o Vercel Cron)
 scripts/demo-data.mjs               # gera dados de exemplo (NÃO rodar em prod)
 scripts/encrypt-secrets.mjs         # backfill: encripta credenciais em repouso
 public/pixel.js                     # script de tracking instalável
@@ -444,9 +445,11 @@ saiu de 0/5 para 1/5 ao cadastrar um pixel. `tsc --noEmit` e `next build` limpos
 - **Prisma 7 exige driver adapter** (`pg`). Pooler para o app, session pooler para
   migrations. Para o Supabase, remover `pgbouncer=true` e usar
   `?sslmode=require&uselibpqcompat=true`.
-- **BullMQ → Vercel Cron** (serverless não roda worker). 3 crons no `vercel.json`:
-  `sync-facebook` e `run-rules` a cada 15min, `reports` de hora em hora. Protegidos
-  por `CRON_SECRET`.
+- **BullMQ → cron externo** (serverless não roda worker). Foi Vercel Cron até
+  descobrirmos que o plano Hobby só aceita cron diário e **rejeita o deploy inteiro**
+  com `*/15`. Hoje o agendamento vive em `.github/workflows/cron.yml` (GitHub Actions):
+  `sync-facebook` e `run-rules` a cada 15min, `reports` de hora em hora. As rotas
+  `/api/cron/*` seguem protegidas por `CRON_SECRET`. Ver a seção de deploy.
 - **Atribuição venda→campanha/criativo é "best-effort"** por `utm_campaign` = nome
   da campanha (e `utm_content` = nome do anúncio). Enquanto os UTMs não baterem com
   os nomes, "Vendas/ROAS" por campanha/criativo aparecem zerados. O **Bloco 11**
@@ -467,40 +470,68 @@ estava parado em `76a747e` (24/07 00:49) e os **8 commits seguintes — Blocos 1
 12 — só existiam na máquina local**. A Vercel não estava deixando de fazer deploy:
 não havia nada novo para ela buildar. Corrigido com `git push origin main`.
 
-### Problema 2 — a Vercel não builda nem o que ESTÁ no GitHub (DEPENDE DO USUÁRIO)
-Sondando a produção (`342dd-virid.vercel.app`):
+### Problema 2 — CRON DE 15 MIN NO PLANO HOBBY (CAUSA RAIZ, RESOLVIDO)
+
+**O `vercel.json` declarava 3 crons, dois deles `*/15 * * * *`. O plano Hobby só
+aceita cron DIÁRIO — e isso não degrada, faz o DEPLOY INTEIRO FALHAR na validação:**
+
+> *Hobby accounts are limited to daily cron jobs. This cron expression (\*/15 \* \* \* \*)
+> would run more than once per day.*
+
+É a explicação completa do sintoma: desde o commit que introduziu os crons (Fase 7),
+**todo deploy falhava**, e a produção ficou congelada no último build bem-sucedido —
+exatamente o "build pré-Fase-7" observado. Não era integração desconectada; era o
+`vercel.json` sendo rejeitado. Sondagem que confirmava o congelamento:
 
 | Rota | Status | Leitura |
 |------|--------|---------|
 | `/login` | 200 | o app está no ar |
-| `/api/track/click` | 405 | rota **existe** (só não aceita GET) — build antigo, v1 |
-| `/dashboard/integracoes/anuncios` | **404** | **Bloco 1 não está no ar, apesar de estar no GitHub desde `2138e4b`** |
-| `/api/webhook/{ingest,kirvano}`, `/api/pixel/event` | 404 | esperado (eram os commits não enviados) |
+| `/api/track/click` | 405 | rota **existe** — build antigo, v1 |
+| `/dashboard/integracoes/anuncios` | **404** | Bloco 1 no GitHub desde `2138e4b`, mas nunca buildado |
 
-O Bloco 1 está no `origin/main` há bastante tempo e mesmo assim dá 404 em produção →
-**a integração GitHub→Vercel está de fato desconectada ou a produção está pinada num
-commit antigo.** Isso só se resolve no painel, com a conta do usuário.
+**Solução adotada (sem custo):** os crons saíram do `vercel.json` (que agora só declara
+o framework) e o agendamento foi para o **GitHub Actions** —
+`.github/workflows/cron.yml`. As rotas `/api/cron/*` **não mudaram**: continuam
+protegidas por `CRON_SECRET` e recebendo `Authorization: Bearer`. O workflow tem dois
+schedules (`*/15` para sync + regras, `0 * * * *` para relatórios), `workflow_dispatch`
+para disparo manual e um `concurrency` group para não sobrepor execuções.
 
-**Passos para o usuário executar (nesta ordem):**
-1. Vercel → projeto → **Settings › Git**: conferir se o repo `Pedroadsdurso/traffik`
-   está conectado na branch `main`. Se estiver, **Disconnect** e reconectar.
-2. Vercel → **Settings › Environment Variables** (Production): garantir
-   `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, `NEXT_PUBLIC_APP_URL` (**domínio real,
-   não localhost**), `ENCRYPTION_KEY`, `CRON_SECRET`, `FACEBOOK_APP_ID`,
-   `FACEBOOK_APP_SECRET`, `FACEBOOK_REDIRECT_URI`.
+**Configurar no GitHub** → Settings › Secrets and variables › Actions:
+- **Secret** `CRON_SECRET` — mesmo valor da env var na Vercel
+- **Variable** `APP_URL` — `https://342dd-virid.vercel.app` (sem barra no fim)
+
+> ⚠️ **`CRON_SECRET` é obrigatória em produção.** A checagem nas rotas é
+> `if (secret && auth !== ...)`: **sem a env var definida, as rotas de cron ficam
+> públicas** e qualquer um pode disparar `/api/cron/run-rules`, que pausa campanha e
+> altera orçamento de verdade.
+
+**Limitações do GitHub Actions** (aceitas conscientemente): o agendamento é
+*best-effort* e costuma atrasar 5–20 min em horário de pico; workflows agendados são
+**desativados automaticamente após 60 dias sem commits** no repositório. Se isso
+incomodar, as alternativas são cron-job.org / Upstash QStash (grátis, mais pontuais)
+ou o Vercel Pro (~US$20/mês, que devolve o cron nativo).
+
+**Passos restantes para o usuário:**
+1. Vercel → **Settings › Environment Variables** (Production): `DATABASE_URL`,
+   `AUTH_SECRET`, `AUTH_URL`, `NEXT_PUBLIC_APP_URL` (**domínio real**),
+   `ENCRYPTION_KEY`, `CRON_SECRET`, `FACEBOOK_APP_ID`, `FACEBOOK_APP_SECRET`,
+   `FACEBOOK_REDIRECT_URI`.
    ⚠️ **A `ENCRYPTION_KEY` tem de ser a MESMA do `.env` local** — o banco é o mesmo
-   Supabase, e uma chave diferente torna ilegíveis os segredos já gravados.
-   `DIRECT_URL` **não** é necessária (a Vercel não roda migrations).
-3. **Deployments › Redeploy** no commit mais recente, com *"Use existing Build Cache"*
-   **desmarcado**. Redeploy de um deployment antigo não resolve (rebuilda o mesmo commit).
-4. Depois do deploy: **regerar os scripts** de pixel e UTM na UI, porque a URL da API
-   fica embutida no arquivo gerado (ver "URL pública nos scripts gerados").
+   Supabase, e chave diferente torna ilegíveis os segredos já gravados.
+   `DIRECT_URL` e `REDIS_URL` **não** são necessárias.
+2. Registrar `https://342dd-virid.vercel.app/api/auth/facebook/callback` nos "URIs de
+   redirecionamento do OAuth válidos" do app do Facebook.
+3. Configurar `CRON_SECRET` + `APP_URL` no GitHub (acima) e rodar o workflow uma vez
+   pelo `workflow_dispatch` para validar.
+4. **Regerar os scripts** de pixel e UTM na UI — a URL da API fica embutida no arquivo.
 
-**O que já foi verificado daqui:** `npm run build` passa limpo, `vercel.json` está
-válido (3 crons), `package.json` roda `prisma generate` no `build` e no `postinstall`,
-e nenhuma rota precisa de banco em tempo de build (todas são `ƒ` dinâmicas). **Não há
-nada no repositório que impeça o build** — o bloqueio está na configuração do projeto
-na Vercel.
+> Se apagar e recriar o projeto na Vercel: o domínio `*.vercel.app` deriva do **nome do
+> projeto**. Para manter `342dd-virid.vercel.app`, recriar com o mesmo nome ou fixar o
+> domínio em Settings › Domains.
+
+**Verificado daqui:** `npm run build` passa limpo, `package.json` roda `prisma generate`
+no `build` e no `postinstall`, nenhuma rota precisa de banco em build (todas `ƒ`
+dinâmicas), e as 3 rotas de cron respondem **200 com o Bearer certo e 401 sem ele**.
 
 > As **migrations não rodam na Vercel**. Depois de subir código com schema novo, rode
 > `npx prisma migrate deploy` localmente (usa `DIRECT_URL`). As 6 migrations atuais já

@@ -1,16 +1,4 @@
 {
-  "crons": [
-    {
-      "path": "/api/cron/sync-facebook",
-      "schedule": "*/15 * * * *"
-    },
-    {
-      "path": "/api/cron/run-rules",
-      "schedule": "*/15 * * * *"
-    },
-    {
-      "path": "/api/cron/reports",
-      "schedule": "0 * * * *"
-    }
-  ]
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs"
 }

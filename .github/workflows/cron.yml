@@ -1,0 +1,79 @@
+# Agendamento das rotinas da Traffik.
+#
+# Por que não o Vercel Cron: o plano Hobby só aceita cron DIÁRIO. As rotinas
+# precisam rodar a cada 15 min, e um `*/15 * * * *` no vercel.json faz o deploy
+# inteiro FALHAR na validação — foi o que manteve a produção congelada.
+#
+# As rotas continuam sendo as mesmas `/api/cron/*`, protegidas por CRON_SECRET.
+# Aqui só disparamos o HTTP na hora certa.
+#
+# Configurar em Settings › Secrets and variables › Actions:
+#   secret  CRON_SECRET  → mesmo valor da env var na Vercel
+#   var     APP_URL      → https://342dd-virid.vercel.app  (sem barra no fim)
+
+name: Cron
+
+on:
+  schedule:
+    # A cada 15 min: sincronização do Facebook + motor de regras.
+    - cron: "*/15 * * * *"
+    # De hora em hora: relatórios.
+    - cron: "0 * * * *"
+  # Permite disparar manualmente pela aba Actions (útil para testar).
+  workflow_dispatch:
+
+# Se uma execução atrasar e outra começar, não deixa as duas rodarem juntas.
+concurrency:
+  group: traffik-cron
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verificar configuração
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ]; then
+            echo "::error::A variável APP_URL não está definida (Settings › Secrets and variables › Actions › Variables)."
+            exit 1
+          fi
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::O secret CRON_SECRET não está definido."
+            exit 1
+          fi
+
+      - name: Sincronizar Facebook
+        if: github.event.schedule == '*/15 * * * *' || github.event_name == 'workflow_dispatch'
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' --max-time 300 \
+            -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/sync-facebook")
+          echo "HTTP $code"; cat /tmp/out.json; echo
+          [ "$code" = "200" ] || exit 1
+
+      - name: Executar regras
+        if: github.event.schedule == '*/15 * * * *' || github.event_name == 'workflow_dispatch'
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' --max-time 300 \
+            -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/run-rules")
+          echo "HTTP $code"; cat /tmp/out.json; echo
+          [ "$code" = "200" ] || exit 1
+
+      - name: Gerar relatórios
+        if: github.event.schedule == '0 * * * *' || github.event_name == 'workflow_dispatch'
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' --max-time 300 \
+            -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/reports")
+          echo "HTTP $code"; cat /tmp/out.json; echo
+          [ "$code" = "200" ] || exit 1
