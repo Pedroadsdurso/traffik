@@ -58,6 +58,8 @@ src/
     DashboardShell.tsx              # client: roda useTraffikState 1x e provê o contexto
     Header.tsx  Sidebar.tsx         # navegação por ROTA (usePathname + Link)
     EditDashboardDrawer.tsx  Icon.tsx  ImageSlot.tsx
+    blocks.ts                       # registro dos blocos do Dashboard (Bloco 2)
+    DashboardGrid.tsx  BlockContent.tsx   # grid arrastável + conteúdo de cada bloco
     useTraffikState.ts              # HOOK GIGANTE: todo o estado/derivações do dashboard
     types.ts                        # só TabKey e MetricKey
     views/                          # DashboardView, AdsManagerView, CreativesView, RulesView,
@@ -68,7 +70,7 @@ src/
     crypto/secrets.ts               # AES-256-GCM das credenciais em repouso
     actions/                        # server actions ("use server"), retornam DTOs
       webhooks pixels rules notifications expenses facebook dashboardPrefs session
-      apiCredentials utm diagnostics
+      apiCredentials utm diagnostics dashboardLayout
     dashboard/metrics.ts            # computeDashboard (KPIs reais)
     ads/{overview,creatives}.ts     # dados do gerenciador e ranking de criativos
     facebook/{graph,sync,manage,capi}.ts
@@ -142,7 +144,7 @@ Logins: `teste@traffik.io` / `traffik123` (vazio) · `pedrodurso8@gmail.com` /
 | Bloco | Descrição | Status |
 |-------|-----------|--------|
 | 1 | Reestruturação da navegação (rotas reais) | ✅ **Feito** |
-| 2 | Grid arrastável do Dashboard | ⏳ pendente |
+| 2 | Grid arrastável do Dashboard | ✅ **Feito** |
 | 3 | Filtros e container do topo | ⏳ pendente |
 | 4 | Métricas do Dashboard (ROI×, ARPU, CPA, por horário…) | ⏳ pendente |
 | 5 | Gráficos (funil, mapa de países, donuts, taxa de aprovação) | ⏳ pendente |
@@ -551,6 +553,64 @@ abandonado (auto-expira).
 
 ---
 
+### Bloco 2 — Grid arrastável do Dashboard
+
+**Escolha da lib: `react-grid-layout` 2.2.3.** O `dnd-kit` é melhor para listas
+ordenáveis, mas **não tem redimensionamento** — teria que construir resize,
+colisão e compactação na mão. O RGL foi feito exatamente para grid de dashboard,
+o layout dele é um array serializável (`{i,x,y,w,h}`) que vai direto para o Json
+do Prisma, e o `Responsive` já resolve breakpoints — que é o requisito de
+"layouts separados para desktop e mobile". Aceita React 19 (peer `>= 16.3`).
+
+> ⚠️ A **v2 mudou a API** em relação aos exemplos da v1 que circulam por aí:
+> `dragConfig={{enabled, handle}}` e `resizeConfig={{enabled, handles}}` no lugar
+> de `isDraggable`/`isResizable`, e **não existe mais o HOC `WidthProvider`** — usa-se
+> o hook `useContainerWidth()`, que devolve `{ width, containerRef }`.
+
+Feito:
+- **`blocks.ts` — registro único** do que existe no dashboard: 18 blocos (12 KPIs +
+  6 gráficos/tabelas), cada um com tamanho padrão e mínimo. O layout padrão, o painel
+  de "Métricas Disponíveis" e o saneamento derivam **todos** daqui, então adicionar
+  uma métrica no Bloco 4 é acrescentar uma entrada nessa lista.
+- **`sanitizeLayout`** roda na leitura **e** na escrita: descarta bloco que não existe
+  mais no código, força os tamanhos mínimos e ignora entrada inválida. É o que impede
+  um layout salvo de quebrar o dashboard depois de um deploy que removeu um bloco.
+- **`DashboardGrid.tsx`**: modo de edição com alças de arraste (o cabeçalho roxo do
+  bloco), redimensionamento pelo canto, botão ✕ para remover, painel lateral com os
+  blocos ainda não usados, e **Salvar / Cancelar / Redefinir configurações**.
+  "Cancelar" volta para um snapshot tirado ao entrar em edição.
+- **Tabela `DashboardLayout`** (migration `20260724210000`): `@@unique([userId, viewport])`,
+  uma linha por usuário × viewport. Actions em `lib/actions/dashboardLayout.ts`.
+- `DashboardView` ficou só com a barra de filtros + `<DashboardGrid />`; todo o
+  conteúdo virou `BlockContent.tsx`, que mapeia id do bloco → JSX.
+- `useTraffikState` passou a expor `metricCards` (o registro por chave) — o grid
+  precisa buscar a métrica pelo id, não pela ordem.
+
+**Testado:** modo de edição abre com alças e painel; arrastar um KPI reflui os
+vizinhos; adicionar bloco pelo painel funciona (ele some da lista de disponíveis);
+"Salvar" grava as duas viewports (14 blocos cada) e o desktop reflete a ordem
+arrastada enquanto o mobile mantém o padrão — provando que os layouts são mesmo
+independentes. Round-trip do `sanitizeLayout` verificado contra o banco real, mais
+os casos de bloco removido (15→14), tamanho abaixo do mínimo (corrigido para 4/5) e
+entrada inválida (`null`). `tsc` e `next build` limpos.
+
+**Incompleto / TODO no Bloco 2:**
+- **A restauração ao recarregar não foi confirmada visualmente** — a extensão do Chrome
+  caiu no fim. Está verificada no banco e pelo round-trip do `sanitizeLayout`, e o
+  caminho de leitura é direto (`loadDashboardLayouts` → `setLayouts`), mas convém abrir
+  o dashboard e conferir a olho.
+- O painel "Métricas Disponíveis" adiciona **por clique, não por arraste**. O roteiro
+  pedia arrastar de dentro do painel para a grade; o RGL suporta (`dropConfig` +
+  `droppingItem` + HTML5 drag), mas o clique é mais previsível e acessível. Trocar se
+  fizer falta.
+- **`Cancelar` não desfaz o `Redefinir configurações`** — o reset já apaga no banco na
+  hora. É destrutivo e sem confirmação.
+- Os gráficos ainda são os SVGs antigos, só que dentro de blocos redimensionáveis.
+  Quem os refaz de verdade (área, funil trapezoidal, mapa, donuts) é o **Bloco 5**.
+- Sem `rowHeight` responsivo: em telas muito baixas os blocos altos forçam scroll.
+
+---
+
 ## ⚡ Performance — o que estava lento e por quê
 
 Medido em 24/07/2026 com o dev server e o Supabase real. **A latência de ida e
@@ -627,9 +687,10 @@ Registradas de propósito — **não são bugs esquecidos**, são decisões toma
 
 1. **Resolver o deploy da Vercel** — os 4 passos manuais na seção acima. É a única
    pendência que depende do painel e trava ver qualquer coisa em produção.
-2. **Bloco 2** (grid arrastável do Dashboard) — as Integrações (9–13) estão fechadas,
-   e o roteiro manda ir para o Dashboard agora. Escolher entre `react-grid-layout` e
-   `dnd-kit`, criar a tabela `DashboardLayout` (user_id, layout JSON, viewport) e
-   salvar layouts separados para desktop e mobile.
-3. Oportunidade de faxina antes do Bloco 2: limpar a dívida técnica #2, já que o
-   Bloco 2 mexe pesado no `useTraffikState`.
+2. **Bloco 3** (filtros e container do topo) — agrupar os selects + "Editar dashboard"
+   num container com o estilo dos cards, trocar os selects nativos por componentes
+   próprios e fazer o seletor de período "Personalizado" abrir um calendário de
+   intervalo de verdade.
+3. Depois **Bloco 4** (métricas: ROI em multiplicador, ARPU, CPA, por horário) — o
+   `blocks.ts` do Bloco 2 já é o ponto de extensão: cada métrica nova é uma entrada.
+4. Faxina pendente: a dívida técnica #2 (nav morto no `useTraffikState`).

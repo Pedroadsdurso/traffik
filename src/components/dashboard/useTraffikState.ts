@@ -943,6 +943,9 @@ export function useTraffikState(
     onDashSource: (e: React.ChangeEvent<HTMLSelectElement>) => set({ dashSource: e.target.value }),
 
     kpiCards, chart, chartPeriodLabel, products, sources, payments, funnel, feed, metricList,
+    // Registro por chave: o grid do Bloco 2 renderiza cada KPI como bloco
+    // independente, então precisa acessar a métrica pelo id e não pela ordem.
+    metricCards: reg,
     dashLoading: s.dashLoading,
     filterAccounts: filterOptions.accounts,
     filterProducts: filterOptions.products,

@@ -150,6 +150,7 @@ model User {
   notificationSettings NotificationSettings?
   dashboardPreference  DashboardPreference?
   webhookLogs          WebhookLog[]
+  dashboardLayouts     DashboardLayout[]
 }
 
 // ─────────────────── Facebook: perfis, contas, estrutura ───────────────────
@@ -431,6 +432,25 @@ model ApiCredential {
 
   @@index([userId])
   @@index([key])
+}
+
+/// Layout do grid arrastável do Dashboard (Bloco 2). Uma linha por
+/// usuário × viewport, porque desktop e mobile têm arranjos independentes.
+model DashboardLayout {
+  id String @id @default(cuid())
+  /// "desktop" | "mobile" — o breakpoint do react-grid-layout.
+  viewport String
+  /// Array de `{ i, x, y, w, h }` do react-grid-layout, mais os blocos
+  /// visíveis. Fica como Json porque o formato é ditado pela lib.
+  layout    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, viewport])
+  @@index([userId])
 }
 
 /// Log cru de cada payload recebido por webhook — alimenta o "Teste de Webhook"

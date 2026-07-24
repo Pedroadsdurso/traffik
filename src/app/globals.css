@@ -392,3 +392,63 @@ a {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
 }
+
+/* ──────────────────── Grid arrastável do Dashboard (Bloco 2) ────────────────────
+   O CSS base vem de react-grid-layout/css/styles.css (importado no layout raiz).
+   Aqui só ajustamos ao visual do Traffik.                                        */
+
+.react-grid-item {
+  transition: transform var(--dur-base) var(--ease-out), width var(--dur-base) var(--ease-out),
+    height var(--dur-base) var(--ease-out);
+}
+/* Enquanto arrasta/redimensiona a transição atrapalha (o item "persegue" o mouse). */
+.react-grid-item.react-draggable-dragging,
+.react-grid-item.resizing {
+  transition: none;
+  z-index: 3;
+}
+.react-grid-item.react-draggable-dragging .card { box-shadow: var(--shadow-lg); }
+
+/* Sombra do destino durante o arraste. */
+.react-grid-item.react-grid-placeholder {
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  border: 1px dashed var(--color-accent);
+  border-radius: var(--radius-md);
+  opacity: 1;
+  transition-duration: var(--dur-fast);
+}
+
+/* Contorno tracejado só no modo de edição, para dar a leitura de "isto se move". */
+.grid-editando .react-grid-item > div > .card {
+  outline: 1px dashed color-mix(in srgb, var(--color-accent) 45%, transparent);
+  outline-offset: -1px;
+}
+
+/* Alça de arraste: é o cabeçalho do bloco em modo de edição. */
+.bloco-alca {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  height: 26px; padding: 0 8px; cursor: grab;
+  font-size: 11px; color: var(--color-accent-100);
+  background: var(--color-accent-800);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  user-select: none;
+}
+.bloco-alca:active { cursor: grabbing; }
+.bloco-remover {
+  flex: none; border: 0; background: transparent; cursor: pointer;
+  color: inherit; font-size: 12px; line-height: 1; padding: 3px 5px;
+  border-radius: var(--radius-sm);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.bloco-remover:hover { background: color-mix(in srgb, var(--color-text) 18%, transparent); }
+
+/* Punho de redimensionar — o padrão da lib é invisível no tema escuro. */
+.react-resizable-handle {
+  width: 16px; height: 16px; right: 2px; bottom: 2px;
+  background: none; padding: 0; cursor: se-resize;
+}
+.react-resizable-handle::after {
+  content: ""; position: absolute; right: 3px; bottom: 3px; width: 8px; height: 8px;
+  border-right: 2px solid var(--color-accent); border-bottom: 2px solid var(--color-accent);
+  border-radius: 0 0 2px 0;
+}
