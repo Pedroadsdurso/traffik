@@ -35,6 +35,18 @@ enum WebhookPlatform {
   CUSTOM
 }
 
+/// Estado de processamento de um payload recebido por webhook (Bloco 13).
+enum WebhookLogStatus {
+  /// Gravado assim que chega, antes de qualquer processamento.
+  RECEBIDO
+  /// Venda criada/atualizada com sucesso.
+  PROCESSADO
+  /// Recusado na validação (token inválido, webhook inativo, JSON quebrado).
+  REJEITADO
+  /// Estourou uma exceção durante o processamento.
+  ERRO
+}
+
 enum EntityStatus {
   ACTIVE
   PAUSED
@@ -137,6 +149,7 @@ model User {
   expenses             Expense[]
   notificationSettings NotificationSettings?
   dashboardPreference  DashboardPreference?
+  webhookLogs          WebhookLog[]
 }
 
 // ─────────────────── Facebook: perfis, contas, estrutura ───────────────────
@@ -399,9 +412,15 @@ model Webhook {
 /// por qualquer sistema externo (integração genérica — bloco direito da aba
 /// Webhooks). A chave completa é guardada para permitir "revelar".
 model ApiCredential {
-  id         String    @id @default(cuid())
-  name       String
-  key        String    @unique
+  id   String @id @default(cuid())
+  name String
+  /// Chave encriptada (AES-256-GCM). Só é decriptada no botão "revelar";
+  /// a autenticação das requests usa o `keyHash`.
+  key String @unique
+  /// Hash determinístico da chave em texto puro — é por ele que o endpoint
+  /// `/api/webhook/ingest` encontra a credencial (o ciphertext tem IV aleatório
+  /// e não serve para busca). Nulo só em registros anteriores à migração.
+  keyHash    String?   @unique
   revoked    Boolean   @default(false)
   lastUsedAt DateTime?
   createdAt  DateTime  @default(now())
@@ -414,12 +433,39 @@ model ApiCredential {
   @@index([key])
 }
 
+/// Log cru de cada payload recebido por webhook — alimenta o "Teste de Webhook"
+/// da aba Testes (Bloco 13). É gravado ANTES do processamento, para que um
+/// payload que quebre no meio do caminho ainda apareça no diagnóstico.
+model WebhookLog {
+  /// Gateway de origem: valor de WebhookPlatform ou "API" (ingest genérico).
+  gateway String
+  id      String @id @default(cuid())
+  /// Corpo cru recebido, exatamente como chegou.
+  payloadRaw Json
+  status     WebhookLogStatus @default(RECEBIDO)
+  /// Motivo da rejeição / mensagem de erro, quando houver.
+  message    String?
+  httpStatus Int?
+  /// Venda criada ou atualizada por este payload, quando o processamento deu certo.
+  saleId    String?
+  createdAt DateTime @default(now())
+
+  /// Nulo quando nem deu para identificar o dono (ex.: token desconhecido).
+  userId    String?
+  user      User?   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  webhookId String?
+
+  @@index([userId, createdAt])
+  @@index([gateway])
+}
+
 model PixelConfig {
   id      String @id @default(cuid())
   name    String
   /// ID do pixel na Meta (legado Fase 10 — agora os pixels ficam em MetaPixel).
   pixelId String?
   /// Token da Conversions API para envio server-side (legado — ver MetaPixel).
+  /// Encriptado em repouso (AES-256-GCM) — ver `src/lib/crypto/secrets.ts`.
   accessToken String?
   provider    String   @default("META")
   enabled     Boolean  @default(true)
@@ -441,8 +487,10 @@ model PixelConfig {
 /// Um pixel da Meta vinculado a um PixelConfig. Um "Pixel" da Traffik pode
 /// disparar para vários pixels da Meta ao mesmo tempo (Bloco 12).
 model MetaPixel {
-  id          String   @id @default(cuid())
-  pixelId     String
+  id      String @id @default(cuid())
+  pixelId String
+  /// Token da Conversions API, encriptado em repouso (AES-256-GCM).
+  /// Só é decriptado no momento de chamar a CAPI — ver `src/lib/crypto/secrets.ts`.
   accessToken String?
   nickname    String?
   createdAt   DateTime @default(now())

@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 
+import { decryptSecretSafe } from "@/lib/crypto/secrets";
 import { sendServerEvent, type CapiEventName } from "@/lib/facebook/capi";
 import { prisma } from "@/lib/prisma";
 import type { PixelEventType } from "@/generated/prisma/enums";
@@ -65,11 +66,13 @@ export async function POST(req: NextRequest) {
   const eventId = typeof body.eventId === "string" ? body.eventId : `${eventKey}-${Date.now()}`;
   let sent = 0;
   for (const mp of targets) {
-    if (!mp.accessToken) continue;
+    // O token fica encriptado no banco; decripta só aqui, para a chamada.
+    const accessToken = decryptSecretSafe(mp.accessToken);
+    if (!accessToken) continue;
     const r = await sendServerEvent({
       eventName: mapped.capi,
       pixelId: mp.pixelId,
-      accessToken: mp.accessToken,
+      accessToken,
       eventId,
       value: typeof body.value === "number" ? body.value : undefined,
       currency: typeof body.currency === "string" ? body.currency : undefined,

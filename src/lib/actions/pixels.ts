@@ -1,6 +1,7 @@
 "use server";
 
 import { auth } from "@/auth";
+import { encryptSecret } from "@/lib/crypto/secrets";
 import { prisma } from "@/lib/prisma";
 import type { PixelEventType, PurchaseSendMode, PurchaseValueMode } from "@/generated/prisma/enums";
 
@@ -146,10 +147,18 @@ function rulesFromForm(input: PixelFormInput) {
   ];
 }
 
+/** Normaliza o form e **encripta** os tokens antes de tocar no banco. */
 function cleanMetaPixels(list: PixelFormInput["metaPixels"]) {
   return list
     .filter((m) => m.pixelId?.trim())
-    .map((m) => ({ pixelId: m.pixelId.trim(), accessToken: m.accessToken?.trim() || null, nickname: m.nickname?.trim() || null }));
+    .map((m) => {
+      const token = m.accessToken?.trim();
+      return {
+        pixelId: m.pixelId.trim(),
+        accessToken: token ? encryptSecret(token) : null,
+        nickname: m.nickname?.trim() || null,
+      };
+    });
 }
 
 export async function createPixel(input: PixelFormInput): Promise<PixelConfigDTO> {

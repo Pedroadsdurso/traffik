@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { auth } from "@/auth";
+import { decryptSecretSafe } from "@/lib/crypto/secrets";
 import { sendPurchaseEvent } from "@/lib/facebook/capi";
 import { prisma } from "@/lib/prisma";
 
@@ -26,11 +27,15 @@ export async function POST(req: NextRequest) {
   const target =
     pixel.metaPixels.find((m) => m.accessToken) ??
     (pixel.pixelId && pixel.accessToken ? { pixelId: pixel.pixelId, accessToken: pixel.accessToken } : null);
-  if (!target?.accessToken) return Response.json({ error: "Pixel sem token da Conversions API." }, { status: 400 });
+  // O token fica encriptado no banco; decripta só aqui, para a chamada.
+  const accessToken = decryptSecretSafe(target?.accessToken);
+  if (!target || !accessToken) {
+    return Response.json({ error: "Pixel sem token da Conversions API." }, { status: 400 });
+  }
 
   const result = await sendPurchaseEvent({
     pixelId: target.pixelId,
-    accessToken: target.accessToken,
+    accessToken,
     value: 1,
     currency: "BRL",
     eventId: "test-" + Date.now(),

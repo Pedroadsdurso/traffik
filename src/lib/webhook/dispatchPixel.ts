@@ -1,3 +1,4 @@
+import { decryptSecretSafe } from "@/lib/crypto/secrets";
 import { sendPurchaseEvent } from "@/lib/facebook/capi";
 import { prisma } from "@/lib/prisma";
 
@@ -52,10 +53,12 @@ export async function dispatchPurchaseEvents(saleId: string): Promise<void> {
             : [];
 
       for (const mp of targets) {
-        if (!mp.accessToken) continue;
+        // O token fica encriptado no banco; decripta só aqui, para a chamada.
+        const accessToken = decryptSecretSafe(mp.accessToken);
+        if (!accessToken) continue;
         const result = await sendPurchaseEvent({
           pixelId: mp.pixelId,
-          accessToken: mp.accessToken,
+          accessToken,
           value,
           currency: sale.currency,
           eventId: sale.id, // dedup com o pixel do navegador

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { getUtmCodes, type UtmCodesDTO } from "@/lib/actions/utm";
+import { getPublicAppUrl } from "@/lib/appUrl";
 import { backRedirectScript, utmScript } from "@/lib/utm/scripts";
 import { sx } from "@/lib/sx";
 
@@ -106,8 +107,7 @@ function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
 
   function baixarUtm() {
     if (!codes) return;
-    const apiBase = typeof window !== "undefined" ? window.location.origin : "";
-    download("traffik-utm.js", utmScript(codes.accountId, apiBase));
+    download("traffik-utm.js", utmScript(codes.accountId, getPublicAppUrl()));
   }
   function baixarBack() {
     download("traffik-back-redirect.js", backRedirectScript(backUrl));
@@ -125,6 +125,16 @@ function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
         <p className="card-body" style={sx("margin:0")}>
           Captura UTMs + fbclid, salva em cookie de 30 dias, propaga para os links de checkout e envia o
           clique para a Traffik. Cole no <code>&lt;head&gt;</code> do seu site.
+        </p>
+        <p className="card-body" style={sx("margin:0;font-size:12px")}>
+          Os cliques serão enviados para{" "}
+          <code style={sx("font-family:ui-monospace,monospace")}>{getPublicAppUrl()}</code>
+          {getPublicAppUrl().includes("localhost") && (
+            <span style={sx("color:var(--color-warning,#fbbf24)")}>
+              {" "}— é um endereço local. Defina <code>NEXT_PUBLIC_APP_URL</code> com o domínio de produção
+              e baixe o script de novo antes de instalar no site.
+            </span>
+          )}
         </p>
         <button className="btn btn-primary" type="button" onClick={baixarUtm} disabled={!codes} style={sx("width:fit-content")}>
           Baixar traffik-utm.js

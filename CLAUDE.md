@@ -47,6 +47,7 @@ src/
     api/
       track/click                   # captura de cliques (pixel.js)
       webhook/sale/[webhookId]      # recebe vendas dos gateways
+      webhook/kirvano  webhook/ingest # Kirvano + ingestão por chave de API
       pixel/event                   # eventos do script de pixel próprio → CAPI (CORS)
       dashboard  ads  ads/status  ads/campaign  creatives  notifications  pixel/test
       sync/facebook  rules/run
@@ -64,18 +65,22 @@ src/
     views/integracoes/              # AnunciosView, WebhooksView, PixelView, TestesView
   lib/
     prisma.ts appUrl.ts format.ts sx.ts
+    crypto/secrets.ts               # AES-256-GCM das credenciais em repouso
     actions/                        # server actions ("use server"), retornam DTOs
       webhooks pixels rules notifications expenses facebook dashboardPrefs session
+      apiCredentials utm diagnostics
     dashboard/metrics.ts            # computeDashboard (KPIs reais)
     ads/{overview,creatives}.ts     # dados do gerenciador e ranking de criativos
     facebook/{graph,sync,manage,capi}.ts
     utm/{parse,scripts}.ts          # parser reverso dos UTMs/xcod + scripts instaláveis
     pixel/script.ts                 # gerador do script de pixel próprio (Bloco 12)
     webhook/{normalizeSale,matchClick,dispatchPixel,dispatchNotification}.ts
+    webhook/{ingestSale,parseKirvano,logWebhook}.ts
     rules/engine.ts  reports/generate.ts
   generated/prisma/                 # cliente Prisma gerado (GITIGNORED)
 prisma/{schema.prisma, seed.ts, migrations/}
 scripts/demo-data.mjs               # gera dados de exemplo (NÃO rodar em prod)
+scripts/encrypt-secrets.mjs         # backfill: encripta credenciais em repouso
 public/pixel.js                     # script de tracking instalável
 ```
 
@@ -147,9 +152,57 @@ Logins: `teste@traffik.io` / `traffik123` (vazio) · `pedrodurso8@gmail.com` /
 | 10 | Integrações › Webhooks (Kirvano + credenciais de API) | ✅ **Feito** |
 | 11 | Integrações › UTMs (códigos xcod + scripts) | ✅ **Feito** |
 | 12 | Integrações › Pixel (script próprio) | ✅ **Feito** |
-| 13 | Integrações › Testes (central de diagnóstico) | ⏳ pendente (**próximo**) |
+| 13 | Integrações › Testes (central de diagnóstico) | ✅ **Feito** |
 
 Ordem recomendada do roteiro: 1 → 9,10,11,12,13 → 2 → 3,4 → 5 → 6,7 → 8.
+
+**Todas as Integrações (9–13) estão concluídas.** O próximo é o **Bloco 2**
+(grid arrastável do Dashboard).
+
+---
+
+## 🔐 Segurança: credenciais encriptadas em repouso
+
+`src/lib/crypto/secrets.ts` — **AES-256-GCM**, chave em `ENCRYPTION_KEY`
+(`openssl rand -base64 32`). Envelope `trkenc.v1.<iv>.<tag>.<ct>` em base64url.
+
+- **Encripta na escrita, decripta só no momento de usar** o segredo para chamar a
+  API externa. O prefixo do envelope permite distinguir ciphertext de texto puro
+  legado, o que torna a migração **idempotente** (`decryptSecret` devolve texto
+  puro intacto; `encryptSecret` não re-encripta).
+- **Colunas cobertas:** `MetaPixel.accessToken`, `PixelConfig.accessToken`
+  (legado da Fase 10) e `ApiCredential.key`.
+- **`ApiCredential` precisou de `keyHash`** (migration `20260724190000`): a chave
+  chega na request e precisa virar um `where`, mas o ciphertext tem IV aleatório e
+  não serve para busca. O `keyHash` é `sha256(ENCRYPTION_KEY || chave)` — com sal
+  da própria chave, então não cai em rainbow table. **O login da API usa o
+  `keyHash`; a coluna `key` só é decriptada no botão "revelar".**
+- **Backfill:** `node scripts/encrypt-secrets.mjs` (`--dry` para simular). Importa
+  o **mesmo** módulo `secrets.ts` da aplicação (Node faz type-stripping do `.ts`) —
+  duplicar a lógica de cripto poderia divergir e corromper dados.
+
+> ⚠️ **Trocar a `ENCRYPTION_KEY` torna ilegível tudo que já foi gravado.** Não há
+> rotação de chave implementada. Se precisar trocar, decripte antes com a chave
+> antiga.
+
+**Ainda em texto puro (fora do escopo pedido, decidir depois):**
+`AdProfile.accessToken` (token OAuth do Facebook) e `Webhook.secret` (token de
+segurança da Kirvano). Ambos usam o mesmo helper se um dia forem migrados — o
+`Webhook.secret` é só comparado por igualdade, então poderia virar hash.
+
+---
+
+## 🌐 URL pública nos scripts gerados
+
+Os scripts que o usuário instala **rodam no site dele**, então `window.location.origin`
+ali é o domínio do cliente, não o nosso. Ambos os geradores (pixel e UTM) usam
+**`getPublicAppUrl()`** (`src/lib/appUrl.ts`), que lê `NEXT_PUBLIC_APP_URL`.
+
+- `NEXT_PUBLIC_APP_URL` precisa ser lida como **literal** (`process.env.NEXT_PUBLIC_APP_URL`)
+  — o Next substitui a expressão inteira em build; desestruturar `process.env` quebra.
+- Sem a env var, cai em `window.location.origin` para não travar o dev — por isso a
+  UI **mostra a URL resolvida** nas abas Pixel e UTMs e **avisa em amarelo** quando é
+  `localhost`, deixando o erro visível antes de instalar no site.
 
 ---
 
@@ -324,11 +377,61 @@ aprovada em `/api/webhook/ingest` também chega na CAPI; delete do `PixelConfig`
   o roteiro só pediu Ativado/Desativado, sem regra de detecção configurável.
 - **`MetaPixel.accessToken` fica em texto puro** (mesmo trade-off do `ApiCredential`
   do Bloco 10) — é necessário para o envio server-side.
-- **Sem dedup com o pixel do navegador para Lead/AddToCart/IC**: o `eventId` é gerado
-  aleatoriamente no cliente. Só o Purchase deduplica de verdade (usa `sale.id`).
-- O `apiBase` do script é `window.location.origin` no momento da geração → em dev sai
-  `http://localhost:3000`. **Precisa regerar o script depois do deploy da Vercel.**
-- A **aba Testes ainda usa `v.pixels`** do contexto (Bloco 13 vai refazer).
+- **Sem dedup com o pixel do navegador para Lead/AddToCart/IC** — ver "Dívidas
+  técnicas conhecidas" no fim do arquivo. **Aceito conscientemente pelo usuário.**
+- ~~O `apiBase` do script é `window.location.origin`~~ → **resolvido**: agora vem de
+  `NEXT_PUBLIC_APP_URL` (ver seção "URL pública nos scripts gerados"). Quem já gerou
+  um script antes disso **precisa regerá-lo**.
+- ~~`MetaPixel.accessToken` em texto puro~~ → **resolvido** (AES-256-GCM).
+- ~~A aba Testes ainda usa `v.pixels`~~ → **resolvido** no Bloco 13.
+
+### Bloco 13 — Integrações › Testes
+Feito:
+- **`TestesView` autocontida** (sem `v`), com 4 blocos, na ordem: Checklist → Teste de
+  Pixel → Teste de Webhook → Teste de Tracking. Actions em `src/lib/actions/diagnostics.ts`.
+- **Nova tabela `WebhookLog`** (migration `20260724200000`): `gateway`, `payloadRaw`
+  (Json), `status` (enum `WebhookLogStatus`: RECEBIDO/PROCESSADO/REJEITADO/ERRO),
+  `message`, `httpStatus`, `saleId`, `userId?`, `webhookId?`, `createdAt`.
+- **Os 3 endpoints receptores** (`/api/webhook/kirvano`, `/api/webhook/ingest`,
+  `/api/webhook/sale/[webhookId]`) foram reescritos para **ler o corpo ANTES das
+  validações** e gravar o log já com status `RECEBIDO`, fechando depois com
+  PROCESSADO/REJEITADO/ERRO. Assim os payloads **recusados** — os que mais importam
+  para depurar — também aparecem. Um JSON quebrado é guardado como `{"raw": "..."}`
+  em vez de se perder. Todo processamento ficou dentro de `try/catch` (antes uma
+  exceção no `ingestSale` estourava 500 sem rastro).
+- **`logWebhook.ts`** (`startWebhookLog`/`finishWebhookLog`) **nunca lança** — falha ao
+  logar não pode derrubar a ingestão da venda.
+- **Teste de Pixel:** select dos pixels que têm token, `test_event_code` opcional,
+  chama `/api/pixel/test` e mostra a resposta **real** do Facebook (✓ ou ✗ com o erro).
+- **Teste de Tracking:** aceita URL completa **ou só a querystring**; roda o
+  `parseTrackingCodes` do Bloco 11, lista os 7 campos extraídos e resolve o **vínculo
+  no banco** (campanha/anúncio), dizendo se casou **por id ou por nome** — e alertando
+  que casar por nome é frágil. Notas acionáveis (ex.: "rode a sincronização").
+- **Checklist:** perfil FB, conta de anúncio com `trackingEnabled`, webhook ativo,
+  script de UTM (infere de `Click.count > 0`) e pixel com token da CAPI. Cada item
+  falho tem botão "Resolver" que leva à aba certa.
+- **Limpeza:** o CRUD do teste de pixel saiu do `useTraffikState`.
+
+**Testado ponta a ponta (dev server + DB + navegador):** payloads válidos gravam
+PROCESSADO+`saleId`, chave inválida → REJEITADO 401, JSON quebrado → REJEITADO 400 com
+`{"raw":...}`, token Kirvano desconhecido → REJEITADO 404; a UI lista os logs por
+gateway com timestamp e expande o corpo cru; Teste de Pixel devolveu o erro real do
+Facebook (*"Malformed access token …"*, com o token **decriptado** — prova o round-trip
+da cripto); Teste de Tracking extraiu os 6 ids/nomes + placement de uma URL do Bloco 11
+e reportou corretamente "não vinculada" (nada sincronizado nesse usuário); checklist
+saiu de 0/5 para 1/5 ao cadastrar um pixel. `tsc --noEmit` e `next build` limpos.
+
+**Incompleto / TODO no Bloco 13:**
+- **Logs sem dono não aparecem na UI.** Quando a chave de API é inválida ou o token
+  Kirvano é desconhecido, não dá para saber de quem é o payload → `userId` fica nulo e
+  a aba (que filtra por usuário) não o mostra. O registro **existe** no banco. Depurar
+  "meu gateway manda e não chega" exige olhar a tabela direto.
+- **Sem retenção/limpeza:** a `WebhookLog` cresce para sempre. Falta um cron de purga.
+- **Sem paginação:** a UI busca os últimos 20 (limite máximo de 100 na action).
+- **"Script de UTM detectado" é inferência**, não detecção: olha se existe algum
+  `Click`. Um site com o script instalado mas sem tráfego aparece como ✗.
+- O nível **AdSet** não é resolvido no Teste de Tracking (só campanha e anúncio),
+  espelhando a limitação de atribuição do Bloco 11.
 
 ---
 
@@ -354,18 +457,54 @@ aprovada em `/api/webhook/ingest` também chega na CAPI; delete do `PixelConfig`
 
 ## ⚠️ Pendência crítica — DEPLOY NA VERCEL
 
-**A produção (`342dd-virid.vercel.app`) está servindo um build ANTIGO (pré-Fase-7).**
-Todas as rotas `/api/*` novas dão **404** lá. O **GitHub está 100% atualizado** —
-o problema é que o **auto-deploy da Vercel parou de disparar** (10+ pushes, 0 deploys
-novos). Um empty commit não resolveu.
+**Diagnóstico refeito em 24/07/2026. A versão anterior deste documento estava errada:
+afirmava "o GitHub está 100% atualizado / 10+ pushes". Não havia pushes.** São
+**dois problemas independentes**:
 
-- **Causa provável:** integração GitHub→Vercel desconectada, OU a produção está
-  "pinada" num commit antigo.
-- **Fix pendente:** na Vercel → Settings → Git, reconectar o repo `Pedroadsdurso/
-  traffik` (branch `main`) e forçar um deploy do commit mais novo. Redeploy de um
-  deployment antigo **não** resolve (ele rebuilda o mesmo commit).
-- **Consequência:** NADA da v1 pós-Fase-6 nem da v2 está no ar ainda. Só o localhost
-  reflete o estado atual. O usuário optou por resolver o deploy **depois** dos blocos.
+### Problema 1 — os commits nunca subiram (RESOLVIDO)
+`git rev-list --left-right --count origin/main...HEAD` dava **`0 8`**: o `origin/main`
+estava parado em `76a747e` (24/07 00:49) e os **8 commits seguintes — Blocos 10, 11 e
+12 — só existiam na máquina local**. A Vercel não estava deixando de fazer deploy:
+não havia nada novo para ela buildar. Corrigido com `git push origin main`.
+
+### Problema 2 — a Vercel não builda nem o que ESTÁ no GitHub (DEPENDE DO USUÁRIO)
+Sondando a produção (`342dd-virid.vercel.app`):
+
+| Rota | Status | Leitura |
+|------|--------|---------|
+| `/login` | 200 | o app está no ar |
+| `/api/track/click` | 405 | rota **existe** (só não aceita GET) — build antigo, v1 |
+| `/dashboard/integracoes/anuncios` | **404** | **Bloco 1 não está no ar, apesar de estar no GitHub desde `2138e4b`** |
+| `/api/webhook/{ingest,kirvano}`, `/api/pixel/event` | 404 | esperado (eram os commits não enviados) |
+
+O Bloco 1 está no `origin/main` há bastante tempo e mesmo assim dá 404 em produção →
+**a integração GitHub→Vercel está de fato desconectada ou a produção está pinada num
+commit antigo.** Isso só se resolve no painel, com a conta do usuário.
+
+**Passos para o usuário executar (nesta ordem):**
+1. Vercel → projeto → **Settings › Git**: conferir se o repo `Pedroadsdurso/traffik`
+   está conectado na branch `main`. Se estiver, **Disconnect** e reconectar.
+2. Vercel → **Settings › Environment Variables** (Production): garantir
+   `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, `NEXT_PUBLIC_APP_URL` (**domínio real,
+   não localhost**), `ENCRYPTION_KEY`, `CRON_SECRET`, `FACEBOOK_APP_ID`,
+   `FACEBOOK_APP_SECRET`, `FACEBOOK_REDIRECT_URI`.
+   ⚠️ **A `ENCRYPTION_KEY` tem de ser a MESMA do `.env` local** — o banco é o mesmo
+   Supabase, e uma chave diferente torna ilegíveis os segredos já gravados.
+   `DIRECT_URL` **não** é necessária (a Vercel não roda migrations).
+3. **Deployments › Redeploy** no commit mais recente, com *"Use existing Build Cache"*
+   **desmarcado**. Redeploy de um deployment antigo não resolve (rebuilda o mesmo commit).
+4. Depois do deploy: **regerar os scripts** de pixel e UTM na UI, porque a URL da API
+   fica embutida no arquivo gerado (ver "URL pública nos scripts gerados").
+
+**O que já foi verificado daqui:** `npm run build` passa limpo, `vercel.json` está
+válido (3 crons), `package.json` roda `prisma generate` no `build` e no `postinstall`,
+e nenhuma rota precisa de banco em tempo de build (todas são `ƒ` dinâmicas). **Não há
+nada no repositório que impeça o build** — o bloqueio está na configuração do projeto
+na Vercel.
+
+> As **migrations não rodam na Vercel**. Depois de subir código com schema novo, rode
+> `npx prisma migrate deploy` localmente (usa `DIRECT_URL`). As 6 migrations atuais já
+> estão aplicadas no Supabase.
 
 ## Banco de dados
 Supabase (ref `dgaoucxkmpdxeenpfqth`, us-east-1). Usuários: `teste@traffik.io`
@@ -381,15 +520,28 @@ abandonado (auto-expira).
 
 ---
 
+## Dívidas técnicas conhecidas
+
+Registradas de propósito — **não são bugs esquecidos**, são decisões tomadas.
+
+| # | Dívida | Por quê / risco |
+|---|--------|-----------------|
+| 1 | **Dedup parcial dos eventos de pixel.** `Lead`/`AddToCart`/`InitiateCheckout` mandam um `eventId` aleatório do cliente, então o Facebook **não consegue deduplicar** se o pixel do navegador disparar o mesmo evento. Só o `Purchase` deduplica de verdade (usa `sale.id`). | **Aceito conscientemente pelo usuário** em 24/07/2026 como suficiente para começar. Risco: contagem inflada desses 3 eventos se o usuário também tiver o pixel nativo da Meta instalado. Para resolver: derivar o `eventId` de algo estável (ex.: `fbclid` + nome do evento + janela de tempo) e expor a mesma chave ao pixel do navegador. |
+| 2 | **Nav morto no `useTraffikState`** (`navAnalise`, `navAuto`, `navConfig`, `pageTitle`, `activeTab`, `fbTabs`, `fbSub`) e o **gerador de link/snippet antigo** (`utmUrl`, `snippetText`). Nada é renderizado. | Sobrou do Bloco 1/11. Limpar num passo de faxina. |
+| 3 | **Atribuição por nome é ambígua** quando dois anúncios/campanhas têm o mesmo nome. | Limitação pré-existente; o id resolve para tráfego novo com os códigos do Bloco 11. O Teste de Tracking (Bloco 13) agora **avisa** quando o casamento foi por nome. |
+| 4 | **`WebhookLog` sem retenção nem paginação.** | Cresce indefinidamente. Falta cron de purga. |
+| 5 | **`AdProfile.accessToken` e `Webhook.secret` ainda em texto puro.** | Fora do escopo da encriptação pedida (que cobriu `MetaPixel`/`ApiCredential`). Mesmo helper serve se forem migrados. |
+| 6 | **Sem rotação de `ENCRYPTION_KEY`.** | Trocar a chave torna ilegível o que já foi gravado. Uma rotação exigiria decriptar com a chave antiga e re-encriptar com a nova. |
+
+---
+
 ## Próximo passo recomendado
 
-1. **Resolver o deploy da Vercel** (fix acima) para que os Blocos 1, 9 e 10 fiquem de
-   fato no ar — senão seguimos construindo às cegas em produção.
-2. Depois, **Bloco 13** (Integrações › Testes): central de diagnóstico — teste de
-   pixel (dispara evento e mostra se o Facebook confirmou), teste de webhook (últimos
-   payloads crus por gateway, com timestamp e status — **exige guardar os payloads
-   recebidos**, que hoje não são persistidos), teste de tracking (cola uma URL com
-   UTMs e mostra como o `parse.ts` do Bloco 11 a interpretaria) e checklist de
-   instalação (conta FB, conta de anúncio ativa, webhook, script de UTM, pixel).
-   A `TestesView` atual ainda consome `v.pixels` do `useTraffikState` — provavelmente
-   vira autocontida como a `UtmsView`/`PixelView`.
+1. **Resolver o deploy da Vercel** — os 4 passos manuais na seção acima. É a única
+   pendência que depende do painel e trava ver qualquer coisa em produção.
+2. **Bloco 2** (grid arrastável do Dashboard) — as Integrações (9–13) estão fechadas,
+   e o roteiro manda ir para o Dashboard agora. Escolher entre `react-grid-layout` e
+   `dnd-kit`, criar a tabela `DashboardLayout` (user_id, layout JSON, viewport) e
+   salvar layouts separados para desktop e mobile.
+3. Oportunidade de faxina antes do Bloco 2: limpar a dívida técnica #2, já que o
+   Bloco 2 mexe pesado no `useTraffikState`.

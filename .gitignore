@@ -32,6 +32,9 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+# ...menos o template, que precisa estar no repo para quem clonar saber
+# quais variáveis existem. NUNCA colocar valores reais nele.
+!.env.example
 
 # vercel
 .vercel

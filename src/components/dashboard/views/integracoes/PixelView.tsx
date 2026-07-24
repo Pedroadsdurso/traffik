@@ -13,6 +13,7 @@ import {
   type PixelConfigDTO,
   type PixelFormInput,
 } from "@/lib/actions/pixels";
+import { getPublicAppUrl } from "@/lib/appUrl";
 import { pixelScript } from "@/lib/pixel/script";
 import { sx } from "@/lib/sx";
 
@@ -152,7 +153,7 @@ export function PixelView() {
     const ic = px.rules.find((r) => r.eventType === "INITIATE_CHECKOUT");
     return pixelScript({
       configId: px.id,
-      apiBase: typeof window !== "undefined" ? window.location.origin : "",
+      apiBase: getPublicAppUrl(),
       lead: px.rules.find((r) => r.eventType === "LEAD")?.enabled ?? false,
       addToCart: px.rules.find((r) => r.eventType === "ADD_TO_CART")?.enabled ?? false,
       initiateCheckout: {
@@ -337,6 +338,16 @@ export function PixelView() {
             <div className="dialog-title">Script do pixel — {scriptFor.name}</div>
             <div className="dialog-body" style={sx("display:flex;flex-direction:column;gap:var(--space-2)")}>
               <p className="card-body" style={sx("margin:0")}>Cole este script antes do <code>&lt;/head&gt;</code> do seu site. Ele reporta os eventos configurados à Conversions API.</p>
+              <p className="card-body" style={sx("margin:0;font-size:12px")}>
+                Os eventos serão enviados para{" "}
+                <code style={sx("font-family:ui-monospace,monospace")}>{getPublicAppUrl()}</code>
+                {getPublicAppUrl().includes("localhost") && (
+                  <span style={sx("color:var(--color-warning,#fbbf24)")}>
+                    {" "}— é um endereço local. Defina <code>NEXT_PUBLIC_APP_URL</code> com o domínio de produção
+                    e gere o script de novo antes de instalar no site.
+                  </span>
+                )}
+              </p>
               <pre style={sx("background:var(--color-bg,#0b0b0f);border:1px solid var(--color-border);border-radius:8px;padding:var(--space-3);font-size:11px;font-family:ui-monospace,monospace;overflow:auto;max-height:320px;margin:0")}>
                 {scriptText(scriptFor)}
               </pre>

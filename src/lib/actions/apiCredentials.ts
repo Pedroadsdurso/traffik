@@ -3,6 +3,7 @@
 import { randomBytes } from "node:crypto";
 
 import { auth } from "@/auth";
+import { decryptSecret, encryptSecret, secretLookupHash } from "@/lib/crypto/secrets";
 import { prisma } from "@/lib/prisma";
 
 export interface ApiCredentialDTO {
@@ -20,6 +21,7 @@ export interface ApiCredentialCreatedDTO extends ApiCredentialDTO {
   key: string;
 }
 
+/** Recebe a chave JÁ decriptada. */
 function maskKey(key: string): string {
   const last4 = key.slice(-4);
   return `trk_live_••••${last4}`;
@@ -36,7 +38,7 @@ function toDTO(c: {
   return {
     id: c.id,
     name: c.name,
-    keyMasked: maskKey(c.key),
+    keyMasked: maskKey(decryptSecret(c.key)),
     revoked: c.revoked,
     createdAt: c.createdAt.toISOString(),
     lastUsedAt: c.lastUsedAt?.toISOString() ?? null,
@@ -62,7 +64,14 @@ export async function createApiCredential(name: string): Promise<ApiCredentialCr
   const userId = await requireUserId();
   const key = `trk_live_${randomBytes(24).toString("hex")}`;
   const created = await prisma.apiCredential.create({
-    data: { userId, name: name.trim() || "Credencial de API", key },
+    // A chave em texto puro só existe aqui e na resposta desta chamada (exibida
+    // uma única vez). No banco vai o ciphertext + o hash usado na autenticação.
+    data: {
+      userId,
+      name: name.trim() || "Credencial de API",
+      key: encryptSecret(key),
+      keyHash: secretLookupHash(key),
+    },
   });
   return { ...toDTO(created), key };
 }
@@ -72,7 +81,7 @@ export async function revealApiCredential(id: string): Promise<{ key: string }> 
   const userId = await requireUserId();
   const cred = await prisma.apiCredential.findFirst({ where: { id, userId }, select: { key: true } });
   if (!cred) throw new Error("Credencial não encontrada.");
-  return { key: cred.key };
+  return { key: decryptSecret(cred.key) };
 }
 
 export async function revokeApiCredential(id: string): Promise<ApiCredentialDTO> {

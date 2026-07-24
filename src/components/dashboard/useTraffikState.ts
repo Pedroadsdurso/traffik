@@ -147,10 +147,6 @@ interface State {
   revealedKeys: Record<string, string>;
   copiedCredId: string | null;
   credError: string | null;
-  testPixelId: string;
-  testEventCode: string;
-  testBusy: boolean;
-  testResult: string | null;
   rules: RuleDTO[];
   ruleBusy: boolean;
   ruleRunBusy: boolean;
@@ -260,10 +256,6 @@ function initialState(
     revealedKeys: {},
     copiedCredId: null,
     credError: null,
-    testPixelId: "",
-    testEventCode: "",
-    testBusy: false,
-    testResult: null,
     rules: initialRulesDTO,
     ruleBusy: false,
     ruleRunBusy: false,
@@ -1112,35 +1104,7 @@ export function useTraffikState(
       setTimeout(() => set({ copiedCredId: null }), 1500);
     },
 
-    // Teste real de evento pela Conversions API (aba Testes)
-    testPixelOptions: s.pixels
-      .filter((px) => px.metaPixels.some((m) => m.hasToken))
-      .map((px) => ({ id: px.id, name: px.name })),
-    testPixelId: s.testPixelId,
-    onTestPixel: (e: React.ChangeEvent<HTMLSelectElement>) => set({ testPixelId: e.target.value }),
-    testEventCode: s.testEventCode,
-    onTestEventCode: (e: React.ChangeEvent<HTMLInputElement>) => set({ testEventCode: e.target.value }),
-    testBusy: s.testBusy,
-    testResult: s.testResult,
-    runPixelTest: async () => {
-      const pixelId = s.testPixelId || s.pixels.find((px) => px.metaPixels.some((m) => m.hasToken))?.id;
-      if (!pixelId) {
-        set({ testResult: "Configure um pixel com token da CAPI antes de testar." });
-        return;
-      }
-      set({ testBusy: true, testResult: null });
-      try {
-        const res = await fetch("/api/pixel/test", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pixelConfigId: pixelId, testEventCode: s.testEventCode || undefined }),
-        });
-        const json = await res.json();
-        set({ testBusy: false, testResult: res.ok ? `✅ Evento Purchase enviado ao Facebook${json.testEventCode ? ` (test_event_code: ${json.testEventCode})` : ""}.` : `⚠️ ${json.error ?? "Falha ao enviar."}` });
-      } catch (e) {
-        set({ testBusy: false, testResult: "Erro de rede: " + String(e) });
-      }
-    },
+    // O teste de pixel virou parte da TestesView autocontida (Bloco 13).
 
     gatewayExpenses,
     taxExpenses,
