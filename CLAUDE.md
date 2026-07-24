@@ -269,8 +269,15 @@ novos). Um empty commit não resolveu.
 
 ## Banco de dados
 Supabase (ref `dgaoucxkmpdxeenpfqth`, us-east-1). Usuários: `teste@traffik.io`
-(vazio) e `pedrodurso8@gmail.com` (dono, 1 perfil FB + 6 contas reais, 0 campanhas
-sincronizadas). O Prisma Postgres temporário antigo foi abandonado (auto-expira).
+(tem 1 webhook Custom de teste) e `pedrodurso8@gmail.com` (dono, 1 perfil FB + 6
+contas reais, 0 campanhas sincronizadas). O Prisma Postgres temporário antigo foi
+abandonado (auto-expira).
+
+> **Sessões auto-curam (commit `a08d0e9`):** o callback `session` em `src/auth.ts`
+> re-resolve o `userId` pelo e-mail a cada sessão. Antes, um JWT emitido pelo banco
+> antigo carregava um `userId` inexistente no Supabase → **FK error** em qualquer
+> insert (webhook, credencial, etc.) e "não acontecia nada" na UI. Agora não exige
+> mais relogin. Se um dia trocar de banco de novo, isso continua cobrindo.
 
 ---
 
