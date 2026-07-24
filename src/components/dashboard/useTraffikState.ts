@@ -147,6 +147,7 @@ interface State {
   webhookEditId: string | null;
   kirvanoToken: string;
   kirvanoName: string;
+  webhookError: string | null;
   // Credenciais de API (bloco direito)
   apiCredentials: ApiCredentialDTO[];
   credModalOpen: boolean;
@@ -155,6 +156,7 @@ interface State {
   createdCredKey: string | null;
   revealedKeys: Record<string, string>;
   copiedCredId: string | null;
+  credError: string | null;
   testPixelId: string;
   testEventCode: string;
   testBusy: boolean;
@@ -263,6 +265,7 @@ function initialState(
     webhookEditId: null,
     kirvanoToken: "",
     kirvanoName: "",
+    webhookError: null,
     apiCredentials: initialApiCredentials,
     credModalOpen: false,
     newCredName: "",
@@ -270,6 +273,7 @@ function initialState(
     createdCredKey: null,
     revealedKeys: {},
     copiedCredId: null,
+    credError: null,
     testPixelId: "",
     testEventCode: "",
     testBusy: false,
@@ -1111,17 +1115,18 @@ export function useTraffikState(
     webhookEditId: s.webhookEditId,
     kirvanoToken: s.kirvanoToken,
     kirvanoName: s.kirvanoName,
+    webhookError: s.webhookError,
     openWebhookModal: () =>
-      set({ webhookModalOpen: true, webhookEditId: null, webhookGateway: "KIRVANO", webhookGatewaySearch: "", kirvanoToken: "", kirvanoName: "" }),
+      set({ webhookModalOpen: true, webhookEditId: null, webhookGateway: "KIRVANO", webhookGatewaySearch: "", kirvanoToken: "", kirvanoName: "", webhookError: null }),
     openEditWebhook: (w: WebhookRowDTO) =>
-      set({ webhookModalOpen: true, webhookEditId: w.id, webhookGateway: w.platform, kirvanoToken: "", kirvanoName: w.name }),
+      set({ webhookModalOpen: true, webhookEditId: w.id, webhookGateway: w.platform, kirvanoToken: "", kirvanoName: w.name, webhookError: null }),
     closeWebhookModal: () => set({ webhookModalOpen: false }),
     onWebhookGatewaySearch: (e: React.ChangeEvent<HTMLInputElement>) => set({ webhookGatewaySearch: e.target.value }),
     selectWebhookGateway: (g: string) => set({ webhookGateway: g }),
     onKirvanoToken: (e: React.ChangeEvent<HTMLInputElement>) => set({ kirvanoToken: e.target.value }),
     onKirvanoName: (e: React.ChangeEvent<HTMLInputElement>) => set({ kirvanoName: e.target.value }),
     saveWebhook: async () => {
-      set({ webhookBusy: true });
+      set({ webhookBusy: true, webhookError: null });
       try {
         if (s.webhookEditId) {
           const updated = await updateWebhook({ id: s.webhookEditId, name: s.kirvanoName, secret: s.kirvanoToken });
@@ -1136,7 +1141,7 @@ export function useTraffikState(
           setS((st) => ({ ...st, webhooks: [...st.webhooks, created], webhookBusy: false, webhookModalOpen: false }));
         }
       } catch {
-        set({ webhookBusy: false });
+        set({ webhookBusy: false, webhookError: "Não foi possível salvar o webhook. Se o problema persistir, saia e entre novamente." });
       }
     },
 
@@ -1148,17 +1153,18 @@ export function useTraffikState(
     createdCredKey: s.createdCredKey,
     revealedKeys: s.revealedKeys,
     copiedCredId: s.copiedCredId,
-    openCredModal: () => set({ credModalOpen: true, newCredName: "", createdCredKey: null }),
+    credError: s.credError,
+    openCredModal: () => set({ credModalOpen: true, newCredName: "", createdCredKey: null, credError: null }),
     closeCredModal: () => set({ credModalOpen: false, createdCredKey: null }),
     onNewCredName: (e: React.ChangeEvent<HTMLInputElement>) => set({ newCredName: e.target.value }),
     createCredential: async () => {
-      set({ credBusy: true });
+      set({ credBusy: true, credError: null });
       try {
         const created = await createApiCredential(s.newCredName);
         const { key, ...dto } = created;
         setS((st) => ({ ...st, apiCredentials: [dto, ...st.apiCredentials], createdCredKey: key, credBusy: false }));
       } catch {
-        set({ credBusy: false });
+        set({ credBusy: false, credError: "Não foi possível gerar a credencial. Se o problema persistir, saia e entre novamente." });
       }
     },
     revealCredential: async (id: string) => {

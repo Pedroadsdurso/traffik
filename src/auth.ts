@@ -52,10 +52,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     jwt({ token, user }) {
-      if (user) token.sub = user.id;
+      if (user) {
+        token.sub = user.id;
+        token.email = user.email;
+      }
       return token;
     },
-    session({ session, token }) {
+    async session({ session, token }) {
+      // Auto-cura sessões obsoletas: um JWT emitido por um banco anterior
+      // carrega um `sub` que não existe mais (viola FK ao gravar). Resolvemos
+      // o id atual pelo e-mail (índice único) a cada sessão, com fallback ao
+      // `sub`. Evita o clássico "exige relogin" após trocar de banco.
+      if (typeof token.email === "string") {
+        const dbUser = await prisma.user.findUnique({
+          where: { email: token.email },
+          select: { id: true },
+        });
+        if (dbUser) {
+          session.user.id = dbUser.id;
+          return session;
+        }
+      }
       if (token.sub) session.user.id = token.sub;
       return session;
     },

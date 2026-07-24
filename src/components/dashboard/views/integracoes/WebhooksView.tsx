@@ -282,6 +282,10 @@ function WebhookModal({ v }: { v: TraffikView }) {
               </div>
             </>
           )}
+
+          {v.webhookError && (
+            <p style={sx("margin:0;font-size:12.5px;color:var(--color-danger,#f87171)")}>{v.webhookError}</p>
+          )}
         </div>
         <div className="dialog-actions">
           <button className="btn btn-secondary" type="button" onClick={v.closeWebhookModal}>Cancelar</button>
@@ -328,6 +332,9 @@ function CredentialModal({ v }: { v: TraffikView }) {
               <label>Nome da credencial</label>
               <input className="input" value={v.newCredName} onChange={v.onNewCredName} placeholder="Ex.: Integração checkout próprio" />
             </div>
+          )}
+          {v.credError && (
+            <p style={sx("margin:0;font-size:12.5px;color:var(--color-danger,#f87171)")}>{v.credError}</p>
           )}
         </div>
         <div className="dialog-actions">
