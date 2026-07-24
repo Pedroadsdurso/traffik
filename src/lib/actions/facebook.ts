@@ -67,6 +67,15 @@ export async function toggleAccountTracking(accountId: string): Promise<AdAccoun
   };
 }
 
+/** Ativa/desativa o rastreamento de TODAS as contas de um perfil de uma vez. */
+export async function setProfileTracking(profileId: string, enabled: boolean): Promise<{ id: string; enabled: boolean }> {
+  const userId = await requireUserId();
+  const profile = await prisma.adProfile.findFirst({ where: { id: profileId, userId }, select: { id: true } });
+  if (!profile) throw new Error("Perfil não encontrado.");
+  await prisma.adAccount.updateMany({ where: { userId, adProfileId: profileId }, data: { trackingEnabled: enabled } });
+  return { id: profileId, enabled };
+}
+
 export async function disconnectProfile(profileId: string): Promise<{ id: string }> {
   const userId = await requireUserId();
   const profile = await prisma.adProfile.findFirst({ where: { id: profileId, userId }, select: { id: true } });

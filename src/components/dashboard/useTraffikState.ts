@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { saveDashboardPrefs, type DashboardPrefsDTO } from "@/lib/actions/dashboardPrefs";
 import {
   disconnectProfile,
+  setProfileTracking,
   toggleAccountTracking,
   type AdProfileDTO,
 } from "@/lib/actions/facebook";
@@ -85,6 +86,7 @@ interface State {
   fbConnected: boolean;
   adProfiles: AdProfileDTO[];
   expandedProfiles: Record<string, boolean>;
+  accountSync: Record<string, { busy: boolean; msg: string | null }>;
   pixels: PixelConfigDTO[];
   newPixelName: string;
   newPixelId: string;
@@ -187,6 +189,7 @@ function initialState(
     fbConnected: initialProfiles.length > 0,
     adProfiles: initialProfiles,
     expandedProfiles: {},
+    accountSync: {},
     pixels: initialPixels,
     newPixelName: "",
     newPixelId: "",
@@ -582,9 +585,21 @@ export function useTraffikState(
     email: p.email,
     pictureUrl: p.pictureUrl,
     accountCount: p.accounts.length,
-    expanded: s.expandedProfiles[p.id] ?? true,
+    trackedCount: p.accounts.filter((a) => a.trackingEnabled).length,
+    allTracked: p.accounts.length > 0 && p.accounts.every((a) => a.trackingEnabled),
+    expanded: s.expandedProfiles[p.id] ?? false,
     toggleExpanded: () =>
-      setS((st) => ({ ...st, expandedProfiles: { ...st.expandedProfiles, [p.id]: !(st.expandedProfiles[p.id] ?? true) } })),
+      setS((st) => ({ ...st, expandedProfiles: { ...st.expandedProfiles, [p.id]: !(st.expandedProfiles[p.id] ?? false) } })),
+    setAllTracking: async () => {
+      const enabled = !(p.accounts.length > 0 && p.accounts.every((a) => a.trackingEnabled));
+      await setProfileTracking(p.id, enabled);
+      setS((st) => ({
+        ...st,
+        adProfiles: st.adProfiles.map((pr) =>
+          pr.id === p.id ? { ...pr, accounts: pr.accounts.map((a2) => ({ ...a2, trackingEnabled: enabled })) } : pr,
+        ),
+      }));
+    },
     disconnect: async () => {
       await disconnectProfile(p.id);
       setS((st) => ({ ...st, adProfiles: st.adProfiles.filter((x) => x.id !== p.id) }));
@@ -595,8 +610,10 @@ export function useTraffikState(
       fbAccountId: ac.fbAccountId,
       currency: ac.currency,
       statusTag: ac.status === "ACTIVE" ? "tag tag-accent" : "tag tag-neutral",
-      statusLabel: ac.status === "ACTIVE" ? "Ativa" : ac.status === "PAUSED" ? "Pausada" : "—",
+      statusLabel: ac.status === "ACTIVE" ? "Ativa" : ac.status === "PAUSED" ? "Desabilitada" : "—",
       trackingOn: ac.trackingEnabled,
+      syncBusy: s.accountSync[ac.id]?.busy ?? false,
+      syncMsg: s.accountSync[ac.id]?.msg ?? null,
       toggleTracking: async () => {
         const updated = await toggleAccountTracking(ac.id);
         setS((st) => ({
@@ -607,6 +624,23 @@ export function useTraffikState(
               : pr,
           ),
         }));
+      },
+      sync: async () => {
+        setS((st) => ({ ...st, accountSync: { ...st.accountSync, [ac.id]: { busy: true, msg: null } } }));
+        try {
+          const res = await fetch("/api/sync/facebook", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ accountId: ac.id }),
+          });
+          const json = await res.json();
+          const msg = res.ok
+            ? `${json.campaigns || 0} camp. · ${json.ads || 0} anúncios · ${json.metrics || 0} dias${json.errors?.length ? " (erro)" : ""}`
+            : json.error || "Falha na sincronização.";
+          setS((st) => ({ ...st, accountSync: { ...st.accountSync, [ac.id]: { busy: false, msg } }, adsRefreshKey: st.adsRefreshKey + 1 }));
+        } catch {
+          setS((st) => ({ ...st, accountSync: { ...st.accountSync, [ac.id]: { busy: false, msg: "Erro de rede." } } }));
+        }
       },
     })),
   }));

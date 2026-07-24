@@ -279,6 +279,31 @@ async function syncAccount(
   }
 }
 
+/** Sincroniza uma única conta de anúncio pelo id interno. */
+export async function syncSingleAccount(userId: string, accountId: string, days = 30): Promise<SyncSummary> {
+  const summary: SyncSummary = { accounts: 0, campaigns: 0, adSets: 0, ads: 0, metrics: 0, errors: [] };
+  const acc = await prisma.adAccount.findFirst({
+    where: { id: accountId, userId },
+    select: { id: true, userId: true, fbAccountId: true, name: true, adProfile: { select: { accessToken: true } } },
+  });
+  if (!acc) {
+    summary.errors.push("Conta não encontrada.");
+    return summary;
+  }
+  const token = acc.adProfile?.accessToken;
+  if (!token) {
+    summary.errors.push("Perfil sem token do Facebook.");
+    return summary;
+  }
+  try {
+    await syncAccount({ id: acc.id, userId: acc.userId, fbAccountId: acc.fbAccountId }, token, summary, days);
+    summary.accounts++;
+  } catch (e) {
+    summary.errors.push(`${acc.name}: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  return summary;
+}
+
 /** Sincroniza todas as contas rastreadas de um usuário. */
 export async function syncUser(userId: string, days = 30): Promise<SyncSummary> {
   const summary: SyncSummary = { accounts: 0, campaigns: 0, adSets: 0, ads: 0, metrics: 0, errors: [] };
