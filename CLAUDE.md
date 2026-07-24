@@ -141,8 +141,8 @@ Logins: `teste@traffik.io` / `traffik123` (vazio) · `pedrodurso8@gmail.com` /
 | 7 | Gerenciador: painel de ações em massa (CBO/ABO) | ⏳ pendente |
 | 8 | Regras: reformulação completa (modal, import/export) | ⏳ pendente |
 | 9 | Integrações › Anúncios (vitrine de perfis) | ✅ **Feito** |
-| 10 | Integrações › Webhooks (Kirvano + credenciais de API) | ⏳ pendente (**próximo**) |
-| 11 | Integrações › UTMs (códigos xcod + scripts) | ⏳ pendente |
+| 10 | Integrações › Webhooks (Kirvano + credenciais de API) | ✅ **Feito** |
+| 11 | Integrações › UTMs (códigos xcod + scripts) | ⏳ pendente (**próximo**) |
 | 12 | Integrações › Pixel (script próprio) | ⏳ pendente |
 | 13 | Integrações › Testes (central de diagnóstico) | ⏳ pendente |
 
@@ -193,6 +193,43 @@ Feito:
   conta. Recomendo abrir logado como `pedrodurso8` e conferir o expand/sync visualmente.
 - Sync por conta usa janela fixa de **30 dias**. Sem paginação para muitos perfis.
 
+### Bloco 10 — Integrações › Webhooks (commit `9f9dfa9`)
+Feito:
+- Aba em **dois blocos lado a lado** (`grid auto-fit minmax(360px,1fr)`).
+- **Esquerda (Webhooks):** estado vazio + modal "Adicionar Webhook" com **busca de
+  gateway**; só **Kirvano** habilitada (Hotmart/Kiwify "em breve" — array `GATEWAYS`
+  extensível). Fluxo Kirvano: usuário cola o **token de segurança** (guardado em
+  `Webhook.secret`) → gera URL única **`/api/webhook/kirvano?id={token}`**. Lista com
+  monograma/nome/status/toggle/URL+copiar/editar/remover.
+- **Endpoint `/api/webhook/kirvano`**: valida o token (header `security-token`/
+  `x-security-token` ou `token`/`security_token` no corpo → 401 se não bater) e usa
+  **`parseKirvano`** (eventos oficiais → status: PIX/boleto/carrinho=PENDENTE,
+  SALE_APPROVED=APROVADA, REFUNDED=REEMBOLSADA, CHARGEBACK, REFUSED=CANCELADA).
+  O upsert por `externalId` faz a transição **gerada→paga** numa única linha — é o que
+  habilita a **Taxa de Aprovação** do Bloco 5 (não precisou de schema novo pra isso).
+- **Direita (Credenciais de API):** nova tabela **`ApiCredential`** (migration
+  `20260724164141`). Gera chave `trk_live_*` (crypto), exibida **uma vez** (copiar),
+  depois **mascarada** com revelar/revogar/excluir. **Endpoint `/api/webhook/ingest`**
+  autentica por `Authorization: Bearer {key}` e ingere venda genérica. Seção
+  **"Como usar"** (`<details>`) documenta o payload.
+- **Refactor:** pipeline de ingestão extraída para **`src/lib/webhook/ingestSale.ts`**
+  (compartilhada por Kirvano, ingest genérico e webhook por token). Helpers de
+  `normalizeSale` exportados (`pick`/`toNumber`/`toStr`/`mapPayment`/`isObj`/`Json`).
+  Rota antiga `/api/webhook/sale/[token]` agora escolhe parser pela `platform`.
+
+**Testado ponta a ponta (dev server + DB):** parser Kirvano (`R$ 197,00`→197, PIX,
+nome/produto), gerada→paga por upsert, token errado→401, ingest com key→200 / sem ou
+inválida→401, `lastUsedAt` atualizado. `tsc --noEmit` e `next build` limpos.
+**Verificado visualmente** (logado como `teste@traffik.io`): dois blocos + modal do
+seletor de gateway (Kirvano habilitada, Hotmart/Kiwify "em breve").
+
+**Incompleto / TODO no Bloco 10:**
+- Só a **Kirvano** tem parser dedicado (o roteiro pediu só ela por ora).
+- A URL do webhook usa **`getAppUrl()`** (localhost em dev). Em prod dependerá do
+  deploy da Vercel (pendência crítica abaixo).
+- `ApiCredential.key` é guardada **em texto puro** (necessário para o "revelar" do
+  roteiro). Se um dia optar por hash, o botão "revelar" deixa de ser possível.
+
 ---
 
 ## Decisões técnicas relevantes
@@ -239,9 +276,10 @@ sincronizadas). O Prisma Postgres temporário antigo foi abandonado (auto-expira
 
 ## Próximo passo recomendado
 
-1. **Resolver o deploy da Vercel** (fix acima) para que Bloco 1 e 9 fiquem de fato
-   no ar — senão seguimos construindo às cegas em produção.
-2. Depois, **Bloco 10** (Integrações › Webhooks): bloco esquerdo com Kirvano (token
-   do usuário → gera URL única + parser dos eventos gerada/paga/reembolso/chargeback,
-   o que também habilita a "Taxa de Aprovação" do Bloco 5); bloco direito com
-   credenciais de API genéricas.
+1. **Resolver o deploy da Vercel** (fix acima) para que os Blocos 1, 9 e 10 fiquem de
+   fato no ar — senão seguimos construindo às cegas em produção.
+2. Depois, **Bloco 11** (Integrações › UTMs): bloco 1 = códigos de parâmetros por
+   destino (Hotmart/Cartpanda/Outros) com `[SEPARADOR]` único por conta + **parser
+   reverso do `xcod`** que vincula a venda ao Ad correto (chave pra cruzar venda ↔
+   criativo — vários blocos dependem dela); bloco 2 = scripts próprios (captura de
+   UTM/fbclid em cookie 30d + endpoint `/api/track/click`, e back redirect).
