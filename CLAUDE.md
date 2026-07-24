@@ -142,8 +142,8 @@ Logins: `teste@traffik.io` / `traffik123` (vazio) · `pedrodurso8@gmail.com` /
 | 8 | Regras: reformulação completa (modal, import/export) | ⏳ pendente |
 | 9 | Integrações › Anúncios (vitrine de perfis) | ✅ **Feito** |
 | 10 | Integrações › Webhooks (Kirvano + credenciais de API) | ✅ **Feito** |
-| 11 | Integrações › UTMs (códigos xcod + scripts) | ⏳ pendente (**próximo**) |
-| 12 | Integrações › Pixel (script próprio) | ⏳ pendente |
+| 11 | Integrações › UTMs (códigos xcod + scripts) | ✅ **Feito** |
+| 12 | Integrações › Pixel (script próprio) | ⏳ pendente (**próximo**) |
 | 13 | Integrações › Testes (central de diagnóstico) | ⏳ pendente |
 
 Ordem recomendada do roteiro: 1 → 9,10,11,12,13 → 2 → 3,4 → 5 → 6,7 → 8.
@@ -230,6 +230,42 @@ seletor de gateway (Kirvano habilitada, Hotmart/Kiwify "em breve").
 - `ApiCredential.key` é guardada **em texto puro** (necessário para o "revelar" do
   roteiro). Se um dia optar por hash, o botão "revelar" deixa de ser possível.
 
+### Bloco 11 — Integrações › UTMs (commit `e4bee7f`)
+Feito:
+- Aba reformulada em 2 blocos (`UtmsView` **autocontida** — busca dados via server
+  action, estado local; a `UtmView` antiga foi **removida**). A rota `utms/page.tsx`
+  agora renderiza `<UtmsView />` sem `v`.
+- **Códigos:** botão "Ver opções" → popup com **Hotmart/Cartpanda/Outros**, cada um
+  com o código de parâmetros + Copiar. `getUtmCodes()` (`src/lib/actions/utm.ts`)
+  gera e persiste um **separador único por usuário** (`User.xcodSeparator`, migration
+  `20260724171328`) para o `xcod` da Hotmart; Cartpanda usa `cid={userId}`; todos os
+  UTMs no formato `{{campaign.name}}|{{campaign.id}}`.
+- **Parser reverso (`src/lib/utm/parse.ts`) — o coração:** `splitPipe` divide
+  `"Nome|id"` no ÚLTIMO `|` (ignora placeholders `{{...}}` e ids não-numéricos),
+  `parseUtms`/`parseXcod`/`parseTrackingCodes`. **`creatives.ts` e `overview.ts`**
+  agora atribuem a venda ao anúncio/campanha pelo **id do Facebook** extraído do
+  `utm_content`/`utm_campaign` (`fbAdId`/`fbCampaignId`), **somando** o fallback por
+  nome (cliques antigos). Cada venda cai em só um mapa → sem dupla contagem.
+- **Scripts (`src/lib/utm/scripts.ts`):** "Baixar traffik-utm.js" (script próprio,
+  account embutido: lê UTMs+fbclid, cookie 30d, propaga p/ links de checkout, envia
+  ao `/api/track/click`, expõe `window.traffik.getData()`); "Baixar
+  traffik-back-redirect.js" (intercepta voltar → redireciona p/ URL da UI preservando
+  UTMs). Download via Blob no cliente.
+
+**Testado:** parser (unit: nome com `|`, placeholder, xcod inválido); atribuição por
+id **ponta a ponta** (id casa mesmo com nome errado; soma fallback → sales=2/rev=400/
+roas=4); scripts passam em `node --check`; UI no navegador (popup Hotmart com
+separador `_dbca9cc2b39f_`, Cartpanda com `cid=<userId>`). Build + tsc limpos.
+
+**Incompleto / TODO no Bloco 11:**
+- A atribuição por **nome** ainda é ambígua se dois anúncios/campanhas tiverem o mesmo
+  nome (limitação pré-existente; o id resolve para tráfego novo com os códigos novos).
+- `useTraffikState` ainda expõe o **gerador de link/snippet antigo** (`utmUrl`,
+  `snippetText`, etc.) — agora **código morto** (a `UtmView` que consumia foi
+  removida). Limpar junto do resto do nav morto.
+- O nível **conjunto (AdSet)** não recebeu atribuição por id (só campanha e anúncio);
+  não foi pedido, mas o parser já extrai `adsetId` se precisar.
+
 ---
 
 ## Decisões técnicas relevantes
@@ -285,8 +321,9 @@ abandonado (auto-expira).
 
 1. **Resolver o deploy da Vercel** (fix acima) para que os Blocos 1, 9 e 10 fiquem de
    fato no ar — senão seguimos construindo às cegas em produção.
-2. Depois, **Bloco 11** (Integrações › UTMs): bloco 1 = códigos de parâmetros por
-   destino (Hotmart/Cartpanda/Outros) com `[SEPARADOR]` único por conta + **parser
-   reverso do `xcod`** que vincula a venda ao Ad correto (chave pra cruzar venda ↔
-   criativo — vários blocos dependem dela); bloco 2 = scripts próprios (captura de
-   UTM/fbclid em cookie 30d + endpoint `/api/track/click`, e back redirect).
+2. Depois, **Bloco 12** (Integrações › Pixel): popup "Adicionar Pixel" (nome, tipo
+   Meta, múltiplos pixels Meta com ID+token+apelido, regras de Lead/AddToCart/
+   InitiateCheckout com detecção por texto/CSS/URL, regra de Purchase com envio/valor/
+   produto); ao salvar **gera um script de pixel próprio** que escuta os eventos na
+   página e reporta ao backend → CAPI. Já existe base da Fase 10 (`capi.ts`,
+   `actions/pixels.ts`, `PixelConfig`/`PixelEventRule`) para reaproveitar.
