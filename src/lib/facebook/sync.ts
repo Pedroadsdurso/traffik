@@ -114,6 +114,8 @@ export interface SyncSummary {
   adSets: number;
   ads: number;
   metrics: number;
+  /** Entidades apagadas localmente por não existirem mais no Facebook. */
+  removidos?: number;
   errors: string[];
 }
 
@@ -251,6 +253,18 @@ async function syncAccount(
     }
   }
 
+  // 3.5 Poda: o que sumiu do Facebook tem que sumir daqui.
+  //
+  // Era o bug de "excluí no Facebook e continua aparecendo": o sync só fazia
+  // upsert do que a Graph API devolvia e **nunca removia** o que deixou de vir.
+  // Uma campanha excluída/arquivada some da listagem da Meta, então a ausência
+  // é justamente o sinal.
+  //
+  // A poda é feita por CONTA e só quando a Graph respondeu — se `campaigns`
+  // viesse vazio por erro de rede, apagaríamos tudo. Como `graphAll` lança em
+  // falha, chegar aqui significa que a resposta é confiável.
+  await podar(account.id, campaigns.map((c) => c.id), adSets.map((a) => a.id), ads.map((a) => a.id), summary);
+
   // 4. Métricas diárias por anúncio.
   //
   // `time_range` explícito em vez de `date_preset`: os presets da Meta
@@ -297,6 +311,25 @@ async function syncAccount(
     });
     summary.metrics++;
   }
+}
+
+/**
+ * Remove da base local o que não veio mais na resposta do Facebook.
+ * A ordem importa: anúncios → conjuntos → campanhas, para não esbarrar em FK.
+ */
+async function podar(
+  adAccountId: string,
+  fbCampaignIds: string[],
+  fbAdSetIds: string[],
+  fbAdIds: string[],
+  summary: SyncSummary,
+) {
+  const [ads, adSets, campaigns] = await Promise.all([
+    prisma.ad.deleteMany({ where: { adAccountId, fbAdId: { notIn: fbAdIds } } }),
+    prisma.adSet.deleteMany({ where: { adAccountId, fbAdSetId: { notIn: fbAdSetIds } } }),
+    prisma.campaign.deleteMany({ where: { adAccountId, fbCampaignId: { notIn: fbCampaignIds } } }),
+  ]);
+  summary.removidos = (summary.removidos ?? 0) + ads.count + adSets.count + campaigns.count;
 }
 
 /** Sincroniza uma única conta de anúncio pelo id interno. */

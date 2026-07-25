@@ -24,24 +24,6 @@ function GatewayBadge({ label }: { label: string }) {
   );
 }
 
-function OptionsMenu({
-  onEdit,
-  onRemove,
-}: {
-  onEdit: () => void;
-  onRemove: () => void;
-}) {
-  return (
-    <div style={sx("display:flex;align-items:center;gap:6px")}>
-      <button className="btn btn-ghost" type="button" onClick={onEdit} style={sx("padding:6px 10px;font-size:12px")}>
-        Editar
-      </button>
-      <button className="btn btn-ghost" type="button" onClick={onRemove} style={sx("padding:6px 10px;font-size:12px")} title="Remover">
-        Remover
-      </button>
-    </div>
-  );
-}
 
 // ─────────────────────────── Bloco esquerdo ───────────────────────────
 
@@ -93,7 +75,10 @@ function WebhooksBlock({ v }: { v: TraffikView }) {
               style={sx("white-space:nowrap")}>
               Editar
             </button>
-            <OptionsMenu onEdit={() => v.openEditWebhook(w)} onRemove={() => v.removeWebhook(w.id)} />
+            <button className="btn btn-ghost" type="button" onClick={() => v.removeWebhook(w.id)}
+              style={sx("white-space:nowrap")}>
+              Remover
+            </button>
           </div>
         ))
       )}

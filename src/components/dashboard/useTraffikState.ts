@@ -320,6 +320,8 @@ const DOWN_PATH = "M32 80 L96 144 L136 112 L224 192 M176 192 L224 192 L224 144";
  * escondida, 5s é sustentável.
  */
 const DASH_POLL_MS = 5000;
+/** Gerenciador de Anúncios: reflete o Facebook sem depender do botão manual. */
+const ADS_POLL_MS = 8000;
 
 function startPolling(load: () => void, intervalMs: number): () => void {
   let timer: ReturnType<typeof setInterval> | null = null;
@@ -417,7 +419,7 @@ export function useTraffikState(
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
-    (async () => {
+    async function carregar() {
       const qs = new URLSearchParams({ period: s.adsPeriod, account: s.adsAccount });
       try {
         const res = await fetch(`/api/ads?${qs.toString()}`, { signal: controller.signal });
@@ -427,8 +429,13 @@ export function useTraffikState(
       } catch {
         /* abortado ou erro de rede */
       }
-    })();
-    return () => { active = false; controller.abort(); };
+    }
+    void carregar();
+    // Gerenciador ao vivo: sem isso, campanha nova / métrica nova / mudança de
+    // status só apareciam ao clicar em "Sincronizar". Pausa em aba escondida
+    // (ver `startPolling`), então não custa nada com o painel em segundo plano.
+    const stop = startPolling(() => { void carregar(); }, ADS_POLL_MS);
+    return () => { active = false; controller.abort(); stop(); };
   }, [s.adsPeriod, s.adsAccount, s.adsRefreshKey]);
 
   // Ranking de criativos.
@@ -1012,6 +1019,8 @@ export function useTraffikState(
       { label: "Vendas aprovadas", curto: "Vendas Apr.", value: d?.funnel.vendas ?? 0 },
     ],
     sparklines: d?.chart.sparklines ?? {},
+    /** Recarrega os dados do Dashboard sem recarregar a página. */
+    refreshDashboard: () => setS((st) => ({ ...st, dashLoading: true, refreshKey: st.refreshKey + 1 })),
     byCountry: d?.byCountry ?? [],
     approval: d?.approval ?? [],
     byHour: d?.byHour ?? [],

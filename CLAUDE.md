@@ -600,6 +600,42 @@ pendentes + 9 eventos de IC): taxa de aprovação saiu **Pix 4/5 = 80%, Cartão 
 Boleto 1/1 = 100%**; países BR/PT/AR com os valores certos; funil com os 5 estágios;
 donuts com percentuais somando 100%. Dados de teste removidos depois.
 
+### Gerenciador ao vivo, orçamento inline e poda (pós-Blocos 6/7)
+
+- **Orçamento editável inline**, com caneta, na coluna à esquerda de "Vendas". A caneta
+  só aparece **no nível que a Meta aceita**: campanha CBO edita na campanha, ABO edita
+  no conjunto. A detecção reusa a mesma regra do modal (`dailyBudget != null` na
+  campanha). No nível errado a célula mostra o valor sem caneta, em vez de oferecer uma
+  edição que seria recusada.
+- **Polling do gerenciador** a cada 8s (`ADS_POLL_MS`), pausando em aba escondida como o
+  do Dashboard. Campanha nova, métrica nova e mudança de status entram sozinhas; o botão
+  "Sincronizar métricas" vira atalho, não obrigação.
+- **Botão "Atualizar" no Dashboard** (`refreshDashboard`), com ícone girando enquanto
+  busca — recarrega os dados sem recarregar a página.
+- **Duplicar campanha** agora pergunta se a cópia nasce **Ativada ou Desativada**
+  (padrão desativada) e repassa `status_option` para o `/copies` da Meta.
+- **Botão "Editar" duplicado** no card de webhook: eu tinha deixado um em botão e outro
+  dentro do `OptionsMenu`. Ficou só o de botão + "Remover"; o `OptionsMenu` foi removido.
+  Auditoria não encontrou duplicata em nenhum outro card.
+
+> ### 🐛 Exclusão não propagava — corrigido
+> O sync só fazia `upsert` do que a Graph API devolvia e **nunca removia o que deixou de
+> vir**. Campanha excluída no Facebook continuava na ferramenta para sempre. Agora, ao
+> fim de cada conta, `podar()` apaga o que não veio na resposta (anúncios → conjuntos →
+> campanhas, nessa ordem, por causa das FKs).
+>
+> **Por que é seguro:** a poda roda **por conta** e só depois de a Graph responder — o
+> `graphAll` lança em falha, então chegar ali significa resposta confiável. Se a resposta
+> viesse vazia por erro de rede, apagaríamos tudo daquela conta; é justamente por isso
+> que a poda depende de a chamada ter tido sucesso, e não de um `try/catch` silencioso.
+>
+> A exclusão feita **pela própria ferramenta** também passou a apagar o registro local
+> (`removerLocal`) em vez de só marcar `DELETED` e deixar a linha na tela.
+>
+> Testado no banco: campanha ausente da resposta é removida; **lista vazia apaga tudo
+> daquela conta** (caso de borda de conta sem campanhas); a poda não vaza para outras
+> contas; e os conjuntos das campanhas removidas somem por cascade.
+
 ### Blocos 6 e 7 — Gerenciador de Anúncios
 
 **Bloco 6.** As abas viraram **cards lado a lado** (`.ads-abas`) com ícone, contagem e

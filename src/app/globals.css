@@ -669,3 +669,6 @@ a {
   box-shadow: 0 24px 64px rgba(0, 0, 0, .55);
   animation: dialog-in var(--dur-base) var(--ease-out) both;
 }
+
+/* Ícone de recarregar girando enquanto o Dashboard busca dados. */
+@keyframes girar { to { transform: rotate(360deg); } }

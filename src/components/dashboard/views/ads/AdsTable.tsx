@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { brl, brl0, pct } from "@/lib/format";
 import { derivar, somar, type LinhaBase } from "@/lib/ads/metrics";
 import { sx } from "@/lib/sx";
@@ -13,10 +15,17 @@ export interface LinhaTabela extends LinhaBase {
   sub?: string;
   bidCap?: number | null;
   orcamento?: number | null;
+  /**
+   * Se o orçamento pode ser editado NESTE nível. Campanha CBO edita na
+   * campanha; ABO edita no conjunto. A Meta recusa no nível errado, então a
+   * célula nem oferece a caneta quando não é o lugar certo.
+   */
+  orcamentoEditavel?: boolean;
 }
 
 /** Colunas de métrica, na ordem pedida no Bloco 6. */
 const COLUNAS: { chave: string; label: string; dica?: string }[] = [
+  { chave: "orcamento", label: "Orçamento", dica: "Orçamento diário — editável no nível correto (CBO na campanha, ABO no conjunto)" },
   { chave: "vendas", label: "Vendas" },
   { chave: "cpa", label: "CPA", dica: "Gasto ÷ vendas" },
   { chave: "faturamento", label: "Faturamento" },
@@ -34,6 +43,83 @@ const COLUNAS: { chave: string; label: string; dica?: string }[] = [
 ];
 
 const traco = <span style={sx("opacity:.35")}>—</span>;
+
+/** Célula de orçamento: mostra o valor e, quando editável, a caneta. */
+function CelulaOrcamento({
+  linha,
+  onSalvar,
+}: {
+  linha: LinhaTabela;
+  onSalvar: (id: string, valor: number) => Promise<void>;
+}) {
+  const [editando, setEditando] = useState(false);
+  const [valor, setValor] = useState("");
+  const [salvando, setSalvando] = useState(false);
+
+  if (!linha.orcamentoEditavel) {
+    // Nível errado para este tipo de campanha — mostra o valor se houver, mas
+    // sem caneta, para não sugerir uma edição que a Meta recusaria.
+    return <>{linha.orcamento != null ? brl(linha.orcamento) : traco}</>;
+  }
+
+  async function salvar() {
+    const n = parseFloat(valor.replace(",", "."));
+    if (!n || n <= 0) return;
+    setSalvando(true);
+    try {
+      await onSalvar(linha.id, n);
+      setEditando(false);
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  if (editando) {
+    return (
+      <span style={sx("display:inline-flex;align-items:center;gap:4px;justify-content:flex-end")}>
+        <input
+          className="input"
+          autoFocus
+          inputMode="decimal"
+          value={valor}
+          disabled={salvando}
+          onChange={(e) => setValor(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") salvar();
+            if (e.key === "Escape") setEditando(false);
+          }}
+          style={sx("width:82px;min-height:26px;padding:2px 6px;font-size:12px;text-align:right")}
+          aria-label={`Novo orçamento de ${linha.nome}`}
+        />
+        <button className="btn btn-ghost" type="button" onClick={salvar} disabled={salvando}
+          style={sx("padding:2px 6px;font-size:12px")} aria-label="Salvar orçamento">
+          {salvando ? "…" : "✓"}
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <span style={sx("display:inline-flex;align-items:center;gap:6px;justify-content:flex-end")}>
+      {linha.orcamento != null ? brl(linha.orcamento) : traco}
+      <button
+        type="button"
+        onClick={() => {
+          setValor(linha.orcamento != null ? String(linha.orcamento).replace(".", ",") : "");
+          setEditando(true);
+        }}
+        title="Editar orçamento"
+        aria-label={`Editar orçamento de ${linha.nome}`}
+        style={sx("background:none;border:0;cursor:pointer;color:var(--color-accent);padding:2px;line-height:0;opacity:.75")}
+      >
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2}
+          strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" />
+        </svg>
+      </button>
+    </span>
+  );
+}
 const n0 = (v: number) => v.toLocaleString("pt-BR");
 
 export function AdsTable({
@@ -42,6 +128,7 @@ export function AdsTable({
   onSelecionar,
   onSelecionarTodas,
   onToggleStatus,
+  onSalvarOrcamento,
   fixadas,
   carregando,
   vazio,
@@ -51,6 +138,7 @@ export function AdsTable({
   onSelecionar: (id: string) => void;
   onSelecionarTodas: () => void;
   onToggleStatus: (id: string) => void;
+  onSalvarOrcamento: (id: string, valor: number) => Promise<void>;
   /** Ids fixados sobem para o topo (ação "Fixar" do Bloco 7). */
   fixadas: Set<string>;
   carregando: boolean;
@@ -119,6 +207,7 @@ export function AdsTable({
                     </div>
                   </td>
 
+                  <td><CelulaOrcamento linha={l} onSalvar={onSalvarOrcamento} /></td>
                   <td>{n0(l.results)}</td>
                   <td>{m.cpa != null ? brl(m.cpa) : traco}</td>
                   <td>{brl(l.revenue)}</td>
@@ -145,6 +234,7 @@ export function AdsTable({
               <td className="fixa fixa-1" />
               <td className="fixa fixa-2" />
               <td className="fixa fixa-3" style={sx("font-weight:600")}>Total ({ordenadas.length})</td>
+              <td>{traco}</td>
               <td>{n0(totais.results)}</td>
               <td>{md.cpa != null ? brl(md.cpa) : traco}</td>
               <td>{brl(totais.revenue)}</td>

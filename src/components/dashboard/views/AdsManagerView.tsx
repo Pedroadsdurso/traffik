@@ -47,13 +47,19 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
         id: c.id, fbId: c.fbId, nome: c.name, status: c.status,
         // Orçamento na campanha ⇒ CBO. É o que o modal de orçamento lê.
         sub: c.dailyBudget != null ? "CBO · orçamento na campanha" : "ABO · orçamento nos conjuntos",
-        orcamento: c.dailyBudget, spend: c.spend, impressions: c.impressions,
+        orcamento: c.dailyBudget,
+        // CBO edita na campanha; ABO não (o orçamento vive nos conjuntos).
+        orcamentoEditavel: c.dailyBudget != null,
+        spend: c.spend, impressions: c.impressions,
         clicks: c.clicks, results: c.results, revenue: c.revenue,
       }));
     } else if (v.adsSub === "adsets") {
       base = raw.adSets.filter((a) => filtra(a.name, a.status)).map((a) => ({
         id: a.id, fbId: a.fbId, nome: a.name, status: a.status, sub: a.campaignName,
-        orcamento: a.dailyBudget, bidCap: a.bidAmount, spend: a.spend,
+        orcamento: a.dailyBudget, bidCap: a.bidAmount,
+        // Conjunto só edita orçamento quando a campanha-mãe é ABO.
+        orcamentoEditavel: raw.campaigns.find((c) => c.id === a.campaignId)?.dailyBudget == null,
+        spend: a.spend,
         impressions: a.impressions, clicks: a.clicks, results: a.results, revenue: a.revenue,
       }));
     } else if (v.adsSub === "ads") {
@@ -94,7 +100,7 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
     setSelecao((s) => (s.size === linhas.length ? new Set() : new Set(linhas.map((l) => l.id))));
   }
 
-  async function executar(acao: Acao, valor?: number) {
+  async function executar(acao: Acao, valor?: number, ativar?: boolean) {
     if (!nivel) return;
     setBusy(true);
     setResultado(null);
@@ -102,7 +108,7 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
       const res = await fetch("/api/ads/bulk", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nivel, acao, ids: [...selecao], valor }),
+        body: JSON.stringify({ nivel, acao, ids: [...selecao], valor, ativar }),
       });
       const data = (await res.json()) as {
         error?: string; sucessos?: number;
@@ -125,6 +131,20 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  /** Edição inline do orçamento — mesma rota das ações em massa, com 1 id. */
+  async function salvarOrcamento(id: string, valor: number) {
+    if (!nivel) return;
+    const res = await fetch("/api/ads/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nivel, acao: "budget", ids: [id], valor }),
+    });
+    const data = (await res.json()) as { error?: string; resultados?: { ok: boolean; erro?: string }[] };
+    const falha = data.error ?? data.resultados?.find((r) => !r.ok)?.erro;
+    setResultado(falha ? `✗ ${falha}` : "✓ Orçamento atualizado no Facebook.");
+    v.refreshAds();
   }
 
   function fixar() {
@@ -227,6 +247,7 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
         onToggleStatus={(id) => {
           if (nivel) v.toggleAdsEntity(nivel, id);
         }}
+        onSalvarOrcamento={salvarOrcamento}
         fixadas={fixadas}
         carregando={v.adsLoading}
         vazio={

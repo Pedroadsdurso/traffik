@@ -69,13 +69,18 @@ export async function deleteEntity(fbId: string, accessToken: string): Promise<v
  * Duplica uma campanha usando o endpoint `/copies` da Meta.
  *
  * `deep_copy` traz junto conjuntos e anúncios; sem ele viria uma casca vazia.
- * A cópia nasce **PAUSED** de propósito: duplicar e já começar a gastar sem o
- * usuário revisar seria um jeito fácil de queimar orçamento.
+ * O status da cópia é escolhido pelo usuário no diálogo de duplicar. O padrão
+ * segue sendo **PAUSED**: duplicar e já começar a gastar sem revisar é um jeito
+ * fácil de queimar orçamento.
  */
-export async function duplicateCampaign(fbId: string, accessToken: string): Promise<string | null> {
+export async function duplicateCampaign(
+  fbId: string,
+  accessToken: string,
+  ativar = false,
+): Promise<string | null> {
   const r = await graphPost(`/${fbId}/copies`, {
     deep_copy: "true",
-    status_option: "PAUSED",
+    status_option: ativar ? "ACTIVE" : "PAUSED",
     access_token: accessToken,
   });
   return r.id ?? null;

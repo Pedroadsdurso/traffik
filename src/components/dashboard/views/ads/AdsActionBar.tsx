@@ -61,13 +61,15 @@ export function AdsActionBar({
   onFixar: () => void;
   onCopiarId: () => void;
   onAbrirNoFacebook: () => void;
-  onExecutar: (acao: Acao, valor?: number) => Promise<void>;
+  onExecutar: (acao: Acao, valor?: number, ativar?: boolean) => Promise<void>;
   busy: boolean;
   resultado: string | null;
 }) {
   const [menuAberto, setMenuAberto] = useState(false);
   const [confirmar, setConfirmar] = useState<{ acao: Acao; label: string } | null>(null);
   const [valor, setValor] = useState("");
+  /** Duplicar: a cópia nasce ativa? Padrão pausada, para não gastar sem revisão. */
+  const [duplicarAtiva, setDuplicarAtiva] = useState(false);
   const raizRef = useRef<HTMLDivElement>(null);
 
   const n = selecionados.length;
@@ -94,6 +96,7 @@ export function AdsActionBar({
     if (item.acao === "fixar") return onFixar();
     if (item.acao === "copiarId") return onCopiarId();
     setValor("");
+    setDuplicarAtiva(false);
     setConfirmar({ acao: item.acao, label: item.label });
   }
 
@@ -102,7 +105,7 @@ export function AdsActionBar({
     const precisaValor = confirmar.acao === "budget" || confirmar.acao === "bidcap";
     const num = precisaValor ? parseFloat(valor.replace(",", ".")) : undefined;
     if (precisaValor && (!num || num <= 0)) return;
-    await onExecutar(confirmar.acao, num);
+    await onExecutar(confirmar.acao, num, confirmar.acao === "duplicate" ? duplicarAtiva : undefined);
     setConfirmar(null);
   }
 
@@ -194,7 +197,7 @@ export function AdsActionBar({
                     A Meta não oferece desfazer — a ação é <strong>irreversível</strong>.
                   </>
                 ) : confirmar.acao === "duplicate" ? (
-                  <>Serão duplicadas <strong>{n} campanha(s)</strong>, com conjuntos e anúncios. As cópias nascem <strong>pausadas</strong>.</>
+                  <>Serão duplicadas <strong>{n} campanha(s)</strong>, com conjuntos e anúncios.</>
                 ) : (
                   <>A ação será aplicada a <strong>{n} item(ns)</strong> direto no Facebook.</>
                 )}
@@ -222,6 +225,30 @@ export function AdsActionBar({
                     </p>
                   )}
                 </>
+              )}
+
+              {confirmar.acao === "duplicate" && (
+                <div className="field">
+                  <label>Como a cópia deve nascer?</label>
+                  <div style={sx("display:flex;gap:8px")}>
+                    {[
+                      { ativa: false, titulo: "Desativada", dica: "Recomendado — revise antes de gastar" },
+                      { ativa: true, titulo: "Ativada", dica: "Começa a gastar assim que o Facebook aprovar" },
+                    ].map((o) => (
+                      <button
+                        key={String(o.ativa)}
+                        type="button"
+                        className="opcao-tile"
+                        aria-pressed={duplicarAtiva === o.ativa}
+                        onClick={() => setDuplicarAtiva(o.ativa)}
+                        style={sx("flex:1;align-items:flex-start;text-align:left;gap:3px")}
+                      >
+                        <span style={sx("font-weight:600")}>{o.titulo}</span>
+                        <span className="text-muted" style={sx("font-size:11px;line-height:1.4")}>{o.dica}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
 
               {(confirmar.acao === "budget" || confirmar.acao === "bidcap") && (

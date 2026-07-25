@@ -48,6 +48,13 @@ async function resolverAlvos(userId: string, nivel: Nivel, ids: string[]): Promi
   return rows.map((r) => ({ id: r.id, fbId: r.fbAdId, nome: r.name, token: r.adAccount.adProfile?.accessToken ?? null }));
 }
 
+/** Apaga o registro local depois que o Facebook confirmou a exclusão. */
+async function removerLocal(nivel: Nivel, id: string) {
+  if (nivel === "campaign") await prisma.campaign.delete({ where: { id } }).catch(() => {});
+  else if (nivel === "adset") await prisma.adSet.delete({ where: { id } }).catch(() => {});
+  else await prisma.ad.delete({ where: { id } }).catch(() => {});
+}
+
 /** Reflete no banco o que acabou de ser aplicado no Facebook. */
 async function espelharLocal(nivel: Nivel, id: string, acao: Acao, valor?: number) {
   const status: EntityStatus | null =
@@ -84,8 +91,10 @@ export async function POST(req: NextRequest) {
     acao?: Acao;
     ids?: string[];
     valor?: number;
+    /** Só para duplicar: a cópia nasce ativa? */
+    ativar?: boolean;
   };
-  const { nivel, acao, ids, valor } = body;
+  const { nivel, acao, ids, valor, ativar } = body;
 
   if (!nivel || !acao || !Array.isArray(ids) || ids.length === 0) {
     return Response.json({ error: "Parâmetros inválidos." }, { status: 400 });
@@ -114,11 +123,17 @@ export async function POST(req: NextRequest) {
       else if (acao === "budget") await updateDailyBudget(alvo.fbId, valor!, alvo.token);
       else if (acao === "bidcap") await updateBidCap(alvo.fbId, valor!, alvo.token);
       else if (acao === "delete") await deleteEntity(alvo.fbId, alvo.token);
-      else if (acao === "duplicate") await duplicateCampaign(alvo.fbId, alvo.token);
+      else if (acao === "duplicate") await duplicateCampaign(alvo.fbId, alvo.token, ativar === true);
 
       // Duplicar cria um objeto novo no Facebook; ele entra no banco no
       // próximo sync, não aqui.
-      if (acao !== "duplicate") await espelharLocal(nivel, alvo.id, acao, valor);
+      if (acao === "delete") {
+        // Exclusão some da ferramenta na hora. Antes só marcávamos DELETED e a
+        // linha continuava aparecendo até alguém reparar no status.
+        await removerLocal(nivel, alvo.id);
+      } else if (acao !== "duplicate") {
+        await espelharLocal(nivel, alvo.id, acao, valor);
+      }
 
       resultados.push({ id: alvo.id, nome: alvo.nome, ok: true });
     } catch (e) {
