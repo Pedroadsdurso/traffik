@@ -6,6 +6,7 @@ import { getUtmCodes, type UtmCodesDTO } from "@/lib/actions/utm";
 import { getPublicAppUrl } from "@/lib/appUrl";
 import { backRedirectScript, utmScript } from "@/lib/utm/scripts";
 import { sx } from "@/lib/sx";
+import { Modal } from "../../ui/Modal";
 
 type Destino = "hotmart" | "cartpanda" | "outros";
 const DESTINOS: { id: Destino; label: string }[] = [
@@ -58,43 +59,46 @@ function CodigosBlock({ codes }: { codes: UtmCodesDTO | null }) {
       </div>
 
       {open && codes && (
-        <div className="dialog-backdrop" onClick={() => setOpen(false)}>
-          <div className="dialog" onClick={(e) => e.stopPropagation()} style={sx("max-width:640px")}>
-            <div className="dialog-title">Parâmetros de URL</div>
-            <div className="dialog-body" style={sx("display:flex;flex-direction:column;gap:var(--space-3)")}>
-              <div style={sx("display:flex;gap:8px")}>
-                {DESTINOS.map((d) => (
-                  <button
-                    key={d.id}
-                    type="button"
-                    onClick={() => setDest(d.id)}
-                    style={sx(
-                      `flex:1;padding:8px;border-radius:9px;font-size:13px;cursor:pointer;border:1px solid ${dest === d.id ? "var(--color-accent,#a78bfa)" : "var(--color-border)"};background:${dest === d.id ? "var(--color-accent-soft,rgba(139,92,246,.12))" : "transparent"};color:var(--color-text)`,
-                    )}
-                  >
-                    {d.label}
-                  </button>
-                ))}
-              </div>
-              <pre
-                style={sx("background:var(--color-bg,#0b0b0f);border:1px solid var(--color-border);border-radius:8px;padding:var(--space-3);font-size:11.5px;font-family:ui-monospace,monospace;overflow-x:auto;white-space:pre-wrap;word-break:break-all;margin:0;max-height:220px;overflow-y:auto")}
-              >
-                {code}
-              </pre>
-              <p className="text-muted" style={sx("font-size:11.5px;margin:0")}>
-                {dest === "hotmart"
-                  ? "O xcod concatena tudo com um separador único da sua conta, usado no parsing reverso."
-                  : dest === "cartpanda"
-                    ? "O cid identifica sua conta na Traffik para atribuição."
-                    : "Formato genérico de UTMs para qualquer plataforma."}
-              </p>
-            </div>
-            <div className="dialog-actions">
+        <Modal
+          aberta
+          onClose={() => setOpen(false)}
+          largura={640}
+          titulo="Parâmetros de URL"
+          descricao="Cole no campo “Parâmetros de URL” do seu anúncio no Facebook Ads."
+          rodape={
+            <>
               <button className="btn btn-secondary" type="button" onClick={() => setOpen(false)}>Fechar</button>
               <button className="btn btn-primary" type="button" onClick={copy}>{copied ? "Copiado!" : "Copiar"}</button>
-            </div>
+            </>
+          }
+        >
+          <div style={sx("display:flex;gap:8px")}>
+            {DESTINOS.map((d) => (
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => setDest(d.id)}
+                style={sx(
+                  `flex:1;padding:8px;border-radius:9px;font-size:13px;cursor:pointer;border:1px solid ${dest === d.id ? "var(--color-accent,#a78bfa)" : "var(--color-border)"};background:${dest === d.id ? "var(--color-accent-soft,rgba(139,92,246,.12))" : "transparent"};color:var(--color-text)`,
+                )}
+              >
+                {d.label}
+              </button>
+            ))}
           </div>
-        </div>
+          <pre
+            style={sx("background:var(--color-bg,#0b0b0f);border:1px solid var(--color-border);border-radius:8px;padding:var(--space-3);font-size:11.5px;font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-all;margin:0;max-height:260px;overflow:auto")}
+          >
+            {code}
+          </pre>
+          <p className="text-muted" style={sx("font-size:11.5px;margin:0;line-height:1.5")}>
+            {dest === "hotmart"
+              ? "O xcod concatena tudo com um separador único da sua conta, usado no parsing reverso."
+              : dest === "cartpanda"
+                ? "O cid identifica sua conta na Traffik para atribuição."
+                : "Formato genérico de UTMs para qualquer plataforma."}
+          </p>
+        </Modal>
       )}
     </div>
   );

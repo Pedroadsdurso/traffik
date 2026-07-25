@@ -717,6 +717,29 @@ gasto feito hoje aparecia como R$ 0,00. Trocado por `time_range` explícito
 > `trackingEnabled = true`** — se o gasto foi em outra, é preciso ligar o rastreamento
 > dela na aba Anúncios.
 
+## 🪟 Camadas flutuantes: SEMPRE via `ui/Drawer` ou `ui/Modal`
+
+**Nunca escreva um popup à mão.** Existem dois componentes, e os dois passam pelo
+mesmo `ui/useOverlay.ts`, que é onde vive a correção do bug de sobreposição:
+
+| Componente | Quando |
+|---|---|
+| `ui/Drawer.tsx` | Detalhe de um item da listagem (URL de webhook, config de pixel, contas do perfil) |
+| `ui/Modal.tsx` | Diálogo curto e centralizado (confirmação, "ver opções", formulário de 1 campo) |
+
+> ⚠️ **A causa do bug, para não se repetir:** um overlay é `position:fixed`, e
+> **qualquer ancestral com `transform` vira o bloco de contenção dele**. O `.page-enter`
+> do shell anima com `translateY`, então popups escritos direto na árvore da página
+> cobriam apenas a caixa da página — apareciam **colados no topo, cortados, com o
+> conteúdo de trás vazando por cima**. `useOverlay` resolve portando para o `<body>`
+> via `createPortal`, e ainda entrega Esc, trava de scroll do fundo e foco preso.
+
+A classe `.dialog-backdrop` continua no `globals.css` só por herança e **não deve ser
+usada em código novo** — ela não porta para o body. Hoje **nenhum `.tsx` a usa**.
+
+Migrados nesta rodada (eram os 3 últimos com o modelo antigo): "Parâmetros de URL"
+(UTMs), "Adicionar Credencial" (Webhooks) e "Alterar orçamento" (Gerenciador).
+
 ## 🗄️ Padrão de revelação: gavetas laterais
 
 **Regra da ferramenta:** dado sensível ou verboso (URL de webhook, token, script, id)

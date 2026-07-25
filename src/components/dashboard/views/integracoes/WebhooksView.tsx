@@ -1,5 +1,6 @@
 import { sx } from "@/lib/sx";
 import { CampoCopiavel, Drawer } from "../../ui/Drawer";
+import { Modal } from "../../ui/Modal";
 import type { TraffikView } from "../../useTraffikState";
 
 /** Gateways suportados no modal. Arquitetura pronta para novos — só a
@@ -302,10 +303,27 @@ function WebhookModal({ v }: { v: TraffikView }) {
 
 function CredentialModal({ v }: { v: TraffikView }) {
   return (
-    <div className="dialog-backdrop" onClick={v.closeCredModal}>
-      <div className="dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="dialog-title">Adicionar Credencial</div>
-        <div className="dialog-body" style={sx("display:flex;flex-direction:column;gap:var(--space-3)")}>
+    <Modal
+      aberta
+      onClose={v.closeCredModal}
+      titulo="Adicionar Credencial"
+      descricao="A chave autentica envios de venda de qualquer sistema para a Traffik."
+      rodape={
+        v.createdCredKey ? (
+          <button className="btn btn-primary" type="button" onClick={v.closeCredModal}>Concluir</button>
+        ) : (
+          <>
+            <button className="btn btn-secondary" type="button" onClick={v.closeCredModal}>Cancelar</button>
+            <button className="btn btn-primary" type="button" onClick={v.createCredential} disabled={v.credBusy}>
+              {v.credBusy ? "Gerando…" : "Gerar chave"}
+            </button>
+          </>
+        )
+      }
+    >
+
+
+
           {v.createdCredKey ? (
             <>
               <p className="card-body" style={sx("margin:0")}>
@@ -333,21 +351,7 @@ function CredentialModal({ v }: { v: TraffikView }) {
           {v.credError && (
             <p style={sx("margin:0;font-size:12.5px;color:var(--color-danger,#f87171)")}>{v.credError}</p>
           )}
-        </div>
-        <div className="dialog-actions">
-          {v.createdCredKey ? (
-            <button className="btn btn-primary" type="button" onClick={v.closeCredModal}>Concluir</button>
-          ) : (
-            <>
-              <button className="btn btn-secondary" type="button" onClick={v.closeCredModal}>Cancelar</button>
-              <button className="btn btn-primary" type="button" onClick={v.createCredential} disabled={v.credBusy}>
-                {v.credBusy ? "Gerando…" : "Gerar chave"}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

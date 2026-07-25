@@ -644,3 +644,28 @@ a {
 .ads-table tbody tr:hover .fixa { background: color-mix(in srgb, var(--color-text) 4%, var(--color-surface)); }
 .ads-table tr.linha-marcada .fixa { background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface)); }
 .ads-table input[type="checkbox"] { accent-color: var(--color-accent); width: 15px; height: 15px; cursor: pointer; }
+
+/* ──────────────── Modal centralizado (padrão único de popup) ────────────────
+   O `.dialog-backdrop` antigo continua no arquivo só para não quebrar estilos
+   herdados, mas NÃO deve ser usado em código novo: ele não porta para o body e
+   por isso herdava o bloco de contenção do `.page-enter`, aparecendo colado no
+   topo e deixando o conteúdo de trás vazar. Use o componente `ui/Modal.tsx`. */
+
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 80;
+  display: grid; place-items: center;
+  padding: var(--space-4);
+  background: color-mix(in srgb, #05060d 62%, transparent);
+  backdrop-filter: blur(3px);
+  animation: fade-in var(--dur-fast) var(--ease-out) both;
+  overflow: auto;
+}
+.modal-painel {
+  display: flex; flex-direction: column;
+  max-height: min(88vh, 100%);
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .55);
+  animation: dialog-in var(--dur-base) var(--ease-out) both;
+}

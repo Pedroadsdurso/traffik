@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import { createPortal } from "react-dom";
 
 import { sx } from "@/lib/sx";
+import { useOverlay } from "./useOverlay";
 
 /**
  * Gaveta lateral que desliza da direita — o padrão de "revelar sob demanda" da
@@ -31,59 +32,10 @@ export function Drawer({
   children: React.ReactNode;
   rodape?: React.ReactNode;
 }) {
-  const painelRef = useRef<HTMLDivElement>(null);
-  const focoAnterior = useRef<HTMLElement | null>(null);
-  // Portal só depois de montar: no SSR não existe `document`.
-  const [montado, setMontado] = useState(false);
-  useEffect(() => setMontado(true), []);
+  // Mesmo comportamento do Modal: portal, Esc, trava de scroll e foco preso.
+  const { painelRef, podeRenderizar } = useOverlay(aberta, onClose);
+  if (!podeRenderizar) return null;
 
-  useEffect(() => {
-    if (!aberta) return;
-    focoAnterior.current = document.activeElement as HTMLElement | null;
-
-    const overflowAntes = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        onClose();
-        return;
-      }
-      if (e.key !== "Tab") return;
-      // Mantém o Tab circulando dentro da gaveta.
-      const foco = painelRef.current?.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
-      if (!foco || foco.length === 0) return;
-      const primeiro = foco[0]!;
-      const ultimo = foco[foco.length - 1]!;
-      if (e.shiftKey && document.activeElement === primeiro) {
-        e.preventDefault();
-        ultimo.focus();
-      } else if (!e.shiftKey && document.activeElement === ultimo) {
-        e.preventDefault();
-        primeiro.focus();
-      }
-    }
-
-    document.addEventListener("keydown", onKey, true);
-    // Foca o primeiro campo útil ao abrir.
-    const t = setTimeout(() => {
-      painelRef.current
-        ?.querySelector<HTMLElement>('input, button:not([data-fechar]), select, textarea')
-        ?.focus();
-    }, 60);
-
-    return () => {
-      document.removeEventListener("keydown", onKey, true);
-      document.body.style.overflow = overflowAntes;
-      clearTimeout(t);
-      focoAnterior.current?.focus?.();
-    };
-  }, [aberta, onClose]);
-
-  if (!aberta || !montado) return null;
 
   // Portal para o <body>: a gaveta é `position:fixed`, e qualquer ancestral com
   // `transform` (a animação `.page-enter` do shell) ou `overflow` vira o bloco

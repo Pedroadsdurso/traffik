@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { sx } from "@/lib/sx";
+import { Modal } from "../../ui/Modal";
 
 export type Nivel = "campaign" | "adset" | "ad";
 export type Acao = "activate" | "pause" | "budget" | "bidcap" | "duplicate" | "delete";
@@ -158,10 +159,34 @@ export function AdsActionBar({
 
       {/* Confirmação — obrigatória para tudo que muda algo no Facebook */}
       {confirmar && (
-        <div className="dialog-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setConfirmar(null)}>
-          <div className="dialog" style={sx("max-width:460px")}>
-            <div className="dialog-title">{confirmar.label}</div>
-            <div className="dialog-body" style={sx("display:flex;flex-direction:column;gap:var(--space-3)")}>
+        <Modal
+          aberta
+          onClose={() => setConfirmar(null)}
+          largura={480}
+          titulo={confirmar.label}
+          rodape={
+            <>
+              <button className="btn btn-secondary" type="button" onClick={() => setConfirmar(null)}>Cancelar</button>
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={confirmarExecucao}
+                disabled={
+                  busy ||
+                  (confirmar.acao === "budget" && orcamentoBloqueado && cbos.length === 0) ||
+                  ((confirmar.acao === "budget" || confirmar.acao === "bidcap") && !valor.trim())
+                }
+                style={sx(confirmar.acao === "delete" ? "color:#f87171;border-color:#f87171" : "")}
+              >
+                {busy ? "Aplicando…" : confirmar.acao === "delete" ? "Excluir mesmo assim" : "Confirmar"}
+              </button>
+            </>
+          }
+        >
+
+
+
+
               <p style={sx("margin:0;font-size:13px")}>
                 {confirmar.acao === "delete" ? (
                   <>
@@ -211,25 +236,7 @@ export function AdsActionBar({
                 {selecionados.slice(0, 12).map((s) => <div key={s.id}>· {s.nome}</div>)}
                 {n > 12 && <div>… e mais {n - 12}</div>}
               </div>
-            </div>
-            <div className="dialog-actions">
-              <button className="btn btn-secondary" type="button" onClick={() => setConfirmar(null)}>Cancelar</button>
-              <button
-                className="btn btn-primary"
-                type="button"
-                onClick={confirmarExecucao}
-                disabled={
-                  busy ||
-                  (confirmar.acao === "budget" && orcamentoBloqueado && cbos.length === 0) ||
-                  ((confirmar.acao === "budget" || confirmar.acao === "bidcap") && !valor.trim())
-                }
-                style={sx(confirmar.acao === "delete" ? "color:#f87171;border-color:#f87171" : "")}
-              >
-                {busy ? "Aplicando…" : confirmar.acao === "delete" ? "Excluir mesmo assim" : "Confirmar"}
-              </button>
-            </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );
