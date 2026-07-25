@@ -527,3 +527,53 @@ a {
 .tk-dia:disabled { opacity: .25; cursor: not-allowed; }
 .tk-dia-dentro { background: color-mix(in srgb, var(--color-accent) 20%, transparent); border-radius: 0; }
 .tk-dia-ponta { background: var(--color-accent-700); color: var(--color-accent-100); }
+
+/* ──────────────── Gaveta lateral (padrão "revelar sob demanda") ──────────────── */
+
+.drawer-backdrop {
+  position: fixed; inset: 0; z-index: 70;
+  display: flex; justify-content: flex-end;
+  background: color-mix(in srgb, #05060d 55%, transparent);
+  backdrop-filter: blur(2px);
+  animation: fade-in var(--dur-fast) var(--ease-out) both;
+}
+.drawer-painel {
+  display: flex; flex-direction: column;
+  height: 100%; max-width: 100%;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-divider);
+  box-shadow: -18px 0 48px rgba(0, 0, 0, .45);
+  animation: drawer-in 260ms var(--ease-out) both;
+}
+@keyframes drawer-in { from { transform: translateX(100%); } to { transform: none; } }
+
+/* Grade de gateways/plataformas dentro da gaveta. */
+.grade-opcoes {
+  display: grid; gap: var(--space-2);
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+}
+.opcao-tile {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: var(--space-3) var(--space-2); cursor: pointer; text-align: center;
+  background: var(--color-bg);
+  border: 1px solid var(--color-divider); border-radius: var(--radius-md);
+  color: var(--color-text); font: inherit; font-size: 12.5px;
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out);
+}
+.opcao-tile:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-bg));
+  transform: translateY(-2px);
+}
+.opcao-tile:disabled { opacity: .4; cursor: not-allowed; }
+.opcao-tile[aria-pressed="true"] {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 16%, var(--color-bg));
+}
+/* Monograma do gateway quando não há logo. */
+.opcao-logo {
+  display: grid; place-items: center; width: 38px; height: 38px; flex: none;
+  border-radius: 10px; font-weight: 600; font-size: 15px;
+  background: var(--color-accent-800); color: var(--color-accent-100);
+}

@@ -16,6 +16,7 @@ import {
 import { getPublicAppUrl } from "@/lib/appUrl";
 import { pixelScript } from "@/lib/pixel/script";
 import { sx } from "@/lib/sx";
+import { Drawer } from "../../ui/Drawer";
 
 /** `savedToken` marca um pixel já persistido cujo token fica no servidor (nunca volta ao cliente). */
 type MetaDraft = { pixelId: string; accessToken: string; nickname: string; savedToken?: boolean };
@@ -87,7 +88,6 @@ export function PixelView() {
   const [metaOpen, setMetaOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [scriptFor, setScriptFor] = useState<PixelConfigDTO | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -132,8 +132,8 @@ export function PixelView() {
       const input = formToInput(form);
       const saved = editId ? await updatePixel(editId, input) : await createPixel(input);
       setPixels((list) => (editId ? list.map((p) => (p.id === saved.id ? saved : p)) : [...list, saved]));
-      setModalOpen(false);
-      setScriptFor(saved); // mostra o script gerado
+      // Mantém a gaveta aberta no pixel recém-criado: é onde o script aparece.
+      setEditId(saved.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Não foi possível salvar. Saia e entre novamente se persistir.");
     } finally {
@@ -194,13 +194,12 @@ export function PixelView() {
                 </div>
                 <div className="card-meta">
                   {px.metaPixels.length} pixel(s) da Meta ·{" "}
-                  {px.rules.filter((r) => r.enabled).map((r) => r.eventType).join(", ") || "sem eventos"}
+                  {px.rules.filter((r) => r.enabled).length} evento(s) ativo(s)
                 </div>
               </div>
               <div style={sx("display:flex;align-items:center;gap:10px")}>
                 <Toggle on={px.enabled} onClick={() => toggle(px.id)} />
-                <button className="btn btn-secondary" type="button" onClick={() => setScriptFor(px)}>Ver script</button>
-                <button className="btn btn-ghost" type="button" onClick={() => openEdit(px)}>Editar</button>
+                <button className="btn btn-secondary" type="button" onClick={() => openEdit(px)}>Editar / ver</button>
                 <button className="btn btn-ghost" type="button" onClick={() => remove(px.id)}>Remover</button>
               </div>
             </div>
@@ -208,11 +207,22 @@ export function PixelView() {
         ))
       )}
 
-      {modalOpen && (
-        <div className="dialog-backdrop" onClick={() => setModalOpen(false)}>
-          <div className="dialog" onClick={(e) => e.stopPropagation()} style={sx("max-width:640px;max-height:88vh;overflow-y:auto")}>
-            <div className="dialog-title">{editId ? "Editar Pixel" : "Adicionar Pixel"}</div>
-            <div className="dialog-body" style={sx("display:flex;flex-direction:column;gap:var(--space-3)")}>
+      <Drawer
+        aberta={modalOpen}
+        onClose={() => setModalOpen(false)}
+        largura={560}
+        titulo={editId ? "Editar Pixel" : "Adicionar Pixel"}
+        descricao="Configure os pixels da Meta e quais eventos disparar. O script de instalação fica no fim desta gaveta."
+        rodape={
+          <>
+            <button className="btn btn-secondary" type="button" onClick={() => setModalOpen(false)}>Cancelar</button>
+            <button className="btn btn-primary" type="button" onClick={save} disabled={busy || form.metaPixels.length === 0}>
+              {busy ? "Salvando…" : "Salvar dados"}
+            </button>
+          </>
+        }
+      >
+        <>
               <div className="field">
                 <label>Nome do pixel</label>
                 <input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex.: Pixel principal" />
@@ -320,47 +330,40 @@ export function PixelView() {
                 )}
               </div>
 
-              {error && <p style={sx("margin:0;font-size:12.5px;color:var(--color-danger,#f87171)")}>{error}</p>}
-            </div>
-            <div className="dialog-actions">
-              <button className="btn btn-secondary" type="button" onClick={() => setModalOpen(false)}>Cancelar</button>
-              <button className="btn btn-primary" type="button" onClick={save} disabled={busy || form.metaPixels.length === 0}>
-                {busy ? "Salvando…" : "Salvar dados"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          {error && <p style={sx("margin:0;font-size:12.5px;color:var(--color-danger,#f87171)")}>{error}</p>}
+        </>
 
-      {scriptFor && (
-        <div className="dialog-backdrop" onClick={() => setScriptFor(null)}>
-          <div className="dialog" onClick={(e) => e.stopPropagation()} style={sx("max-width:680px")}>
-            <div className="dialog-title">Script do pixel — {scriptFor.name}</div>
-            <div className="dialog-body" style={sx("display:flex;flex-direction:column;gap:var(--space-2)")}>
-              <p className="card-body" style={sx("margin:0")}>Cole este script antes do <code>&lt;/head&gt;</code> do seu site. Ele reporta os eventos configurados à Conversions API.</p>
+        {/* Script na própria gaveta: fora dela, nada de despejar código na tela. */}
+        {editId && (() => {
+          const px = pixels.find((p) => p.id === editId);
+          if (!px) return null;
+          const codigo = scriptText(px);
+          const local = getPublicAppUrl().includes("localhost");
+          return (
+            <div style={sx("border-top:1px solid var(--color-divider);padding-top:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)")}>
+              <div style={sx("font-weight:600;font-size:13px")}>Script de instalação</div>
               <p className="card-body" style={sx("margin:0;font-size:12px")}>
-                Os eventos serão enviados para{" "}
+                Cole antes do <code>&lt;/head&gt;</code> do seu site. Os eventos vão para{" "}
                 <code style={sx("font-family:ui-monospace,monospace")}>{getPublicAppUrl()}</code>
-                {getPublicAppUrl().includes("localhost") && (
+                {local && (
                   <span style={sx("color:var(--color-warning,#fbbf24)")}>
-                    {" "}— é um endereço local. Defina <code>NEXT_PUBLIC_APP_URL</code> com o domínio de produção
-                    e gere o script de novo antes de instalar no site.
+                    {" "}— endereço local. Defina <code>NEXT_PUBLIC_APP_URL</code> com o domínio de produção
+                    e gere o script de novo antes de instalar.
                   </span>
                 )}
               </p>
-              <pre style={sx("background:var(--color-bg,#0b0b0f);border:1px solid var(--color-border);border-radius:8px;padding:var(--space-3);font-size:11px;font-family:ui-monospace,monospace;overflow:auto;max-height:320px;margin:0")}>
-                {scriptText(scriptFor)}
+              <pre style={sx("background:var(--color-bg,#0b0b0f);border:1px solid var(--color-border);border-radius:8px;padding:var(--space-3);font-size:10.5px;font-family:ui-monospace,monospace;overflow:auto;max-height:220px;margin:0")}>
+                {codigo}
               </pre>
-            </div>
-            <div className="dialog-actions">
-              <button className="btn btn-secondary" type="button" onClick={() => { navigator.clipboard.writeText(scriptText(scriptFor)); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>
+              <button className="btn btn-secondary" type="button" style={sx("align-self:flex-start")}
+                onClick={() => { navigator.clipboard.writeText(codigo); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>
                 {copied ? "Copiado!" : "Copiar script"}
               </button>
-              <button className="btn btn-primary" type="button" onClick={() => setScriptFor(null)}>Concluir</button>
             </div>
-          </div>
-        </div>
-      )}
+          );
+        })()}
+      </Drawer>
+
     </div>
   );
 }

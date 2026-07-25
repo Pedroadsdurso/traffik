@@ -1,4 +1,5 @@
 import { sx } from "@/lib/sx";
+import { CampoCopiavel, Drawer } from "../../ui/Drawer";
 import type { TraffikView } from "../../useTraffikState";
 
 /** Gateways suportados no modal. Arquitetura pronta para novos — só a
@@ -67,42 +68,31 @@ function WebhooksBlock({ v }: { v: TraffikView }) {
           Nenhum webhook cadastrado ainda. Clique em <strong>Adicionar Webhook</strong> para começar.
         </div>
       ) : (
+        // A URL NÃO aparece aqui: a listagem mostra só o essencial e o detalhe
+        // fica na gaveta de edição (padrão "revelar sob demanda").
         v.webhooks.map((w) => (
           <div
             key={w.id}
-            style={sx("border:1px solid var(--color-border);border-radius:var(--radius-md,12px);padding:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)")}
+            style={sx("border:1px solid var(--color-border);border-radius:var(--radius-md,12px);padding:var(--space-3);display:flex;align-items:center;gap:10px;transition:border-color var(--dur-fast) var(--ease-out)")}
           >
-            <div style={sx("display:flex;align-items:center;gap:10px")}>
-              <GatewayBadge label={v.webhookPlatformLabel(w.platform)} />
-              <div style={sx("min-width:0;flex:1")}>
-                <div style={sx("display:flex;align-items:center;gap:8px")}>
-                  <span className="card-title" style={sx("font-size:14px")}>{w.name}</span>
-                  <span className={w.active ? "tag tag-accent" : "tag tag-neutral"}>{w.active ? "Ativado" : "Desativado"}</span>
-                </div>
-                <div className="card-meta">
-                  {v.webhookPlatformLabel(w.platform)} · {w.eventCount} eventos recebidos
-                  {w.hasSecret ? " · token protegido" : ""}
-                </div>
+            <GatewayBadge label={v.webhookPlatformLabel(w.platform)} />
+            <div style={sx("min-width:0;flex:1")}>
+              <div style={sx("display:flex;align-items:center;gap:8px;flex-wrap:wrap")}>
+                <span className="card-title" style={sx("font-size:14px")}>{w.name}</span>
+                <span className={w.active ? "tag tag-accent" : "tag tag-neutral"}>{w.active ? "Ativado" : "Desativado"}</span>
               </div>
-              <button className="sw" role="switch" aria-checked={w.active} onClick={() => v.toggleWebhook(w.id)} />
+              <div className="card-meta">
+                {v.webhookPlatformLabel(w.platform)} · {w.eventCount} evento(s) recebido(s)
+                {w.hasSecret ? " · token protegido" : ""}
+              </div>
             </div>
-
-            <div style={sx("display:flex;align-items:center;gap:8px")}>
-              <input
-                className="input"
-                readOnly
-                value={w.url}
-                style={sx("flex:1;min-width:0;font-size:12px;font-family:ui-monospace,monospace")}
-                onFocus={(e) => e.target.select()}
-              />
-              <button className="btn btn-secondary" type="button" onClick={() => v.copyWebhookUrl(w.id, w.url)}>
-                {v.copiedWebhookId === w.id ? "Copiado!" : "Copiar"}
-              </button>
-            </div>
-
-            <div style={sx("display:flex;justify-content:flex-end")}>
-              <OptionsMenu onEdit={() => v.openEditWebhook(w)} onRemove={() => v.removeWebhook(w.id)} />
-            </div>
+            <button className="sw" role="switch" aria-checked={w.active} onClick={() => v.toggleWebhook(w.id)}
+              aria-label={`${w.active ? "Desativar" : "Ativar"} ${w.name}`} />
+            <button className="btn btn-secondary" type="button" onClick={() => v.openEditWebhook(w)}
+              style={sx("white-space:nowrap")}>
+              Editar
+            </button>
+            <OptionsMenu onEdit={() => v.openEditWebhook(w)} onRemove={() => v.removeWebhook(w.id)} />
           </div>
         ))
       )}
@@ -227,79 +217,86 @@ function WebhookModal({ v }: { v: TraffikView }) {
   const editing = Boolean(v.webhookEditId);
   const filtered = GATEWAYS.filter((g) => g.name.toLowerCase().includes(v.webhookGatewaySearch.toLowerCase()));
   const selected = GATEWAYS.find((g) => g.id === v.webhookGateway);
+  const emEdicao = editing ? v.webhooks.find((w) => w.id === v.webhookEditId) : null;
 
   return (
-    <div className="dialog-backdrop" onClick={v.closeWebhookModal}>
-      <div className="dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="dialog-title">{editing ? "Editar webhook" : "Adicionar Webhook"}</div>
-        <div className="dialog-body" style={sx("display:flex;flex-direction:column;gap:var(--space-3)")}>
-          {!editing && (
-            <>
-              <div className="field">
-                <label>Buscar gateway</label>
-                <input className="input" value={v.webhookGatewaySearch} onChange={v.onWebhookGatewaySearch} placeholder="Ex.: Kirvano" />
-              </div>
-              <div style={sx("display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px")}>
-                {filtered.map((g) => (
-                  <button
-                    key={g.id}
-                    type="button"
-                    disabled={!g.enabled}
-                    onClick={() => v.selectWebhookGateway(g.id)}
-                    style={sx(
-                      `display:flex;align-items:center;gap:8px;padding:10px;border-radius:10px;cursor:${g.enabled ? "pointer" : "not-allowed"};text-align:left;border:1px solid ${v.webhookGateway === g.id ? "var(--color-accent,#a78bfa)" : "var(--color-border)"};background:${v.webhookGateway === g.id ? "var(--color-accent-soft,rgba(139,92,246,.12))" : "transparent"};opacity:${g.enabled ? 1 : 0.5}`,
-                    )}
-                  >
-                    <GatewayBadge label={g.name} />
-                    <span style={sx("font-size:13px")}>
-                      {g.name}
-                      {!g.enabled && <span className="text-muted" style={sx("display:block;font-size:11px")}>em breve</span>}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-
-          {selected?.enabled && (
-            <>
-              <div className="field">
-                <label>Nome (opcional)</label>
-                <input className="input" value={v.kirvanoName} onChange={v.onKirvanoName} placeholder={`Ex.: ${selected.name} — Método Foco`} />
-              </div>
-              <div className="field">
-                <label>Token de segurança da {selected.name}</label>
-                <input
-                  className="input"
-                  value={v.kirvanoToken}
-                  onChange={v.onKirvanoToken}
-                  placeholder={v.webhookEditId ? "Deixe em branco para manter o atual" : "Cole aqui o token gerado no painel da Kirvano"}
-                />
-                <p className="text-muted" style={sx("font-size:11.5px;margin:4px 0 0")}>
-                  Gere o token dentro do painel da {selected.name} (você define o texto e escolhe os eventos).
-                  Nós validamos cada evento recebido com esse token e geramos uma URL única para você colar lá.
-                </p>
-              </div>
-            </>
-          )}
-
-          {v.webhookError && (
-            <p style={sx("margin:0;font-size:12.5px;color:var(--color-danger,#f87171)")}>{v.webhookError}</p>
-          )}
-        </div>
-        <div className="dialog-actions">
+    <Drawer
+      aberta={v.webhookModalOpen}
+      onClose={v.closeWebhookModal}
+      titulo={editing ? "Editar webhook" : "Adicionar Webhook"}
+      descricao={
+        editing
+          ? "A URL abaixo é a que você cola no painel do gateway."
+          : "Escolha o gateway e informe o token de segurança gerado no painel dele."
+      }
+      rodape={
+        <>
           <button className="btn btn-secondary" type="button" onClick={v.closeWebhookModal}>Cancelar</button>
-          <button
-            className="btn btn-primary"
-            type="button"
-            onClick={v.saveWebhook}
-            disabled={v.webhookBusy || !selected?.enabled || (!editing && !v.kirvanoToken.trim())}
-          >
+          <button className="btn btn-primary" type="button" onClick={v.saveWebhook}
+            disabled={v.webhookBusy || !selected?.enabled || (!editing && !v.kirvanoToken.trim())}>
             {v.webhookBusy ? "Salvando…" : editing ? "Salvar" : "Adicionar"}
           </button>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    >
+      {!editing && (
+        <>
+          <div className="field">
+            <label>Buscar gateway</label>
+            <input className="input" value={v.webhookGatewaySearch} onChange={v.onWebhookGatewaySearch}
+              placeholder="Ex.: Kirvano" />
+          </div>
+          {/* Grade preparada para muitos gateways — hoje só a Kirvano ativa. */}
+          <div className="grade-opcoes">
+            {filtered.map((g) => (
+              <button key={g.id} type="button" className="opcao-tile" disabled={!g.enabled}
+                aria-pressed={v.webhookGateway === g.id} onClick={() => v.selectWebhookGateway(g.id)}>
+                <span className="opcao-logo">{g.name.charAt(0)}</span>
+                <span>
+                  {g.name}
+                  {!g.enabled && <span className="text-muted" style={sx("display:block;font-size:10.5px")}>em breve</span>}
+                </span>
+              </button>
+            ))}
+            {filtered.length === 0 && (
+              <p className="text-muted" style={sx("font-size:12.5px;grid-column:1/-1")}>Nenhum gateway encontrado.</p>
+            )}
+          </div>
+        </>
+      )}
+
+      {selected?.enabled && (
+        <>
+          <div className="field">
+            <label>Nome (opcional)</label>
+            <input className="input" value={v.kirvanoName} onChange={v.onKirvanoName}
+              placeholder={`Ex.: ${selected.name} — Método Foco`} />
+          </div>
+          <div className="field">
+            <label>Token de segurança da {selected.name}</label>
+            <input className="input" value={v.kirvanoToken} onChange={v.onKirvanoToken}
+              placeholder={editing ? "Deixe em branco para manter o atual" : "Cole aqui o token gerado no painel da Kirvano"} />
+            <p className="text-muted" style={sx("font-size:11.5px;margin:5px 0 0;line-height:1.5")}>
+              Gere o token dentro do painel da {selected.name} (você define o texto e escolhe os eventos).
+              Nós validamos cada evento com esse token e geramos uma URL única para você colar lá.
+            </p>
+          </div>
+        </>
+      )}
+
+      {/* Só na edição a URL é revelada. */}
+      {emEdicao && (
+        <CampoCopiavel
+          label="URL do webhook"
+          valor={emEdicao.url}
+          dica="Cole esta URL no campo de webhook do painel do gateway. Ela é única e identifica a sua conta."
+        />
+      )}
+
+      {v.webhookError && (
+        <p style={sx("margin:0;font-size:12.5px;color:var(--color-danger,#f87171)")}>{v.webhookError}</p>
+      )}
+    </Drawer>
   );
 }
 

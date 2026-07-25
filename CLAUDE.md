@@ -600,6 +600,47 @@ pendentes + 9 eventos de IC): taxa de aprovação saiu **Pix 4/5 = 80%, Cartão 
 Boleto 1/1 = 100%**; países BR/PT/AR com os valores certos; funil com os 5 estágios;
 donuts com percentuais somando 100%. Dados de teste removidos depois.
 
+## 🗄️ Padrão de revelação: gavetas laterais
+
+**Regra da ferramenta:** dado sensível ou verboso (URL de webhook, token, script, id)
+**nunca aparece na listagem**. A listagem mostra nome, status e uma métrica de uso; o
+detalhe vive numa gaveta que desliza da direita, com botão de copiar.
+
+`ui/Drawer.tsx` — `Drawer` + `CampoCopiavel`. Fecha no Esc, trava o scroll do fundo,
+devolve o foco a quem abriu e prende o Tab dentro dela.
+
+> ⚠️ **A gaveta é renderizada via `createPortal` no `<body>`, e isso é obrigatório.**
+> Ela é `position:fixed`, e qualquer ancestral com `transform` vira o bloco de contenção
+> — a animação `.page-enter` do shell fazia exatamente isso, e a gaveta abria com a
+> **altura colapsada** (só o cabeçalho e o rodapé). Se um dia aparecer um painel fixo
+> "achatado", é esse o motivo.
+
+Aplicado em:
+- **Webhooks**: "Adicionar Webhook" abre gaveta com **grade de gateways + busca**
+  (preparada para muitos; só Kirvano ativa). A listagem mostra logo, nome, status e
+  nº de eventos — **sem a URL**. "Editar" abre a gaveta e só ali a URL é revelada.
+- **Pixel**: card compacto (nome, status, nº de pixels Meta, nº de eventos ativos).
+  "Editar / ver" abre a gaveta com toda a configuração **e o script gerado**, que
+  deixou de ter modal próprio. Ao salvar um pixel novo a gaveta continua aberta nele,
+  porque é onde o script aparece.
+- **Anúncios**: clicar no perfil abre gaveta com as contas e seus toggles, em vez de
+  expandir inline empurrando a vitrine. O tile "+" segue sempre visível.
+- **UTMs**: já estava no padrão desde o Bloco 11 ("Ver opções" → modal com Hotmart /
+  Cartpanda / Outros e botão copiar). Nada a mudar.
+
+### Bug do zoom do globo (corrigido)
+
+O `scale` da projeção crescia com o zoom mas o `translate` ficava preso no centro do
+`viewBox`: a esfera transbordava e aparecia cortada/deslocada. Agora há
+`clampZoom` (1–4) e **`clampPan`**, que limita o deslocamento do centro a
+`raio − SIZE/2`. O efeito: em zoom 1 o globo aparece inteiro e centrado; com zoom, o
+quadro fica sempre **dentro** da esfera, então nunca se vê o fundo. O wheel faz
+zoom-to-cursor e o Reset volta a zoom 1, pan zero e rotação inicial.
+Verificado: esfera 288px dentro da moldura de 300 em zoom 1 → 1097px cobrindo
+integralmente a moldura após 6 passos de zoom.
+
+---
+
 ### 3ª rodada de polimento + bug dos gráficos de barra
 
 **BUG CRÍTICO corrigido:** "Vendas por Horário", "Lucro por Horário" e "Vendas por Dia"

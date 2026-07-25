@@ -1,4 +1,5 @@
 import { sx } from "@/lib/sx";
+import { Drawer } from "../../ui/Drawer";
 import type { TraffikView } from "../../useTraffikState";
 
 type Profile = TraffikView["adProfiles"][number];
@@ -33,10 +34,14 @@ function ProfileTile({ p }: { p: Profile }) {
   );
 }
 
-/** Painel expandido (largura total) com a lista de contas do perfil. */
+/**
+ * Conteúdo da gaveta do perfil. Antes isto era um card de largura total que
+ * expandia inline e empurrava a vitrine para baixo; agora desliza da direita e
+ * a grade de perfis fica intacta.
+ */
 function ProfilePanel({ p }: { p: Profile }) {
   return (
-    <div className="card" style={sx("grid-column:1/-1;gap:var(--space-3)")}>
+    <div style={sx("display:flex;flex-direction:column;gap:var(--space-3)")}>
       <div style={sx("display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);flex-wrap:wrap")}>
         <button
           type="button"
@@ -110,8 +115,8 @@ export function AnunciosView({ v }: { v: TraffikView }) {
     );
   }
 
-  const expanded = v.adProfiles.filter((p) => p.expanded);
-  const collapsed = v.adProfiles.filter((p) => !p.expanded);
+  // Um perfil "expandido" agora abre a gaveta em vez de crescer na grade.
+  const aberto = v.adProfiles.find((p) => p.expanded) ?? null;
 
   return (
     <div style={sx("display:flex;flex-direction:column;gap:var(--space-3)")}>
@@ -123,10 +128,7 @@ export function AnunciosView({ v }: { v: TraffikView }) {
       </div>
 
       <div style={sx("display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:var(--space-4);align-items:start")}>
-        {/* Perfis expandidos ocupam a linha inteira */}
-        {expanded.map((p) => <ProfilePanel key={p.id} p={p} />)}
-        {/* Perfis recolhidos como tiles da vitrine */}
-        {collapsed.map((p) => <ProfileTile key={p.id} p={p} />)}
+        {v.adProfiles.map((p) => <ProfileTile key={p.id} p={p} />)}
         {/* Tile de adicionar perfil */}
         <a
           href={v.connectHref}
@@ -137,6 +139,16 @@ export function AnunciosView({ v }: { v: TraffikView }) {
           <span style={sx("font-size:13px")}>Adicionar perfil</span>
         </a>
       </div>
+
+      <Drawer
+        aberta={Boolean(aberto)}
+        onClose={() => aberto?.toggleExpanded()}
+        largura={560}
+        titulo={aberto?.name ?? ""}
+        descricao={aberto ? `${aberto.accountCount} conta(s) de anúncio · ${aberto.trackedCount} rastreando` : undefined}
+      >
+        {aberto && <ProfilePanel p={aberto} />}
+      </Drawer>
     </div>
   );
 }
