@@ -1,5 +1,6 @@
 import { sx } from "@/lib/sx";
 import { Drawer } from "../../ui/Drawer";
+import { LogoGateway } from "../../ui/LogoGateway";
 import type { TraffikView } from "../../useTraffikState";
 
 type Profile = TraffikView["adProfiles"][number];
@@ -107,7 +108,10 @@ export function AnunciosView({ v }: { v: TraffikView }) {
               <path d="M96 72 a56 56 0 100 112 a56 56 0 100 -112 M160 72 a56 56 0 100 112 a56 56 0 100 -112" />
             </svg>
           </span>
-          <div className="card-title">Conectar Facebook Ads</div>
+          <div style={sx("display:flex;align-items:center;gap:10px")}>
+            <LogoGateway id="FACEBOOK" nome="Facebook Ads" tamanho={34} />
+            <div className="card-title">Conectar Facebook Ads</div>
+          </div>
           <p className="card-body" style={sx("text-align:center")}>Conecte via Marketing API para puxar campanhas, gasto e métricas. Pediremos as permissões <code>ads_read</code> e <code>ads_management</code>.</p>
           <a className="btn btn-primary btn-block" href={v.connectHref}>Conectar</a>
         </div>

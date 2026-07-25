@@ -753,6 +753,30 @@ gasto feito hoje aparecia como R$ 0,00. Trocado por `time_range` explícito
 > `trackingEnabled = true`** — se o gasto foi em outra, é preciso ligar o rastreamento
 > dela na aba Anúncios.
 
+## 🎨 Marca e logos
+
+Arquivos em `public/logos/` (webp, vindos do designer):
+
+| Arquivo | Onde |
+|---|---|
+| `traffik-claro.webp` | Wordmark de letras **brancas** — sidebar (o tema é escuro) |
+| `traffik-escuro.webp` | Wordmark de letras pretas — reservado para fundo claro, **ainda sem uso** |
+| `kirvano/hotmart/cartpanda/facebook.webp` | Gateways e plataformas |
+| `favicon.webp` | Origem do favicon |
+
+- **`ui/LogoGateway.tsx`** é o único ponto que resolve logo de gateway. Recebe o id
+  (`KIRVANO`, `HOTMART`, …) e **cai no monograma quando não há arquivo** — hoje é o caso
+  da Kiwify. Renderiza sobre um quadrado branco arredondado porque as artes têm fundo
+  transparente e várias são escuras: sem isso a Kirvano sumiria no card.
+- **Favicon**: `src/app/icon.png` (512) e `apple-icon.png` (180), gerados do `.webp` por
+  `scripts/gen-favicon.mjs` com o `sharp` (que já vinha com o Next). A convenção de
+  arquivo do Next **não aceita webp**, e nem todo navegador desenha favicon nesse
+  formato — por isso a conversão. O `src/app/favicon.ico` antigo foi removido, senão
+  teria precedência.
+- **Tamanhos**: wordmark com `height:26px` e largura automática (proporção 904×230, nunca
+  esticar); gateways a 34px no card e 38px na grade da gaveta; 22px nas abas do modal
+  de UTMs.
+
 ## 🪟 Camadas flutuantes: SEMPRE via `ui/Drawer` ou `ui/Modal`
 
 **Nunca escreva um popup à mão.** Existem dois componentes, e os dois passam pelo

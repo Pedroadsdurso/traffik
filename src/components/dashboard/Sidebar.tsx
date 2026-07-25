@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -57,14 +59,18 @@ export function Sidebar({ user }: { user?: SidebarUser }) {
         "width:236px;flex-shrink:0;background:var(--color-surface);border-right:1px solid var(--color-divider);padding:var(--space-6) var(--space-4);display:flex;flex-direction:column;gap:var(--space-4);position:sticky;top:0;height:100vh;overflow:auto",
       )}
     >
-      <div style={sx("display:flex;align-items:center;gap:var(--space-3)")}>
-        <div style={sx("width:34px;height:34px;border-radius:var(--radius-md);border:1px solid var(--color-accent);color:var(--color-accent);display:flex;align-items:center;justify-content:center;font-family:var(--font-heading);font-weight:600;font-size:15px")}>
-          {v.brandInitial}
-        </div>
-        <div>
-          <div style={sx("font-family:var(--font-heading);font-weight:500;font-size:16px;line-height:1.1")}>{v.brandName}</div>
-          <div style={sx("font-size:11px;color:var(--color-text);opacity:.55")}>Analytics de tráfego</div>
-        </div>
+      <div style={sx("display:flex;flex-direction:column;gap:5px")}>
+        {/* Wordmark de letras brancas (o tema é escuro). Proporção 904×230, então
+            a altura manda e a largura acompanha — nada de esticar a marca. */}
+        <Image
+          src="/logos/traffik-claro.webp"
+          alt={v.brandName}
+          width={904}
+          height={230}
+          priority
+          style={{ height: 26, width: "auto", objectFit: "contain" }}
+        />
+        <div style={sx("font-size:11px;color:var(--color-text);opacity:.55")}>Analytics de tráfego</div>
       </div>
 
       <div style={sx("display:flex;flex-direction:column;gap:2px;margin-top:var(--space-2)")}>

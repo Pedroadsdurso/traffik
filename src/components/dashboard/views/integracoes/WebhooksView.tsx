@@ -1,5 +1,6 @@
 import { sx } from "@/lib/sx";
 import { CampoCopiavel, Drawer } from "../../ui/Drawer";
+import { LogoGateway } from "../../ui/LogoGateway";
 import { Modal } from "../../ui/Modal";
 import type { TraffikView } from "../../useTraffikState";
 
@@ -12,17 +13,6 @@ const GATEWAYS: { id: string; name: string; enabled: boolean }[] = [
 ];
 
 /** Monograma colorido no lugar do logo do gateway. */
-function GatewayBadge({ label }: { label: string }) {
-  return (
-    <div
-      style={sx(
-        "width:34px;height:34px;border-radius:9px;flex-shrink:0;display:grid;place-items:center;font-weight:700;font-size:14px;background:var(--color-accent-soft,rgba(139,92,246,.15));color:var(--color-accent,#a78bfa)",
-      )}
-    >
-      {label.charAt(0).toUpperCase()}
-    </div>
-  );
-}
 
 
 // ─────────────────────────── Bloco esquerdo ───────────────────────────
@@ -58,7 +48,7 @@ function WebhooksBlock({ v }: { v: TraffikView }) {
             key={w.id}
             style={sx("border:1px solid var(--color-border);border-radius:var(--radius-md,12px);padding:var(--space-3);display:flex;align-items:center;gap:10px;transition:border-color var(--dur-fast) var(--ease-out)")}
           >
-            <GatewayBadge label={v.webhookPlatformLabel(w.platform)} />
+            <LogoGateway id={w.platform} nome={v.webhookPlatformLabel(w.platform)} />
             <div style={sx("min-width:0;flex:1")}>
               <div style={sx("display:flex;align-items:center;gap:8px;flex-wrap:wrap")}>
                 <span className="card-title" style={sx("font-size:14px")}>{w.name}</span>
@@ -237,7 +227,7 @@ function WebhookModal({ v }: { v: TraffikView }) {
             {filtered.map((g) => (
               <button key={g.id} type="button" className="opcao-tile" disabled={!g.enabled}
                 aria-pressed={v.webhookGateway === g.id} onClick={() => v.selectWebhookGateway(g.id)}>
-                <span className="opcao-logo">{g.name.charAt(0)}</span>
+                <LogoGateway id={g.id} nome={g.name} tamanho={38} />
                 <span>
                   {g.name}
                   {!g.enabled && <span className="text-muted" style={sx("display:block;font-size:10.5px")}>em breve</span>}

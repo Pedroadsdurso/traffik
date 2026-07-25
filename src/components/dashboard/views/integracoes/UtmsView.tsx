@@ -6,6 +6,7 @@ import { getUtmCodes, type UtmCodesDTO } from "@/lib/actions/utm";
 import { getPublicAppUrl } from "@/lib/appUrl";
 import { backRedirectScript, utmScript } from "@/lib/utm/scripts";
 import { sx } from "@/lib/sx";
+import { LogoGateway } from "../../ui/LogoGateway";
 import { Modal } from "../../ui/Modal";
 
 type Destino = "hotmart" | "cartpanda" | "outros";
@@ -79,9 +80,10 @@ function CodigosBlock({ codes }: { codes: UtmCodesDTO | null }) {
                 type="button"
                 onClick={() => setDest(d.id)}
                 style={sx(
-                  `flex:1;padding:8px;border-radius:9px;font-size:13px;cursor:pointer;border:1px solid ${dest === d.id ? "var(--color-accent,#a78bfa)" : "var(--color-border)"};background:${dest === d.id ? "var(--color-accent-soft,rgba(139,92,246,.12))" : "transparent"};color:var(--color-text)`,
+                  `flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:9px;border-radius:9px;font-size:13px;cursor:pointer;border:1px solid ${dest === d.id ? "var(--color-accent,#a78bfa)" : "var(--color-border)"};background:${dest === d.id ? "var(--color-accent-soft,rgba(139,92,246,.12))" : "transparent"};color:var(--color-text)`,
                 )}
               >
+                {d.id !== "outros" && <LogoGateway id={d.id} nome={d.label} tamanho={22} />}
                 {d.label}
               </button>
             ))}
