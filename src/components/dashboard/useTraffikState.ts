@@ -1028,6 +1028,14 @@ export function useTraffikState(
 
     adsTabs,
     adsSub: s.adsSub,
+    // Bloco 6: a tabela nova precisa dos NÚMEROS CRUS para derivar
+    // ROAS/ROI/CPA/CPC/CTR/CPM — as linhas pré-formatadas acima só têm texto.
+    adsRaw: s.adsData,
+    adsBusyId: s.adsBusyId,
+    setAdsSub: (k: "campaigns" | "adsets" | "ads" | "accounts") => set({ adsSub: k }),
+    toggleAdsEntity: (type: "campaign" | "adset" | "ad", id: string) => toggleEntity(type, id)(),
+    /** Força um recarregamento do overview (após ação em massa ou sync). */
+    refreshAds: () => setS((st) => ({ ...st, adsRefreshKey: st.adsRefreshKey + 1 })),
     adsSearch: s.adsSearch,
     adsStatus: s.adsStatus,
     adsPeriod: s.adsPeriod,

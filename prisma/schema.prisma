@@ -210,8 +210,12 @@ model Campaign {
   name           String
   status         EntityStatus @default(UNKNOWN)
   objective      String?
+  /// Orçamento no nível da CAMPANHA = campanha CBO. Nulo = ABO (o orçamento
+  /// vive nos conjuntos). É essa a detecção usada no modal de orçamento.
   dailyBudget    Decimal?     @db.Decimal(14, 2)
   lifetimeBudget Decimal?     @db.Decimal(14, 2)
+  /// `bid_strategy` da Meta (LOWEST_COST_WITHOUT_CAP, COST_CAP, …).
+  bidStrategy    String?
   startTime      DateTime?
   stopTime       DateTime?
   createdAt      DateTime     @default(now())
@@ -233,6 +237,8 @@ model AdSet {
   status           EntityStatus @default(UNKNOWN)
   dailyBudget      Decimal?     @db.Decimal(14, 2)
   lifetimeBudget   Decimal?     @db.Decimal(14, 2)
+  /// Bid cap (`bid_amount` da Meta), em reais.
+  bidAmount        Decimal?     @db.Decimal(14, 2)
   optimizationGoal String?
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt

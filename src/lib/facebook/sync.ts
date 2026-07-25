@@ -62,6 +62,7 @@ interface FbCampaign {
   objective?: string;
   daily_budget?: string;
   lifetime_budget?: string;
+  bid_strategy?: string;
   start_time?: string;
   stop_time?: string;
 }
@@ -72,6 +73,7 @@ interface FbAdSet {
   daily_budget?: string;
   lifetime_budget?: string;
   optimization_goal?: string;
+  bid_amount?: string;
   campaign_id?: string;
 }
 interface FbCreative {
@@ -129,7 +131,7 @@ async function syncAccount(
   // 1. Campanhas
   const campaigns = await graphAll<FbCampaign>(
     `${act}/campaigns`,
-    { fields: "id,name,status,objective,daily_budget,lifetime_budget,start_time,stop_time" },
+    { fields: "id,name,status,objective,daily_budget,lifetime_budget,bid_strategy,start_time,stop_time" },
     accessToken,
   );
   const campaignIdMap = new Map<string, string>(); // fbCampaignId → interno
@@ -142,6 +144,7 @@ async function syncAccount(
         objective: c.objective ?? null,
         dailyBudget: budget(c.daily_budget),
         lifetimeBudget: budget(c.lifetime_budget),
+        bidStrategy: c.bid_strategy ?? null,
         startTime: toDate(c.start_time),
         stopTime: toDate(c.stop_time),
       },
@@ -153,6 +156,7 @@ async function syncAccount(
         objective: c.objective ?? null,
         dailyBudget: budget(c.daily_budget),
         lifetimeBudget: budget(c.lifetime_budget),
+        bidStrategy: c.bid_strategy ?? null,
         startTime: toDate(c.start_time),
         stopTime: toDate(c.stop_time),
       },
@@ -165,7 +169,7 @@ async function syncAccount(
   // 2. Conjuntos
   const adSets = await graphAll<FbAdSet>(
     `${act}/adsets`,
-    { fields: "id,name,status,daily_budget,lifetime_budget,optimization_goal,campaign_id" },
+    { fields: "id,name,status,daily_budget,lifetime_budget,optimization_goal,bid_amount,campaign_id" },
     accessToken,
   );
   const adSetIdMap = new Map<string, string>();
@@ -180,6 +184,7 @@ async function syncAccount(
         dailyBudget: budget(a.daily_budget),
         lifetimeBudget: budget(a.lifetime_budget),
         optimizationGoal: a.optimization_goal ?? null,
+        bidAmount: budget(a.bid_amount),
         campaignId,
       },
       create: {
@@ -190,6 +195,7 @@ async function syncAccount(
         dailyBudget: budget(a.daily_budget),
         lifetimeBudget: budget(a.lifetime_budget),
         optimizationGoal: a.optimization_goal ?? null,
+        bidAmount: budget(a.bid_amount),
         campaignId,
       },
       select: { id: true },

@@ -50,3 +50,33 @@ export async function createCampaign(
   if (!res.id) throw new Error("Facebook não retornou o id da campanha.");
   return res.id;
 }
+
+/** Ajusta o **bid cap** (`bid_amount`) de um conjunto, em reais. */
+export async function updateBidCap(fbId: string, bidReais: number, accessToken: string): Promise<void> {
+  await graphPost(`/${fbId}`, { bid_amount: String(Math.round(bidReais * 100)), access_token: accessToken });
+}
+
+/**
+ * "Exclui" uma entidade. A Meta não apaga de fato: marca como `DELETED`, e o
+ * objeto some do gerenciador. **É irreversível pela API** — daí a confirmação
+ * explícita exigida na UI antes de chamar isto.
+ */
+export async function deleteEntity(fbId: string, accessToken: string): Promise<void> {
+  await graphPost(`/${fbId}`, { status: "DELETED", access_token: accessToken });
+}
+
+/**
+ * Duplica uma campanha usando o endpoint `/copies` da Meta.
+ *
+ * `deep_copy` traz junto conjuntos e anúncios; sem ele viria uma casca vazia.
+ * A cópia nasce **PAUSED** de propósito: duplicar e já começar a gastar sem o
+ * usuário revisar seria um jeito fácil de queimar orçamento.
+ */
+export async function duplicateCampaign(fbId: string, accessToken: string): Promise<string | null> {
+  const r = await graphPost(`/${fbId}/copies`, {
+    deep_copy: "true",
+    status_option: "PAUSED",
+    access_token: accessToken,
+  });
+  return r.id ?? null;
+}

@@ -151,8 +151,8 @@ Logins: `teste@traffik.io` / `traffik123` (vazio) · `pedrodurso8@gmail.com` /
 | 3 | Filtros e container do topo | ✅ **Feito** |
 | 4 | Métricas do Dashboard (ROI×, ARPU, CPA, por horário…) | ✅ **Feito** |
 | 5 | Gráficos (funil, mapa de países, donuts, taxa de aprovação) | ✅ **Feito** |
-| 6 | Gerenciador de Anúncios: layout+colunas estilo FB | ⏳ pendente |
-| 7 | Gerenciador: painel de ações em massa (CBO/ABO) | ⏳ pendente |
+| 6 | Gerenciador de Anúncios: layout+colunas estilo FB | ✅ **Feito** |
+| 7 | Gerenciador: painel de ações em massa (CBO/ABO) | ✅ **Feito** |
 | 8 | Regras: reformulação completa (modal, import/export) | ⏳ pendente |
 | 9 | Integrações › Anúncios (vitrine de perfis) | ✅ **Feito** |
 | 10 | Integrações › Webhooks (Kirvano + credenciais de API) | ✅ **Feito** |
@@ -599,6 +599,60 @@ mesmo havendo checkouts e vendas.
 pendentes + 9 eventos de IC): taxa de aprovação saiu **Pix 4/5 = 80%, Cartão 1/3 = 33,3%,
 Boleto 1/1 = 100%**; países BR/PT/AR com os valores certos; funil com os 5 estágios;
 donuts com percentuais somando 100%. Dados de teste removidos depois.
+
+### Blocos 6 e 7 — Gerenciador de Anúncios
+
+**Bloco 6.** As abas viraram **cards lado a lado** (`.ads-abas`) com ícone, contagem e
+indicador de aba ativa. A tabela (`views/ads/AdsTable.tsx`) tem as 14 colunas pedidas,
+rolagem horizontal e **as 3 primeiras colunas presas** (checkbox, status, nome) via
+`position:sticky` com `left` acumulado — a `.fixa-3` ainda projeta uma sombra para
+marcar onde termina a área fixa. Cabeçalho e rodapé de totais também são sticky.
+O controle de pausar/ativar é o **toggle deslizante** (`.sw`), não play/pause, e chama
+`/api/ads/status` (Marketing API real). Checkbox por linha + "selecionar todas".
+
+As métricas derivadas ficam em **`lib/ads/metrics.ts`** (ROAS, ROI, CPA, lucro, CPC,
+CTR, CPM) — fora da view porque as mesmas fórmulas valem para os 4 níveis, e porque
+divisão por zero é a fonte clássica de `NaN` na tela: o helper `div` devolve `null` e a
+célula mostra "—".
+
+**Bloco 7.** `views/ads/AdsActionBar.tsx` + `POST /api/ads/bulk`. Menu de ações em massa
+(duplicar, ativar, desativar, alterar orçamento, alterar bid cap, fixar, copiar ID,
+excluir), ordenação por gasto, "Abrir no Facebook" e "Sincronizar métricas".
+**Toda ação que muda algo no Facebook exige confirmação**, e a de excluir avisa que a
+Meta não oferece desfazer.
+
+> **Detecção CBO/ABO** — não precisou de campo novo: **campanha com `dailyBudget`
+> próprio é CBO**; sem ele é ABO e o orçamento vive nos conjuntos. Ao alterar orçamento
+> de uma campanha ABO, o modal **bloqueia o Confirmar** e manda o usuário para a aba
+> Conjuntos, em vez de deixar a Meta recusar a chamada.
+
+Novos campos sincronizados: `Campaign.bidStrategy` e `AdSet.bidAmount` (bid cap),
+migration `20260725150000`.
+
+**Testado no navegador** com 1 conta, 2 campanhas (1 CBO / 1 ABO), 2 conjuntos e 2
+anúncios semeados: as 4 abas mostram as contagens certas; a tabela renderiza as 14
+colunas com métricas derivadas reais (CPC R$ 0,55 · CTR 3,1% · CPM R$ 16,74 ·
+12.900 impressões) e linha de totais; o toggle reflete o status; o menu de ações lista
+as 7 opções válidas para campanha; e ao pedir "Alterar orçamento" numa campanha ABO o
+modal avisou e **desabilitou o Confirmar**. Dados de demonstração removidos depois.
+
+**Incompleto / TODO nos Blocos 6 e 7:**
+- **IC e CPI ficam "—".** Os `PixelEvent` não têm atribuição a campanha/anúncio — o
+  script de pixel não envia os UTMs junto do evento. Para preencher essas colunas é
+  preciso carimbar o evento com os códigos do Bloco 11 na hora do disparo.
+- **O lucro da tabela é bruto** (faturamento − gasto). Taxas, impostos e despesas só
+  existem no nível da conta e não há como ratear com honestidade por campanha; o
+  Dashboard, que é no nível da conta, usa o lucro líquido.
+- **"Fixar" é só de sessão** — não persiste ao recarregar.
+- **Duplicar** depende do sync seguinte para a cópia aparecer na lista.
+- **Nenhuma ação de escrita foi exercida contra a API real do Facebook** nesta sessão
+  (a conta de teste não tem token). O caminho até a Graph API está escrito e tipado,
+  mas **a primeira execução real precisa ser observada** — comece por uma campanha
+  pausada e de baixo risco.
+- O **botão "Sincronizar métricas" continua existindo**; a sincronização oportunista
+  (disparar sozinho quando o dado está velho) ficou para depois.
+
+---
 
 ## 🔴 Perda de dados em webhooks concorrentes (corrigido)
 

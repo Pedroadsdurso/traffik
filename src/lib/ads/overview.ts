@@ -14,7 +14,10 @@ export interface CampaignRow {
   name: string;
   status: string;
   accountId: string;
+  /// Orçamento na campanha ⇒ CBO. Nulo ⇒ ABO (orçamento nos conjuntos).
   dailyBudget: number | null;
+  lifetimeBudget: number | null;
+  bidStrategy: string | null;
   spend: number;
   impressions: number;
   clicks: number;
@@ -25,6 +28,8 @@ export interface AdSetRow extends Omit<CampaignRow, "dailyBudget"> {
   campaignId: string;
   campaignName: string;
   dailyBudget: number | null;
+  /** Bid cap do conjunto (`bid_amount`). */
+  bidAmount: number | null;
 }
 export interface AdRow extends Omit<CampaignRow, "dailyBudget"> {
   campaignId: string;
@@ -83,11 +88,11 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
     }),
     prisma.campaign.findMany({
       where: { adAccount: { userId, ...accountWhere } },
-      select: { id: true, fbCampaignId: true, name: true, status: true, dailyBudget: true, adAccountId: true },
+      select: { id: true, fbCampaignId: true, name: true, status: true, dailyBudget: true, lifetimeBudget: true, bidStrategy: true, adAccountId: true },
     }),
     prisma.adSet.findMany({
       where: { adAccount: { userId, ...accountWhere } },
-      select: { id: true, fbAdSetId: true, name: true, status: true, dailyBudget: true, adAccountId: true, campaignId: true },
+      select: { id: true, fbAdSetId: true, name: true, status: true, dailyBudget: true, lifetimeBudget: true, bidAmount: true, adAccountId: true, campaignId: true },
     }),
     prisma.ad.findMany({
       where: { adAccount: { userId, ...accountWhere } },
@@ -143,6 +148,9 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
   const adRows: AdRow[] = ads.map((a) => {
     const met = metByAd.get(a.id) ?? { spend: 0, impressions: 0, clicks: 0 };
     return {
+      // Orçamento/lance não existem no nível de anúncio na Meta.
+      lifetimeBudget: null,
+      bidStrategy: null,
       id: a.id,
       fbId: a.fbAdId,
       name: a.name,
@@ -196,6 +204,8 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
       status: c.status,
       accountId: c.adAccountId,
       dailyBudget: c.dailyBudget != null ? num(c.dailyBudget) : null,
+      lifetimeBudget: c.lifetimeBudget != null ? num(c.lifetimeBudget) : null,
+      bidStrategy: c.bidStrategy ?? null,
       spend: agg.spend,
       impressions: agg.impressions,
       clicks: agg.clicks,
@@ -215,6 +225,9 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
       campaignId: a.campaignId,
       campaignName: campaignNameById.get(a.campaignId) ?? "",
       dailyBudget: a.dailyBudget != null ? num(a.dailyBudget) : null,
+      lifetimeBudget: a.lifetimeBudget != null ? num(a.lifetimeBudget) : null,
+      bidAmount: a.bidAmount != null ? num(a.bidAmount) : null,
+      bidStrategy: null,
       spend: agg.spend,
       impressions: agg.impressions,
       clicks: agg.clicks,
