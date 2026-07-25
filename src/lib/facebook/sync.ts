@@ -245,14 +245,28 @@ async function syncAccount(
     }
   }
 
-  // 4. Métricas diárias por anúncio (últimos N dias)
+  // 4. Métricas diárias por anúncio.
+  //
+  // `time_range` explícito em vez de `date_preset`: os presets da Meta
+  // (`last_7d`/`last_30d`) são ancorados no fuso da CONTA e, na prática, não
+  // trazem o dia corrente de forma confiável — era por isso que um gasto feito
+  // hoje aparecia como R$ 0,00 na ferramenta. Com `since`/`until` até hoje, o
+  // dia parcial vem junto.
+  const hoje = new Date();
+  const desde = new Date(hoje.getTime() - days * 864e5);
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
   const insights = await graphAll<FbInsight>(
     `${act}/insights`,
     {
       level: "ad",
       fields: "ad_id,spend,impressions,clicks,ctr,cpc,cpm,reach,frequency",
       time_increment: "1",
-      date_preset: days > 7 ? "last_30d" : "last_7d",
+      time_range: JSON.stringify({ since: iso(desde), until: iso(hoje) }),
+      // Sem isto a Meta omite linhas de dias com entrega mas gasto ainda não
+      // consolidado, o que abre buracos na série.
+      action_report_time: "impression",
     },
     accessToken,
   );

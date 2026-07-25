@@ -1,3 +1,7 @@
+import { after } from "next/server";
+
+import type { Prisma } from "@/generated/prisma/client";
+import type { SaleStatus } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
 import { dispatchSaleNotification } from "@/lib/webhook/dispatchNotification";
 import { dispatchPurchaseEvents } from "@/lib/webhook/dispatchPixel";
@@ -50,28 +54,9 @@ export async function ingestSale(
     rawPayload: rawPayload as object,
   };
 
-  // Idempotência: quando a plataforma manda um id de transação, reprocessos
-  // (ex.: gerada → paga) atualizam a mesma venda.
   const sale =
     data.externalId != null
-      ? await prisma.sale.upsert({
-          where: { userId_externalId: { userId: ctx.userId, externalId: data.externalId } },
-          update: {
-            // O status sempre reflete o último evento (gerada→paga→reembolso…).
-            status: saleData.status,
-            // Eventos posteriores (ex.: reembolso) podem vir com payload esparso;
-            // não sobrescrevemos o valor/pagamento já conhecidos com 0/OUTRO.
-            ...(saleData.value > 0 ? { value: saleData.value } : {}),
-            ...(saleData.paymentMethod !== "OUTRO" ? { paymentMethod: saleData.paymentMethod } : {}),
-            // Preserva o carimbo de aprovação: só grava quando aprova, nunca zera.
-            ...(saleData.status === "APROVADA" ? { approvedAt: new Date() } : {}),
-            // Só melhora o match; nunca sobrescreve um clique já vinculado por nada.
-            ...(match.clickId ? { clickId: match.clickId, matchMethod: match.method } : {}),
-            rawPayload: rawPayload as object,
-          },
-          create: saleData,
-          select: { id: true, status: true, matchMethod: true },
-        })
+      ? await upsertMonotonico(ctx.userId, data.externalId, saleData, match, rawPayload)
       : await prisma.sale.create({ data: saleData, select: { id: true, status: true, matchMethod: true } });
 
   if (ctx.webhookId) {
@@ -81,12 +66,93 @@ export async function ingestSale(
     });
   }
 
-  // Dispara o evento Purchase para a Conversions API (Fase 10).
-  await dispatchPurchaseEvents(sale.id);
-  // Cria a notificação de venda para o dashboard (Fase 12).
-  await dispatchSaleNotification(sale.id);
+  // Efeitos colaterais saem do caminho da resposta (`after` do Next 16): a CAPI
+  // é uma chamada HTTP ao Facebook e estava sendo aguardada DENTRO do request,
+  // segurando conexão do pool. Com 5 webhooks simultâneos a rajada levava ~2,5s
+  // e aumentava a janela em que dois eventos disputavam a mesma linha.
+  // O gateway recebe o 200 assim que a venda está gravada.
+  after(async () => {
+    try {
+      await dispatchPurchaseEvents(sale.id);
+      await dispatchSaleNotification(sale.id);
+    } catch (e) {
+      console.error("[ingestSale] efeitos pós-resposta:", e);
+    }
+  });
 
   return { id: sale.id, status: sale.status, match: sale.matchMethod ?? "none" };
+}
+
+/**
+ * Ordem de "força" do status. O gateway **não garante a ordem de entrega**: a
+ * confirmação de pagamento pode chegar antes (ou junto) do evento de venda
+ * gerada, e ambos disputam a mesma linha.
+ */
+const FORCA: Record<SaleStatus, number> = {
+  PENDENTE: 0,
+  APROVADA: 1,
+  // Terminais: acontecem depois de uma aprovação e nunca devem ser revertidos.
+  REEMBOLSADA: 2,
+  CHARGEBACK: 2,
+  CANCELADA: 2,
+};
+
+/** Status atuais que um status novo tem permissão de sobrescrever. */
+function podeSobrescrever(novo: SaleStatus): SaleStatus[] {
+  const alvo = FORCA[novo];
+  return (Object.keys(FORCA) as SaleStatus[]).filter((s) => FORCA[s] <= alvo);
+}
+
+/**
+ * Grava a venda de forma **idempotente e à prova de corrida**.
+ *
+ * O `upsert` do Prisma era last-write-wins: com "gerada" e "paga" do mesmo
+ * `externalId` chegando em paralelo, a "gerada" que terminasse por último
+ * rebaixava a venda de APROVADA para PENDENTE — a venda sumia do faturamento
+ * mesmo tendo respondido 200 e gerado notificação. Era essa a perda de dados.
+ *
+ * Agora são duas instruções, cada uma atômica no banco e **independente da ordem
+ * de chegada**:
+ *  1. `createMany({ skipDuplicates: true })` garante que a linha exista, sem
+ *     estourar violação de unicidade quando duas requisições criam ao mesmo tempo.
+ *  2. `updateMany` com filtro de status: o `WHERE` só deixa passar quando o
+ *     status novo é **igual ou mais forte** que o gravado. É o banco que decide,
+ *     então dois writes concorrentes convergem para o mesmo resultado.
+ */
+async function upsertMonotonico(
+  userId: string,
+  externalId: string,
+  saleData: Prisma.SaleCreateManyInput,
+  match: { clickId: string | null; method: string },
+  rawPayload: unknown,
+) {
+  const novoStatus = saleData.status as SaleStatus;
+
+  // 1) Garante a linha. `skipDuplicates` transforma a corrida de criação num
+  //    no-op em vez de erro P2002.
+  await prisma.sale.createMany({ data: [saleData], skipDuplicates: true });
+
+  // 2) Atualiza só se o evento não for um "retrocesso" de status.
+  await prisma.sale.updateMany({
+    where: { userId, externalId, status: { in: podeSobrescrever(novoStatus) } },
+    data: {
+      status: novoStatus,
+      // Eventos posteriores (ex.: reembolso) vêm com payload esparso; não
+      // sobrescrevemos valor/pagamento já conhecidos com 0/OUTRO.
+      ...(Number(saleData.value) > 0 ? { value: saleData.value } : {}),
+      ...(saleData.paymentMethod !== "OUTRO" ? { paymentMethod: saleData.paymentMethod } : {}),
+      ...(novoStatus === "APROVADA" ? { approvedAt: new Date() } : {}),
+      // Só melhora o match; nunca desvincula um clique já casado.
+      ...(match.clickId ? { clickId: match.clickId, matchMethod: match.method } : {}),
+      rawPayload: rawPayload as object,
+    },
+  });
+
+  const sale = await prisma.sale.findUniqueOrThrow({
+    where: { userId_externalId: { userId, externalId } },
+    select: { id: true, status: true, matchMethod: true },
+  });
+  return sale;
 }
 
 /** Extrai o IP do cliente dos headers de proxy. */

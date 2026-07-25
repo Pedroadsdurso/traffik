@@ -313,6 +313,14 @@ const DOWN_PATH = "M32 80 L96 144 L136 112 L224 192 M176 192 L224 192 L224 144";
  * em segundo plano mantinha o servidor ocupado indefinidamente, e a contenção
  * fazia as mesmas rotas irem de ~380ms para ~1.4s. Devolve o teardown.
  */
+/**
+ * Intervalo do polling ao vivo. Era 15s, o que dava a sensação de "a venda
+ * chegou mas o dashboard não mexeu". Agora que a rota de webhook responde em
+ * ~100ms (a CAPI saiu do caminho da resposta) e o polling pausa em aba
+ * escondida, 5s é sustentável.
+ */
+const DASH_POLL_MS = 5000;
+
 function startPolling(load: () => void, intervalMs: number): () => void {
   let timer: ReturnType<typeof setInterval> | null = null;
   const start = () => {
@@ -400,7 +408,7 @@ export function useTraffikState(
     }
     load();
     if (!liveUpdates) return () => { active = false; controller.abort(); };
-    const stop = startPolling(load, 15000);
+    const stop = startPolling(load, DASH_POLL_MS);
     return () => { active = false; controller.abort(); stop(); };
   }, [s.dashPeriod, s.dashFrom, s.dashTo, s.dashAccount, s.dashProduct, s.dashSource, s.refreshKey, liveUpdates]);
 
@@ -457,7 +465,7 @@ export function useTraffikState(
     }
     load();
     if (!liveUpdates) return () => { active = false; controller.abort(); };
-    const stop = startPolling(load, 15000);
+    const stop = startPolling(load, DASH_POLL_MS);
     return () => { active = false; controller.abort(); stop(); };
   }, [liveUpdates]);
 

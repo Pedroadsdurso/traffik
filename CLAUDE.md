@@ -600,6 +600,69 @@ pendentes + 9 eventos de IC): taxa de aprovação saiu **Pix 4/5 = 80%, Cartão 
 Boleto 1/1 = 100%**; países BR/PT/AR com os valores certos; funil com os 5 estágios;
 donuts com percentuais somando 100%. Dados de teste removidos depois.
 
+## 🔴 Perda de dados em webhooks concorrentes (corrigido)
+
+**Sintoma relatado:** o gateway envia a venda, o evento chega (aparece até nas
+notificações), mas o dashboard não reflete; com vários pagamentos em sequência rápida,
+"processa só 1 ou nenhum".
+
+**A causa NÃO era perda de linha nem falta de fila.** Um teste com 5 webhooks
+simultâneos de `externalId` distintos gravou 5/5. O que se perdia era o **status**:
+
+```
+race-1  → evento "approved" respondeu 200 dizendo APROVADA
+race-1  → linha no banco ficou PENDENTE
+```
+
+`prisma.sale.upsert` é **last-write-wins**. Com "gerada" e "paga" do mesmo
+`externalId` chegando em paralelo (o gateway não garante ordem, e ainda reentrega),
+a "gerada" que terminasse por último **rebaixava a venda de APROVADA para PENDENTE**.
+A venda sumia do faturamento mesmo tendo respondido 200 e gerado notificação — daí a
+impressão de "chegou mas não apareceu".
+
+**Correção (`ingestSale.ts`):** o upsert virou **monotônico e independente de ordem**:
+1. `createMany({ skipDuplicates: true })` garante a linha sem estourar P2002 quando
+   duas requisições criam ao mesmo tempo.
+2. `updateMany` com `where: { status: { in: podeSobrescrever(novo) } }` — o `WHERE`
+   só deixa passar quando o status novo é **igual ou mais forte** que o gravado
+   (PENDENTE 0 < APROVADA 1 < REEMBOLSADA/CHARGEBACK/CANCELADA 2). Quem decide é o
+   banco, então writes concorrentes **convergem** para o mesmo resultado.
+
+**Também:** `dispatchPurchaseEvents` (HTTP para a CAPI do Facebook) e a notificação
+eram **aguardados dentro do request**, segurando conexão do pool e alongando a janela
+de disputa. Passaram para o `after()` do Next 16 — o gateway recebe o 200 assim que a
+venda está gravada. O polling do dashboard caiu de 15s para 5s.
+
+**Teste (`node` contra o dev server, 6 casos, todos passando):**
+| Caso | Resultado |
+|---|---|
+| 5 vendas simultâneas | 5/5 persistidas, todas APROVADA, 1812ms |
+| gerada+paga concorrentes, **nas duas ordens** | ambas convergem para APROVADA |
+| reembolso + reentrega de eventos anteriores | permanece REEMBOLSADA |
+| rajada de 15 vendas | 15/15 persistidas |
+| 6 reentregas do mesmo evento | 1 única linha (idempotente) |
+
+> **Sobre a fila BullMQ:** não foi usada, de propósito. Ela está no `package.json` mas
+> exige Redis + um worker de processo longo, que **não existe em serverless** (foi
+> justamente por isso que a v1 trocou BullMQ por Vercel Cron). O enfileiramento que
+> importava — "gravar o payload antes de processar" — já existe desde o Bloco 13 via
+> `WebhookLog`, e a idempotência agora é garantida pelo banco, que é mais robusto que
+> serializar numa fila.
+
+## ⚠️ Gasto das campanhas vindo zerado (corrigido)
+
+O sync usava `date_preset: last_7d/last_30d` nos insights. Os presets da Meta são
+ancorados no fuso da conta e **não trazem o dia corrente de forma confiável** — um
+gasto feito hoje aparecia como R$ 0,00. Trocado por `time_range` explícito
+(`since`/`until` até hoje) + `action_report_time: "impression"`.
+
+> **Não confirmado contra a API real:** a conta de teste não tem token do Facebook
+> válido nesta sessão. A correção é a explicação mais provável (havia 1 campanha, 1
+> anúncio e 1 linha de métrica gravados, com `spend = 0`), mas **precisa ser validada
+> com uma sincronização real**. Note também que **só 1 das contas de anúncio está com
+> `trackingEnabled = true`** — se o gasto foi em outra, é preciso ligar o rastreamento
+> dela na aba Anúncios.
+
 ## 🗄️ Padrão de revelação: gavetas laterais
 
 **Regra da ferramenta:** dado sensível ou verboso (URL de webhook, token, script, id)
