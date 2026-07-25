@@ -33,7 +33,15 @@ export interface DashboardData {
     buyers: number;
   };
   deltas: Record<string, number | null>;
-  chart: { labels: string[]; revenue: number[]; spend: number[]; periodLabel: string; granularity: "hour" | "day" };
+  chart: {
+    labels: string[];
+    revenue: number[];
+    spend: number[];
+    periodLabel: string;
+    granularity: "hour" | "day";
+    /** Série por bucket de cada KPI, para os mini-gráficos dos cards. */
+    sparklines: Record<string, number[]>;
+  };
   expenses: { gateway: number; tax: number; recurring: number; total: number };
   products: { name: string; total: number; sales: number }[];
   sources: { name: string; total: number }[];
@@ -187,6 +195,7 @@ export async function computeDashboard(userId: string, filters: DashboardFilters
     ctr: pctDelta(summary.ctr, prev.ctr),
     roi: pctDelta(summary.roi, prev.roi),
     margem: pctDelta(summary.margin, prev.margin),
+    arpu: pctDelta(summary.arpu, prev.arpu),
   };
 
   const chart = buildChart(current, start, end, granularity, filters.period);
@@ -445,10 +454,32 @@ function buildChart(w: Window, start: Date, end: Date, granularity: "hour" | "da
     w.metrics.filter((m) => m.date.getTime() >= b.start && m.date.getTime() < b.end).reduce((a, m) => a + num(m.spend), 0),
   );
 
+  // Séries por bucket para os sparklines dos cards de KPI (Bloco 5 — polimento).
+  // Derivadas dos mesmos buckets do gráfico, para a mini-linha contar a mesma
+  // história do gráfico grande.
+  const vendasPorBucket = buckets.map((b) =>
+    approved.filter((s) => s.timestamp.getTime() >= b.start && s.timestamp.getTime() < b.end).length,
+  );
+  const compradoresPorBucket = buckets.map((b) => {
+    const nesse = approved.filter((s) => s.timestamp.getTime() >= b.start && s.timestamp.getTime() < b.end);
+    const emails = new Set(nesse.map((s) => s.buyerEmail?.trim().toLowerCase()).filter(Boolean));
+    return emails.size + nesse.filter((s) => !s.buyerEmail?.trim()).length;
+  });
+  const div = (a: number, b: number) => (b ? a / b : 0);
+  const sparklines: Record<string, number[]> = {
+    faturamento: revenue,
+    gasto: spend,
+    vendas: vendasPorBucket,
+    roas: revenue.map((r, i) => div(r, spend[i] ?? 0)),
+    ticket: revenue.map((r, i) => div(r, vendasPorBucket[i] ?? 0)),
+    arpu: revenue.map((r, i) => div(r, compradoresPorBucket[i] ?? 0)),
+    cpa: spend.map((sp, i) => div(sp, vendasPorBucket[i] ?? 0)),
+  };
+
   const periodLabel =
     { hoje: "Hoje · por hora", "7d": "Últimos 7 dias", "30d": "Últimos 30 dias", custom: "Período personalizado" }[period];
 
-  return { labels: buckets.map((b) => b.label), revenue, spend, periodLabel, granularity };
+  return { labels: buckets.map((b) => b.label), revenue, spend, periodLabel, granularity, sparklines };
 }
 
 function buildActivity(w: Window) {

@@ -1,15 +1,14 @@
 /**
- * Gera `src/lib/worldPaths.ts` — os contornos dos continentes já convertidos
- * para paths SVG em projeção equirretangular (viewBox 360×180).
+ * Gera `src/lib/worldGeo.ts` — a geometria dos continentes em **coordenadas
+ * geográficas** (lng/lat), não em paths SVG.
  *
- * Roda UMA VEZ, na mão, e o resultado é commitado — assim o navegador não
- * baixa os 105 KB de TopoJSON nem o topojson-client, e nenhum dos dois fica no
- * package.json da aplicação.
+ * O globo usa `d3.geoOrthographic`, que precisa reprojetar os pontos a cada
+ * frame conforme a rotação — paths SVG pré-renderizados não serviriam.
  *
- * Para regerar:
+ * Roda na mão e o resultado é commitado, para o navegador não baixar o
+ * TopoJSON (105 KB) nem o topojson-client:
  *   npm i -D world-atlas@2 topojson-client@3
  *   node scripts/gen-world-paths.mjs
- *   npm uninstall world-atlas topojson-client
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { feature } from "topojson-client";
@@ -17,32 +16,26 @@ import { feature } from "topojson-client";
 const topo = JSON.parse(readFileSync("node_modules/world-atlas/land-110m.json", "utf8"));
 const geo = feature(topo, topo.objects.land);
 
-// Equirretangular: lng -180..180 → 0..360 ; lat 90..-90 → 0..180
-const px = (lng) => +(lng + 180).toFixed(1);
-const py = (lat) => +(90 - lat).toFixed(1);
+// 1 casa decimal ≈ 11 km: imperceptível num globo de ~300 px e corta ~40% do peso.
+const round = (v) => +v.toFixed(1);
+const anel = (r) => r.map(([lng, lat]) => [round(lng), round(lat)]);
 
-function anelParaPath(ring) {
-  let d = "";
-  for (let i = 0; i < ring.length; i++) {
-    const [lng, lat] = ring[i];
-    d += (i === 0 ? "M" : "L") + px(lng) + " " + py(lat);
-  }
-  return d + "Z";
-}
-
-const partes = [];
+const polys = [];
 for (const f of geo.features) {
   const g = f.geometry;
-  const polys = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
-  for (const poly of polys) for (const ring of poly) partes.push(anelParaPath(ring));
+  const lista = g.type === "Polygon" ? [g.coordinates] : g.coordinates;
+  for (const poly of lista) polys.push(poly.map(anel));
 }
 
-const d = partes.join("");
 const out = `// GERADO por scripts/gen-world-paths.mjs — não editar à mão.
-// Contorno dos continentes em projeção equirretangular, viewBox 360x180.
-// Pré-computado para o navegador não baixar o TopoJSON (105 KB) nem o
-// topojson-client. Regerar com: node scripts/gen-world-paths.mjs
-export const WORLD_PATH = ${JSON.stringify(d)};
+// Continentes em lng/lat para o globo ortográfico (d3.geoOrthographic).
+// Regerar: veja o cabeçalho do script.
+import type { GeoJSON } from "geojson";
+
+export const WORLD_LAND = {
+  type: "MultiPolygon",
+  coordinates: ${JSON.stringify(polys)},
+} as const;
 `;
-writeFileSync("src/lib/worldPaths.ts", out);
-console.log("gerado:", Math.round(out.length / 1024) + "KB,", partes.length, "anéis");
+writeFileSync("src/lib/worldGeo.ts", out);
+console.log("gerado:", Math.round(out.length / 1024) + "KB,", polys.length, "polígonos");

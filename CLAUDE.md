@@ -600,6 +600,61 @@ pendentes + 9 eventos de IC): taxa de aprovação saiu **Pix 4/5 = 80%, Cartão 
 Boleto 1/1 = 100%**; países BR/PT/AR com os valores certos; funil com os 5 estágios;
 donuts com percentuais somando 100%. Dados de teste removidos depois.
 
+### Polimento premium dos gráficos (2ª revisão de design)
+
+Reformulação completa do acabamento, pedida com referências (Apple/Linear/Vercel):
+
+- **`ui/chartKit.tsx` — peças compartilhadas.** `ChartTooltip` (fundo translúcido com
+  `backdrop-filter`, borda sutil, sombra), `ChartEmpty` (ícone + frase útil),
+  `Sparkline`, `Delta` (seta + verde/vermelho, com flag `invertido` para métricas de
+  custo onde subir é ruim) e a paleta análoga. Antes cada gráfico inventava o seu.
+- **Globo** (`CountryMap`): `d3.geoOrthographic` — esfera girável de verdade, com
+  gradiente radial de iluminação, oceano azul-marinho, continentes com borda luminosa,
+  marcadores pulsantes proporcionais, **rotação automática que pausa ao interagir**,
+  arraste/scroll/reset e tooltip com bandeira. Estado vazio = globo girando com legenda
+  discreta sobreposta.
+  **WebGL/three.js foi descartado de propósito:** seria um canvas com contexto próprio
+  dentro de um bloco redimensionável, com risco em máquina sem aceleração. O d3 desenha
+  SVG comum, participa do layout e não tem contexto para perder.
+- **Funil**: gradiente contínuo azul→roxo→magenta, animação de preenchimento da esquerda
+  para a direita (`clipPath` animado), taxa no centro, valor absoluto embaixo, tooltip
+  por etapa.
+- **Donuts**: espessura generosa, gap entre fatias, fatia ativa cresce e as outras
+  esmaecem, total no centro, legenda em **colunas alinhadas** (cor · nome · R$ · %).
+- **Barras**: barras-fantasma nas posições sem valor (dá contexto de série temporal em
+  vez de uma barra solitária no vazio), grade, eixo Y, animação de subida escalonada e
+  **tooltip detalhado** — "14h00 – 15h00" com vendas e faturamento; no diário, a data
+  por extenso.
+- **Cards de KPI**: hierarquia (label → número grande → comparação), **sparkline** da
+  métrica no período e delta colorido com seta. As séries vêm de `chart.sparklines`,
+  derivadas dos mesmos buckets do gráfico grande.
+
+**Dois erros meus corrigidos no caminho:**
+1. Tentei forçar o funil a estreitar sempre (clamp monotônico no mínimo acumulado). Isso
+   **colapsava o funil inteiro numa linha** quando o 1º estágio era 0 — que é o caso
+   comum, com o Facebook não sincronizado. Voltou a ser proporção direta: com dados
+   encadeados a forma afunila sozinha, e quando um estágio posterior é maior isso é
+   informação real (ICs vêm do pixel, vendas vêm do gateway — fontes independentes).
+2. O gradiente do funil saía **listrado**: `linearGradient` usa `objectBoundingBox` por
+   padrão, então cada segmento aplicava a escala inteira à própria caixa. Corrigido com
+   `gradientUnits="userSpaceOnUse"`.
+
+> **Dados do globo**: `scripts/gen-world-paths.mjs` agora gera `src/lib/worldGeo.ts` com
+> **coordenadas lng/lat** (não paths SVG), porque a projeção ortográfica reprojeta a
+> cada frame. Continua pré-computado e commitado — sem TopoJSON no navegador e sem
+> `world-atlas`/`topojson-client` no package.json. A única dependência nova é `d3-geo`.
+
+**Ainda pendente do polimento:**
+- O globo cobre os **~32 países** da tabela `lib/countries.ts`; fora dela, o país aparece
+  só no Ranking.
+- Os continentes são **contorno de terra**, sem fronteiras por país — os países são
+  identificados pelos marcadores.
+- Sparklines existem para faturamento, gasto, vendas, ROAS, ticket, ARPU e CPA. **ROI,
+  margem, CTR e as métricas de contagem não têm série** e ficam sem mini-gráfico.
+- `deltas` do backend não cobrem todas as métricas; as sem delta mostram o texto neutro.
+
+---
+
 ### Revisão de design do Bloco 5 (feedback do usuário)
 
 Os gráficos foram reprovados na primeira entrega e refeitos:

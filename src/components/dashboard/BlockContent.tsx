@@ -1,7 +1,9 @@
 "use client";
 
-import { brl } from "@/lib/format";
+import { brl, brl0 } from "@/lib/format";
 import { sx } from "@/lib/sx";
+import { BarChart, type BarraDado } from "./ui/BarChart";
+import { ChartEmpty, Delta, Sparkline } from "./ui/chartKit";
 import { AreaChart } from "./ui/AreaChart";
 import { CountryMap } from "./ui/CountryMap";
 import { Donut } from "./ui/Donut";
@@ -21,17 +23,17 @@ function Bloco({ children, gap0 = false }: { children: React.ReactNode; gap0?: b
 function KpiBloco({ v, metric }: { v: TraffikView; metric: string }) {
   const k = v.metricCards[metric as keyof typeof v.metricCards];
   if (!k) return null;
+  const serie = v.sparklines[metric] ?? [];
   return (
     <Bloco>
+      {/* Hierarquia: label pequeno em cima, número grande no meio, comparação embaixo. */}
       <div className="card-kicker">{k.label}</div>
-      <div style={sx("font-family:var(--font-heading);font-weight:500;font-size:24px;font-variant-numeric:tabular-nums")}>
+      <div style={sx("font-family:var(--font-heading);font-weight:500;font-size:26px;line-height:1.1;font-variant-numeric:tabular-nums;margin-top:2px")}>
         {k.value}
       </div>
-      <div style={sx(`display:flex;align-items:center;gap:5px;font-size:12px;color:${k.trendColor}`)}>
-        <svg viewBox="0 0 256 256" width="12" height="12" fill="none" stroke="currentColor" strokeWidth={18} strokeLinecap="round" strokeLinejoin="round">
-          <path d={k.trendPath} />
-        </svg>
-        <span>{k.trendLabel}</span>
+      <div style={sx("margin-top:auto;display:flex;flex-direction:column;gap:6px")}>
+        {serie.length > 1 && <Sparkline valores={serie} />}
+        <Delta pct={k.delta} invertido={k.invertido} />
       </div>
     </Bloco>
   );
@@ -64,79 +66,6 @@ function Barras({
           {l.sub && <div className="text-muted" style={sx("font-size:11px")}>{l.sub}</div>}
         </div>
       ))}
-    </div>
-  );
-}
-
-/**
- * Barras verticais (Bloco 4, redesenhadas). A primeira versão desenhava barras
- * finas com um piso de 2px, o que num período de pouca venda virava uma fileira
- * de tracinhos perdidos num bloco alto. Agora há grade de fundo, eixo Y com o
- * valor máximo, barras largas com gradiente e topo arredondado, e as barras
- * zeradas ficam como sulco discreto em vez de traço solto.
- */
-function BarrasVerticais({
-  dados,
-  formatar,
-  vazio,
-}: {
-  dados: { rotulo: string; valor: number; titulo: string }[];
-  formatar: (v: number) => string;
-  vazio: string;
-}) {
-  const max = Math.max(0, ...dados.map((d) => d.valor));
-  if (max <= 0) {
-    return (
-      <div className="text-muted" style={sx("display:grid;place-items:center;flex:1;min-height:110px;font-size:13px")}>
-        {vazio}
-      </div>
-    );
-  }
-  // Topo arredondado para o rótulo do eixo Y não ficar quebrado.
-  const mag = 10 ** Math.floor(Math.log10(max));
-  const topo = Math.ceil(max / mag) * mag;
-
-  return (
-    <div style={sx("display:flex;flex-direction:column;flex:1;min-height:130px;margin-top:var(--space-2)")}>
-      <div style={sx("display:flex;gap:6px;flex:1;min-height:90px")}>
-        {/* Eixo Y */}
-        <div style={sx("display:flex;flex-direction:column;justify-content:space-between;font-size:9px;color:var(--color-neutral-500);text-align:right;padding-bottom:14px;flex:none")}>
-          <span>{formatar(topo)}</span>
-          <span>{formatar(topo / 2)}</span>
-          <span>0</span>
-        </div>
-
-        <div style={sx("position:relative;flex:1;display:flex;align-items:flex-end;justify-content:flex-start;gap:3px;padding-bottom:14px")}>
-          {/* Grade de fundo */}
-          {[0, 0.5, 1].map((f) => (
-            <div key={f} aria-hidden
-              style={sx(`position:absolute;left:0;right:0;bottom:calc(14px + ${f * 100}% - ${f * 14}px);height:1px;background:var(--color-divider)`)} />
-          ))}
-
-          {dados.map((d, i) => {
-            const pctAltura = (d.valor / topo) * 100;
-            return (
-              // `max-width` evita que 2 ou 3 pontos virem blocos gigantes
-              // ocupando meia tela (acontecia em "vendas por dia").
-              <div key={i} style={sx("flex:1;min-width:0;max-width:64px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;position:relative")}
-                title={`${d.titulo}: ${formatar(d.valor)}`}>
-                {/* Sulco: mostra a lacuna sem fingir que há valor */}
-                <div style={sx("position:absolute;inset:auto 0 0 0;height:2px;border-radius:1px;background:var(--color-neutral-800)")} />
-                {d.valor > 0 && (
-                  <div
-                    style={sx(
-                      `position:relative;width:100%;border-radius:3px 3px 0 0;height:${Math.max(3, pctAltura)}%;background:linear-gradient(180deg, var(--color-accent-400) 0%, var(--color-accent-700) 100%);box-shadow:0 0 10px color-mix(in srgb, var(--color-accent) 45%, transparent);transition:height var(--dur-base) var(--ease-out)`,
-                    )}
-                  />
-                )}
-                <span style={sx("position:absolute;bottom:-14px;left:0;right:0;text-align:center;font-size:9px;color:var(--color-neutral-500);white-space:nowrap;overflow:hidden")}>
-                  {d.rotulo}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 }
@@ -177,7 +106,8 @@ export function BlockContent({ id, v }: { id: string; v: TraffikView }) {
         <Bloco>
           <div className="card-kicker">Vendas por produto</div>
           <Donut
-            vazio="Nenhuma venda no período."
+            vazio="Nenhuma venda por produto"
+            totalLabel={brl0(v.products.reduce((a, p) => a + p.total, 0))}
             fatias={v.products.map((p) => ({ name: p.name, value: p.total, label: p.totalLabel }))}
           />
         </Bloco>
@@ -188,7 +118,8 @@ export function BlockContent({ id, v }: { id: string; v: TraffikView }) {
         <Bloco>
           <div className="card-kicker">Vendas por fonte</div>
           <Donut
-            vazio="Nenhuma venda no período."
+            vazio="Nenhuma venda por fonte"
+            totalLabel={brl0(v.sources.reduce((a, x) => a + x.total, 0))}
             fatias={v.sources.map((x) => ({ name: x.name, value: x.total, label: x.totalLabel }))}
           />
         </Bloco>
@@ -199,7 +130,8 @@ export function BlockContent({ id, v }: { id: string; v: TraffikView }) {
         <Bloco>
           <div className="card-kicker">Vendas por método de pagamento</div>
           <Donut
-            vazio="Nenhuma venda aprovada no período."
+            vazio="Nenhuma venda aprovada"
+            totalLabel={brl0(v.payments.reduce((a, p) => a + p.total, 0))}
             fatias={v.payments.map((p) => ({ name: p.name, value: p.total, label: p.totalLabel }))}
           />
         </Bloco>
@@ -239,54 +171,6 @@ export function BlockContent({ id, v }: { id: string; v: TraffikView }) {
               ))}
             </div>
           )}
-        </Bloco>
-      );
-
-    case "chart:vendasHora":
-      return (
-        <Bloco>
-          <div className="card-kicker">Vendas por horário</div>
-          <BarrasVerticais
-            vazio="Nenhuma venda aprovada no período."
-            formatar={(n) => `${n} venda(s)`}
-            // Rótulo a cada 3h para não virar sopa de números em bloco estreito.
-            dados={v.byHour.map((h) => ({
-              rotulo: h.hour % 3 === 0 ? String(h.hour).padStart(2, "0") : "",
-              valor: h.sales,
-              titulo: `${String(h.hour).padStart(2, "0")}h`,
-            }))}
-          />
-        </Bloco>
-      );
-
-    case "chart:lucroHora":
-      return (
-        <Bloco>
-          <div className="card-kicker">Lucro por horário</div>
-          <BarrasVerticais
-            vazio="Sem lucro apurado no período."
-            formatar={(n) => brl(n)}
-            dados={v.byHour.map((h) => ({
-              rotulo: h.hour % 3 === 0 ? String(h.hour).padStart(2, "0") : "",
-              valor: h.profit,
-              titulo: `${String(h.hour).padStart(2, "0")}h`,
-            }))}
-          />
-        </Bloco>
-      );
-
-    case "chart:vendasDia":
-      return (
-        <Bloco>
-          <div className="card-kicker">Vendas por dia</div>
-          <BarrasVerticais
-            vazio="Nenhuma venda aprovada no período."
-            formatar={(n) => `${n} venda(s)`}
-            dados={v.byDay.map((d) => {
-              const [, m, dia] = d.date.split("-");
-              return { rotulo: `${dia}/${m}`, valor: d.sales, titulo: `${dia}/${m}` };
-            })}
-          />
         </Bloco>
       );
 

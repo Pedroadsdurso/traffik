@@ -492,10 +492,21 @@ export function useTraffikState(
   function trendOf(key: string, invert = false) {
     const dv = d?.deltas?.[key] ?? null;
     const good = dv === null ? true : invert ? dv <= 0 : dv >= 0;
-    return { trendColor: good ? A : N, trendPath: (dv ?? 0) >= 0 ? UP_PATH : DOWN_PATH, trendLabel: fmtDelta(dv) };
+    return {
+      trendColor: good ? A : N,
+      trendPath: (dv ?? 0) >= 0 ? UP_PATH : DOWN_PATH,
+      trendLabel: fmtDelta(dv),
+      // Bloco 5 (polimento): o card usa o número cru para colorir e apontar a
+      // seta; `invertido` marca métrica de custo, onde subir é ruim.
+      delta: dv,
+      invertido: invert,
+    };
   }
 
-  const reg: Record<MetricKey, { label: string; value: string; trendColor: string; trendPath: string; trendLabel: string }> = {
+  const reg: Record<
+    MetricKey,
+    { label: string; value: string; trendColor: string; trendPath: string; trendLabel: string; delta: number | null; invertido: boolean }
+  > = {
     faturamento: { label: "Faturamento", value: brl(revenue), ...trendOf("revenue") },
     gasto: { label: "Gasto total", value: brl(spend), ...trendOf("spend", true) },
     roas: { label: "ROAS", value: roasFmt(roas), ...trendOf("roas") },
@@ -508,9 +519,9 @@ export function useTraffikState(
     ticket: { label: "Ticket médio", value: brl(ticket), ...trendOf("ticket") },
     arpu: { label: "ARPU", value: brl(arpu), ...trendOf("arpu") },
     ctr: { label: "CTR", value: pct(ctr), ...trendOf("ctr") },
-    pendentes: { label: "Vendas pendentes", value: String(pendentes), trendColor: N, trendPath: DOWN_PATH, trendLabel: "aguardando pgto." },
-    reembolsadas: { label: "Reembolsadas", value: String(reembolsadas), trendColor: N, trendPath: DOWN_PATH, trendLabel: "no período" },
-    chargeback: { label: "Taxa de chargeback", value: pct(chargebackRate), trendColor: A, trendPath: UP_PATH, trendLabel: "sobre eventos de venda" },
+    pendentes: { label: "Vendas pendentes", value: String(pendentes), delta: null, invertido: false, trendColor: N, trendPath: DOWN_PATH, trendLabel: "aguardando pgto." },
+    reembolsadas: { label: "Reembolsadas", value: String(reembolsadas), delta: null, invertido: false, trendColor: N, trendPath: DOWN_PATH, trendLabel: "no período" },
+    chargeback: { label: "Taxa de chargeback", value: pct(chargebackRate), delta: null, invertido: false, trendColor: A, trendPath: UP_PATH, trendLabel: "sobre eventos de venda" },
   };
   const kpiCards = s.metricOrder.filter((key) => s.metricVisible[key]).map((key) => reg[key]);
   const metricList = s.metricOrder.map((key, i) => ({
@@ -980,6 +991,7 @@ export function useTraffikState(
       { label: "Vendas iniciadas", curto: "Vendas Inic.", value: d?.funnel.iniciadas ?? 0 },
       { label: "Vendas aprovadas", curto: "Vendas Apr.", value: d?.funnel.vendas ?? 0 },
     ],
+    sparklines: d?.chart.sparklines ?? {},
     byCountry: d?.byCountry ?? [],
     approval: d?.approval ?? [],
     byHour: d?.byHour ?? [],
