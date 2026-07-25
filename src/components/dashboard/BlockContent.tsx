@@ -2,6 +2,10 @@
 
 import { brl } from "@/lib/format";
 import { sx } from "@/lib/sx";
+import { AreaChart } from "./ui/AreaChart";
+import { CountryMap } from "./ui/CountryMap";
+import { Donut } from "./ui/Donut";
+import { Funnel } from "./ui/Funnel";
 import { BLOCK_BY_ID } from "./blocks";
 import type { TraffikView } from "./useTraffikState";
 
@@ -130,15 +134,7 @@ export function BlockContent({ id, v }: { id: string; v: TraffikView }) {
               </span>
             </div>
           </div>
-          {/* preserveAspectRatio="none" faz o gráfico acompanhar a altura do bloco */}
-          <svg viewBox="0 0 600 180" preserveAspectRatio="none" style={{ width: "100%", flex: 1, minHeight: 90 }}>
-            <polygon points={v.chart.revenueArea} fill="var(--color-accent-800)" opacity={0.35} />
-            <polyline points={v.chart.spendLine} fill="none" stroke="var(--color-neutral-600)" strokeWidth={2} strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
-            <polyline points={v.chart.revenueLine} fill="none" stroke="var(--color-accent)" strokeWidth={2.5} vectorEffect="non-scaling-stroke" />
-            <circle cx={v.chart.lastX} cy={v.chart.lastY} r={4} fill="var(--color-accent)">
-              <animate attributeName="r" values="4;7;4" dur="1.6s" repeatCount="indefinite" />
-            </circle>
-          </svg>
+          <AreaChart serie={v.chartSerie} />
         </Bloco>
       );
 
@@ -146,10 +142,9 @@ export function BlockContent({ id, v }: { id: string; v: TraffikView }) {
       return (
         <Bloco>
           <div className="card-kicker">Vendas por produto</div>
-          <Barras
-            cor="var(--color-accent)"
+          <Donut
             vazio="Nenhuma venda no período."
-            linhas={v.products.map((p) => ({ key: p.name, titulo: p.name, direita: p.totalLabel, largura: p.barWidth, sub: `${p.sales} vendas` }))}
+            fatias={v.products.map((p) => ({ name: p.name, value: p.total, label: p.totalLabel }))}
           />
         </Bloco>
       );
@@ -158,10 +153,9 @@ export function BlockContent({ id, v }: { id: string; v: TraffikView }) {
       return (
         <Bloco>
           <div className="card-kicker">Vendas por fonte</div>
-          <Barras
-            cor="var(--color-accent-500)"
+          <Donut
             vazio="Nenhuma venda no período."
-            linhas={v.sources.map((s) => ({ key: s.name, titulo: s.name, direita: `${s.totalLabel} · ${s.pctLabel}`, largura: s.barWidth }))}
+            fatias={v.sources.map((x) => ({ name: x.name, value: x.total, label: x.totalLabel }))}
           />
         </Bloco>
       );
@@ -169,21 +163,48 @@ export function BlockContent({ id, v }: { id: string; v: TraffikView }) {
     case "chart:pagamentos":
       return (
         <Bloco>
-          <div className="card-kicker">Vendas por pagamento</div>
-          <Barras
-            cor="var(--color-accent-2-500)"
+          <div className="card-kicker">Vendas por método de pagamento</div>
+          <Donut
             vazio="Nenhuma venda aprovada no período."
-            linhas={v.payments.map((p) => ({
-              key: p.name,
-              titulo: (
-                <>
-                  {p.name} <span className="text-muted">· {p.count} vendas</span>
-                </>
-              ),
-              direita: `${p.totalLabel} · ${p.pctLabel}`,
-              largura: p.barWidth,
-            }))}
+            fatias={v.payments.map((p) => ({ name: p.name, value: p.total, label: p.totalLabel }))}
           />
+        </Bloco>
+      );
+
+    case "chart:paises":
+      return (
+        <Bloco>
+          <div className="card-kicker">Vendas por país</div>
+          <CountryMap dados={v.byCountry} />
+        </Bloco>
+      );
+
+    case "chart:aprovacao":
+      return (
+        <Bloco>
+          <div className="card-kicker">Taxa de aprovação</div>
+          {v.approval.length === 0 ? (
+            <div className="text-muted" style={sx("font-size:13px;padding:var(--space-2) 0")}>
+              Nenhum evento de venda no período.
+            </div>
+          ) : (
+            <div style={sx("display:flex;flex-direction:column;gap:var(--space-3);margin-top:var(--space-2)")}>
+              {v.approval.map((a) => (
+                <div key={a.name} style={sx("display:flex;flex-direction:column;gap:4px")}>
+                  <div style={sx("display:flex;justify-content:space-between;font-size:12.5px;gap:8px")}>
+                    <span>{a.name}</span>
+                    <span style={sx("font-variant-numeric:tabular-nums;white-space:nowrap")}>
+                      <strong>{a.rate.toFixed(1).replace(".", ",")}%</strong>{" "}
+                      <span className="text-muted">({a.pagas}/{a.geradas})</span>
+                    </span>
+                  </div>
+                  <div style={sx("height:8px;border-radius:4px;background:var(--color-neutral-800);overflow:hidden")}>
+                    <div style={sx(`height:100%;border-radius:4px;background:var(--color-accent);width:${a.rate}%;transition:width var(--dur-base) var(--ease-out)`)} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </Bloco>
       );
 
@@ -242,16 +263,7 @@ export function BlockContent({ id, v }: { id: string; v: TraffikView }) {
       return (
         <Bloco>
           <div className="card-kicker">Funil de conversão</div>
-          <div style={sx("display:flex;align-items:flex-end;gap:var(--space-4);margin-top:var(--space-3);flex:1")}>
-            {v.funnel.map((stage) => (
-              <div key={stage.label} style={sx("flex:1;display:flex;flex-direction:column;align-items:center;gap:8px")}>
-                <div style={sx("font-family:var(--font-heading);font-size:22px;font-variant-numeric:tabular-nums")}>{stage.count}</div>
-                <div style={sx(`width:100%;background:${stage.color};border-radius:var(--radius-sm);height:${stage.height}`)} />
-                <div className="text-muted" style={sx("font-size:12px;text-align:center")}>{stage.label}</div>
-                {stage.hasRate && <span className="tag tag-outline" style={sx("font-size:10px")}>{stage.rate} conv.</span>}
-              </div>
-            ))}
-          </div>
+          <Funnel etapas={v.funnelStages} />
         </Bloco>
       );
 

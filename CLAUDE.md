@@ -61,6 +61,7 @@ src/
     blocks.ts                       # registro dos blocos do Dashboard (Bloco 2)
     useDashboardLayout.ts           # estado do grid (layouts, modo de edição)
     ui/{Select,DateRangePicker}.tsx # select próprio + calendário de intervalo
+    ui/{AreaChart,Donut,Funnel,CountryMap}.tsx  # gráficos do Bloco 5
     DashboardGrid.tsx  BlockContent.tsx   # grid arrastável + conteúdo de cada bloco
     useTraffikState.ts              # HOOK GIGANTE: todo o estado/derivações do dashboard
     types.ts                        # só TabKey e MetricKey
@@ -68,7 +69,7 @@ src/
                                     #   NotificationsView, FeesView, UtmView
     views/integracoes/              # AnunciosView, WebhooksView, PixelView, TestesView
   lib/
-    prisma.ts appUrl.ts format.ts sx.ts dateRange.ts
+    prisma.ts appUrl.ts format.ts sx.ts dateRange.ts countries.ts
     crypto/secrets.ts               # AES-256-GCM das credenciais em repouso
     actions/                        # server actions ("use server"), retornam DTOs
       webhooks pixels rules notifications expenses facebook dashboardPrefs session
@@ -149,7 +150,7 @@ Logins: `teste@traffik.io` / `traffik123` (vazio) · `pedrodurso8@gmail.com` /
 | 2 | Grid arrastável do Dashboard | ✅ **Feito** |
 | 3 | Filtros e container do topo | ✅ **Feito** |
 | 4 | Métricas do Dashboard (ROI×, ARPU, CPA, por horário…) | ✅ **Feito** |
-| 5 | Gráficos (funil, mapa de países, donuts, taxa de aprovação) | ⏳ pendente |
+| 5 | Gráficos (funil, mapa de países, donuts, taxa de aprovação) | ✅ **Feito** |
 | 6 | Gerenciador de Anúncios: layout+colunas estilo FB | ⏳ pendente |
 | 7 | Gerenciador: painel de ações em massa (CBO/ABO) | ⏳ pendente |
 | 8 | Regras: reformulação completa (modal, import/export) | ⏳ pendente |
@@ -555,6 +556,66 @@ abandonado (auto-expira).
 
 ---
 
+### Bloco 5 — Gráficos do Dashboard
+
+Feito (os 6 itens do roteiro):
+1. **Faturamento vs. gasto** → `ui/AreaChart.tsx`: eixo Y com escala arredondada
+   (1/2/2.5/5 × 10ⁿ), eixo X ralo conforme a quantidade de pontos, grade, duas áreas
+   sobrepostas, legenda e **tooltip seguindo o mouse**.
+2. **Funil** → `ui/Funnel.tsx`: trapézios empilhados de verdade (o topo de cada um é a
+   base do anterior), 5 etapas, taxa de conversão vs. etapa anterior e transição animada.
+3. **Vendas por país** → `ui/CountryMap.tsx`, com toggle **Ranking | Mapa**, pontos
+   luminosos proporcionais, pan/zoom e tooltip.
+4. **Produto e Fonte** → `ui/Donut.tsx` com legenda lateral (valor + %) e destaque no hover.
+5. **Método de pagamento** → mesmo Donut.
+6. **Taxa de aprovação** → barras por método com `pagas/geradas`.
+
+**Dois gaps de dados que o bloco precisou fechar:**
+- **Eventos de pixel não eram persistidos** — o `/api/pixel/event` só repassava à CAPI e
+  descartava. Sem isso o estágio "Initiate Checkout" do funil não tinha fonte. Nova
+  tabela **`PixelEvent`** (migration `20260724220000`); a gravação é best-effort e nunca
+  bloqueia o envio à CAPI.
+- **`Sale.country` existia mas nunca era agregado.** Agora `byCountry` usa o país da
+  venda e cai no país do clique quando o gateway não manda.
+
+> **Por que NÃO usei `react-simple-maps`** (o roteiro sugeria): ele exige um TopoJSON de
+> mundo (~100 KB+) que por padrão vem de **CDN** — dependência de rede em runtime para
+> um bloco secundário. A projeção equirretangular é uma conta linear (`lng→x`, `lat→y`),
+> então o mapa é desenhado à mão sobre uma grade de meridianos, com centroides em
+> `lib/countries.ts`. **Custo: não há fronteiras desenhadas.** Se quiser o mapa
+> "de verdade", é trocar este componente e bundlar o atlas.
+
+**Bug pré-existente corrigido:** o `buildChart` gerava `round((end-start)/dia)` buckets
+a partir de `start`, então em "últimos 7 dias" o último bucket parava **ontem** —
+as vendas de hoje caíam fora de todos os buckets e o gráfico ficava achatado em zero
+(com o eixo Y indo até R$ 1). Agora são `days + 1` buckets. Verificado: a soma da série
+do gráfico passou a bater exatamente com o KPI de faturamento.
+
+**Decisão no funil:** a base do trapézio é o **maior** estágio, não o primeiro. Com o
+Facebook ainda não sincronizado, "cliques no anúncio" é 0 e o funil ficaria invisível
+mesmo havendo checkouts e vendas.
+
+**Testado com dados semeados** (7 vendas em 4 países, 3 métodos, misturando aprovadas e
+pendentes + 9 eventos de IC): taxa de aprovação saiu **Pix 4/5 = 80%, Cartão 1/3 = 33,3%,
+Boleto 1/1 = 100%**; países BR/PT/AR com os valores certos; funil com os 5 estágios;
+donuts com percentuais somando 100%. Dados de teste removidos depois.
+
+**Incompleto / TODO no Bloco 5:**
+- **O mapa não tem fronteiras** (ver a nota acima) — são pontos sobre uma grade.
+- **`lib/countries.ts` cobre ~32 países.** Um país fora da lista aparece no Ranking com
+  o código cru, mas **não ganha ponto no mapa**. Ampliar é acrescentar uma linha.
+- **O funil mistura fontes com granularidades diferentes**: "cliques no anúncio" vem de
+  métricas **diárias** do Facebook, enquanto os outros estágios são eventos com hora.
+  Num período de horas os números não são comparáveis.
+- **"Vendas iniciadas" conta todos os eventos de venda** (inclusive reembolsadas e
+  chargebacks), porque é o que existe hoje na tabela.
+- Os rótulos dos eixos ficam dentro de um SVG com `preserveAspectRatio="none"`; em
+  blocos muito largos e baixos o texto estica. O tooltip já é HTML por isso.
+- A **animação do funil** depende do browser interpolar `points`; o suporte é bom mas
+  não é garantido em todos.
+
+---
+
 ### Bloco 4 — Métricas do Dashboard
 
 Feito:
@@ -791,9 +852,8 @@ Registradas de propósito — **não são bugs esquecidos**, são decisões toma
 
 1. **Resolver o deploy da Vercel** — os 4 passos manuais na seção acima. É a única
    pendência que depende do painel e trava ver qualquer coisa em produção.
-2. **Bloco 5** (gráficos) — o maior do roteiro: refazer o "Faturamento vs. gasto" com
-   eixos e tooltip, funil trapezoidal proporcional, **mapa-múndi de vendas por país**
-   (novo, precisa de `react-simple-maps` e de país na venda), donuts para fonte/produto/
-   pagamento e a **Taxa de Aprovação** por método (que já é possível: o upsert do
-   Bloco 10 registra venda gerada e paga na mesma linha).
+2. **Bloco 6** (Gerenciador de Anúncios: layout e colunas estilo Facebook) — abas viram
+   cards, tabela com 14 colunas de métricas, colunas fixas ao rolar, toggle de
+   pausar/ativar na primeira coluna chamando a Marketing API, e checkboxes de seleção.
+3. Depois **Bloco 7** (ações em massa, CBO/ABO) e **Bloco 8** (Regras).
 4. Faxina pendente: a dívida técnica #2 (nav morto no `useTraffikState`).

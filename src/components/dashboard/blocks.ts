@@ -70,6 +70,9 @@ const CHART_BLOCKS: BlockDef[] = [
   { id: "chart:vendasHora", label: "Vendas por horário", kind: "chart", w: 6, h: 6, minW: 3, minH: 4 },
   { id: "chart:lucroHora", label: "Lucro por horário", kind: "chart", w: 6, h: 6, minW: 3, minH: 4 },
   { id: "chart:vendasDia", label: "Vendas por dia", kind: "chart", w: 12, h: 6, minW: 4, minH: 4 },
+  // Bloco 5 — também entram desativados.
+  { id: "chart:paises", label: "Vendas por país", kind: "chart", w: 6, h: 8, minW: 3, minH: 5 },
+  { id: "chart:aprovacao", label: "Taxa de aprovação", kind: "chart", w: 6, h: 6, minW: 3, minH: 4 },
 ];
 
 export const ALL_BLOCKS: BlockDef[] = [...KPI_BLOCKS, ...CHART_BLOCKS];

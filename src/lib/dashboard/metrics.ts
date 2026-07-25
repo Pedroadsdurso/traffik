@@ -38,7 +38,11 @@ export interface DashboardData {
   products: { name: string; total: number; sales: number }[];
   sources: { name: string; total: number }[];
   payments: { name: string; total: number; count: number }[];
-  funnel: { cliques: number; checkouts: number; vendas: number };
+  funnel: { cliques: number; visitas: number; checkouts: number; iniciadas: number; vendas: number };
+  /** Vendas aprovadas por país (ISO-2), ordenado por faturamento — Bloco 5. */
+  byCountry: { code: string; sales: number; revenue: number }[];
+  /** Taxa de aprovação por método de pagamento — Bloco 5. */
+  approval: { name: string; geradas: number; pagas: number; rate: number }[];
   /** 24 posições (0–23) da janela filtrada — Bloco 4. */
   byHour: { hour: number; sales: number; revenue: number; profit: number }[];
   /** Vendas por dia da janela filtrada, no máximo 30 dias — Bloco 4. */
@@ -103,7 +107,7 @@ async function windowAggregate(userId: string, filters: DashboardFilters, start:
   const sourceFilter = filters.source !== "todas" ? filters.source : null;
   const productFilter = filters.product !== "todos" ? filters.product : null;
 
-  const [sales, clicks, metrics, expenses] = await Promise.all([
+  const [sales, clicks, metrics, expenses, initiateCheckouts] = await Promise.all([
     prisma.sale.findMany({
       where: {
         userId,
@@ -120,7 +124,8 @@ async function windowAggregate(userId: string, filters: DashboardFilters, start:
         timestamp: true,
         buyerName: true,
         buyerEmail: true, // identifica comprador único para o ARPU
-        click: { select: { utmSource: true, utmCampaign: true } },
+        country: true, // "Vendas por país" (Bloco 5)
+        click: { select: { utmSource: true, utmCampaign: true, country: true } },
       },
       orderBy: { timestamp: "desc" },
     }),
@@ -147,9 +152,13 @@ async function windowAggregate(userId: string, filters: DashboardFilters, start:
       where: { userId, active: true },
       select: { type: true, calc: true, amount: true, paymentMethod: true },
     }),
+    // Bloco 5: alimenta o estágio "Initiate Checkout" do funil.
+    prisma.pixelEvent.count({
+      where: { userId, event: "InitiateCheckout", timestamp: { gte: start, lte: end } },
+    }),
   ]);
 
-  return { sales, clicks, metrics, expenses };
+  return { sales, clicks, metrics, expenses, initiateCheckouts };
 }
 
 export async function computeDashboard(userId: string, filters: DashboardFilters): Promise<DashboardData> {
@@ -209,6 +218,8 @@ export async function computeDashboard(userId: string, filters: DashboardFilters
     sources: summary.sources,
     payments: summary.payments,
     funnel: summary.funnel,
+    byCountry: summary.byCountry,
+    approval: summary.approval,
     byHour: summary.byHour,
     byDay: summary.byDay,
     activity,
@@ -305,7 +316,52 @@ function summarize(w: Window) {
     .map(([k, v]) => ({ name: PAYMENT_LABEL[k], ...v }))
     .sort((a, b) => b.total - a.total);
 
-  const funnel = { cliques: clicksCount, checkouts: totalSalesEvents, vendas: salesCount };
+  // ── Funil de 5 estágios (Bloco 5) ──
+  // "Cliques" são os cliques NO ANÚNCIO (métricas do Facebook); "visitas" são as
+  // páginas efetivamente carregadas com o nosso script. A diferença entre os
+  // dois é justamente o que o funil existe para mostrar.
+  const funnel = {
+    cliques: adClicks,
+    visitas: clicksCount,
+    checkouts: w.initiateCheckouts,
+    iniciadas: totalSalesEvents,
+    vendas: salesCount,
+  };
+
+  // ── Vendas por país (Bloco 5) ──
+  // Prefere o país da venda; cai no país do clique quando o gateway não manda.
+  const paisMap = new Map<string, { sales: number; revenue: number }>();
+  for (const s of approved) {
+    const code = (s.country ?? s.click?.country ?? "").trim().toUpperCase();
+    if (!code) continue;
+    const cur = paisMap.get(code) ?? { sales: 0, revenue: 0 };
+    cur.sales += 1;
+    cur.revenue += num(s.value);
+    paisMap.set(code, cur);
+  }
+  const byCountry = [...paisMap.entries()]
+    .map(([code, v]) => ({ code, ...v }))
+    .sort((a, b) => b.revenue - a.revenue);
+
+  // ── Taxa de aprovação por método (Bloco 5) ──
+  // "Gerada" é qualquer evento de venda daquele método; "paga" é a APROVADA.
+  // O upsert por externalId (Bloco 10) faz a transição gerada→paga na MESMA
+  // linha, então basta contar por status — não há dupla contagem.
+  const aprovMap = new Map<PaymentMethod, { geradas: number; pagas: number }>();
+  for (const s of w.sales) {
+    const cur = aprovMap.get(s.paymentMethod) ?? { geradas: 0, pagas: 0 };
+    cur.geradas += 1;
+    if (s.status === "APROVADA") cur.pagas += 1;
+    aprovMap.set(s.paymentMethod, cur);
+  }
+  const approval = [...aprovMap.entries()]
+    .map(([method, v]) => ({
+      name: PAYMENT_LABEL[method],
+      geradas: v.geradas,
+      pagas: v.pagas,
+      rate: v.geradas ? (v.pagas / v.geradas) * 100 : 0,
+    }))
+    .sort((a, b) => b.geradas - a.geradas);
 
   // ── Séries por horário e por dia (Bloco 4) ──
   //
@@ -349,7 +405,7 @@ function summarize(w: Window) {
   return {
     revenue, salesCount, pendentes, reembolsadas, chargebackRate,
     spend, clicksCount, ticket, cpa, roas, ctr, profit, roi, margin, arpu, buyers,
-    expenses, products, sources, payments, funnel, byHour, byDay,
+    expenses, products, sources, payments, funnel, byHour, byDay, byCountry, approval,
   };
 }
 
@@ -369,7 +425,10 @@ function buildChart(w: Window, start: Date, end: Date, granularity: "hour" | "da
       buckets.push({ label: `${String(h).padStart(2, "0")}h`, start: bs.getTime(), end: be.getTime() });
     }
   } else {
-    const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 864e5));
+    // `+ 1` porque os dois extremos entram: em "últimos 7 dias" o intervalo vai
+    // de hoje-7 até agora, e sem o +1 o último bucket parava ONTEM — as vendas
+    // de hoje caíam fora de todos os buckets e o gráfico ficava achatado em zero.
+    const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 864e5) + 1);
     for (let d = 0; d < days; d++) {
       const bs = new Date(start.getTime() + d * 864e5);
       bs.setHours(0, 0, 0, 0);

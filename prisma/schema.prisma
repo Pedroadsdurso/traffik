@@ -151,6 +151,7 @@ model User {
   dashboardPreference  DashboardPreference?
   webhookLogs          WebhookLog[]
   dashboardLayouts     DashboardLayout[]
+  pixelEvents          PixelEvent[]
 }
 
 // ─────────────────── Facebook: perfis, contas, estrutura ───────────────────
@@ -451,6 +452,26 @@ model DashboardLayout {
 
   @@unique([userId, viewport])
   @@index([userId])
+}
+
+/// Evento recebido do script de pixel próprio (Bloco 5). Antes os eventos só
+/// eram repassados à CAPI e descartados — sem persistir não havia como contar
+/// o "Initiate Checkout" no funil de conversão.
+model PixelEvent {
+  id String @id @default(cuid())
+  /// "Lead" | "AddToCart" | "InitiateCheckout" — o nome do evento na CAPI.
+  event     String
+  /// Id gerado no cliente; guardado para depuração/dedup futura.
+  eventId   String?
+  url       String?
+  fbclid    String?
+  timestamp DateTime @default(now())
+
+  userId        String
+  user          User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pixelConfigId String?
+
+  @@index([userId, event, timestamp])
 }
 
 /// Log cru de cada payload recebido por webhook — alimenta o "Teste de Webhook"

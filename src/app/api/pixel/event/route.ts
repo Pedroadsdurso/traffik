@@ -56,6 +56,24 @@ export async function POST(req: NextRequest) {
   const rule = config.eventRules[0];
   if (!rule?.enabled) return json({ ok: true, skipped: "regra desabilitada" });
 
+  // Persiste o evento (Bloco 5): sem isto o funil não tem como contar o
+  // "Initiate Checkout" — antes o evento só era repassado à CAPI e descartado.
+  // Falhar aqui não pode impedir o envio, que é o que o usuário realmente quer.
+  try {
+    await prisma.pixelEvent.create({
+      data: {
+        userId: config.userId,
+        pixelConfigId: config.id,
+        event: eventKey,
+        eventId: typeof body.eventId === "string" ? body.eventId : null,
+        url: typeof body.url === "string" ? body.url.slice(0, 500) : null,
+        fbclid: typeof body.fbclid === "string" ? body.fbclid : null,
+      },
+    });
+  } catch (e) {
+    console.error("[pixel/event] falha ao persistir evento:", e);
+  }
+
   const targets =
     config.metaPixels.length > 0
       ? config.metaPixels

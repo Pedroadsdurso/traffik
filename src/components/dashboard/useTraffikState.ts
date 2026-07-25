@@ -552,6 +552,7 @@ export function useTraffikState(
   const products = (d?.products ?? []).map((p) => ({
     name: p.name,
     sales: p.sales,
+    total: p.total, // valor cru: o Donut calcula a fatia (Bloco 5)
     totalLabel: brl0(p.total),
     barWidth: Math.round((p.total / prodMax) * 100) + "%",
   }));
@@ -559,6 +560,7 @@ export function useTraffikState(
   const srcMax = Math.max(1, ...(d?.sources ?? []).map((x) => x.total));
   const sources = (d?.sources ?? []).map((x) => ({
     name: x.name,
+    total: x.total,
     totalLabel: brl0(x.total),
     pctLabel: Math.round((x.total / srcTotal) * 100) + "%",
     barWidth: Math.round((x.total / srcMax) * 100) + "%",
@@ -567,6 +569,7 @@ export function useTraffikState(
   const payMax = Math.max(1, ...(d?.payments ?? []).map((x) => x.total));
   const payments = (d?.payments ?? []).map((x) => ({
     name: x.name,
+    total: x.total,
     count: x.count,
     totalLabel: brl0(x.total),
     pctLabel: Math.round((x.total / payTotal) * 100) + "%",
@@ -968,6 +971,17 @@ export function useTraffikState(
     // independente, então precisa acessar a métrica pelo id e não pela ordem.
     metricCards: reg,
     // Séries do Bloco 4 (por horário / por dia), já filtradas no servidor.
+    // Bloco 5: séries brutas para os gráficos novos (o front formata).
+    chartSerie: { labels: d?.chart.labels ?? [], revenue: d?.chart.revenue ?? [], spend: d?.chart.spend ?? [] },
+    funnelStages: [
+      { label: "Cliques no anúncio", value: d?.funnel.cliques ?? 0 },
+      { label: "Visita na página", value: d?.funnel.visitas ?? 0 },
+      { label: "Initiate Checkout", value: d?.funnel.checkouts ?? 0 },
+      { label: "Vendas iniciadas", value: d?.funnel.iniciadas ?? 0 },
+      { label: "Vendas", value: d?.funnel.vendas ?? 0 },
+    ],
+    byCountry: d?.byCountry ?? [],
+    approval: d?.approval ?? [],
     byHour: d?.byHour ?? [],
     byDay: d?.byDay ?? [],
     buyers,
