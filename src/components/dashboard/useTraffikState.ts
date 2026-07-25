@@ -92,6 +92,9 @@ interface State {
   pixels: PixelConfigDTO[];
   editDashOpen: boolean;
   dashPeriod: DashPeriod;
+  /** Intervalo do período "Personalizado" (ISO `YYYY-MM-DD`). */
+  dashFrom: string | null;
+  dashTo: string | null;
   dashAccount: string;
   dashProduct: string;
   dashSource: string;
@@ -203,6 +206,8 @@ function initialState(
     pixels: initialPixels,
     editDashOpen: false,
     dashPeriod: "7d",
+    dashFrom: null,
+    dashTo: null,
     dashAccount: "todas",
     dashProduct: "todos",
     dashSource: "todas",
@@ -379,6 +384,11 @@ export function useTraffikState(
         product: s.dashProduct,
         source: s.dashSource,
       });
+      // `from`/`to` só fazem sentido no período personalizado.
+      if (s.dashPeriod === "custom" && s.dashFrom) {
+        qs.set("from", s.dashFrom);
+        qs.set("to", s.dashTo ?? s.dashFrom);
+      }
       try {
         const res = await fetch(`/api/dashboard?${qs.toString()}`, { signal: controller.signal });
         if (!res.ok) return;
@@ -392,7 +402,7 @@ export function useTraffikState(
     if (!liveUpdates) return () => { active = false; controller.abort(); };
     const stop = startPolling(load, 15000);
     return () => { active = false; controller.abort(); stop(); };
-  }, [s.dashPeriod, s.dashAccount, s.dashProduct, s.dashSource, s.refreshKey, liveUpdates]);
+  }, [s.dashPeriod, s.dashFrom, s.dashTo, s.dashAccount, s.dashProduct, s.dashSource, s.refreshKey, liveUpdates]);
 
   // Gerenciador de anúncios: busca sob demanda (período/conta) — status e busca
   // são filtrados no cliente para não refazer a cada tecla.
@@ -937,10 +947,16 @@ export function useTraffikState(
     dashAccount: s.dashAccount,
     dashProduct: s.dashProduct,
     dashSource: s.dashSource,
-    onDashPeriod: (e: React.ChangeEvent<HTMLSelectElement>) => set({ dashPeriod: e.target.value as DashPeriod }),
-    onDashAccount: (e: React.ChangeEvent<HTMLSelectElement>) => set({ dashAccount: e.target.value }),
-    onDashProduct: (e: React.ChangeEvent<HTMLSelectElement>) => set({ dashProduct: e.target.value }),
-    onDashSource: (e: React.ChangeEvent<HTMLSelectElement>) => set({ dashSource: e.target.value }),
+    dashFrom: s.dashFrom,
+    dashTo: s.dashTo,
+    // Setters por valor: os filtros do Bloco 3 são componentes próprios, não
+    // `<select>` nativos, então não existe mais um ChangeEvent para ler.
+    setDashPeriod: (p: DashPeriod) => set({ dashPeriod: p }),
+    setDashAccount: (v: string) => set({ dashAccount: v }),
+    setDashProduct: (v: string) => set({ dashProduct: v }),
+    setDashSource: (v: string) => set({ dashSource: v }),
+    /** Aplica o intervalo do calendário e já muda o período para "custom". */
+    setDashRange: (from: string, to: string) => set({ dashPeriod: "custom", dashFrom: from, dashTo: to }),
 
     kpiCards, chart, chartPeriodLabel, products, sources, payments, funnel, feed, metricList,
     // Registro por chave: o grid do Bloco 2 renderiza cada KPI como bloco

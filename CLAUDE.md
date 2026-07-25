@@ -59,6 +59,8 @@ src/
     Header.tsx  Sidebar.tsx         # navegação por ROTA (usePathname + Link)
     EditDashboardDrawer.tsx  Icon.tsx  ImageSlot.tsx
     blocks.ts                       # registro dos blocos do Dashboard (Bloco 2)
+    useDashboardLayout.ts           # estado do grid (layouts, modo de edição)
+    ui/{Select,DateRangePicker}.tsx # select próprio + calendário de intervalo
     DashboardGrid.tsx  BlockContent.tsx   # grid arrastável + conteúdo de cada bloco
     useTraffikState.ts              # HOOK GIGANTE: todo o estado/derivações do dashboard
     types.ts                        # só TabKey e MetricKey
@@ -66,7 +68,7 @@ src/
                                     #   NotificationsView, FeesView, UtmView
     views/integracoes/              # AnunciosView, WebhooksView, PixelView, TestesView
   lib/
-    prisma.ts appUrl.ts format.ts sx.ts
+    prisma.ts appUrl.ts format.ts sx.ts dateRange.ts
     crypto/secrets.ts               # AES-256-GCM das credenciais em repouso
     actions/                        # server actions ("use server"), retornam DTOs
       webhooks pixels rules notifications expenses facebook dashboardPrefs session
@@ -145,7 +147,7 @@ Logins: `teste@traffik.io` / `traffik123` (vazio) · `pedrodurso8@gmail.com` /
 |-------|-----------|--------|
 | 1 | Reestruturação da navegação (rotas reais) | ✅ **Feito** |
 | 2 | Grid arrastável do Dashboard | ✅ **Feito** |
-| 3 | Filtros e container do topo | ⏳ pendente |
+| 3 | Filtros e container do topo | ✅ **Feito** |
 | 4 | Métricas do Dashboard (ROI×, ARPU, CPA, por horário…) | ⏳ pendente |
 | 5 | Gráficos (funil, mapa de países, donuts, taxa de aprovação) | ⏳ pendente |
 | 6 | Gerenciador de Anúncios: layout+colunas estilo FB | ⏳ pendente |
@@ -553,6 +555,61 @@ abandonado (auto-expira).
 
 ---
 
+### Bloco 3 — Filtros e container do topo
+
+Feito:
+- **Container único** (`.tk-filtros`) com os 4 filtros + o botão "Editar dashboard",
+  usando fundo/borda/raio dos cards. Para o botão morar aqui, o estado do grid saiu do
+  `DashboardGrid` para o hook **`useDashboardLayout`**, chamado na `DashboardView` — o
+  grid virou puro renderizador. Em modo de edição o container troca o botão por
+  Salvar / Cancelar / Redefinir.
+- **`ui/Select.tsx`** — select próprio (o nativo não aceita dropdown escuro nem busca).
+  Mantém o que o nativo dava de graça em acessibilidade: `combobox`/`listbox`, setas,
+  Enter/Esc/Home/End e foco de volta no gatilho ao fechar. **Busca interna aparece só
+  quando a lista tem ≥ 8 itens** (`searchThreshold`) — é o caso das contas de anúncio.
+- **`ui/DateRangePicker.tsx`** — calendário de intervalo: seleção de duas pontas com
+  pré-visualização no hover, setas de mês, dropdowns de mês e ano, os 6 atalhos
+  (Hoje / Ontem / Últimos 7 / Últimos 30 / Este mês / Mês passado), Aplicar e Cancelar,
+  e dias futuros desabilitados.
+- **`lib/dateRange.ts`** — a lógica de data ficou fora do componente, como função pura
+  e testável.
+
+> ⚠️ **Nunca usar `Date.toISOString()` para pegar "o dia".** Ele converte para UTC e no
+> Brasil (UTC-3) **a partir das 21h local já devolve o dia seguinte** — o filtro "Hoje"
+> apontaria para amanhã toda noite. Use `toISO()` do `lib/dateRange.ts`, que monta a
+> data a partir dos componentes locais. Verificado: 21:00 de 24/07 → `toISOString()`
+> dá `2026-07-25`.
+
+O backend **já suportava** `period=custom` com `from`/`to` (em `metrics.ts` desde a v1);
+faltava só o front mandar. `useTraffikState` ganhou `dashFrom`/`dashTo` e setters por
+valor (`setDashPeriod`, `setDashRange`, …) no lugar dos antigos `onDashX` que recebiam
+um `ChangeEvent` de `<select>` nativo.
+
+**Testado:** 17 casos da lógica de data passando, incluindo ano bissexto, "Mês passado"
+a partir de janeiro (cai em dez/2025), grade de julho (3 vazios + 31 dias) e a
+divergência de fuso demonstrada às 21h. No navegador: dropdown escuro com hover roxo e
+✓ no selecionado; calendário abre **dentro da tela** com os 6 atalhos e 7 dias futuros
+desabilitados; aplicar "Este mês" fechou o popup, mudou o rótulo do filtro para
+`01/07 – 24/07` e disparou
+`GET /api/dashboard?period=custom&…&from=2026-07-01&to=2026-07-24` → 200.
+Também confirmei aqui o que faltava do Bloco 2: **o layout salvo é restaurado** ao
+recarregar.
+
+**Incompleto / TODO no Bloco 3:**
+- O calendário é **um mês só** (o padrão do mercado para intervalo mostra dois lado a
+  lado). Escolher um intervalo longo exige navegar de mês em mês.
+- **Ancoragem fixa** (`left: 0`): o popup abre sempre alinhado à esquerda do gatilho,
+  com `max-width` para não sair da tela. Não há reposicionamento automático — se o
+  filtro de período for para o lado direito da barra um dia, vai precisar de ajuste.
+- Os `<select>` de mês/ano **dentro** do calendário ainda são nativos. São listas
+  curtas e dentro de um popup já customizado; trocar traria pouco.
+- O `Select` não faz *type-ahead* (digitar "c" para pular para "Cartão") quando a busca
+  está escondida.
+- Sem `<Portal>`: o popup é `position:absolute` dentro do container. Funciona porque o
+  container não tem `overflow:hidden`, mas é uma dependência frágil.
+
+---
+
 ### Bloco 2 — Grid arrastável do Dashboard
 
 **Escolha da lib: `react-grid-layout` 2.2.3.** O `dnd-kit` é melhor para listas
@@ -687,10 +744,9 @@ Registradas de propósito — **não são bugs esquecidos**, são decisões toma
 
 1. **Resolver o deploy da Vercel** — os 4 passos manuais na seção acima. É a única
    pendência que depende do painel e trava ver qualquer coisa em produção.
-2. **Bloco 3** (filtros e container do topo) — agrupar os selects + "Editar dashboard"
-   num container com o estilo dos cards, trocar os selects nativos por componentes
-   próprios e fazer o seletor de período "Personalizado" abrir um calendário de
-   intervalo de verdade.
-3. Depois **Bloco 4** (métricas: ROI em multiplicador, ARPU, CPA, por horário) — o
-   `blocks.ts` do Bloco 2 já é o ponto de extensão: cada métrica nova é uma entrada.
+2. **Bloco 4** (métricas do Dashboard): corrigir o **ROI para multiplicador** (`1,87x`
+   em vez de `1331%` — hoje sai em porcentagem), e somar ARPU, CPA, vendas por horário,
+   lucro por horário e vendas por dia. O `blocks.ts` do Bloco 2 é o ponto de extensão:
+   cada métrica nova é uma entrada na lista, e já aparece no painel de disponíveis.
+3. Depois **Bloco 5** (gráficos), que é o maior do roteiro.
 4. Faxina pendente: a dívida técnica #2 (nav morto no `useTraffikState`).

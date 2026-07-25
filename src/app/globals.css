@@ -452,3 +452,78 @@ a {
   border-right: 2px solid var(--color-accent); border-bottom: 2px solid var(--color-accent);
   border-radius: 0 0 2px 0;
 }
+
+/* ─────────── Select próprio e calendário de intervalo (Bloco 3) ─────────── */
+
+.tk-filtros {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: var(--space-4); flex-wrap: wrap;
+  padding: var(--space-3);
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+}
+
+.tk-select {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  min-height: 36px; padding: 6px 10px; font: inherit; font-size: 14px;
+  color: var(--color-text); text-align: left; cursor: pointer;
+  background: var(--color-bg);
+  border: 1px solid var(--color-divider); border-radius: var(--radius-md);
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.tk-select:hover { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); }
+.tk-select[aria-expanded="true"] { border-color: var(--color-accent); }
+.tk-caret { flex: none; opacity: .6; transition: transform var(--dur-fast) var(--ease-out); }
+.tk-caret-open { transform: rotate(180deg); }
+
+/* Camada flutuante compartilhada pelo dropdown e pelo calendário. */
+.tk-pop {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 40;
+  min-width: 100%; padding: 6px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider); border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  animation: fade-rise var(--dur-fast) var(--ease-out) both;
+}
+
+.tk-opt {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 7px 10px; font-size: 13.5px; cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+/* O destaque segue o teclado E o mouse (a classe é aplicada no onMouseEnter). */
+.tk-opt-ativa { background: color-mix(in srgb, var(--color-accent) 22%, transparent); }
+.tk-opt[aria-selected="true"] { color: var(--color-accent-200); }
+
+/* Ancora à esquerda: o painel é bem mais largo que o gatilho, e o filtro de
+   período é o primeiro da barra — ancorar à direita jogava os atalhos para
+   fora da tela. `max-width` + scroll protegem telas estreitas. */
+.tk-calendario {
+  left: 0; right: auto; padding: var(--space-3);
+  width: max-content; max-width: min(92vw, 560px); overflow: auto;
+}
+
+.tk-atalho {
+  text-align: left; padding: 6px 10px; font-size: 13px; cursor: pointer;
+  color: var(--color-text); background: transparent; border: 0;
+  border-radius: var(--radius-sm);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.tk-atalho:hover { background: color-mix(in srgb, var(--color-accent) 18%, transparent); }
+
+.tk-grade { display: grid; grid-template-columns: repeat(7, 32px); gap: 2px; }
+.tk-grade-cab {
+  display: grid; place-items: center; height: 24px;
+  font-size: 10px; text-transform: uppercase; opacity: .45;
+}
+.tk-dia {
+  height: 30px; border: 0; border-radius: var(--radius-sm); cursor: pointer;
+  font: inherit; font-size: 12.5px; font-variant-numeric: tabular-nums;
+  color: var(--color-text); background: transparent;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.tk-dia:hover:not(:disabled) { background: color-mix(in srgb, var(--color-text) 12%, transparent); }
+.tk-dia:disabled { opacity: .25; cursor: not-allowed; }
+.tk-dia-dentro { background: color-mix(in srgb, var(--color-accent) 20%, transparent); border-radius: 0; }
+.tk-dia-ponta { background: var(--color-accent-700); color: var(--color-accent-100); }
