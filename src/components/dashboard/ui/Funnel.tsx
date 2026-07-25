@@ -50,7 +50,7 @@ export function Funnel({ etapas }: { etapas: EtapaFunil[] }) {
 
   // Piso de 3% para uma etapa zerada continuar sendo um fio visível em vez de
   // um buraco no meio do desenho.
-  const alturas = etapas.map((e) => Math.max(0.03, e.value / max));
+  const alturas = etapas.map((e) => Math.max(0.045, e.value / max));
 
   const col = W / n;
   const alturaUtil = H - TOPO - BASE;
@@ -135,9 +135,13 @@ export function Funnel({ etapas }: { etapas: EtapaFunil[] }) {
             const ant = i > 0 ? etapas[i - 1]!.value : null;
             const taxa = i === 0 ? null : ant && ant > 0 ? (e.value / ant) * 100 : 0;
             return (
-              <span key={e.label}
-                style={sx(`font-size:14px;font-weight:700;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.65);opacity:${pronto ? 1 : 0};transition:opacity 500ms 400ms var(--ease-out)`)}>
-                {taxa === null ? "—" : `${taxa.toFixed(1).replace(".", ",")}%`}
+              <span key={e.label} style={sx("display:flex;justify-content:center")}>
+                {/* Fundo semi-transparente + sombra: o gradiente por baixo varia
+                    muito de luminosidade e o número branco puro sumia em cima
+                    dos tons claros. */}
+                <span style={sx(`font-size:14px;font-weight:700;color:#fff;padding:2px 9px;border-radius:999px;background:rgba(10,12,24,.42);backdrop-filter:blur(2px);text-shadow:0 1px 3px rgba(0,0,0,.8);opacity:${pronto ? 1 : 0};transition:opacity 500ms 400ms var(--ease-out)`)}>
+                  {taxa === null ? "—" : `${taxa.toFixed(1).replace(".", ",")}%`}
+                </span>
               </span>
             );
           })}
@@ -163,13 +167,22 @@ export function Funnel({ etapas }: { etapas: EtapaFunil[] }) {
           linhas={[
             { cor: GRAD_FUNIL[Math.min(tip.i, GRAD_FUNIL.length - 1)], label: "Total", valor: etapas[tip.i]!.value.toLocaleString("pt-BR") },
             ...(tip.i > 0
-              ? [{
-                  label: `vs. ${etapas[tip.i - 1]!.curto}`,
-                  valor:
-                    etapas[tip.i - 1]!.value > 0
-                      ? `${((etapas[tip.i]!.value / etapas[tip.i - 1]!.value) * 100).toFixed(1).replace(".", ",")}%`
-                      : "—",
-                }]
+              ? [
+                  {
+                    label: `vs. ${etapas[tip.i - 1]!.curto}`,
+                    valor:
+                      etapas[tip.i - 1]!.value > 0
+                        ? `${((etapas[tip.i]!.value / etapas[tip.i - 1]!.value) * 100).toFixed(1).replace(".", ",")}%`
+                        : "—",
+                  },
+                  {
+                    label: `vs. ${etapas[0]!.curto} (topo)`,
+                    valor:
+                      etapas[0]!.value > 0
+                        ? `${((etapas[tip.i]!.value / etapas[0]!.value) * 100).toFixed(1).replace(".", ",")}%`
+                        : "—",
+                  },
+                ]
               : []),
           ]}
         />

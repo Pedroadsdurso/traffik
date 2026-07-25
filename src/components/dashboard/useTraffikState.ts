@@ -597,16 +597,28 @@ export function useTraffikState(
     { label: "Vendas", count: fn.vendas.toLocaleString("pt-BR"), height: funH(fn.vendas), color: "var(--color-accent)", hasRate: true, rate: rate(fn.vendas, fn.checkouts) },
   ];
 
-  const feed = (d?.activity ?? []).map((f) => ({
-    id: f.id,
-    type: f.type,
-    source: f.source,
-    campaign: f.campaign,
-    tagClass: f.type === "venda" ? "tag tag-accent" : "tag tag-outline",
-    typeLabel: f.type === "venda" ? "Venda" : "Clique",
-    valueLabel: f.value != null ? brl(f.value) : "—",
-    timeLabel: elapsed(f.ts),
-  }));
+  // Feed unificado: cada tipo de evento tem rótulo e cor próprios.
+  const EVENTO_META: Record<string, { label: string; cor: string }> = {
+    clique: { label: "Clique", cor: "#60a5fa" },
+    checkout: { label: "Checkout", cor: "#a78bfa" },
+    venda_pendente: { label: "Venda pendente", cor: "#fbbf24" },
+    venda_aprovada: { label: "Venda aprovada", cor: "#4ade80" },
+    reembolso: { label: "Reembolso", cor: "#f87171" },
+    chargeback: { label: "Chargeback", cor: "#fb7185" },
+  };
+  const feed = (d?.activity ?? []).map((f) => {
+    const meta = EVENTO_META[f.type] ?? { label: f.type, cor: "var(--color-neutral-400)" };
+    return {
+      id: f.id,
+      type: f.type,
+      source: f.source,
+      campaign: f.campaign,
+      typeLabel: meta.label,
+      cor: meta.cor,
+      valueLabel: f.value != null ? brl(f.value) : "—",
+      timeLabel: elapsed(f.ts),
+    };
+  });
 
   const filterOptions = d?.filterOptions ?? { accounts: [], products: [], sources: [] };
 

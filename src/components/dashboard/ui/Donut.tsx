@@ -71,6 +71,13 @@ export function Donut({
       style={sx("position:relative;display:flex;align-items:center;gap:var(--space-4);flex:1;min-height:0;padding:var(--space-2) 0")}>
       <svg viewBox="0 0 160 160" style={{ flex: "0 1 42%", minWidth: 130, maxWidth: 220, height: "100%", minHeight: 150 }}
         role="img" aria-label="Distribuição">
+        <defs>
+          {/* Com uma fatia só o anel fica "chapado"; o glow devolve profundidade. */}
+          <filter id="donut-glow" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="3.5" result="b" />
+            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
         {/* Trilho: dá forma ao donut mesmo com uma fatia só */}
         <circle cx={cx} cy={cy} r={R} fill="none" stroke="var(--color-neutral-900)" strokeWidth={ESPESSURA} opacity={0.55} />
 
@@ -94,6 +101,7 @@ export function Donut({
               key={f.name}
               d={arco(cx + dx, cy + dy, rExt, rInt, ini + gap, fim - gap)}
               fill={PALETA[i % PALETA.length]}
+              filter={fatias.length === 1 ? "url(#donut-glow)" : undefined}
               opacity={ativa === null || on ? 1 : 0.32}
               strokeLinejoin="round"
               style={{
@@ -113,21 +121,23 @@ export function Donut({
         })}
 
         <text x={cx} y={ativa !== null ? cy - 2 : cy + 2} textAnchor="middle"
-          style={{ fontSize: ativa !== null ? 17 : 19, fontWeight: 600, fill: "var(--color-text)" }}>
-          {ativa !== null
-            ? `${((fatias[ativa]!.value / total) * 100).toFixed(1).replace(".", ",")}%`
-            : totalLabel ?? String(fatias.length)}
+          style={{ fontSize: ativa !== null ? 15 : 19, fontWeight: 600, fill: "var(--color-text)", transition: "font-size 200ms var(--ease-out)" }}>
+          {ativa !== null ? fatias[ativa]!.label : totalLabel ?? String(fatias.length)}
         </text>
         <text x={cx} y={ativa !== null ? cy + 14 : cy + 18} textAnchor="middle"
           style={{ fontSize: 8.5, fill: "var(--color-neutral-500)" }}>
-          {ativa !== null ? fatias[ativa]!.name.slice(0, 18) : totalLabel ? "total" : unidade}
+          {ativa !== null
+            ? `${fatias[ativa]!.name.slice(0, 14)} · ${((fatias[ativa]!.value / total) * 100).toFixed(1).replace(".", ",")}%`
+            : totalLabel ? "total" : unidade}
         </text>
       </svg>
 
       {/* Legenda em colunas alinhadas: nome | valor | % */}
       <div style={sx("display:flex;flex-direction:column;justify-content:center;gap:2px;flex:1 1 58%;min-width:0;overflow:auto")}>
         {fatias.map((f, i) => {
-          const pct = ((f.value / total) * 100).toFixed(1).replace(".", ",");
+          const pctNum = (f.value / total) * 100;
+          // O CSS precisa do número com PONTO; o texto exibe com vírgula.
+          const pct = pctNum.toFixed(1).replace(".", ",");
           const on = ativa === i;
           return (
             <div
@@ -135,11 +145,17 @@ export function Donut({
               onMouseEnter={() => setAtiva(i)}
               onMouseLeave={() => { setAtiva(null); setTip(null); }}
               style={sx(
-                `display:grid;grid-template-columns:12px minmax(0,1fr) auto 52px;align-items:center;gap:9px;font-size:12.5px;padding:5px 7px;border-radius:var(--radius-sm);cursor:default;transition:background var(--dur-fast) var(--ease-out);${on ? "background:color-mix(in srgb, var(--color-text) 9%, transparent);" : ""}`,
+                `display:grid;grid-template-columns:12px minmax(0,1fr) auto 48px;align-items:center;gap:9px;font-size:12.5px;padding:5px 7px;border-radius:var(--radius-sm);cursor:default;transition:background var(--dur-fast) var(--ease-out);${on ? "background:color-mix(in srgb, var(--color-text) 9%, transparent);" : ""}`,
               )}
             >
               <span style={sx(`width:9px;height:9px;border-radius:50%;background:${PALETA[i % PALETA.length]};transition:transform var(--dur-fast) var(--ease-out);transform:scale(${on ? 1.35 : 1})`)} />
-              <span style={sx("overflow:hidden;text-overflow:ellipsis;white-space:nowrap")}>{f.name}</span>
+              <span style={sx("min-width:0")}>
+                <span style={sx("display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap")}>{f.name}</span>
+                {/* Mini-barra: reforça o percentual visualmente, sem ler o número. */}
+                <span style={sx("display:block;height:3px;border-radius:2px;margin-top:3px;background:color-mix(in srgb, var(--color-text) 8%, transparent);overflow:hidden")}>
+                  <span style={sx(`display:block;height:100%;border-radius:2px;background:${PALETA[i % PALETA.length]};width:${pronto ? pctNum.toFixed(2) : "0"}%;transition:width 600ms var(--ease-out)`)} />
+                </span>
+              </span>
               <span style={sx("font-variant-numeric:tabular-nums;white-space:nowrap")}>{f.label}</span>
               <span className="text-muted" style={sx("font-variant-numeric:tabular-nums;text-align:right")}>{pct}%</span>
             </div>

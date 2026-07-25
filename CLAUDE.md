@@ -600,6 +600,43 @@ pendentes + 9 eventos de IC): taxa de aprovação saiu **Pix 4/5 = 80%, Cartão 
 Boleto 1/1 = 100%**; países BR/PT/AR com os valores certos; funil com os 5 estágios;
 donuts com percentuais somando 100%. Dados de teste removidos depois.
 
+### 3ª rodada de polimento + bug dos gráficos de barra
+
+**BUG CRÍTICO corrigido:** "Vendas por Horário", "Lucro por Horário" e "Vendas por Dia"
+renderizavam só a alça roxa e o corpo vazio. **Não era altura zerada** — os três ids
+estavam registrados em `blocks.ts` mas **sem `case` correspondente no `BlockContent`**:
+uma edição minha anterior, ao remover casos duplicados, apagou os novos junto. O
+`switch` caía no `default: return null`. Lição: `blocks.ts` e o `switch` do
+`BlockContent` são duas listas que precisam andar juntas — **um bloco registrado sem
+case vira um card vazio silencioso**, sem erro de tipo nem de runtime.
+
+Demais melhorias desta rodada:
+- **Barras**: 24 posições sempre presentes (horário) e **todos os dias da janela**
+  (`byDay` agora preenche as lacunas no backend, antes só trazia dias COM venda).
+  Barras-fantasma nas posições sem valor, grade, eixo Y, subida escalonada e tooltip
+  com faixa de hora (`14h00 – 15h00`) ou data por extenso.
+- **Donuts**: micro-interação no centro (troca o total pelo valor+% da fatia sob o
+  mouse), mini-barra de proporção na legenda, glow quando há **uma fatia só**.
+- **Funil**: percentual sobre "pílula" semi-transparente com blur (o número branco
+  sumia nos trechos claros do gradiente), fio mínimo de 4,5% para o estrangulamento
+  não desaparecer, e tooltip com **as duas taxas** (vs. etapa anterior e vs. topo).
+- **Taxa de aprovação**: ícone por método, cor reagindo ao valor (verde ≥80%,
+  amarelo ≥50%, vermelho abaixo), glow na ponta, animação escalonada e **os 3 métodos
+  sempre visíveis** — um método sem dado mostra "N/A" em vez de sumir da lista, que era
+  justamente o que escondia o método que parou de vender.
+- **Atividade recente**: virou **feed unificado**. Antes todo evento saía como "Venda"
+  porque o tipo era fixo por origem de tabela. Agora são 6 tipos com badge, ícone e cor
+  próprios — clique (azul), checkout (roxo), venda pendente (âmbar), venda aprovada
+  (verde), reembolso e chargeback (vermelho) — com **filtro por tipo** no topo e entrada
+  escalonada. Os `PixelEvent` passaram a ser lidos como linhas (antes só `count()`).
+
+**Ainda pendente:**
+- O filtro do feed é **local** (filtra o que já veio); não recarrega do servidor.
+- O feed traz no máximo 40 eventos por janela, sem paginação.
+- Sparklines seguem cobrindo 7 métricas; ROI, margem e CTR continuam sem série.
+
+---
+
 ### Polimento premium dos gráficos (2ª revisão de design)
 
 Reformulação completa do acabamento, pedida com referências (Apple/Linear/Vercel):

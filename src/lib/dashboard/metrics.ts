@@ -55,7 +55,15 @@ export interface DashboardData {
   byHour: { hour: number; sales: number; revenue: number; profit: number }[];
   /** Vendas por dia da janela filtrada, no máximo 30 dias — Bloco 4. */
   byDay: { date: string; sales: number; revenue: number }[];
-  activity: { id: string; type: "venda" | "clique"; source: string; campaign: string; value: number | null; ts: number }[];
+  activity: {
+    id: string;
+    /** Tipos do feed unificado — cada um com badge e cor próprios na UI. */
+    type: "clique" | "checkout" | "venda_pendente" | "venda_aprovada" | "reembolso" | "chargeback";
+    source: string;
+    campaign: string;
+    value: number | null;
+    ts: number;
+  }[];
   filterOptions: { accounts: { id: string; name: string }[]; products: string[]; sources: string[] };
 }
 
@@ -115,7 +123,7 @@ async function windowAggregate(userId: string, filters: DashboardFilters, start:
   const sourceFilter = filters.source !== "todas" ? filters.source : null;
   const productFilter = filters.product !== "todos" ? filters.product : null;
 
-  const [sales, clicks, metrics, expenses, initiateCheckouts] = await Promise.all([
+  const [sales, clicks, metrics, expenses, pixelEvents] = await Promise.all([
     prisma.sale.findMany({
       where: {
         userId,
@@ -160,13 +168,16 @@ async function windowAggregate(userId: string, filters: DashboardFilters, start:
       where: { userId, active: true },
       select: { type: true, calc: true, amount: true, paymentMethod: true },
     }),
-    // Bloco 5: alimenta o estágio "Initiate Checkout" do funil.
-    prisma.pixelEvent.count({
+    // Alimenta o estágio "Initiate Checkout" do funil E o feed de atividade.
+    prisma.pixelEvent.findMany({
       where: { userId, event: "InitiateCheckout", timestamp: { gte: start, lte: end } },
+      select: { id: true, url: true, timestamp: true },
+      orderBy: { timestamp: "desc" },
+      take: 200,
     }),
   ]);
 
-  return { sales, clicks, metrics, expenses, initiateCheckouts };
+  return { sales, clicks, metrics, expenses, pixelEvents, initiateCheckouts: pixelEvents.length, janela: { start, end } };
 }
 
 export async function computeDashboard(userId: string, filters: DashboardFilters): Promise<DashboardData> {
@@ -404,10 +415,20 @@ function summarize(w: Window) {
     cur.revenue += num(s.value);
     diaMap.set(key, cur);
   }
-  const byDay = [...diaMap.entries()]
-    .map(([date, v]) => ({ date, ...v }))
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(-30);
+  // Preenche todos os dias da janela, inclusive os sem venda: o gráfico desenha
+  // barra-fantasma nas lacunas, e sem elas a série temporal ficaria com buracos.
+  const byDay: { date: string; sales: number; revenue: number }[] = [];
+  const iso = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const cursor = new Date(w.janela.start);
+  cursor.setHours(0, 0, 0, 0);
+  const limite = new Date(w.janela.end);
+  while (cursor <= limite && byDay.length < 60) {
+    const k = iso(cursor);
+    byDay.push({ date: k, ...(diaMap.get(k) ?? { sales: 0, revenue: 0 }) });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  byDay.splice(0, Math.max(0, byDay.length - 30));
 
   const expenses = { gateway: exp.gateway, tax: exp.tax, recurring: exp.recurring, total: exp.total };
 
@@ -484,17 +505,25 @@ function buildChart(w: Window, start: Date, end: Date, granularity: "hour" | "da
 
 function buildActivity(w: Window) {
   const items: DashboardData["activity"] = [];
-  for (const s of w.sales.slice(0, 20)) {
+
+  // Uma venda vira um evento diferente conforme o status — antes tudo era
+  // "venda", o que fazia o feed parecer que só existia esse tipo.
+  for (const s of w.sales.slice(0, 40)) {
+    const tipo =
+      s.status === "APROVADA" ? "venda_aprovada"
+      : s.status === "REEMBOLSADA" ? "reembolso"
+      : s.status === "CHARGEBACK" ? "chargeback"
+      : "venda_pendente";
     items.push({
       id: "s-" + s.id,
-      type: "venda",
+      type: tipo,
       source: s.click?.utmSource ?? "Direto",
       campaign: s.click?.utmCampaign ?? s.product,
       value: num(s.value),
       ts: s.timestamp.getTime(),
     });
   }
-  for (const c of w.clicks.slice(0, 20)) {
+  for (const c of w.clicks.slice(0, 40)) {
     items.push({
       id: "c-" + c.id,
       type: "clique",
@@ -504,8 +533,20 @@ function buildActivity(w: Window) {
       ts: c.timestamp.getTime(),
     });
   }
-  return items.sort((a, b) => b.ts - a.ts).slice(0, 15);
+  for (const e of w.pixelEvents.slice(0, 40)) {
+    items.push({
+      id: "p-" + e.id,
+      type: "checkout",
+      source: "Pixel",
+      campaign: e.url ? e.url.replace(/^https?:\/\//, "").slice(0, 48) : "—",
+      value: null,
+      ts: e.timestamp.getTime(),
+    });
+  }
+
+  return items.sort((a, b) => b.ts - a.ts).slice(0, 40);
 }
+
 
 async function loadFilterOptions(userId: string) {
   const [accounts, productRows, sourceRows] = await Promise.all([
