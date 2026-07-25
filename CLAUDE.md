@@ -578,12 +578,12 @@ Feito (os 6 itens do roteiro):
 - **`Sale.country` existia mas nunca era agregado.** Agora `byCountry` usa o país da
   venda e cai no país do clique quando o gateway não manda.
 
-> **Por que NÃO usei `react-simple-maps`** (o roteiro sugeria): ele exige um TopoJSON de
-> mundo (~100 KB+) que por padrão vem de **CDN** — dependência de rede em runtime para
-> um bloco secundário. A projeção equirretangular é uma conta linear (`lng→x`, `lat→y`),
-> então o mapa é desenhado à mão sobre uma grade de meridianos, com centroides em
-> `lib/countries.ts`. **Custo: não há fronteiras desenhadas.** Se quiser o mapa
-> "de verdade", é trocar este componente e bundlar o atlas.
+> **Mapa: contornos reais, zero dependência.** `react-simple-maps` está descartado —
+> só suporta **até React 18** (aqui é 19). Em vez disso, `scripts/gen-world-paths.mjs`
+> converte o `world-atlas` em paths SVG equirretangulares **uma vez, em build**, e o
+> resultado (`src/lib/worldPaths.ts`, ~53 KB) é commitado. O navegador não baixa
+> TopoJSON, não há CDN em runtime, e `world-atlas`/`topojson-client` **não ficam no
+> package.json**. Para regerar, o cabeçalho do script tem as 3 linhas de comando.
 
 **Bug pré-existente corrigido:** o `buildChart` gerava `round((end-start)/dia)` buckets
 a partir de `start`, então em "últimos 7 dias" o último bucket parava **ontem** —
@@ -600,8 +600,24 @@ pendentes + 9 eventos de IC): taxa de aprovação saiu **Pix 4/5 = 80%, Cartão 
 Boleto 1/1 = 100%**; países BR/PT/AR com os valores certos; funil com os 5 estágios;
 donuts com percentuais somando 100%. Dados de teste removidos depois.
 
+### Revisão de design do Bloco 5 (feedback do usuário)
+
+Os gráficos foram reprovados na primeira entrega e refeitos:
+- **Funil**: os trapézios com quinas viraram **bulbos com curvas de Bézier**, gradiente
+  azul→roxo→rosa, nome da etapa no topo, % sobre o eixo e valor absoluto embaixo.
+  A meia-altura de cada etapa é proporcional ao valor, e o estrangulamento entre elas
+  sai das curvas — não de barras justapostas.
+- **Mapa**: agora é o **modo padrão** (antes abria em Ranking, e o usuário nunca via o
+  mapa) e desenha os continentes de verdade.
+- **Donuts**: eram um disco fixo de 140 px perdido num card alto ("raso e vazio").
+  Passaram a **escalar com o bloco** (`flex` no SVG + legenda centralizada).
+- **Barras** (por horário / lucro / por dia): eram tracinhos de 2 px espalhados.
+  Ganharam grade de fundo, eixo Y, gradiente, brilho e topo arredondado — com
+  `max-width` por barra para 2 ou 3 pontos não virarem blocos gigantes.
+
 **Incompleto / TODO no Bloco 5:**
-- **O mapa não tem fronteiras** (ver a nota acima) — são pontos sobre uma grade.
+- O mapa desenha **contorno de terra**, não fronteiras por país — os países são
+  identificados pelos marcadores, não por preenchimento.
 - **`lib/countries.ts` cobre ~32 países.** Um país fora da lista aparece no Ranking com
   o código cru, mas **não ganha ponto no mapa**. Ampliar é acrescentar uma linha.
 - **O funil mistura fontes com granularidades diferentes**: "cliques no anúncio" vem de

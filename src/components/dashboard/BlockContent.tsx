@@ -69,40 +69,74 @@ function Barras({
 }
 
 /**
- * Barras verticais (Bloco 4). Escala pelo maior valor; barras zeradas viram um
- * traço de 2px para a lacuna ser legível em vez de sumir.
+ * Barras verticais (Bloco 4, redesenhadas). A primeira versão desenhava barras
+ * finas com um piso de 2px, o que num período de pouca venda virava uma fileira
+ * de tracinhos perdidos num bloco alto. Agora há grade de fundo, eixo Y com o
+ * valor máximo, barras largas com gradiente e topo arredondado, e as barras
+ * zeradas ficam como sulco discreto em vez de traço solto.
  */
 function BarrasVerticais({
   dados,
-  cor,
   formatar,
   vazio,
 }: {
   dados: { rotulo: string; valor: number; titulo: string }[];
-  cor: string;
   formatar: (v: number) => string;
   vazio: string;
 }) {
   const max = Math.max(0, ...dados.map((d) => d.valor));
   if (max <= 0) {
-    return <div className="text-muted" style={sx("font-size:13px;padding:var(--space-2) 0")}>{vazio}</div>;
+    return (
+      <div className="text-muted" style={sx("display:grid;place-items:center;flex:1;min-height:110px;font-size:13px")}>
+        {vazio}
+      </div>
+    );
   }
+  // Topo arredondado para o rótulo do eixo Y não ficar quebrado.
+  const mag = 10 ** Math.floor(Math.log10(max));
+  const topo = Math.ceil(max / mag) * mag;
+
   return (
-    // `justify-content:flex-start` + largura máxima por barra: com poucos pontos
-    // (ex.: um único dia) uma barra esticada na largura toda vira um bloco
-    // sólido, que não se lê como gráfico.
-    <div style={sx("display:flex;align-items:flex-end;justify-content:flex-start;gap:2px;flex:1;min-height:80px;margin-top:var(--space-2)")}>
-      {dados.map((d, i) => (
-        <div key={i} style={sx("flex:1;max-width:56px;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end")}
-          title={`${d.titulo}: ${formatar(d.valor)}`}>
-          <div
-            style={sx(
-              `width:100%;border-radius:2px 2px 0 0;background:${cor};height:${Math.max(2, (d.valor / max) * 100)}%;transition:height var(--dur-base) var(--ease-out)`,
-            )}
-          />
-          <span className="text-muted" style={sx("font-size:9px;white-space:nowrap")}>{d.rotulo}</span>
+    <div style={sx("display:flex;flex-direction:column;flex:1;min-height:130px;margin-top:var(--space-2)")}>
+      <div style={sx("display:flex;gap:6px;flex:1;min-height:90px")}>
+        {/* Eixo Y */}
+        <div style={sx("display:flex;flex-direction:column;justify-content:space-between;font-size:9px;color:var(--color-neutral-500);text-align:right;padding-bottom:14px;flex:none")}>
+          <span>{formatar(topo)}</span>
+          <span>{formatar(topo / 2)}</span>
+          <span>0</span>
         </div>
-      ))}
+
+        <div style={sx("position:relative;flex:1;display:flex;align-items:flex-end;justify-content:flex-start;gap:3px;padding-bottom:14px")}>
+          {/* Grade de fundo */}
+          {[0, 0.5, 1].map((f) => (
+            <div key={f} aria-hidden
+              style={sx(`position:absolute;left:0;right:0;bottom:calc(14px + ${f * 100}% - ${f * 14}px);height:1px;background:var(--color-divider)`)} />
+          ))}
+
+          {dados.map((d, i) => {
+            const pctAltura = (d.valor / topo) * 100;
+            return (
+              // `max-width` evita que 2 ou 3 pontos virem blocos gigantes
+              // ocupando meia tela (acontecia em "vendas por dia").
+              <div key={i} style={sx("flex:1;min-width:0;max-width:64px;height:100%;display:flex;flex-direction:column;justify-content:flex-end;position:relative")}
+                title={`${d.titulo}: ${formatar(d.valor)}`}>
+                {/* Sulco: mostra a lacuna sem fingir que há valor */}
+                <div style={sx("position:absolute;inset:auto 0 0 0;height:2px;border-radius:1px;background:var(--color-neutral-800)")} />
+                {d.valor > 0 && (
+                  <div
+                    style={sx(
+                      `position:relative;width:100%;border-radius:3px 3px 0 0;height:${Math.max(3, pctAltura)}%;background:linear-gradient(180deg, var(--color-accent-400) 0%, var(--color-accent-700) 100%);box-shadow:0 0 10px color-mix(in srgb, var(--color-accent) 45%, transparent);transition:height var(--dur-base) var(--ease-out)`,
+                    )}
+                  />
+                )}
+                <span style={sx("position:absolute;bottom:-14px;left:0;right:0;text-align:center;font-size:9px;color:var(--color-neutral-500);white-space:nowrap;overflow:hidden")}>
+                  {d.rotulo}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -213,7 +247,6 @@ export function BlockContent({ id, v }: { id: string; v: TraffikView }) {
         <Bloco>
           <div className="card-kicker">Vendas por horário</div>
           <BarrasVerticais
-            cor="var(--color-accent)"
             vazio="Nenhuma venda aprovada no período."
             formatar={(n) => `${n} venda(s)`}
             // Rótulo a cada 3h para não virar sopa de números em bloco estreito.
@@ -231,7 +264,6 @@ export function BlockContent({ id, v }: { id: string; v: TraffikView }) {
         <Bloco>
           <div className="card-kicker">Lucro por horário</div>
           <BarrasVerticais
-            cor="var(--color-accent-2-500)"
             vazio="Sem lucro apurado no período."
             formatar={(n) => brl(n)}
             dados={v.byHour.map((h) => ({
@@ -248,7 +280,6 @@ export function BlockContent({ id, v }: { id: string; v: TraffikView }) {
         <Bloco>
           <div className="card-kicker">Vendas por dia</div>
           <BarrasVerticais
-            cor="var(--color-accent-500)"
             vazio="Nenhuma venda aprovada no período."
             formatar={(n) => `${n} venda(s)`}
             dados={v.byDay.map((d) => {

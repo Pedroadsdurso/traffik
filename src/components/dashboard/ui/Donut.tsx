@@ -39,8 +39,11 @@ export function Donut({ fatias, vazio }: { fatias: Fatia[]; vazio: string }) {
   let acumulado = 0;
 
   return (
-    <div style={sx("display:flex;align-items:center;gap:var(--space-4);flex-wrap:wrap;flex:1;margin-top:var(--space-2)")}>
-      <svg viewBox="0 0 160 160" style={{ width: 140, height: 140, flex: "none" }} role="img" aria-label="Distribuição">
+    // `align-items:stretch` + `flex:1` no SVG: o donut cresce com o bloco em vez
+    // de ficar um disco de 140px perdido num card alto (era o "raso e vazio").
+    <div style={sx("display:flex;align-items:stretch;gap:var(--space-4);flex:1;min-height:0;margin-top:var(--space-2)")}>
+      <svg viewBox="0 0 160 160" style={{ flex: "1 1 40%", minWidth: 120, maxWidth: 260, height: "100%", minHeight: 130 }}
+        role="img" aria-label="Distribuição">
         {/* Trilho de fundo, para o donut ter forma mesmo com uma fatia só. */}
         <circle cx="80" cy="80" r={R} fill="none" stroke="var(--color-neutral-900)" strokeWidth={22} />
         {fatias.map((f, i) => {
@@ -70,15 +73,15 @@ export function Donut({ fatias, vazio }: { fatias: Fatia[]; vazio: string }) {
             </circle>
           );
         })}
-        <text x="80" y="76" textAnchor="middle" style={{ fontSize: 15, fill: "var(--color-text)" }}>
+        <text x="80" y="77" textAnchor="middle" style={{ fontSize: 19, fontWeight: 600, fill: "var(--color-text)" }}>
           {ativa !== null ? `${((fatias[ativa]!.value / total) * 100).toFixed(1).replace(".", ",")}%` : fatias.length}
         </text>
-        <text x="80" y="94" textAnchor="middle" style={{ fontSize: 9, fill: "var(--color-neutral-500)" }}>
+        <text x="80" y="95" textAnchor="middle" style={{ fontSize: 8.5, fill: "var(--color-neutral-500)" }}>
           {ativa !== null ? fatias[ativa]!.name.slice(0, 16) : fatias.length === 1 ? "item" : "itens"}
         </text>
       </svg>
 
-      <div style={sx("display:flex;flex-direction:column;gap:5px;flex:1;min-width:140px")}>
+      <div style={sx("display:flex;flex-direction:column;justify-content:center;gap:7px;flex:1 1 60%;min-width:150px;overflow:auto")}>
         {fatias.map((f, i) => {
           const pct = ((f.value / total) * 100).toFixed(1).replace(".", ",");
           return (

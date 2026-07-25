@@ -974,11 +974,11 @@ export function useTraffikState(
     // Bloco 5: séries brutas para os gráficos novos (o front formata).
     chartSerie: { labels: d?.chart.labels ?? [], revenue: d?.chart.revenue ?? [], spend: d?.chart.spend ?? [] },
     funnelStages: [
-      { label: "Cliques no anúncio", value: d?.funnel.cliques ?? 0 },
-      { label: "Visita na página", value: d?.funnel.visitas ?? 0 },
-      { label: "Initiate Checkout", value: d?.funnel.checkouts ?? 0 },
-      { label: "Vendas iniciadas", value: d?.funnel.iniciadas ?? 0 },
-      { label: "Vendas", value: d?.funnel.vendas ?? 0 },
+      { label: "Cliques no anúncio", curto: "Cliques", value: d?.funnel.cliques ?? 0 },
+      { label: "Visita na página", curto: "Vis. Página", value: d?.funnel.visitas ?? 0 },
+      { label: "Initiate Checkout", curto: "ICs", value: d?.funnel.checkouts ?? 0 },
+      { label: "Vendas iniciadas", curto: "Vendas Inic.", value: d?.funnel.iniciadas ?? 0 },
+      { label: "Vendas aprovadas", curto: "Vendas Apr.", value: d?.funnel.vendas ?? 0 },
     ],
     byCountry: d?.byCountry ?? [],
     approval: d?.approval ?? [],
