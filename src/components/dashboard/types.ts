@@ -17,6 +17,7 @@ export type MetricKey =
   | "vendas"
   | "cpa"
   | "ticket"
+  | "arpu"
   | "ctr"
   | "pendentes"
   | "reembolsadas"

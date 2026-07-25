@@ -148,7 +148,7 @@ Logins: `teste@traffik.io` / `traffik123` (vazio) · `pedrodurso8@gmail.com` /
 | 1 | Reestruturação da navegação (rotas reais) | ✅ **Feito** |
 | 2 | Grid arrastável do Dashboard | ✅ **Feito** |
 | 3 | Filtros e container do topo | ✅ **Feito** |
-| 4 | Métricas do Dashboard (ROI×, ARPU, CPA, por horário…) | ⏳ pendente |
+| 4 | Métricas do Dashboard (ROI×, ARPU, CPA, por horário…) | ✅ **Feito** |
 | 5 | Gráficos (funil, mapa de países, donuts, taxa de aprovação) | ⏳ pendente |
 | 6 | Gerenciador de Anúncios: layout+colunas estilo FB | ⏳ pendente |
 | 7 | Gerenciador: painel de ações em massa (CBO/ABO) | ⏳ pendente |
@@ -555,6 +555,53 @@ abandonado (auto-expira).
 
 ---
 
+### Bloco 4 — Métricas do Dashboard
+
+Feito:
+- **ROI virou multiplicador.** Era `(profit / totalCost) * 100` exibido como `1331%`;
+  agora é a razão pura, formatada com **`multFmt`** (2 casas: `13,31x`). Os `deltas`
+  não foram afetados — são variação percentual entre períodos, e a escala se cancela.
+- **ARPU** = faturamento ÷ compradores únicos. O comprador é identificado pelo e-mail;
+  **vendas sem e-mail contam como compradores distintos**, porque não há como agrupá-las
+  — melhor superestimar o denominador (ARPU conservador) do que fundir pessoas.
+- **CPA já existia** (`spend / salesCount`) desde a v1 — só não estava evidente. Nada a
+  fazer além de confirmar que está no `blocks.ts`.
+- **Três séries novas**: vendas por horário, lucro por horário (24 posições) e vendas
+  por dia (até 30). Renderizadas por um `BarrasVerticais` reutilizável, com tooltip por
+  barra e rótulo de hora a cada 3h para não virar sopa de números.
+- Os 4 blocos novos entram **desativados**, aparecendo em "Métricas disponíveis" —
+  quem já tinha layout salvo não vê o dashboard mudar sozinho.
+
+> **Decisão sobre "respeitar os filtros".** O roteiro pede "24h do dia atual" e
+> "últimos 30 dias" mas também exige que toda métrica respeite os filtros do topo.
+> Resolvido bucketizando a **janela já filtrada**: com o período em "Hoje" o gráfico por
+> horário É as 24h de hoje; com "Últimos 30 dias" o por-dia É o mês. Fica coerente com
+> qualquer filtro em vez de ignorar o de cima.
+
+> **Lucro por hora é rateado.** Não há como atribuir gasto de anúncio (que vem de
+> métricas *diárias*) nem despesas de gateway/imposto a uma hora específica. O lucro
+> horário aplica `custoSobreReceita = (gasto + despesas) / faturamento` proporcional ao
+> faturamento da hora. É aproximação, não custo real por hora.
+
+**Testado com dados reais:** 4 vendas semeadas (duas do mesmo e-mail, uma sem e-mail)
+→ `revenue=1238,70`, `buyers=5`, `arpu=247,74` — confirmando que o mesmo comprador com
+2 compras conta uma vez. `byHour` com 24 posições e vendas nas horas certas; ROI saiu
+`13,31x` na tela (era `1331%`). Os 4 blocos apareceram em "Métricas disponíveis" e
+foram adicionados ao grid. Dados de teste removidos depois.
+
+**Incompleto / TODO no Bloco 4:**
+- **`roasFmt` continua com 1 casa** (`0,0x`) enquanto o ROI usa 2 (`13,31x`). O roteiro
+  dizia "igual ao ROAS" mas deu exemplos de 2 casas (`1,87x`); segui os exemplos e não
+  mexi no ROAS, que não estava no escopo. **Alinhar os dois se você preferir.**
+- **Sem delta para o ARPU**: `trendOf("arpu")` procura uma chave que o backend não
+  calcula, então cai no texto neutro "vs. período anterior" em vez de uma variação.
+- Os gráficos de barras são **CSS puro, sem eixo Y nem grade** — o valor só aparece no
+  tooltip. Eixos e tooltips ricos são o Bloco 5.
+- "Vendas por dia" corta em 30 pontos; um período personalizado mais longo mostra só os
+  30 últimos dias, silenciosamente.
+
+---
+
 ### Bloco 3 — Filtros e container do topo
 
 Feito:
@@ -744,9 +791,9 @@ Registradas de propósito — **não são bugs esquecidos**, são decisões toma
 
 1. **Resolver o deploy da Vercel** — os 4 passos manuais na seção acima. É a única
    pendência que depende do painel e trava ver qualquer coisa em produção.
-2. **Bloco 4** (métricas do Dashboard): corrigir o **ROI para multiplicador** (`1,87x`
-   em vez de `1331%` — hoje sai em porcentagem), e somar ARPU, CPA, vendas por horário,
-   lucro por horário e vendas por dia. O `blocks.ts` do Bloco 2 é o ponto de extensão:
-   cada métrica nova é uma entrada na lista, e já aparece no painel de disponíveis.
-3. Depois **Bloco 5** (gráficos), que é o maior do roteiro.
+2. **Bloco 5** (gráficos) — o maior do roteiro: refazer o "Faturamento vs. gasto" com
+   eixos e tooltip, funil trapezoidal proporcional, **mapa-múndi de vendas por país**
+   (novo, precisa de `react-simple-maps` e de país na venda), donuts para fonte/produto/
+   pagamento e a **Taxa de Aprovação** por método (que já é possível: o upsert do
+   Bloco 10 registra venda gerada e paga na mesma linha).
 4. Faxina pendente: a dívida técnica #2 (nav morto no `useTraffikState`).

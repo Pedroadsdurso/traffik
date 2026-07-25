@@ -28,6 +28,9 @@ export interface DashboardData {
     ctr: number;
     clicks: number;
     profit: number;
+    /** Faturamento ÷ compradores únicos (Bloco 4). */
+    arpu: number;
+    buyers: number;
   };
   deltas: Record<string, number | null>;
   chart: { labels: string[]; revenue: number[]; spend: number[]; periodLabel: string; granularity: "hour" | "day" };
@@ -36,6 +39,10 @@ export interface DashboardData {
   sources: { name: string; total: number }[];
   payments: { name: string; total: number; count: number }[];
   funnel: { cliques: number; checkouts: number; vendas: number };
+  /** 24 posições (0–23) da janela filtrada — Bloco 4. */
+  byHour: { hour: number; sales: number; revenue: number; profit: number }[];
+  /** Vendas por dia da janela filtrada, no máximo 30 dias — Bloco 4. */
+  byDay: { date: string; sales: number; revenue: number }[];
   activity: { id: string; type: "venda" | "clique"; source: string; campaign: string; value: number | null; ts: number }[];
   filterOptions: { accounts: { id: string; name: string }[]; products: string[]; sources: string[] };
 }
@@ -112,6 +119,7 @@ async function windowAggregate(userId: string, filters: DashboardFilters, start:
         paymentMethod: true,
         timestamp: true,
         buyerName: true,
+        buyerEmail: true, // identifica comprador único para o ARPU
         click: { select: { utmSource: true, utmCampaign: true } },
       },
       orderBy: { timestamp: "desc" },
@@ -190,6 +198,8 @@ export async function computeDashboard(userId: string, filters: DashboardFilters
       margin: summary.margin,
       ctr: summary.ctr,
       clicks: summary.clicksCount,
+      arpu: summary.arpu,
+      buyers: summary.buyers,
       profit: summary.profit,
     },
     deltas,
@@ -199,6 +209,8 @@ export async function computeDashboard(userId: string, filters: DashboardFilters
     sources: summary.sources,
     payments: summary.payments,
     funnel: summary.funnel,
+    byHour: summary.byHour,
+    byDay: summary.byDay,
     activity,
     filterOptions,
   };
@@ -238,8 +250,24 @@ function summarize(w: Window) {
   );
   const profit = revenue - spend - exp.total;
   const totalCost = spend + exp.total;
-  const roi = totalCost ? (profit / totalCost) * 100 : 0;
+  // ROI como **multiplicador** (Bloco 4), na mesma escala do ROAS: 1,87x.
+  // Antes era `* 100` e a UI mostrava "1331%".
+  const roi = totalCost ? profit / totalCost : 0;
   const margin = revenue ? (profit / revenue) * 100 : 0;
+
+  // ARPU = faturamento ÷ compradores únicos. O comprador é identificado pelo
+  // e-mail; vendas sem e-mail não dá para agrupar, então cada uma conta como um
+  // comprador distinto — melhor superestimar o denominador (ARPU conservador)
+  // do que fundir pessoas diferentes num só.
+  const emails = new Set<string>();
+  let semEmail = 0;
+  for (const s of approved) {
+    const e = s.buyerEmail?.trim().toLowerCase();
+    if (e) emails.add(e);
+    else semEmail += 1;
+  }
+  const buyers = emails.size + semEmail;
+  const arpu = buyers ? revenue / buyers : 0;
 
   // Vendas por produto
   const prodMap = new Map<string, { total: number; sales: number }>();
@@ -279,12 +307,49 @@ function summarize(w: Window) {
 
   const funnel = { cliques: clicksCount, checkouts: totalSalesEvents, vendas: salesCount };
 
+  // ── Séries por horário e por dia (Bloco 4) ──
+  //
+  // O roteiro pede "24h do dia atual" e "últimos 30 dias", mas também exige que
+  // toda métrica respeite os filtros. Resolvemos bucketizando a **janela já
+  // filtrada**: com o período em "Hoje" o gráfico por horário É as 24h de hoje,
+  // e com "Últimos 30 dias" o por-dia É o mês. Fica coerente com qualquer
+  // filtro em vez de ignorar o de cima.
+  //
+  // O lucro por hora rateia as despesas (gateway/imposto/recorrentes) na
+  // proporção do faturamento daquela hora — não há como atribuí-las por hora,
+  // então o rateio proporcional é a aproximação honesta. Gasto de anúncio vem
+  // de métricas diárias e também é rateado.
+  const custoSobreReceita = revenue ? (spend + exp.total) / revenue : 0;
+
+  const byHour = Array.from({ length: 24 }, (_, hour) => ({ hour, sales: 0, revenue: 0, profit: 0 }));
+  for (const s of approved) {
+    const h = new Date(s.timestamp).getHours();
+    const v = num(s.value);
+    byHour[h]!.sales += 1;
+    byHour[h]!.revenue += v;
+    byHour[h]!.profit += v - v * custoSobreReceita;
+  }
+
+  const diaMap = new Map<string, { sales: number; revenue: number }>();
+  for (const s of approved) {
+    const d = new Date(s.timestamp);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const cur = diaMap.get(key) ?? { sales: 0, revenue: 0 };
+    cur.sales += 1;
+    cur.revenue += num(s.value);
+    diaMap.set(key, cur);
+  }
+  const byDay = [...diaMap.entries()]
+    .map(([date, v]) => ({ date, ...v }))
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-30);
+
   const expenses = { gateway: exp.gateway, tax: exp.tax, recurring: exp.recurring, total: exp.total };
 
   return {
     revenue, salesCount, pendentes, reembolsadas, chargebackRate,
-    spend, clicksCount, ticket, cpa, roas, ctr, profit, roi, margin,
-    expenses, products, sources, payments, funnel,
+    spend, clicksCount, ticket, cpa, roas, ctr, profit, roi, margin, arpu, buyers,
+    expenses, products, sources, payments, funnel, byHour, byDay,
   };
 }
 

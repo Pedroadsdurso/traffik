@@ -46,7 +46,7 @@ import {
 import type { CreativeRow } from "@/lib/ads/creatives";
 import type { AdsOverview } from "@/lib/ads/overview";
 import type { DashboardData } from "@/lib/dashboard/metrics";
-import { brl, brl0, buildPoints, elapsed, pct, roasFmt } from "@/lib/format";
+import { brl, brl0, buildPoints, elapsed, multFmt, pct, roasFmt } from "@/lib/format";
 import type { MetricKey, TabKey } from "./types";
 
 type DashPeriod = "hoje" | "7d" | "30d" | "custom";
@@ -170,11 +170,11 @@ interface State {
 
 const DEFAULT_METRIC_ORDER: MetricKey[] = [
   "faturamento", "gasto", "roas", "roi", "margem", "vendas",
-  "cpa", "ticket", "ctr", "pendentes", "reembolsadas", "chargeback",
+  "cpa", "ticket", "arpu", "ctr", "pendentes", "reembolsadas", "chargeback",
 ];
 const DEFAULT_METRIC_VISIBLE: Record<MetricKey, boolean> = {
   faturamento: true, gasto: true, roas: true, roi: true, margem: true, vendas: true,
-  cpa: true, ticket: true, ctr: false, pendentes: false, reembolsadas: false, chargeback: false,
+  cpa: true, ticket: true, arpu: false, ctr: false, pendentes: false, reembolsadas: false, chargeback: false,
 };
 
 function initialState(
@@ -472,6 +472,8 @@ export function useTraffikState(
   const sales = k?.sales ?? 0;
   const ticket = k?.ticket ?? 0;
   const cpa = k?.cpa ?? 0;
+  const arpu = k?.arpu ?? 0;
+  const buyers = k?.buyers ?? 0;
   const roas = k?.roas ?? 0;
   const roi = k?.roi ?? 0;
   const margin = k?.margin ?? 0;
@@ -497,11 +499,14 @@ export function useTraffikState(
     faturamento: { label: "Faturamento", value: brl(revenue), ...trendOf("revenue") },
     gasto: { label: "Gasto total", value: brl(spend), ...trendOf("spend", true) },
     roas: { label: "ROAS", value: roasFmt(roas), ...trendOf("roas") },
-    roi: { label: "ROI", value: roi.toFixed(0) + "%", ...trendOf("roi") },
+    // Bloco 4: ROI passa a ser multiplicador (era "1331%"), com 2 casas como
+    // nos exemplos do roteiro.
+    roi: { label: "ROI", value: multFmt(roi), ...trendOf("roi") },
     margem: { label: "Margem de lucro", value: pct(margin), ...trendOf("margem") },
     vendas: { label: "Vendas", value: String(sales), ...trendOf("sales") },
     cpa: { label: "CPA", value: brl(cpa), ...trendOf("cpa", true) },
     ticket: { label: "Ticket médio", value: brl(ticket), ...trendOf("ticket") },
+    arpu: { label: "ARPU", value: brl(arpu), ...trendOf("arpu") },
     ctr: { label: "CTR", value: pct(ctr), ...trendOf("ctr") },
     pendentes: { label: "Vendas pendentes", value: String(pendentes), trendColor: N, trendPath: DOWN_PATH, trendLabel: "aguardando pgto." },
     reembolsadas: { label: "Reembolsadas", value: String(reembolsadas), trendColor: N, trendPath: DOWN_PATH, trendLabel: "no período" },
@@ -962,6 +967,10 @@ export function useTraffikState(
     // Registro por chave: o grid do Bloco 2 renderiza cada KPI como bloco
     // independente, então precisa acessar a métrica pelo id e não pela ordem.
     metricCards: reg,
+    // Séries do Bloco 4 (por horário / por dia), já filtradas no servidor.
+    byHour: d?.byHour ?? [],
+    byDay: d?.byDay ?? [],
+    buyers,
     dashLoading: s.dashLoading,
     filterAccounts: filterOptions.accounts,
     filterProducts: filterOptions.products,

@@ -41,6 +41,7 @@ const KPI_BLOCKS: BlockDef[] = (
     ["vendas", "Vendas"],
     ["cpa", "CPA"],
     ["ticket", "Ticket médio"],
+    ["arpu", "ARPU"],
     ["ctr", "CTR"],
     ["pendentes", "Pendentes"],
     ["reembolsadas", "Reembolsadas"],
@@ -65,6 +66,10 @@ const CHART_BLOCKS: BlockDef[] = [
   { id: "chart:pagamentos", label: "Vendas por pagamento", kind: "chart", w: 6, h: 6, minW: 3, minH: 4 },
   { id: "chart:funil", label: "Funil de conversão", kind: "chart", w: 12, h: 7, minW: 4, minH: 5 },
   { id: "chart:feed", label: "Atividade recente", kind: "chart", w: 12, h: 8, minW: 4, minH: 5 },
+  // Bloco 4 — entram desativados por padrão (aparecem em "Métricas disponíveis").
+  { id: "chart:vendasHora", label: "Vendas por horário", kind: "chart", w: 6, h: 6, minW: 3, minH: 4 },
+  { id: "chart:lucroHora", label: "Lucro por horário", kind: "chart", w: 6, h: 6, minW: 3, minH: 4 },
+  { id: "chart:vendasDia", label: "Vendas por dia", kind: "chart", w: 12, h: 6, minW: 4, minH: 4 },
 ];
 
 export const ALL_BLOCKS: BlockDef[] = [...KPI_BLOCKS, ...CHART_BLOCKS];

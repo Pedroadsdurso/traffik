@@ -1,5 +1,6 @@
 "use client";
 
+import { brl } from "@/lib/format";
 import { sx } from "@/lib/sx";
 import { BLOCK_BY_ID } from "./blocks";
 import type { TraffikView } from "./useTraffikState";
@@ -57,6 +58,45 @@ function Barras({
             <div style={sx(`height:100%;background:${cor};width:${l.largura}`)} />
           </div>
           {l.sub && <div className="text-muted" style={sx("font-size:11px")}>{l.sub}</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Barras verticais (Bloco 4). Escala pelo maior valor; barras zeradas viram um
+ * traço de 2px para a lacuna ser legível em vez de sumir.
+ */
+function BarrasVerticais({
+  dados,
+  cor,
+  formatar,
+  vazio,
+}: {
+  dados: { rotulo: string; valor: number; titulo: string }[];
+  cor: string;
+  formatar: (v: number) => string;
+  vazio: string;
+}) {
+  const max = Math.max(0, ...dados.map((d) => d.valor));
+  if (max <= 0) {
+    return <div className="text-muted" style={sx("font-size:13px;padding:var(--space-2) 0")}>{vazio}</div>;
+  }
+  return (
+    // `justify-content:flex-start` + largura máxima por barra: com poucos pontos
+    // (ex.: um único dia) uma barra esticada na largura toda vira um bloco
+    // sólido, que não se lê como gráfico.
+    <div style={sx("display:flex;align-items:flex-end;justify-content:flex-start;gap:2px;flex:1;min-height:80px;margin-top:var(--space-2)")}>
+      {dados.map((d, i) => (
+        <div key={i} style={sx("flex:1;max-width:56px;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end")}
+          title={`${d.titulo}: ${formatar(d.valor)}`}>
+          <div
+            style={sx(
+              `width:100%;border-radius:2px 2px 0 0;background:${cor};height:${Math.max(2, (d.valor / max) * 100)}%;transition:height var(--dur-base) var(--ease-out)`,
+            )}
+          />
+          <span className="text-muted" style={sx("font-size:9px;white-space:nowrap")}>{d.rotulo}</span>
         </div>
       ))}
     </div>
@@ -143,6 +183,57 @@ export function BlockContent({ id, v }: { id: string; v: TraffikView }) {
               direita: `${p.totalLabel} · ${p.pctLabel}`,
               largura: p.barWidth,
             }))}
+          />
+        </Bloco>
+      );
+
+    case "chart:vendasHora":
+      return (
+        <Bloco>
+          <div className="card-kicker">Vendas por horário</div>
+          <BarrasVerticais
+            cor="var(--color-accent)"
+            vazio="Nenhuma venda aprovada no período."
+            formatar={(n) => `${n} venda(s)`}
+            // Rótulo a cada 3h para não virar sopa de números em bloco estreito.
+            dados={v.byHour.map((h) => ({
+              rotulo: h.hour % 3 === 0 ? String(h.hour).padStart(2, "0") : "",
+              valor: h.sales,
+              titulo: `${String(h.hour).padStart(2, "0")}h`,
+            }))}
+          />
+        </Bloco>
+      );
+
+    case "chart:lucroHora":
+      return (
+        <Bloco>
+          <div className="card-kicker">Lucro por horário</div>
+          <BarrasVerticais
+            cor="var(--color-accent-2-500)"
+            vazio="Sem lucro apurado no período."
+            formatar={(n) => brl(n)}
+            dados={v.byHour.map((h) => ({
+              rotulo: h.hour % 3 === 0 ? String(h.hour).padStart(2, "0") : "",
+              valor: h.profit,
+              titulo: `${String(h.hour).padStart(2, "0")}h`,
+            }))}
+          />
+        </Bloco>
+      );
+
+    case "chart:vendasDia":
+      return (
+        <Bloco>
+          <div className="card-kicker">Vendas por dia</div>
+          <BarrasVerticais
+            cor="var(--color-accent-500)"
+            vazio="Nenhuma venda aprovada no período."
+            formatar={(n) => `${n} venda(s)`}
+            dados={v.byDay.map((d) => {
+              const [, m, dia] = d.date.split("-");
+              return { rotulo: `${dia}/${m}`, valor: d.sales, titulo: `${dia}/${m}` };
+            })}
           />
         </Bloco>
       );
