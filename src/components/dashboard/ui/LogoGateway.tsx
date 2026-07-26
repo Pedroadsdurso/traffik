@@ -41,11 +41,12 @@ export function LogoGateway({
   }
 
   return (
-    // Fundo claro sutil: as logos vêm com fundo transparente e várias são
-    // escuras, então sem isso a Kirvano sumiria no card escuro.
+    // Sem fundo: só o recorte arredondado. Algumas artes (a da Kirvano, por
+    // exemplo) já trazem o próprio fundo embutido, e o `overflow:hidden`
+    // arredonda esse quadrado em vez de deixá-lo com quina viva.
     <span
       style={sx(
-        `display:grid;place-items:center;flex:none;width:${tamanho}px;height:${tamanho}px;border-radius:${Math.round(tamanho * 0.28)}px;background:#fff;overflow:hidden`,
+        `display:grid;place-items:center;flex:none;width:${tamanho}px;height:${tamanho}px;border-radius:${Math.round(tamanho * 0.26)}px;overflow:hidden`,
       )}
     >
       <Image
@@ -53,7 +54,7 @@ export function LogoGateway({
         alt={nome}
         width={tamanho}
         height={tamanho}
-        style={{ width: `${Math.round(tamanho * 0.78)}px`, height: `${Math.round(tamanho * 0.78)}px`, objectFit: "contain" }}
+        style={{ width: "100%", height: "100%", objectFit: "contain" }}
       />
     </span>
   );

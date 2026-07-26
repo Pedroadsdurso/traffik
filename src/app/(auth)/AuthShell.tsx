@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { ReactNode } from "react";
 
 import { sx } from "@/lib/sx";
@@ -23,15 +24,15 @@ export function AuthShell({
       )}
     >
       <div style={sx("width:min(400px,100%);display:flex;flex-direction:column;gap:var(--space-6)")}>
-        <div style={sx("display:flex;align-items:center;gap:10px;justify-content:center")}>
-          <span
-            style={sx(
-              "width:26px;height:26px;border-radius:8px;background:var(--color-accent);display:grid;place-items:center;color:var(--color-bg);font-weight:700;font-size:14px;font-family:var(--font-heading)",
-            )}
-          >
-            T
-          </span>
-          <span style={sx("font-family:var(--font-heading);font-size:19px")}>Traffik</span>
+        <div style={sx("display:flex;justify-content:center")}>
+          <Image
+            src="/logos/traffik-claro.webp"
+            alt="Traffik"
+            width={904}
+            height={230}
+            priority
+            style={{ width: 168, height: "auto", objectFit: "contain" }}
+          />
         </div>
 
         <div className="card elev-md" style={sx("padding:var(--space-6);gap:var(--space-3)")}>
