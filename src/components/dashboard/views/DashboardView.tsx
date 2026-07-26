@@ -99,43 +99,45 @@ export function DashboardView({ v }: { v: TraffikView }) {
           />
         </div>
 
-        {!grid.editing && (
-          <button className="btn btn-secondary" type="button" onClick={v.refreshDashboard}
-            disabled={v.dashLoading} title="Recarregar os dados sem atualizar a página"
-            style={sx("display:inline-flex;align-items:center;gap:7px;white-space:nowrap")}>
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2}
-              strokeLinecap="round" strokeLinejoin="round" aria-hidden
-              style={{ animation: v.dashLoading ? "girar 900ms linear infinite" : undefined }}>
-              <path d="M21 12a9 9 0 11-2.6-6.4M21 3v6h-6" />
-            </svg>
-            {v.dashLoading ? "Atualizando…" : "Atualizar"}
-          </button>
-        )}
+        <div style={sx("display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap")}>
+          {!grid.editing && (
+            <button className="btn btn-secondary" type="button" onClick={v.refreshDashboard}
+              disabled={v.dashLoading} title="Recarregar os dados sem atualizar a página"
+              style={sx("display:inline-flex;align-items:center;gap:7px;white-space:nowrap")}>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2}
+                strokeLinecap="round" strokeLinejoin="round" aria-hidden
+                style={{ animation: v.dashLoading ? "girar 900ms linear infinite" : undefined }}>
+                <path d="M21 12a9 9 0 11-2.6-6.4M21 3v6h-6" />
+              </svg>
+              {v.dashLoading ? "Atualizando…" : "Atualizar"}
+            </button>
+          )}
 
-        {grid.editing ? (
-          <div style={sx("display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center")}>
-            <span className="tag tag-accent">Modo de edição</span>
-            <button className="btn btn-ghost" type="button" onClick={grid.redefinir} disabled={grid.busy}>
-              Redefinir configurações
+          {grid.editing ? (
+            <div style={sx("display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center")}>
+              <span className="tag tag-accent">Modo de edição</span>
+              <button className="btn btn-ghost" type="button" onClick={grid.redefinir} disabled={grid.busy}>
+                Redefinir configurações
+              </button>
+              <button className="btn btn-secondary" type="button" onClick={grid.cancelar} disabled={grid.busy}>
+                Cancelar
+              </button>
+              <button className="btn btn-primary" type="button" onClick={grid.salvar} disabled={grid.busy}>
+                {grid.busy ? "Salvando…" : "Salvar"}
+              </button>
+            </div>
+          ) : (
+            <button className="btn btn-secondary" type="button" onClick={grid.abrirEdicao}>
+              <svg viewBox="0 0 256 256" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={16} strokeLinecap="round">
+                <line x1="40" y1="80" x2="216" y2="80" />
+                <circle cx="96" cy="80" r="18" fill="var(--color-surface)" />
+                <line x1="40" y1="176" x2="216" y2="176" />
+                <circle cx="168" cy="176" r="18" fill="var(--color-surface)" />
+              </svg>
+              Editar dashboard
             </button>
-            <button className="btn btn-secondary" type="button" onClick={grid.cancelar} disabled={grid.busy}>
-              Cancelar
-            </button>
-            <button className="btn btn-primary" type="button" onClick={grid.salvar} disabled={grid.busy}>
-              {grid.busy ? "Salvando…" : "Salvar"}
-            </button>
-          </div>
-        ) : (
-          <button className="btn btn-secondary" type="button" onClick={grid.abrirEdicao}>
-            <svg viewBox="0 0 256 256" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={16} strokeLinecap="round">
-              <line x1="40" y1="80" x2="216" y2="80" />
-              <circle cx="96" cy="80" r="18" fill="var(--color-surface)" />
-              <line x1="40" y1="176" x2="216" y2="176" />
-              <circle cx="168" cy="176" r="18" fill="var(--color-surface)" />
-            </svg>
-            Editar dashboard
-          </button>
-        )}
+          )}
+        </div>
       </div>
 
       <DashboardGrid v={v} grid={grid} />
