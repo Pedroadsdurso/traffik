@@ -6,12 +6,14 @@ import { sx } from "@/lib/sx";
 
 /**
  * Logo de um gateway/plataforma. Cai no monograma quando não temos o arquivo —
- * hoje é o caso da Kiwify, que ainda não está habilitada de qualquer forma.
+ * hoje nenhum gateway cadastrado está nessa situação, mas o fallback fica para
+ * o próximo que entrar na lista antes de a arte chegar.
  */
 const LOGOS: Record<string, string> = {
   KIRVANO: "/logos/kirvano.webp",
   HOTMART: "/logos/hotmart.webp",
   CARTPANDA: "/logos/cartpanda.webp",
+  KIWIFY: "/logos/kiwify.webp",
   FACEBOOK: "/logos/facebook.webp",
 };
 

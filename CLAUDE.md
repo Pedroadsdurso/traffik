@@ -761,21 +761,32 @@ Arquivos em `public/logos/` (webp, vindos do designer):
 |---|---|
 | `traffik-claro.webp` | Wordmark de letras **brancas** — sidebar (o tema é escuro) |
 | `traffik-escuro.webp` | Wordmark de letras pretas — reservado para fundo claro, **ainda sem uso** |
-| `kirvano/hotmart/cartpanda/facebook.webp` | Gateways e plataformas |
+| `kirvano/hotmart/cartpanda/kiwify/facebook.webp` | Gateways e plataformas |
 | `favicon.webp` | Origem do favicon |
 
 - **`ui/LogoGateway.tsx`** é o único ponto que resolve logo de gateway. Recebe o id
-  (`KIRVANO`, `HOTMART`, …) e **cai no monograma quando não há arquivo** — hoje é o caso
-  da Kiwify. Renderiza sobre um quadrado branco arredondado porque as artes têm fundo
-  transparente e várias são escuras: sem isso a Kirvano sumiria no card.
+  (`KIRVANO`, `HOTMART`, …) e **cai no monograma quando não há arquivo** — hoje nenhum
+  gateway está nessa situação, mas o fallback fica para o próximo que entrar na lista
+  antes de a arte chegar.
+- **Sem fundo atrás das logos**, por pedido do usuário: só `border-radius` +
+  `overflow:hidden`, que arredonda o fundo **já embutido** em artes como a da Kirvano
+  em vez de deixar quina viva. Luminância média dos pixels opacos (medida com o sharp):
+  Kirvano 63, Cartpanda 87, Hotmart 112, Facebook 134, Kiwify 148 — sobre `/255`.
+  A Kirvano tem 94% de área opaca (traz o próprio fundo escuro), então continua legível.
+  ⚠️ **A Cartpanda é o caso ruim**: panda preto com detalhes brancos em fundo
+  transparente, então no tema escuro sobram quase só os olhos. Só aparece nas abas do
+  modal de UTMs. Resolver exige um arquivo em versão clara ou um fundo sutil só nela.
 - **Favicon**: `src/app/icon.png` (512) e `apple-icon.png` (180), gerados do `.webp` por
   `scripts/gen-favicon.mjs` com o `sharp` (que já vinha com o Next). A convenção de
   arquivo do Next **não aceita webp**, e nem todo navegador desenha favicon nesse
   formato — por isso a conversão. O `src/app/favicon.ico` antigo foi removido, senão
   teria precedência.
-- **Tamanhos**: wordmark com `height:26px` e largura automática (proporção 904×230, nunca
-  esticar); gateways a 34px no card e 38px na grade da gaveta; 22px nas abas do modal
-  de UTMs.
+- **Tamanhos**: o wordmark é preso pela **largura** (`max-width:184px`, altura livre),
+  não pela altura — assim ocupa a coluna da sidebar como na referência da Utmify, e a
+  proporção 904×230 nunca estica. Renderiza 184×47. O mesmo wordmark, a 168px, substituiu
+  o monograma "T" no **login/cadastro** (`(auth)/AuthShell.tsx`). Gateways a 34px no card
+  e 38px na grade da gaveta; 22px nas abas do modal de UTMs.
+- O subtítulo "Analytics de tráfego" saiu da sidebar — a marca agora fala sozinha.
 
 ## 🪟 Camadas flutuantes: SEMPRE via `ui/Drawer` ou `ui/Modal`
 
