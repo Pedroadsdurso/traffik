@@ -18,7 +18,7 @@ export interface PaisVenda {
 const SIZE = 300; // lado do viewBox (o globo é sempre quadrado)
 const MARGEM = 6;
 const ZOOM_MIN = 1;
-const ZOOM_MAX = 4;
+const ZOOM_MAX = 3;
 
 /** Raio da esfera em unidades do viewBox para um dado zoom. */
 function raio(zoom: number): number {
@@ -27,27 +27,6 @@ function raio(zoom: number): number {
 
 function clampZoom(z: number): number {
   return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
-}
-
-/**
- * Impede que a esfera saia da moldura.
- *
- * Era esse o bug: o `scale` crescia com o zoom mas o `translate` ficava preso no
- * centro, então a esfera transbordava o viewBox e aparecia cortada. Agora o
- * centro pode se deslocar (zoom-to-cursor), mas nunca a ponto de descolar a
- * borda da esfera para dentro do quadro:
- *
- * - Enquanto a esfera couber inteira (raio ≤ metade do quadro), o centro fica
- *   travado no meio — o globo aparece inteiro e centrado.
- * - Depois disso, o deslocamento é limitado a `raio − SIZE/2`, o que garante que
- *   o quadro esteja sempre inteiramente **dentro** da esfera.
- */
-function clampPan(p: { x: number; y: number }, zoom: number): { x: number; y: number } {
-  const folga = Math.max(0, raio(zoom) - SIZE / 2);
-  return {
-    x: Math.max(-folga, Math.min(folga, p.x)),
-    y: Math.max(-folga, Math.min(folga, p.y)),
-  };
 }
 
 /**
@@ -66,8 +45,6 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
   const [modo, setModo] = useState<"globo" | "ranking">("globo");
   const [rot, setRot] = useState<[number, number]>([-50, -12]); // começa no Atlântico Sul
   const [zoom, setZoom] = useState(1);
-  /** Deslocamento do centro da esfera, em unidades do viewBox. */
-  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [ativo, setAtivo] = useState<string | null>(null);
   const [tip, setTip] = useState<{ x: number; y: number; code: string } | null>(null);
 
@@ -99,7 +76,7 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
   const { caminhoTerra, esfera, marcadores } = useMemo(() => {
     const proj = geoOrthographic()
       .scale(raio(zoom))
-      .translate([SIZE / 2 + pan.x, SIZE / 2 + pan.y])
+      .translate([SIZE / 2, SIZE / 2])
       .rotate([rot[0], rot[1], 0]);
     const path = geoPath(proj);
 
@@ -121,7 +98,7 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
       esfera: path({ type: "Sphere" } as Parameters<typeof path>[0]) ?? "",
       marcadores: marc,
     };
-  }, [rot, zoom, pan, dados, maxVendas]);
+  }, [rot, zoom, dados, maxVendas]);
 
   const marcado = dados.find((d) => d.code === tip?.code);
 
@@ -189,25 +166,7 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
             }}
             onWheel={(e) => {
               e.preventDefault();
-              const svg = e.currentTarget.getBoundingClientRect();
-              // Ponto do cursor em unidades do viewBox.
-              const cx = ((e.clientX - svg.left) / svg.width) * SIZE;
-              const cy = ((e.clientY - svg.top) / svg.height) * SIZE;
-              setZoom((zAtual) => {
-                const novo = clampZoom(zAtual - e.deltaY * 0.0018);
-                // Zoom-to-cursor: mantém fixo o ponto sob o mouse. O centro se
-                // move na proporção do crescimento do raio.
-                const k = raio(novo) / raio(zAtual);
-                setPan((p) => {
-                  const centroX = SIZE / 2 + p.x;
-                  const centroY = SIZE / 2 + p.y;
-                  return clampPan(
-                    { x: cx + (centroX - cx) * k - SIZE / 2, y: cy + (centroY - cy) * k - SIZE / 2 },
-                    novo,
-                  );
-                });
-                return novo;
-              });
+              setZoom((zAtual) => clampZoom(zAtual - e.deltaY * 0.0018));
             }}
           >
             <defs>
@@ -274,13 +233,15 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
 
           <div style={sx("position:absolute;bottom:8px;right:8px;display:flex;gap:4px")}>
             <button type="button" className="btn btn-secondary" style={sx("padding:1px 8px;font-size:13px")}
-              onClick={() => setZoom((z) => { const n = clampZoom(z + 0.4); setPan((p) => clampPan(p, n)); return n; })}
+              onClick={() => setZoom((z) => clampZoom(z + 0.4))}
+              disabled={zoom >= ZOOM_MAX}
               aria-label="Aproximar">+</button>
             <button type="button" className="btn btn-secondary" style={sx("padding:1px 8px;font-size:13px")}
-              onClick={() => setZoom((z) => { const n = clampZoom(z - 0.4); setPan((p) => clampPan(p, n)); return n; })}
+              onClick={() => setZoom((z) => clampZoom(z - 0.4))}
+              disabled={zoom <= ZOOM_MIN}
               aria-label="Afastar">−</button>
             <button type="button" className="btn btn-secondary" style={sx("padding:1px 8px;font-size:11px")}
-              onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); setRot([-50, -12]); }}>Reset</button>
+              onClick={() => { setZoom(1); setRot([-50, -12]); }}>Reset</button>
           </div>
 
           {tip && marcado && (
