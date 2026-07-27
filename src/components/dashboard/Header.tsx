@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 
+import { useTheme } from "@/components/theme/ThemeProvider";
 import { sx } from "@/lib/sx";
 import { useTraffik } from "./TraffikContext";
 
@@ -21,6 +22,7 @@ function titleFor(pathname: string): [string, string] {
 
 export function Header() {
   const v = useTraffik();
+  const { theme, toggleTheme } = useTheme();
   const pathname = usePathname();
   const [title, subtitle] = titleFor(pathname);
 
@@ -31,6 +33,25 @@ export function Header() {
         <p style={sx("margin:0;opacity:.65;font-size:14px")}>{subtitle}</p>
       </div>
       <div style={sx("display:flex;align-items:center;gap:12px;flex-shrink:0")}>
+        <button
+          className="btn btn-secondary btn-icon"
+          type="button"
+          onClick={toggleTheme}
+          aria-label={theme === "dark" ? "Alternar para Tema Claro" : "Alternar para Tema Escuro"}
+          title={theme === "dark" ? "Tema Claro" : "Tema Escuro"}
+        >
+          {theme === "dark" ? (
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="5" />
+              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          )}
+        </button>
+
         <div style={sx("position:relative")}>
           <button className="btn btn-secondary btn-icon" type="button" onClick={v.toggleNotifOpen} aria-label="Notificações" style={sx("position:relative")}>
             <svg viewBox="0 0 256 256" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={16} strokeLinecap="round" strokeLinejoin="round">

@@ -79,7 +79,7 @@ export function Donut({
           </filter>
         </defs>
         {/* Trilho: dá forma ao donut mesmo com uma fatia só */}
-        <circle cx={cx} cy={cy} r={R} fill="none" stroke="var(--color-neutral-900)" strokeWidth={ESPESSURA} opacity={0.55} />
+        <circle cx={cx} cy={cy} r={R} fill="none" stroke="var(--color-divider)" strokeWidth={ESPESSURA} opacity={0.6} />
 
         {fatias.map((f, i) => {
           const frac = f.value / total;

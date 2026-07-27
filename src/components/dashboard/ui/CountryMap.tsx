@@ -3,6 +3,7 @@
 import { geoOrthographic, geoPath, geoCircle } from "d3-geo";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { useTheme } from "@/components/theme/ThemeProvider";
 import { PAIS, nomePais } from "@/lib/countries";
 import { brl } from "@/lib/format";
 import { sx } from "@/lib/sx";
@@ -42,6 +43,9 @@ function clampZoom(z: number): number {
  * simplificada (~125 polígonos) — ver `scripts/gen-world-paths.mjs`.
  */
 export function CountryMap({ dados }: { dados: PaisVenda[] }) {
+  const { theme } = useTheme();
+  const isLight = theme === "light";
+
   const [modo, setModo] = useState<"globo" | "ranking">("globo");
   const [rot, setRot] = useState<[number, number]>([-50, -12]); // começa no Atlântico Sul
   const [zoom, setZoom] = useState(1);
@@ -258,7 +262,7 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
       ) : (
         <div
           ref={boxRef}
-          style={sx("position:relative;flex:1;min-height:200px;display:grid;place-items:center;overflow:hidden;border-radius:var(--radius-md);background:radial-gradient(circle at 50% 40%, #141a33 0%, #0b0e1a 70%)")}
+          style={sx(`position:relative;flex:1;min-height:200px;display:grid;place-items:center;overflow:hidden;border-radius:var(--radius-md);background:${isLight ? "radial-gradient(circle at 50% 40%, #e0e7ff 0%, #c7d2fe 70%)" : "radial-gradient(circle at 50% 40%, #141a33 0%, #0b0e1a 70%)"}`)}
           onMouseEnter={() => (interagindo.current = true)}
           onMouseLeave={() => {
             interagindo.current = false;
@@ -282,13 +286,13 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
             <defs>
               {/* Iluminação: claro no centro, escuro na borda → sensação de volume. */}
               <radialGradient id="globo-luz" cx="38%" cy="32%" r="72%">
-                <stop offset="0%" stopColor="#2b3a6b" />
-                <stop offset="55%" stopColor="#18224a" />
-                <stop offset="100%" stopColor="#0a1029" />
+                <stop offset="0%" stopColor={isLight ? "#93c5fd" : "#2b3a6b"} />
+                <stop offset="55%" stopColor={isLight ? "#60a5fa" : "#18224a"} />
+                <stop offset="100%" stopColor={isLight ? "#2563eb" : "#0a1029"} />
               </radialGradient>
               <radialGradient id="globo-brilho" cx="50%" cy="50%" r="50%">
-                <stop offset="88%" stopColor="#7c6ce0" stopOpacity={0} />
-                <stop offset="100%" stopColor="#7c6ce0" stopOpacity={0.35} />
+                <stop offset="88%" stopColor={isLight ? "#4f46e5" : "#7c6ce0"} stopOpacity={0} />
+                <stop offset="100%" stopColor={isLight ? "#4f46e5" : "#7c6ce0"} stopOpacity={isLight ? 0.25 : 0.35} />
               </radialGradient>
               <filter id="glow-ponto" x="-140%" y="-140%" width="380%" height="380%">
                 <feGaussianBlur stdDeviation="3" result="b" />
@@ -302,10 +306,10 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
             {/* Oceano */}
             <path d={esfera} fill="url(#globo-luz)" />
             {/* Continentes */}
-            <path d={caminhoTerra} fill="#38477e" stroke="#5b6bb5" strokeWidth={0.4} vectorEffect="non-scaling-stroke" />
+            <path d={caminhoTerra} fill={isLight ? "#4338ca" : "#38477e"} stroke={isLight ? "#312e81" : "#5b6bb5"} strokeWidth={0.4} vectorEffect="non-scaling-stroke" />
             {/* Halo da borda: reforça a curvatura */}
             <path d={esfera} fill="url(#globo-brilho)" />
-            <path d={esfera} fill="none" stroke="#6d5fe0" strokeWidth={0.7} opacity={0.5} vectorEffect="non-scaling-stroke" />
+            <path d={esfera} fill="none" stroke={isLight ? "#4338ca" : "#6d5fe0"} strokeWidth={0.7} opacity={0.5} vectorEffect="non-scaling-stroke" />
 
             {marcadores.map((m) => {
               const on = ativo === m.code;
@@ -318,13 +322,13 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
                   }}
                   onMouseLeave={() => { setAtivo(null); setTip(null); }}
                 >
-                  <circle cx={m.x} cy={m.y} r={m.r * 2.4} fill="#8b7ff0" opacity={on ? 0.5 : 0.25}>
+                  <circle cx={m.x} cy={m.y} r={m.r * 2.4} fill={isLight ? "#4f46e5" : "#8b7ff0"} opacity={on ? 0.5 : 0.25}>
                     <animate attributeName="opacity" values={`${on ? 0.5 : 0.25};0.06;${on ? 0.5 : 0.25}`}
                       dur="2.6s" repeatCount="indefinite" />
                     <animate attributeName="r" values={`${m.r * 1.7};${m.r * 3};${m.r * 1.7}`}
                       dur="2.6s" repeatCount="indefinite" />
                   </circle>
-                  <circle cx={m.x} cy={m.y} r={on ? m.r * 1.25 : m.r} fill="#e5e0ff"
+                  <circle cx={m.x} cy={m.y} r={on ? m.r * 1.25 : m.r} fill={isLight ? "#e0e7ff" : "#e5e0ff"}
                     filter="url(#glow-ponto)" style={{ transition: "r 200ms var(--ease-out)" }} />
                 </g>
               );

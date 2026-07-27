@@ -50,9 +50,9 @@ export function ChartTooltip({
       role="tooltip"
       style={sx(
         `position:absolute;left:${x}px;top:${y}px;transform:translate(${ancorarDireita ? "-100%" : "0"}, -100%) translateY(-10px);pointer-events:none;z-index:5;` +
-          "background:color-mix(in srgb, #12141f 88%, transparent);backdrop-filter:blur(8px);" +
+          "background:color-mix(in srgb, var(--color-surface) 92%, transparent);backdrop-filter:blur(8px);" +
           "border:1px solid color-mix(in srgb, var(--color-text) 14%, transparent);border-radius:10px;" +
-          "padding:8px 11px;box-shadow:0 8px 24px rgba(0,0,0,.45);white-space:nowrap;font-size:11.5px;" +
+          "padding:8px 11px;color:var(--color-text);box-shadow:var(--shadow-lg);white-space:nowrap;font-size:11.5px;" +
           "animation:fade-in 120ms var(--ease-out) both",
       )}
     >

@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { useTheme } from "@/components/theme/ThemeProvider";
 import { logoutAction } from "@/lib/actions/session";
 import { sx } from "@/lib/sx";
 import { NavIcon } from "./Icon";
@@ -51,6 +52,7 @@ function isActive(pathname: string, item: NavItem): boolean {
 
 export function Sidebar({ user }: { user?: SidebarUser }) {
   const v = useTraffik();
+  const { theme } = useTheme();
   const pathname = usePathname();
 
   return (
@@ -59,11 +61,9 @@ export function Sidebar({ user }: { user?: SidebarUser }) {
         "width:236px;flex-shrink:0;background:var(--color-surface);border-right:1px solid var(--color-divider);padding:var(--space-6) var(--space-4);display:flex;flex-direction:column;gap:var(--space-4);position:sticky;top:0;height:100vh;overflow:auto",
       )}
     >
-      {/* Wordmark ocupando a largura útil da sidebar, como referência de marca.
-          A proporção 904×230 é preservada: a largura manda e a altura acompanha,
-          então a marca nunca estica. */}
+      {/* Wordmark ocupando a largura útil da sidebar, como referência de marca. */}
       <Image
-        src="/logos/traffik-claro.webp"
+        src={theme === "light" ? "/logos/traffik-escuro.webp" : "/logos/traffik-claro.webp"}
         alt={v.brandName}
         width={904}
         height={230}
