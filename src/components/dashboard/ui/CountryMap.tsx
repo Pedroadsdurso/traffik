@@ -17,8 +17,8 @@ export interface PaisVenda {
 
 const SIZE = 300; // lado do viewBox (o globo é sempre quadrado)
 const MARGEM = 6;
-const ZOOM_MIN = 1;
-const ZOOM_MAX = 1.6;
+const ZOOM_MIN = 0.8;
+const ZOOM_MAX = 1.04; // Máximo que garante 100% de visibilidade esférica sem clipping nas bordas
 
 /** Raio da esfera em unidades do viewBox para um dado zoom. */
 function raio(zoom: number): number {
@@ -49,6 +49,7 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
   const [tip, setTip] = useState<{ x: number; y: number; code: string } | null>(null);
 
   const arrasto = useRef<{ x: number; y: number; rot: [number, number] } | null>(null);
+  const touchState = useRef<{ dist?: number; x?: number; y?: number; rot?: [number, number] } | null>(null);
   const interagindo = useRef(false);
   const boxRef = useRef<HTMLDivElement>(null);
 
@@ -78,7 +79,7 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
     return () => cancelAnimationFrame(raf);
   }, [modo]);
 
-  // Previne a rolagem da página inteira no wheel e aplica zoom direcionado ao cursor
+  // Previne a rolagem da página inteira no wheel / touch e aplica zoom direcionado ao cursor / pinch
   useEffect(() => {
     const el = boxRef.current;
     if (!el || modo !== "globo") return;
@@ -129,8 +130,61 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
       });
     };
 
+    const handleTouchMove = (e: TouchEvent) => {
+      if (e.touches.length > 0) {
+        e.preventDefault();
+      }
+
+      if (e.touches.length === 1 && touchState.current?.x != null && touchState.current?.y != null && touchState.current?.rot) {
+        const t = e.touches[0];
+        const dx = t.clientX - touchState.current.x;
+        const dy = t.clientY - touchState.current.y;
+        const initialRot = touchState.current.rot;
+        setRot([
+          initialRot[0] + dx * 0.35,
+          Math.max(-88, Math.min(88, initialRot[1] - dy * 0.35)),
+        ]);
+      } else if (e.touches.length === 2 && touchState.current?.dist) {
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+        const factor = dist / touchState.current.dist;
+        setZoom((z) => clampZoom(z * factor));
+        touchState.current.dist = dist;
+      }
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      interagindo.current = true;
+      if (e.touches.length === 1) {
+        touchState.current = {
+          x: e.touches[0].clientX,
+          y: e.touches[0].clientY,
+          rot: [...rotRef.current],
+        };
+      } else if (e.touches.length === 2) {
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+        touchState.current = { dist, rot: [...rotRef.current] };
+      }
+    };
+
+    const handleTouchEnd = () => {
+      touchState.current = null;
+    };
+
     el.addEventListener("wheel", handleWheel, { passive: false });
-    return () => el.removeEventListener("wheel", handleWheel);
+    el.addEventListener("touchstart", handleTouchStart, { passive: true });
+    el.addEventListener("touchmove", handleTouchMove, { passive: false });
+    el.addEventListener("touchend", handleTouchEnd, { passive: true });
+
+    return () => {
+      el.removeEventListener("wheel", handleWheel);
+      el.removeEventListener("touchstart", handleTouchStart);
+      el.removeEventListener("touchmove", handleTouchMove);
+      el.removeEventListener("touchend", handleTouchEnd);
+    };
   }, [modo]);
 
   const { caminhoTerra, esfera, marcadores } = useMemo(() => {
@@ -289,11 +343,11 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
 
           <div style={sx("position:absolute;bottom:8px;right:8px;display:flex;gap:4px")}>
             <button type="button" className="btn btn-secondary" style={sx("padding:1px 8px;font-size:13px")}
-              onClick={() => setZoom((z) => clampZoom(z + 0.2))}
+              onClick={() => setZoom((z) => clampZoom(z + 0.1))}
               disabled={zoom >= ZOOM_MAX}
               aria-label="Aproximar">+</button>
             <button type="button" className="btn btn-secondary" style={sx("padding:1px 8px;font-size:13px")}
-              onClick={() => setZoom((z) => clampZoom(z - 0.2))}
+              onClick={() => setZoom((z) => clampZoom(z - 0.1))}
               disabled={zoom <= ZOOM_MIN}
               aria-label="Afastar">−</button>
             <button type="button" className="btn btn-secondary" style={sx("padding:1px 8px;font-size:11px")}
