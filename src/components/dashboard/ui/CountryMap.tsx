@@ -18,7 +18,7 @@ export interface PaisVenda {
 const SIZE = 300; // lado do viewBox (o globo é sempre quadrado)
 const MARGEM = 6;
 const ZOOM_MIN = 1;
-const ZOOM_MAX = 3;
+const ZOOM_MAX = 1.6;
 
 /** Raio da esfera em unidades do viewBox para um dado zoom. */
 function raio(zoom: number): number {
@@ -52,6 +52,11 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
   const interagindo = useRef(false);
   const boxRef = useRef<HTMLDivElement>(null);
 
+  const rotRef = useRef(rot);
+  useEffect(() => {
+    rotRef.current = rot;
+  }, [rot]);
+
   const totalRev = dados.reduce((a, d) => a + d.revenue, 0);
   const maxVendas = Math.max(1, ...dados.map((d) => d.sales));
 
@@ -71,6 +76,61 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
     };
     raf = requestAnimationFrame(passo);
     return () => cancelAnimationFrame(raf);
+  }, [modo]);
+
+  // Previne a rolagem da página inteira no wheel e aplica zoom direcionado ao cursor
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el || modo !== "globo") return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+
+      const svg = el.querySelector("svg");
+      if (!svg) return;
+
+      const rect = svg.getBoundingClientRect();
+      const cx = ((e.clientX - rect.left) / rect.width) * SIZE;
+      const cy = ((e.clientY - rect.top) / rect.height) * SIZE;
+
+      setZoom((zAtual) => {
+        const delta = -e.deltaY * 0.0015;
+        const novo = clampZoom(zAtual + delta);
+        if (novo === zAtual) return zAtual;
+
+        // Ao aproximar o zoom, orienta suavemente a esfera para a coordenada do cursor
+        if (novo > zAtual) {
+          const projAtual = geoOrthographic()
+            .scale(raio(zAtual))
+            .translate([SIZE / 2, SIZE / 2])
+            .rotate([rotRef.current[0], rotRef.current[1], 0]);
+
+          if (projAtual.invert) {
+            const coords = projAtual.invert([cx, cy]);
+            if (coords && !isNaN(coords[0]) && !isNaN(coords[1])) {
+              const [targetLng, targetLat] = coords;
+              const currentRot = rotRef.current;
+              const factor = Math.min(0.5, (novo - zAtual) * 2.5);
+
+              let dLng = -targetLng - currentRot[0];
+              dLng = ((((dLng + 180) % 360) + 360) % 360) - 180;
+              const targetRotLat = Math.max(-88, Math.min(88, -targetLat));
+              const dLat = targetRotLat - currentRot[1];
+
+              setRot([
+                currentRot[0] + dLng * factor,
+                Math.max(-88, Math.min(88, currentRot[1] + dLat * factor)),
+              ]);
+            }
+          }
+        }
+
+        return novo;
+      });
+    };
+
+    el.addEventListener("wheel", handleWheel, { passive: false });
+    return () => el.removeEventListener("wheel", handleWheel);
   }, [modo]);
 
   const { caminhoTerra, esfera, marcadores } = useMemo(() => {
@@ -164,10 +224,6 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
               // 0.35°/px dá uma rotação que acompanha o mouse sem "escapar".
               setRot([a.rot[0] + (e.clientX - a.x) * 0.35, Math.max(-88, Math.min(88, a.rot[1] - (e.clientY - a.y) * 0.35))]);
             }}
-            onWheel={(e) => {
-              e.preventDefault();
-              setZoom((zAtual) => clampZoom(zAtual - e.deltaY * 0.0018));
-            }}
           >
             <defs>
               {/* Iluminação: claro no centro, escuro na borda → sensação de volume. */}
@@ -233,11 +289,11 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
 
           <div style={sx("position:absolute;bottom:8px;right:8px;display:flex;gap:4px")}>
             <button type="button" className="btn btn-secondary" style={sx("padding:1px 8px;font-size:13px")}
-              onClick={() => setZoom((z) => clampZoom(z + 0.4))}
+              onClick={() => setZoom((z) => clampZoom(z + 0.2))}
               disabled={zoom >= ZOOM_MAX}
               aria-label="Aproximar">+</button>
             <button type="button" className="btn btn-secondary" style={sx("padding:1px 8px;font-size:13px")}
-              onClick={() => setZoom((z) => clampZoom(z - 0.4))}
+              onClick={() => setZoom((z) => clampZoom(z - 0.2))}
               disabled={zoom <= ZOOM_MIN}
               aria-label="Afastar">−</button>
             <button type="button" className="btn btn-secondary" style={sx("padding:1px 8px;font-size:11px")}
