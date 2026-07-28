@@ -1,4 +1,4 @@
-import { syncUser, syncUserMetrics } from "@/lib/facebook/sync";
+import { syncUser, syncUserMetrics, type SyncSummary } from "@/lib/facebook/sync";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -69,6 +69,21 @@ export interface EstadoSync {
   sincronizando: boolean;
 }
 
+/**
+ * O que a chamada REALMENTE fez.
+ *
+ * Existe porque a função era `void` e quem a chamava não tinha como reportar
+ * nada — a rota de cron respondia `accounts: 0` fixo, o que fazia uma
+ * sincronização bem-sucedida parecer que não achou conta nenhuma. Um cron que
+ * mente sobre o próprio resultado é pior do que um cron que falha: o erro fica
+ * invisível justamente onde se vai olhar para diagnosticar.
+ */
+export type ResultadoAutoSync =
+  /** Ainda não venceu o intervalo, ou outra instância pegou a vez. */
+  | { modo: "pulado"; motivo: "intervalo" | "reservado-por-outro" }
+  | { modo: "metricas" | "completo"; summary: SyncSummary }
+  | { modo: "erro"; erro: string };
+
 type Modo = "metricas" | "completo";
 
 /**
@@ -123,37 +138,41 @@ async function reservar(userId: string): Promise<{ perfis: string[]; modo: Modo 
  * **Nunca lança** — é chamada de dentro do `after()` das rotas, onde uma exceção
  * não teria quem a tratasse e viraria ruído de log a cada poucos segundos.
  */
-export async function autoSyncSeNecessario(userId: string): Promise<void> {
+export async function autoSyncSeNecessario(userId: string): Promise<ResultadoAutoSync> {
   try {
     const reserva = await reservar(userId);
-    if (!reserva) return;
+    if (!reserva) return { modo: "pulado", motivo: "intervalo" };
 
     try {
       if (reserva.modo === "completo") {
-        await syncUser(userId, DIAS_AUTO);
+        const summary = await syncUser(userId, DIAS_AUTO);
         // O completo também traz métricas, então zera os dois relógios.
         await prisma.adProfile.updateMany({
           where: { id: { in: reserva.perfis } },
           data: { lastSyncedAt: new Date(), lastMetricsAt: new Date(), syncLockedAt: null },
         });
-      } else {
-        await syncUserMetrics(userId, DIAS_AUTO);
-        // `lastSyncedAt` NÃO avança aqui: a estrutura não foi revisada, e
-        // marcar como completa adiaria a descoberta de contas novas.
-        await prisma.adProfile.updateMany({
-          where: { id: { in: reserva.perfis } },
-          data: { lastMetricsAt: new Date(), syncLockedAt: null },
-        });
+        return { modo: "completo", summary };
       }
-    } catch {
+
+      const summary = await syncUserMetrics(userId, DIAS_AUTO);
+      // `lastSyncedAt` NÃO avança aqui: a estrutura não foi revisada, e marcar
+      // como completa adiaria a descoberta de contas novas.
+      await prisma.adProfile.updateMany({
+        where: { id: { in: reserva.perfis } },
+        data: { lastMetricsAt: new Date(), syncLockedAt: null },
+      });
+      return { modo: "metricas", summary };
+    } catch (e) {
       // Libera a reserva para a próxima tentativa não esperar o lock expirar.
       await prisma.adProfile.updateMany({
         where: { id: { in: reserva.perfis } },
         data: { syncLockedAt: null },
       });
+      return { modo: "erro", erro: e instanceof Error ? e.message : String(e) };
     }
-  } catch {
-    /* sincronizar é oportunista: nunca pode derrubar a requisição do painel */
+  } catch (e) {
+    // Sincronizar é oportunista: nunca pode derrubar a requisição do painel.
+    return { modo: "erro", erro: e instanceof Error ? e.message : String(e) };
   }
 }
 

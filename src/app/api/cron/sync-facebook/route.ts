@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
   const users = await prisma.adProfile.findMany({ distinct: ["userId"], select: { userId: true } });
 
   let totalMetrics = 0;
-  const results: { userId: string; accounts: number; metrics: number; errors: number }[] = [];
+  const results: Record<string, unknown>[] = [];
 
   for (const u of users) {
     try {
@@ -39,8 +39,32 @@ export async function GET(req: NextRequest) {
         // frequência da chamada deixa de determinar a carga na Graph API — os
         // intervalos internos determinam. Chamar mais vezes só faz a maioria
         // sair sem tocar na Meta.
-        await autoSyncSeNecessario(u.userId);
-        results.push({ userId: u.userId, accounts: 0, metrics: 0, errors: 0 });
+        // O resultado vem do auto-sync — antes eram zeros LITERAIS aqui, e a
+        // resposta dizia "accounts: 0" mesmo quando a sincronização tinha
+        // corrido bem. Um cron que mente sobre o próprio resultado esconde o
+        // erro justamente onde se olha para diagnosticar.
+        const r = await autoSyncSeNecessario(u.userId);
+        // Quantas contas o filtro do sync considera elegíveis — é a resposta
+        // para "por que nenhuma conta apareceu?" sem ter que abrir o banco.
+        const elegiveis = await prisma.adAccount.count({
+          where: { userId: u.userId, trackingEnabled: true, adProfile: { isNot: null } },
+        });
+        const total = await prisma.adAccount.count({ where: { userId: u.userId } });
+        totalMetrics += r.modo === "metricas" || r.modo === "completo" ? r.summary.metrics : 0;
+        results.push({
+          userId: u.userId,
+          modo: r.modo,
+          ...(r.modo === "pulado" ? { motivo: r.motivo } : {}),
+          ...(r.modo === "erro" ? { erro: r.erro } : {}),
+          ...(r.modo === "metricas" || r.modo === "completo"
+            ? { accounts: r.summary.accounts, metrics: r.summary.metrics, errors: r.summary.errors.length, detalheErros: r.summary.errors }
+            : {}),
+          contasElegiveis: elegiveis,
+          contasTotais: total,
+          ...(elegiveis === 0 && total > 0
+            ? { aviso: "Nenhuma conta com rastreamento ligado. Ative em Integrações › Anúncios." }
+            : {}),
+        });
       }
     } catch {
       results.push({ userId: u.userId, accounts: 0, metrics: 0, errors: 1 });
