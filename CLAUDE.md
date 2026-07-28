@@ -935,6 +935,96 @@ gasto feito hoje aparecia como R$ 0,00. Trocado por `time_range` explícito
 > `trackingEnabled = true`** — se o gasto foi em outra, é preciso ligar o rastreamento
 > dela na aba Anúncios.
 
+## 🕐 Fuso horário — causa raiz do bug de dia/hora (28/07/2026)
+
+**Causa raiz: o código agregava por dia e hora usando o fuso do PROCESSO Node,
+não o do usuário.** `getHours()`, `setHours(0,0,0,0)`, `getFullYear/getMonth/
+getDate` e `toDateString()` respondem no `TZ` do processo. Em desenvolvimento
+(Windows, Brasil) esse fuso é `America/Sao_Paulo` e tudo parecia certo — **na
+Vercel o processo roda em UTC**, e os 3 primeiros sintomas caem todos daí:
+
+| Sintoma relatado | Mecanismo |
+|---|---|
+| Dados do dia 25 no 24 e vice-versa | "Hoje" começava à meia-noite **UTC** = 21h do dia anterior em Brasília. As vendas das 21h–24h caíam no dia seguinte. |
+| O ciclo de 24h encerrava cedo | Mesma coisa vista de outro ângulo: o dia virava às 21h, 3h antes. |
+| Venda das 17h marcada entre 20h e 21h | `new Date(s.timestamp).getHours()` devolvia a hora **UTC** — 17h BRT = 20h UTC. O deslocamento de +3 é a assinatura do bug. |
+
+O 4º sintoma é independente e trivial: `elapsed()` parava nos minutos
+(`return Math.round(sec/60) + "min atrás"`), daí o "842min atrás".
+
+**Solução central: `src/lib/timezone.ts`.** Regra do projeto daqui em diante —
+**nenhum código de agregação chama método local de `Date`**. Tudo passa por ali.
+
+- **Fuso por usuário:** coluna `User.timezone` (migration `20260728120000`),
+  padrão `America/Sao_Paulo`, editável na aba **Taxas e Despesas** (card "Fuso
+  horário", que mostra a hora atual no fuso escolhido para conferência).
+  `NotificationSettings.timezone` **existe desde a migration inicial e nunca foi
+  lida por código nenhum**. Continua lá, sem uso — ver o aviso abaixo.
+
+> ### 🔴 Não remova coluna de um banco COMPARTILHADO com a produção
+> A migration `20260728120000` chegou a **dropar** a `NotificationSettings.timezone`
+> por ser código morto. Estava tecnicamente certo e operacionalmente errado: o
+> Supabase é o **mesmo banco** do dev e da produção, e a produção roda um build
+> antigo cujo cliente Prisma ainda seleciona aquela coluna. No instante em que
+> ela sumiu, **todo carregamento do dashboard passou a dar 500** — o
+> `getNotificationSettings()` roda no layout de `/dashboard`. Restaurada pela
+> `20260728130000`.
+>
+> Remover coluna aqui só é seguro **depois** que todos os ambientes estiverem
+> rodando o código que deixou de usá-la — ou seja, em dois deploys, nunca em um.
+- **A leitura fica em `src/lib/userTimezone.ts`, NÃO em `actions/profile.ts`.**
+  Aquele módulo é `"use server"` (todo export vira endpoint de server action) e
+  importa o `@/auth` — arrastaria o NextAuth para dentro de `metrics.ts`,
+  `sync.ts` e do motor de regras, que rodam em **cron, sem request nenhum**.
+- **Chave de dia (`"2026-07-25"`) é STRING de propósito.** Comparar strings
+  elimina a classe inteira de bugs de "instante que representa um dia".
+- **`zonedToUtc` faz duas passadas** por causa do horário de verão: o offset é
+  estimado no instante chutado e pode não ser o do instante resultante na
+  virada. O Brasil não tem mais DST, mas Nova York e Lisboa têm (testado: o dia
+  da virada em NY dura 23h).
+
+> ### ⚠️ `DailyAdMetric.date` é `@db.Date` — compare por CHAVE, nunca por instante
+> É um dia de **calendário**, gravado como meia-noite UTC (a Meta manda
+> `"2026-07-25"` e o Prisma trunca a hora). A meia-noite UTC do dia 25 é
+> **anterior** à meia-noite de Brasília do dia 25, então comparar com
+> `m.date.getTime() >= bucket.start` joga a linha no bucket do dia anterior.
+> Use `dateColumnKey()` para ler e `keyToDateColumn()` para o `where`.
+
+**Onde foi corrigido:** `dashboard/metrics.ts` (janela, `byHour`, `byDay`,
+buckets do gráfico, consulta de métrica), `ads/overview.ts`, `ads/creatives.ts`,
+`rules/engine.ts` (inclusive o **limite diário de execuções**, que reiniciava às
+21h e dava execuções extras a uma regra que pausa campanha de verdade),
+`facebook/sync.ts` (o `time_range` da Meta andava um dia), `api/cron/reports`
+(a hora do relatório agora é a de **cada** usuário) e `dateRange.ts` +
+`DateRangePicker` (o "hoje" do calendário era o do **navegador**).
+
+**Três bugs achados de quebra, no mesmo caminho:**
+1. **Período custom de um dia só vinha vazio.** `new Date("2026-07-25")` é
+   meia-noite UTC, então `from === to` dava uma janela de **duração zero**. Hoje
+   o `to` vai até 23:59:59.999 do fuso do usuário.
+2. **A janela de comparação dos deltas era torta.** Era `start - (end - start)`;
+   em "Hoje" isso comparava contra um pedaço de ontem+anteontem. Agora "Hoje"
+   compara contra **ontem até o mesmo horário**, e as janelas de N dias contra
+   os N dias de calendário imediatamente anteriores.
+3. **`"Últimos 7 dias"` não eram 7 dias.** Era `now - 7×86400000`, que cai no
+   meio de um dia e gerava um bucket parcial a mais — a origem do `+ 1` que o
+   `buildChart` precisava ter. Agora são 7 dias de calendário terminando hoje.
+
+> ⚠️ **Gasto é métrica DIÁRIA — não existe gasto por hora.** Na série horária o
+> total do dia é lançado no bucket das 00h, para o gráfico continuar somando o
+> mesmo que o KPI em vez de zerar a linha. Comportamento igual ao anterior, só
+> que agora explícito.
+
+**Testado:** 37 asserções puras com `TZ=UTC` (reproduzindo a Vercel), incluindo
+os 3 sintomas exatos, a virada de DST em Nova York, viradas de mês/ano/bissexto
+e os 13 degraus do `elapsed`. Mais 17 asserções **ponta a ponta contra o
+Supabase**: vendas semeadas às 09h e 17h BRT de hoje e às 22h30 BRT de ontem
+caíram na hora e no dia certos, e o total de "hoje" excluiu a de ontem.
+A prova final é o teste que **troca o fuso do usuário para `UTC` e reproduz o
+bug antigo** (17h vira 20h, a venda de ontem vaza para hoje) — é o que mostra
+que o fuso realmente comanda a agregação agora. `tsc --noEmit` e `next build`
+limpos; dados de teste removidos.
+
 ## 🎨 Marca e logos
 
 Arquivos em `public/logos/` (webp, vindos do designer):

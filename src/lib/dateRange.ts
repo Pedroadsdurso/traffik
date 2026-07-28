@@ -8,10 +8,27 @@
  * Verificado: 21:00 de 24/07 → `toISOString()` dá `2026-07-25`.
  */
 
+import { DEFAULT_TIMEZONE, partsInTz } from "@/lib/timezone";
+
 export interface DateRange {
   /** ISO `YYYY-MM-DD`. */
   from: string;
   to: string;
+}
+
+/**
+ * "Hoje" **no fuso do usuário**, devolvido como `Date` local com os mesmos
+ * ano/mês/dia.
+ *
+ * O calendário roda no navegador, então o "hoje" dele era o do FUSO DO
+ * NAVEGADOR. Um usuário em Lisboa filtrando uma conta configurada em Brasília
+ * pedia um dia que o servidor agregava como outro. Convertendo só a data (e
+ * mantendo o `Date` local), toda a aritmética de calendário daqui — que é
+ * puramente Y/M/D e nunca vira instante — continua valendo sem mudança.
+ */
+export function hojeNoFuso(tz: string = DEFAULT_TIMEZONE): Date {
+  const p = partsInTz(new Date(), tz);
+  return new Date(p.year, p.month - 1, p.day);
 }
 
 /** Data **local** em ISO `YYYY-MM-DD` — nunca use `toISOString()` para isto. */

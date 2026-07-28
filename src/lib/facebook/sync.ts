@@ -1,5 +1,7 @@
+import { getUserTimezone } from "@/lib/userTimezone";
 import { GRAPH_URL } from "@/lib/facebook/graph";
 import { prisma } from "@/lib/prisma";
+import { addDaysToKey, todayKey } from "@/lib/timezone";
 import type { EntityStatus } from "@/generated/prisma/enums";
 
 // ─────────────────── Helpers de Graph API ───────────────────
@@ -272,10 +274,13 @@ async function syncAccount(
   // trazem o dia corrente de forma confiável — era por isso que um gasto feito
   // hoje aparecia como R$ 0,00 na ferramenta. Com `since`/`until` até hoje, o
   // dia parcial vem junto.
-  const hoje = new Date();
-  const desde = new Date(hoje.getTime() - days * 864e5);
-  const iso = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  //
+  // As pontas saem do fuso do USUÁRIO, não do processo: rodando na Vercel (UTC),
+  // a partir das 21h de Brasília o `until` já apontava para o dia seguinte e o
+  // `since` pulava o dia mais antigo — a janela inteira andava um dia.
+  const tz = await getUserTimezone(account.userId);
+  const hoje = todayKey(tz);
+  const desde = addDaysToKey(hoje, -days);
 
   const insights = await graphAll<FbInsight>(
     `${act}/insights`,
@@ -283,7 +288,7 @@ async function syncAccount(
       level: "ad",
       fields: "ad_id,spend,impressions,clicks,ctr,cpc,cpm,reach,frequency",
       time_increment: "1",
-      time_range: JSON.stringify({ since: iso(desde), until: iso(hoje) }),
+      time_range: JSON.stringify({ since: desde, until: hoje }),
       // Sem isto a Meta omite linhas de dias com entrega mas gasto ainda não
       // consolidado, o que abre buracos na série.
       action_report_time: "impression",

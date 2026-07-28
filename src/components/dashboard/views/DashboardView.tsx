@@ -54,6 +54,7 @@ function FiltroPeriodo({ v }: { v: TraffikView }) {
       />
       {aberto && (
         <DateRangePicker
+          timezone={v.timezone}
           value={v.dashFrom ? { from: v.dashFrom, to: v.dashTo ?? v.dashFrom } : null}
           onCancel={() => setAberto(false)}
           onApply={(r) => {

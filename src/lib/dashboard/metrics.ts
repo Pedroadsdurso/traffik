@@ -1,4 +1,18 @@
+import { getUserTimezone } from "@/lib/userTimezone";
 import { prisma } from "@/lib/prisma";
+import {
+  addDaysToKey,
+  dateColumnKey,
+  dayEnd,
+  dayKeyInTz,
+  dayKeyRange,
+  dayStart,
+  daysBetweenKeys,
+  hourInTz,
+  keyToDateColumn,
+  todayKey,
+  zonedToUtc,
+} from "@/lib/timezone";
 import type { PaymentMethod } from "@/generated/prisma/enums";
 
 export type DashPeriod = "hoje" | "7d" | "30d" | "custom";
@@ -74,21 +88,84 @@ const PAYMENT_LABEL: Record<PaymentMethod, string> = {
   OUTRO: "Outro",
 };
 
-function resolveRange(f: DashboardFilters): { start: Date; end: Date; granularity: "hour" | "day" } {
-  const end = new Date();
+/**
+ * A janela do filtro, resolvida **no fuso do usuário**.
+ *
+ * Devolve as pontas como chaves de dia (`YYYY-MM-DD`) além dos instantes: os
+ * buckets e as consultas de `DailyAdMetric` precisam da chave, e derivá-la de
+ * volta a partir do `Date` seria reabrir exatamente o bug que isto conserta.
+ *
+ * A janela anterior (para os deltas) também é alinhada ao calendário. Antes ela
+ * era `start - (end - start)`, o que para "Hoje" comparava contra um pedaço de
+ * ontem+anteontem em vez de contra ontem.
+ */
+interface Range {
+  start: Date;
+  end: Date;
+  startKey: string;
+  endKey: string;
+  granularity: "hour" | "day";
+  prevStart: Date;
+  prevEnd: Date;
+}
+
+function resolveRange(f: DashboardFilters, tz: string): Range {
+  const agora = new Date();
+  const hoje = todayKey(tz);
+
   if (f.period === "custom" && f.from) {
-    const start = new Date(f.from);
-    const to = f.to ? new Date(f.to) : end;
-    return { start, end: to, granularity: "day" };
+    const startKey = f.from;
+    // `to` inclusivo até 23:59:59.999 do fuso do usuário. Antes era
+    // `new Date("2026-07-25")` = meia-noite UTC, então um período de UM dia
+    // (from === to) resultava numa janela de duração ZERO e o dashboard vinha
+    // vazio — e um período normal perdia o último dia inteiro.
+    const endKey = f.to ?? f.from;
+    const dias = Math.max(1, daysBetweenKeys(startKey, endKey) + 1);
+    const start = dayStart(startKey, tz);
+    return {
+      start,
+      end: dayEnd(endKey, tz),
+      startKey,
+      endKey,
+      granularity: "day",
+      prevStart: dayStart(addDaysToKey(startKey, -dias), tz),
+      prevEnd: dayEnd(addDaysToKey(startKey, -1), tz),
+    };
   }
+
   if (f.period === "hoje") {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    return { start, end, granularity: "hour" };
+    const start = dayStart(hoje, tz);
+    // Ontem, do começo do dia até o mesmo ponto do dia em que estamos agora —
+    // comparar o dia parcial contra um dia inteiro faria "Hoje" parecer sempre
+    // pior de manhã.
+    const ontem = addDaysToKey(hoje, -1);
+    const prevStart = dayStart(ontem, tz);
+    return {
+      start,
+      end: agora,
+      startKey: hoje,
+      endKey: hoje,
+      granularity: "hour",
+      prevStart,
+      prevEnd: new Date(prevStart.getTime() + (agora.getTime() - start.getTime())),
+    };
   }
-  const days = f.period === "30d" ? 30 : 7;
-  const start = new Date(end.getTime() - days * 864e5);
-  return { start, end, granularity: "day" };
+
+  // "Últimos 7/30 dias" = 7/30 dias de CALENDÁRIO terminando hoje, alinhados à
+  // meia-noite do usuário. Antes era um deslocamento cru de `n × 86400000` a
+  // partir de agora, que caía no meio de um dia e produzia um bucket parcial a
+  // mais na ponta — a origem do `+ 1` que o `buildChart` precisava ter.
+  const dias = f.period === "30d" ? 30 : 7;
+  const startKey = addDaysToKey(hoje, -(dias - 1));
+  return {
+    start: dayStart(startKey, tz),
+    end: agora,
+    startKey,
+    endKey: hoje,
+    granularity: "day",
+    prevStart: dayStart(addDaysToKey(startKey, -dias), tz),
+    prevEnd: dayEnd(addDaysToKey(startKey, -1), tz),
+  };
 }
 
 function num(v: unknown): number {
@@ -118,8 +195,18 @@ function computeExpenses(
   return { gateway, tax, recurring, total: gateway + tax + recurring };
 }
 
-async function windowAggregate(userId: string, filters: DashboardFilters, start: Date, end: Date) {
+async function windowAggregate(
+  userId: string,
+  filters: DashboardFilters,
+  start: Date,
+  end: Date,
+  tz: string,
+) {
   const accountId = filters.account !== "todas" ? filters.account : null;
+  // As pontas em chave de dia do fuso do usuário — é assim que `DailyAdMetric`
+  // (coluna `@db.Date`, um dia de calendário) tem de ser filtrada.
+  const startKey = dayKeyInTz(start, tz);
+  const endKey = dayKeyInTz(end, tz);
   const sourceFilter = filters.source !== "todas" ? filters.source : null;
   const productFilter = filters.product !== "todos" ? filters.product : null;
 
@@ -156,7 +243,10 @@ async function windowAggregate(userId: string, filters: DashboardFilters, start:
     }),
     prisma.dailyAdMetric.findMany({
       where: {
-        date: { gte: new Date(start.toDateString()), lte: end },
+        // `keyToDateColumn` em vez de `new Date(start.toDateString())`: o
+        // `toDateString()` reinterpretava a data no fuso do PROCESSO, então na
+        // Vercel (UTC) a janela começava um dia adiantada.
+        date: { gte: keyToDateColumn(startKey), lte: keyToDateColumn(endKey) },
         ad: {
           adAccount: { userId },
           ...(accountId ? { adAccountId: accountId } : {}),
@@ -184,19 +274,18 @@ async function windowAggregate(userId: string, filters: DashboardFilters, start:
     }),
   ]);
 
-  return { sales, clicks, metrics, expenses, pixelEvents, initiateCheckouts, janela: { start, end } };
+  return { sales, clicks, metrics, expenses, pixelEvents, initiateCheckouts, janela: { start, end, startKey, endKey, tz } };
 }
 
 export async function computeDashboard(userId: string, filters: DashboardFilters): Promise<DashboardData> {
-  const { start, end, granularity } = resolveRange(filters);
+  // O fuso vem antes de tudo: é ele que define onde a janela começa, e resolver
+  // a janela sem ele é o bug que este módulo inteiro passou a evitar.
+  const tz = await getUserTimezone(userId);
+  const { start, end, startKey, endKey, granularity, prevStart, prevEnd } = resolveRange(filters, tz);
 
   const [current, previous, filterOptions] = await Promise.all([
-    windowAggregate(userId, filters, start, end),
-    (async () => {
-      // Período imediatamente anterior, de mesma duração, para os deltas.
-      const span = end.getTime() - start.getTime();
-      return windowAggregate(userId, filters, new Date(start.getTime() - span), start);
-    })(),
+    windowAggregate(userId, filters, start, end, tz),
+    windowAggregate(userId, filters, prevStart, prevEnd, tz),
     loadFilterOptions(userId),
   ]);
 
@@ -216,7 +305,7 @@ export async function computeDashboard(userId: string, filters: DashboardFilters
     arpu: pctDelta(summary.arpu, prev.arpu),
   };
 
-  const chart = buildChart(current, start, end, granularity, filters.period);
+  const chart = buildChart(current, startKey, endKey, end, granularity, filters.period, tz);
   const activity = buildActivity(current);
 
   return {
@@ -404,9 +493,13 @@ function summarize(w: Window) {
   // de métricas diárias e também é rateado.
   const custoSobreReceita = revenue ? (spend + exp.total) / revenue : 0;
 
+  // `hourInTz` em vez de `getHours()`: era exatamente aqui que uma venda das
+  // 17h em Brasília aparecia às 20h — o processo na Vercel roda em UTC e
+  // `getHours()` devolve a hora do processo, não a do usuário.
+  const tz = w.janela.tz;
   const byHour = Array.from({ length: 24 }, (_, hour) => ({ hour, sales: 0, revenue: 0, profit: 0 }));
   for (const s of approved) {
-    const h = new Date(s.timestamp).getHours();
+    const h = hourInTz(s.timestamp, tz);
     const v = num(s.value);
     byHour[h]!.sales += 1;
     byHour[h]!.revenue += v;
@@ -415,8 +508,7 @@ function summarize(w: Window) {
 
   const diaMap = new Map<string, { sales: number; revenue: number }>();
   for (const s of approved) {
-    const d = new Date(s.timestamp);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const key = dayKeyInTz(s.timestamp, tz);
     const cur = diaMap.get(key) ?? { sales: 0, revenue: 0 };
     cur.sales += 1;
     cur.revenue += num(s.value);
@@ -424,18 +516,9 @@ function summarize(w: Window) {
   }
   // Preenche todos os dias da janela, inclusive os sem venda: o gráfico desenha
   // barra-fantasma nas lacunas, e sem elas a série temporal ficaria com buracos.
-  const byDay: { date: string; sales: number; revenue: number }[] = [];
-  const iso = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const cursor = new Date(w.janela.start);
-  cursor.setHours(0, 0, 0, 0);
-  const limite = new Date(w.janela.end);
-  while (cursor <= limite && byDay.length < 60) {
-    const k = iso(cursor);
-    byDay.push({ date: k, ...(diaMap.get(k) ?? { sales: 0, revenue: 0 }) });
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  byDay.splice(0, Math.max(0, byDay.length - 30));
+  const byDay = dayKeyRange(w.janela.startKey, w.janela.endKey, 60)
+    .map((k) => ({ date: k, ...(diaMap.get(k) ?? { sales: 0, revenue: 0 }) }))
+    .slice(-30);
 
   const expenses = { gateway: exp.gateway, tax: exp.tax, recurring: exp.recurring, total: exp.total };
 
@@ -451,26 +534,52 @@ function pctDelta(cur: number, prev: number): number | null {
   return ((cur - prev) / Math.abs(prev)) * 100;
 }
 
-function buildChart(w: Window, start: Date, end: Date, granularity: "hour" | "day", period: DashPeriod) {
-  const buckets: { label: string; start: number; end: number }[] = [];
+function buildChart(
+  w: Window,
+  startKey: string,
+  endKey: string,
+  end: Date,
+  granularity: "hour" | "day",
+  period: DashPeriod,
+  tz: string,
+) {
+  // Cada bucket carrega a chave do dia a que pertence: o faturamento casa por
+  // instante (é um `DateTime`), mas o gasto casa por CHAVE, porque
+  // `DailyAdMetric.date` é `@db.Date` — um dia de calendário gravado como
+  // meia-noite UTC, que não coincide com a meia-noite de nenhum outro fuso.
+  const buckets: { label: string; start: number; end: number; dayKey: string; primeiroDoDia: boolean }[] = [];
   if (granularity === "hour") {
+    const [y, m, d] = startKey.split("-").map(Number);
     for (let h = 0; h < 24; h++) {
-      const bs = new Date(start);
-      bs.setHours(h, 0, 0, 0);
-      const be = new Date(bs.getTime() + 36e5);
+      const bs = zonedToUtc(y!, m!, d!, h, 0, 0, 0, tz);
       if (bs > end) break;
-      buckets.push({ label: `${String(h).padStart(2, "0")}h`, start: bs.getTime(), end: be.getTime() });
+      // `+1h` pelo relógio de parede, não `+36e5`: num dia de virada de horário
+      // de verão a hora tem 0 ou 2 horas de duração e os buckets ficariam
+      // desalinhados do resto do dia.
+      const be = zonedToUtc(y!, m!, d!, h + 1, 0, 0, 0, tz);
+      buckets.push({
+        label: `${String(h).padStart(2, "0")}h`,
+        start: bs.getTime(),
+        end: be.getTime(),
+        dayKey: startKey,
+        primeiroDoDia: h === 0,
+      });
     }
   } else {
-    // `+ 1` porque os dois extremos entram: em "últimos 7 dias" o intervalo vai
-    // de hoje-7 até agora, e sem o +1 o último bucket parava ONTEM — as vendas
-    // de hoje caíam fora de todos os buckets e o gráfico ficava achatado em zero.
-    const days = Math.max(1, Math.round((end.getTime() - start.getTime()) / 864e5) + 1);
-    for (let d = 0; d < days; d++) {
-      const bs = new Date(start.getTime() + d * 864e5);
-      bs.setHours(0, 0, 0, 0);
-      const be = new Date(bs.getTime() + 864e5);
-      buckets.push({ label: bs.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }), start: bs.getTime(), end: be.getTime() });
+    // As chaves já vêm alinhadas ao calendário do usuário pelo `resolveRange`,
+    // então o `+ 1` que existia aqui (para compensar uma janela que começava no
+    // meio do dia) deixou de ser necessário.
+    for (const key of dayKeyRange(startKey, endKey, 60)) {
+      const bs = dayStart(key, tz);
+      const be = dayStart(addDaysToKey(key, 1), tz);
+      const [, mm, dd] = key.split("-");
+      buckets.push({
+        label: `${dd}/${mm}`,
+        start: bs.getTime(),
+        end: be.getTime(),
+        dayKey: key,
+        primeiroDoDia: true,
+      });
     }
   }
 
@@ -478,8 +587,13 @@ function buildChart(w: Window, start: Date, end: Date, granularity: "hour" | "da
   const revenue = buckets.map((b) =>
     approved.filter((s) => s.timestamp.getTime() >= b.start && s.timestamp.getTime() < b.end).reduce((a, s) => a + num(s.value), 0),
   );
+  // Gasto é uma métrica DIÁRIA: não existe gasto por hora. Numa série horária
+  // o total do dia é lançado no primeiro bucket, para o gráfico continuar
+  // somando o mesmo que o KPI de gasto em vez de zerar a linha inteira.
   const spend = buckets.map((b) =>
-    w.metrics.filter((m) => m.date.getTime() >= b.start && m.date.getTime() < b.end).reduce((a, m) => a + num(m.spend), 0),
+    b.primeiroDoDia
+      ? w.metrics.filter((m) => dateColumnKey(m.date) === b.dayKey).reduce((a, m) => a + num(m.spend), 0)
+      : 0,
   );
 
   // Séries por bucket para os sparklines dos cards de KPI (Bloco 5 — polimento).

@@ -7,6 +7,7 @@ import {
   formatarIntervalo,
   fromISO,
   gradeDoMes,
+  hojeNoFuso,
   toISO,
   type DateRange,
 } from "@/lib/dateRange";
@@ -26,12 +27,15 @@ export function DateRangePicker({
   value,
   onApply,
   onCancel,
+  timezone,
 }: {
   value: DateRange | null;
   onApply: (r: DateRange) => void;
   onCancel: () => void;
+  /** Fuso do usuário: é ele que define qual dia é "hoje", não o do navegador. */
+  timezone?: string;
 }) {
-  const hoje = useMemo(() => new Date(), []);
+  const hoje = useMemo(() => hojeNoFuso(timezone), [timezone]);
   const inicial = value ? fromISO(value.from) : hoje;
 
   const [ano, setAno] = useState(inicial.getFullYear());

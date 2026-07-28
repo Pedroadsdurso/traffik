@@ -1,4 +1,6 @@
+import { getUserTimezone } from "@/lib/userTimezone";
 import { prisma } from "@/lib/prisma";
+import { addDaysToKey, dayStart, keyToDateColumn, todayKey } from "@/lib/timezone";
 import { splitPipe } from "@/lib/utm/parse";
 
 export interface AdsFilters {
@@ -56,14 +58,15 @@ export interface AdsOverview {
   accounts: AccountRow[];
 }
 
-function rangeStart(period: AdsFilters["period"]): Date {
-  if (period === "hoje") {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }
-  const days = period === "30d" ? 30 : 7;
-  return new Date(Date.now() - days * 864e5);
+/**
+ * Janela do gerenciador, no fuso do usuário. Devolve o instante inicial (para
+ * `Sale.timestamp`) e a chave do dia (para `DailyAdMetric.date`, que é
+ * `@db.Date` e não pode ser comparada com um instante).
+ */
+function rangeStart(period: AdsFilters["period"], tz: string): { start: Date; startKey: string } {
+  const hoje = todayKey(tz);
+  const startKey = period === "hoje" ? hoje : addDaysToKey(hoje, -((period === "30d" ? 30 : 7) - 1));
+  return { start: dayStart(startKey, tz), startKey };
 }
 
 function num(v: unknown): number {
@@ -77,7 +80,8 @@ function matchesStatus(status: string, filter: string): boolean {
 }
 
 export async function computeAdsOverview(userId: string, filters: AdsFilters): Promise<AdsOverview> {
-  const start = rangeStart(filters.period);
+  const tz = await getUserTimezone(userId);
+  const { start, startKey } = rangeStart(filters.period, tz);
   const accountWhere = filters.account !== "todas" ? { id: filters.account } : {};
 
   const [accounts, campaigns, adSets, ads, metrics, sales] = await Promise.all([
@@ -108,7 +112,7 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
       },
     }),
     prisma.dailyAdMetric.findMany({
-      where: { date: { gte: new Date(start.toDateString()) }, ad: { adAccount: { userId, ...accountWhere } } },
+      where: { date: { gte: keyToDateColumn(startKey) }, ad: { adAccount: { userId, ...accountWhere } } },
       select: { adId: true, spend: true, impressions: true, clicks: true },
     }),
     // Vendas aprovadas no período, para atribuir resultados por utm_campaign → nome da campanha.

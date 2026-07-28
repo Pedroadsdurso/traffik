@@ -32,6 +32,7 @@ export function DashboardShell({
   initialNotifSettings,
   initialNotifications,
   initialExpenses,
+  timezone,
   children,
 }: {
   user?: SidebarUser;
@@ -46,6 +47,8 @@ export function DashboardShell({
   initialNotifSettings?: NotificationSettingsDTO;
   initialNotifications?: NotificationDTO[];
   initialExpenses?: ExpenseDTO[];
+  /** Fuso de referência do usuário — ver `src/lib/timezone.ts`. */
+  timezone?: string;
   children: ReactNode;
 }) {
   // A `key` pelo pathname remonta o nó a cada rota, disparando a animação de
@@ -64,6 +67,7 @@ export function DashboardShell({
     initialNotifSettings,
     initialNotifications,
     initialExpenses,
+    timezone,
   });
 
   return (

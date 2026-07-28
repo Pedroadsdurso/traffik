@@ -1,5 +1,82 @@
+"use client";
+
+import { useState, useTransition } from "react";
+
+import { setMyTimezone } from "@/lib/actions/profile";
 import { sx } from "@/lib/sx";
+import { TIMEZONE_OPTIONS, partsInTz } from "@/lib/timezone";
 import type { TraffikView } from "../useTraffikState";
+
+/**
+ * Fuso de referência da conta. Fica aqui porque esta é a tela de configuração
+ * que já existe (taxas, impostos, despesas) e o fuso é da mesma natureza: um
+ * parâmetro que muda como todo número do produto é calculado.
+ *
+ * Mostra a hora atual no fuso escolhido — é a única forma de o usuário conferir
+ * que acertou sem esperar o dashboard virar o dia.
+ */
+function CardFusoHorario({ inicial }: { inicial: string }) {
+  const [tz, setTz] = useState(inicial);
+  const [salvo, setSalvo] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [pendente, iniciar] = useTransition();
+
+  const p = partsInTz(new Date(), tz);
+  const agora = `${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`;
+  const dia = `${String(p.day).padStart(2, "0")}/${String(p.month).padStart(2, "0")}`;
+
+  function aplicar(valor: string) {
+    setTz(valor);
+    setErro(null);
+    setSalvo(false);
+    iniciar(async () => {
+      const r = await setMyTimezone(valor);
+      if (r.ok) {
+        setSalvo(true);
+        // Os dados do dashboard são buscados no servidor com o fuso ANTIGO;
+        // recarregar é o caminho honesto de repintar tudo com o novo.
+        setTimeout(() => window.location.reload(), 600);
+      } else {
+        setErro(r.error ?? "Não foi possível salvar.");
+        setTz(inicial);
+      }
+    });
+  }
+
+  return (
+    <div className="card elev-sm">
+      <div className="card-kicker">Fuso horário</div>
+      <div className="card-title">Referência de dia e hora</div>
+      <p className="text-muted" style={sx("font-size:12px;margin-top:var(--space-2);line-height:1.5")}>
+        Define onde o dia começa e termina em todos os relatórios — dashboard, vendas
+        por horário, vendas por dia e os filtros de período.
+      </p>
+      <select
+        className="input"
+        style={sx("width:100%;margin-top:var(--space-3)")}
+        value={tz}
+        disabled={pendente}
+        onChange={(e) => aplicar(e.target.value)}
+      >
+        {/* Um fuso salvo fora da lista (via API) continua selecionável. */}
+        {!TIMEZONE_OPTIONS.some((o) => o.value === tz) && <option value={tz}>{tz}</option>}
+        {TIMEZONE_OPTIONS.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+      <div style={sx("display:flex;justify-content:space-between;align-items:center;margin-top:var(--space-2);font-size:12px")}>
+        <span className="text-muted">Agora neste fuso</span>
+        <span style={sx("font-variant-numeric:tabular-nums")}>{dia} · {agora}</span>
+      </div>
+      {salvo && !erro && (
+        <div style={sx("font-size:12px;color:var(--color-accent-300);margin-top:var(--space-2)")}>
+          Salvo — recarregando os dados…
+        </div>
+      )}
+      {erro && <div style={sx("font-size:12px;color:var(--color-danger, #f87171);margin-top:var(--space-2)")}>{erro}</div>}
+    </div>
+  );
+}
 
 function RemoveBtn({ onClick }: { onClick: () => void }) {
   return (
@@ -92,7 +169,10 @@ export function FeesView({ v }: { v: TraffikView }) {
         </div>
       </div>
 
-      <div className="card elev-sm" style={sx("position:sticky;top:var(--space-4)")}>
+      <div style={sx("display:flex;flex-direction:column;gap:var(--space-4);position:sticky;top:var(--space-4)")}>
+      <CardFusoHorario inicial={v.timezone} />
+
+      <div className="card elev-sm">
         <div className="card-kicker">Cálculo de lucro (período atual)</div>
         <div style={sx("display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-2);font-size:13px")}>
           <div style={sx("display:flex;justify-content:space-between")}><span className="text-muted">Faturamento</span><span style={sx("font-variant-numeric:tabular-nums")}>{v.finance.revenue}</span></div>
@@ -104,6 +184,7 @@ export function FeesView({ v }: { v: TraffikView }) {
           <div style={sx("display:flex;justify-content:space-between;font-size:15px")}><span>Lucro líquido</span><span style={sx("color:var(--color-accent-300);font-variant-numeric:tabular-nums")}>{v.finance.profit}</span></div>
           <div style={sx("display:flex;justify-content:space-between")}><span className="text-muted">Margem de lucro</span><span style={sx("font-variant-numeric:tabular-nums")}>{v.finance.margin}</span></div>
         </div>
+      </div>
       </div>
     </div>
   );

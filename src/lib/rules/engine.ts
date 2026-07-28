@@ -1,5 +1,7 @@
+import { getUserTimezone } from "@/lib/userTimezone";
 import { setEntityStatus, updateDailyBudget } from "@/lib/facebook/manage";
 import { prisma } from "@/lib/prisma";
+import { addDaysToKey, dayKeyInTz, dayStart, keyToDateColumn, todayKey } from "@/lib/timezone";
 import type { RuleLevel } from "@/generated/prisma/enums";
 
 export interface RuleCondition {
@@ -16,32 +18,43 @@ interface EntityMetrics {
   revenue: number;
 }
 
-/** Converte o período de cálculo da regra em uma data inicial. */
-function calcStart(period: string): Date {
-  const now = Date.now();
+/**
+ * Período de cálculo da regra → instante inicial, **no fuso do usuário**.
+ *
+ * Isto aqui pausa campanha e mexe em orçamento de verdade, então "hoje"
+ * começando 3h cedo não é cosmético: às 21h de Brasília o gasto do dia zerava
+ * e uma regra de "gasto > X" voltava a permitir o que já tinha bloqueado.
+ *
+ * Devolve também a chave do dia, porque `DailyAdMetric.date` é `@db.Date` e se
+ * compara por dia de calendário, não por instante.
+ */
+function calcStart(period: string, tz: string): { start: Date; startKey: string } {
+  const agora = Date.now();
+  const hoje = todayKey(tz);
+  // Janelas móveis de N horas: o instante já é absoluto, mas a chave ainda tem
+  // de sair do fuso do usuário para a consulta de métrica diária bater.
+  const movel = (horas: number) => {
+    const start = new Date(agora - horas * 36e5);
+    return { start, startKey: dayKeyInTz(start, tz) };
+  };
+  const doDia = (key: string) => ({ start: dayStart(key, tz), startKey: key });
+
   switch (period) {
     case "ultimas_3h":
-      return new Date(now - 3 * 36e5);
+      return movel(3);
     case "ultimas_6h":
-      return new Date(now - 6 * 36e5);
+      return movel(6);
     case "ultimas_12h":
-      return new Date(now - 12 * 36e5);
-    case "ontem": {
-      const d = new Date();
-      d.setDate(d.getDate() - 1);
-      d.setHours(0, 0, 0, 0);
-      return d;
-    }
+      return movel(12);
+    case "ontem":
+      return doDia(addDaysToKey(hoje, -1));
     case "ultimos_7d":
-      return new Date(now - 7 * 864e5);
+      return doDia(addDaysToKey(hoje, -6));
     case "ultimos_30d":
-      return new Date(now - 30 * 864e5);
+      return doDia(addDaysToKey(hoje, -29));
     case "hoje":
-    default: {
-      const d = new Date();
-      d.setHours(0, 0, 0, 0);
-      return d;
-    }
+    default:
+      return doDia(hoje);
   }
 }
 
@@ -97,7 +110,7 @@ export interface RuleRunResult {
 }
 
 /** Carrega as entidades no nível da regra, com métricas e vendas atribuídas. */
-async function loadEntities(rule: RuleRow, start: Date) {
+async function loadEntities(rule: RuleRow, start: Date, startKey: string) {
   const accountFilter = rule.adAccountIds.length ? { id: { in: rule.adAccountIds } } : {};
   const nameContains = rule.nameFilter?.trim();
 
@@ -130,7 +143,7 @@ async function loadEntities(rule: RuleRow, start: Date) {
     }
   }
 
-  const metricWhere = { date: { gte: new Date(start.toDateString()) }, ad: { adAccount: { userId: rule.userId } } };
+  const metricWhere = { date: { gte: keyToDateColumn(startKey) }, ad: { adAccount: { userId: rule.userId } } };
   const metrics = await prisma.dailyAdMetric.findMany({
     where: metricWhere,
     select: { adId: true, spend: true, impressions: true, clicks: true },
@@ -231,11 +244,12 @@ const LEVEL_TO_TYPE: Record<RuleLevel, "campaign" | "adset" | "ad"> = {
 /** Avalia uma regra e executa a ação nas entidades que baterem as condições. */
 export async function evaluateRule(rule: RuleRow): Promise<RuleRunResult> {
   const conds = (Array.isArray(rule.conditions) ? rule.conditions : []) as RuleCondition[];
-  const start = calcStart(rule.calcPeriod);
+  const tz = await getUserTimezone(rule.userId);
+  const { start, startKey } = calcStart(rule.calcPeriod, tz);
 
-  // Limite diário de execuções.
-  const startOfDay = new Date();
-  startOfDay.setHours(0, 0, 0, 0);
+  // Limite diário de execuções — "diário" também no fuso do usuário, senão a
+  // cota reiniciava às 21h de Brasília e a regra ganhava execuções extras.
+  const startOfDay = dayStart(todayKey(tz), tz);
   const runsToday = await prisma.automationRuleLog.count({
     where: { ruleId: rule.id, ranAt: { gte: startOfDay }, status: "SUCESSO" },
   });
@@ -245,7 +259,7 @@ export async function evaluateRule(rule: RuleRow): Promise<RuleRunResult> {
 
   let entities;
   try {
-    entities = await loadEntities(rule, start);
+    entities = await loadEntities(rule, start, startKey);
   } catch (e) {
     return { status: "ERRO", affected: 0, message: e instanceof Error ? e.message : "Erro ao carregar entidades.", details: null };
   }

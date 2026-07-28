@@ -134,6 +134,10 @@ model User {
   /// Separador aleatório único usado no `xcod` da Hotmart para o parsing
   /// reverso dos UTMs (Bloco 11). Gerado sob demanda e persistido.
   xcodSeparator String?
+  /// Fuso de referência de TODA agregação por dia/hora. Os instantes continuam
+  /// gravados em UTC; este campo é o que define onde o dia começa e termina
+  /// para este usuário. Ver `src/lib/timezone.ts`.
+  timezone      String   @default("America/Sao_Paulo")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -658,6 +662,12 @@ model NotificationSettings {
   report23      Boolean       @default(true)
   reportPattern ReportPattern @default(STATUS_LUCRO)
 
+  /// ⚠️ NÃO USE — o fuso de verdade é `User.timezone`.
+  /// Esta coluna existe desde a migration inicial e nunca foi lida por código
+  /// nenhum. Cheguei a removê-la, mas o banco Supabase é COMPARTILHADO com a
+  /// produção, que roda um build antigo cujo cliente Prisma ainda a seleciona —
+  /// o dashboard inteiro passou a dar 500. Só dá para removê-la depois que
+  /// todos os ambientes estiverem no código novo.
   timezone  String   @default("America/Sao_Paulo")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

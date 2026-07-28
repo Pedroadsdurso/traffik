@@ -1,4 +1,6 @@
+import { getUserTimezone } from "@/lib/userTimezone";
 import { prisma } from "@/lib/prisma";
+import { addDaysToKey, dayStart, keyToDateColumn, todayKey } from "@/lib/timezone";
 import { splitPipe } from "@/lib/utm/parse";
 
 export type CreativePeriod = "hoje" | "7d" | "30d";
@@ -18,13 +20,11 @@ export interface CreativeRow {
   best: boolean;
 }
 
-function rangeStart(period: CreativePeriod): Date {
-  if (period === "hoje") {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d;
-  }
-  return new Date(Date.now() - (period === "30d" ? 30 : 7) * 864e5);
+/** Mesma janela do gerenciador, no fuso do usuário. Ver `ads/overview.ts`. */
+function rangeStart(period: CreativePeriod, tz: string): { start: Date; startKey: string } {
+  const hoje = todayKey(tz);
+  const startKey = period === "hoje" ? hoje : addDaysToKey(hoje, -((period === "30d" ? 30 : 7) - 1));
+  return { start: dayStart(startKey, tz), startKey };
 }
 
 function num(v: unknown): number {
@@ -35,7 +35,8 @@ export async function computeCreatives(
   userId: string,
   opts: { period: CreativePeriod; sort: CreativeSort },
 ): Promise<CreativeRow[]> {
-  const start = rangeStart(opts.period);
+  const tz = await getUserTimezone(userId);
+  const { start, startKey } = rangeStart(opts.period, tz);
 
   const [ads, metrics, sales] = await Promise.all([
     prisma.ad.findMany({
@@ -49,7 +50,7 @@ export async function computeCreatives(
       },
     }),
     prisma.dailyAdMetric.findMany({
-      where: { date: { gte: new Date(start.toDateString()) }, ad: { adAccount: { userId } } },
+      where: { date: { gte: keyToDateColumn(startKey) }, ad: { adAccount: { userId } } },
       select: { adId: true, spend: true, impressions: true, clicks: true },
     }),
     // Vendas aprovadas no período; atribuídas ao anúncio por utm_content → nome.

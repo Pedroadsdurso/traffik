@@ -47,6 +47,7 @@ import type { CreativeRow } from "@/lib/ads/creatives";
 import type { AdsOverview } from "@/lib/ads/overview";
 import type { DashboardData } from "@/lib/dashboard/metrics";
 import { brl, brl0, buildPoints, elapsed, multFmt, pct, roasFmt } from "@/lib/format";
+import { DEFAULT_TIMEZONE } from "@/lib/timezone";
 import type { MetricKey, TabKey } from "./types";
 
 type DashPeriod = "hoje" | "7d" | "30d" | "custom";
@@ -367,12 +368,17 @@ export function useTraffikState(
     initialNotifications?: NotificationDTO[];
     initialExpenses?: ExpenseDTO[];
     initialApiCredentials?: ApiCredentialDTO[];
+    timezone?: string;
   } = {},
 ) {
   const brandName = opts.brandName || "Traffik";
   const liveUpdates = opts.liveUpdates !== false;
   const trackingId = opts.trackingId || "SEU_ID";
   const appUrl = (opts.appUrl || "https://app.traffik.io").replace(/\/+$/, "");
+  // Fuso de referência do usuário. O servidor agrega por ele; o calendário do
+  // filtro precisa do mesmo valor para "hoje" significar a mesma coisa dos dois
+  // lados. Ver `src/lib/timezone.ts`.
+  const timezone = opts.timezone || DEFAULT_TIMEZONE;
 
   const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks, opts.dashboardPrefs, opts.initialProfiles, opts.initialPixels, opts.initialRules, opts.initialNotifSettings, opts.initialNotifications, opts.initialExpenses, opts.initialApiCredentials));
 
@@ -1385,6 +1391,7 @@ export function useTraffikState(
     snippetText,
     trackingId,
     appUrl,
+    timezone,
     snippetCopyLabel: s.snippetCopied ? "Copiado!" : "Copiar snippet",
     copySnippet: () => {
       navigator.clipboard.writeText(snippetText);
