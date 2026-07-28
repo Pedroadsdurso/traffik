@@ -228,7 +228,50 @@ ali é o domínio do cliente, não o nosso. Ambos os geradores (pixel e UTM) usa
 
 ---
 
-## 📦 Loader + runtime hospedado (scripts instaláveis)
+## 📦 Scripts instaláveis: INLINE, e por que voltamos atrás
+
+> ### ⛔ NÃO transformar os scripts em loader de novo (decisão de 28/07/2026)
+> Durante um dia inteiro os scripts viraram um **loader** de uma linha + runtime
+> hospedado (`public/t.js`, `public/px.js`, minificados com terser). O snippet caiu
+> de 5.800 para 743 bytes, mas a mudança **quebrou instalações em produção** e o
+> usuário mandou reverter. Tudo isso foi desfeito: `src/scripts/`, `public/t.js`,
+> `public/px.js`, `scripts/build-scripts.mjs`, o terser, os headers de cache do
+> `next.config.ts` e o componente de dois formatos.
+>
+> **O que ficou:** `utmScript()` e `pixelScript()` devolvem o **código completo,
+> autocontido**, para colar no `<head>`. Uma opção, um botão "Copiar script", sem
+> loader e sem arquivo hospedado. `public/pixel.js` voltou a ser a fonte original
+> da v1 (instalações antigas continuam funcionando).
+>
+> **Por que o ganho de tamanho não compensou:** o snippet é copiado uma vez e vive
+> no HTML do cliente; os ~3 KB não são o gargalo. O custo real foi a dependência de
+> rede (o arquivo pode não carregar, ficar em cache velho, ou o campo onde o
+> snippet é colado tratar as tags `<script>` de forma diferente). Autocontido não
+> tem nenhuma dessas falhas — cola e funciona.
+>
+> ⚠️ O `Cache-Control` de 5 min chegou a esconder um bug real durante o diagnóstico:
+> o navegador servia o `px.js` antigo (`stale-while-revalidate`) enquanto o servidor
+> já tinha o novo. Com script inline esse problema deixa de existir.
+
+### O que o script de pixel inline dispara
+
+| Evento | Quando | Configurável? |
+|---|---|---|
+| `PageView` | todo carregamento de página | **sempre ativo** — não é regra |
+| `Lead` | submit de qualquer formulário | toggle |
+| `AddToCart` | clique em elemento com cara de carrinho | toggle |
+| `InitiateCheckout` | ver modos abaixo | toggle + modo |
+
+> **`PageView` não passa por `PixelEventRule`** e por isso **não exigiu migration**:
+> o enum `PixelEventType` continua com LEAD/ADD_TO_CART/INITIATE_CHECKOUT/PURCHASE.
+> Em `/api/pixel/event` ele é aceito sem consulta de regra (`isPageView`), e
+> `CapiEventName` ganhou `"PageView"`. Se um dia virar configurável, aí sim precisa
+> de enum novo + migration.
+>
+> ⚠️ **PageView dispara a cada pageview**, então o feed enche mais rápido que antes.
+> É diferente do "Clique" do `t.js`, que é **uma vez por sessão**.
+
+## 📦 (histórico) Loader + runtime hospedado — REVERTIDO
 
 **O que o cliente cola no site é um loader de 3–5 linhas**, não a lógica. A lógica é
 servida por nós, minificada com **terser** no build.

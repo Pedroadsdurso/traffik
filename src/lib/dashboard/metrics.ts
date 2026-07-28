@@ -58,7 +58,7 @@ export interface DashboardData {
   activity: {
     id: string;
     /** Tipos do feed unificado — cada um com badge e cor próprios na UI. */
-    type: "clique" | "checkout" | "lead" | "add_to_cart" | "venda_pendente" | "venda_aprovada" | "reembolso" | "chargeback";
+    type: "clique" | "pageview" | "checkout" | "lead" | "add_to_cart" | "venda_pendente" | "venda_aprovada" | "reembolso" | "chargeback";
     source: string;
     campaign: string;
     value: number | null;
@@ -543,7 +543,11 @@ function buildActivity(w: Window) {
   for (const e of w.pixelEvents.slice(0, 40)) {
     items.push({
       id: "p-" + e.id,
-      type: e.event === "Lead" ? "lead" : e.event === "AddToCart" ? "add_to_cart" : "checkout",
+      type:
+        e.event === "Lead" ? "lead"
+        : e.event === "AddToCart" ? "add_to_cart"
+        : e.event === "PageView" ? "pageview"
+        : "checkout",
       source: "Pixel",
       campaign: e.url ? e.url.replace(/^https?:\/\//, "").slice(0, 48) : "—",
       value: null,

@@ -11,7 +11,7 @@ function hash(value: string | null | undefined): string | undefined {
 }
 
 /** Nomes de evento aceitos pela Conversions API que a Traffik dispara. */
-export type CapiEventName = "Purchase" | "Lead" | "AddToCart" | "InitiateCheckout";
+export type CapiEventName = "Purchase" | "Lead" | "AddToCart" | "InitiateCheckout" | "PageView";
 
 export interface ServerEventInput {
   eventName: CapiEventName;

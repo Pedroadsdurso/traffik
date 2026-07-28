@@ -153,6 +153,7 @@ function IconeEvento({ tipo, cor }: { tipo: string; cor: string }) {
     tipo === "clique" ? "M9 3l10 7-4.5 1.5L17 17l-2.5 1.5-2.5-5L9 17V3z"
     : tipo === "checkout" || tipo === "add_to_cart" ? "M6 6h15l-1.5 9h-12zM6 6L5 3H2m4 17a1 1 0 100 2 1 1 0 000-2zm11 0a1 1 0 100 2 1 1 0 000-2z"
     : tipo === "lead" ? "M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"
+    : tipo === "pageview" ? "M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7zm10 3a3 3 0 100-6 3 3 0 000 6z"
     : tipo === "venda_aprovada" ? "M20 6L9 17l-5-5"
     : tipo === "venda_pendente" ? "M12 7v5l3 2M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
     : "M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L14.7 3.9a2 2 0 00-3.4 0z";

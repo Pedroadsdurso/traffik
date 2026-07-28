@@ -17,6 +17,12 @@ export function OPTIONS() {
   return new Response(null, { status: 204, headers: CORS });
 }
 
+/**
+ * Eventos que dependem de uma regra habilitada na aba Pixel. `PageView` NÃO
+ * entra aqui de propósito: é o evento base do pixel, sempre ativo, e não existe
+ * `PAGE_VIEW` no enum `PixelEventType` — tratá-lo como regra exigiria migration
+ * para nada, já que não há o que configurar.
+ */
 const EVENT_MAP: Record<string, { capi: CapiEventName; rule: PixelEventType }> = {
   Lead: { capi: "Lead", rule: "LEAD" },
   AddToCart: { capi: "AddToCart", rule: "ADD_TO_CART" },
@@ -45,16 +51,24 @@ export async function POST(req: NextRequest) {
   const configId = typeof body.pixelConfigId === "string" ? body.pixelConfigId : null;
   const eventKey = typeof body.event === "string" ? body.event : "";
   const mapped = EVENT_MAP[eventKey];
-  if (!configId || !mapped) return json({ error: "Parâmetros inválidos." }, 400);
+  const isPageView = eventKey === "PageView";
+  if (!configId || (!mapped && !isPageView)) return json({ error: "Parâmetros inválidos." }, 400);
 
   const config = await prisma.pixelConfig.findUnique({
     where: { id: configId },
-    include: { metaPixels: true, eventRules: { where: { eventType: mapped.rule } } },
+    include: {
+      metaPixels: true,
+      eventRules: mapped ? { where: { eventType: mapped.rule } } : false,
+    },
   });
   if (!config || !config.enabled) return json({ error: "Pixel não encontrado." }, 404);
 
-  const rule = config.eventRules[0];
-  if (!rule?.enabled) return json({ ok: true, skipped: "regra desabilitada" });
+  if (mapped) {
+    const rule = config.eventRules[0];
+    if (!rule?.enabled) return json({ ok: true, skipped: "regra desabilitada" });
+  }
+
+  const capiEvent: CapiEventName = mapped ? mapped.capi : "PageView";
 
   // Persiste o evento (Bloco 5): sem isto o funil não tem como contar o
   // "Initiate Checkout" — antes o evento só era repassado à CAPI e descartado.
@@ -88,7 +102,7 @@ export async function POST(req: NextRequest) {
     const accessToken = decryptSecretSafe(mp.accessToken);
     if (!accessToken) continue;
     const r = await sendServerEvent({
-      eventName: mapped.capi,
+      eventName: capiEvent,
       pixelId: mp.pixelId,
       accessToken,
       eventId,

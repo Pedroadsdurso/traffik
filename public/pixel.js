@@ -1,18 +1,159 @@
-/*! Traffik t.js */
 /*!
- * Traffik — runtime de rastreamento de UTMs (fonte).
+ * Traffik pixel — rastreamento de cliques e UTMs de primeira parte.
  *
- * NÃO é este arquivo que o cliente instala. `scripts/build-scripts.mjs` minifica
- * isto em `public/t.js` (e no alias legado `public/pixel.js`); no site do cliente
- * entra só o loader de 3 linhas gerado por `src/lib/utm/scripts.ts`.
+ * Instale antes de </head>:
+ *   <script src="https://SEU_HOST/pixel.js" data-account="SEU_ID" async></script>
  *
  * O que faz:
- *   - lê utm_source/medium/campaign/content/term + fbclid/gclid/ttclid da URL
- *   - persiste em cookie de 1ª parte por 30 dias (preserva a 1ª atribuição)
- *   - registra o clique em /api/track/click uma vez por sessão
- *   - propaga os parâmetros para os links de checkout da página
- *   - expõe window.traffik.getData() e window.getTrackingData() (legado)
- *
- * ES5 de propósito: roda em páginas de venda de terceiros, sem transpilação.
+ *   - Lê utm_source/medium/campaign/content/term, fbclid, gclid e ttclid da URL
+ *   - Persiste em cookie de primeira parte por 30 dias
+ *   - Registra o clique em /api/track/click na primeira visita da sessão
+ *   - Expõe window.getTrackingData() para o checkout enviar junto da venda
  */
-!function(t,e){"use strict";var n="traffik_track",r="traffik_session",a=["utm_source","utm_medium","utm_campaign","utm_content","utm_term"].concat(["fbclid","gclid","ttclid"]),i=["hotmart","kirvano","cartpanda","kiwify","monetizze","pay.","checkout"];if(!t.__traffikUtm){t.__traffikUtm=1;var o=function(){if(e.currentScript)return e.currentScript;for(var t=e.getElementsByTagName("script"),n=t.length-1;n>=0;n--)if(/\/(t|pixel)\.js(\?|$)/.test(t[n].src||""))return t[n];return null}(),c=t.traffikConfig||{},f=c.a||o&&o.getAttribute("data-account")||"",u="";if(o&&o.src)try{u=new URL(o.src).origin}catch(t){u=""}if(u||(u=c.u||""),u&&(u=u.replace(/\/+$/,"")),f){var s=function(){for(var t={},e=new URLSearchParams(location.search),n=0;n<a.length;n++){var r=e.get(a[n]);r&&(t[a[n]]=r)}return t}(),l=Object.keys(s).length>0,d=l?h(m(),s):m();!l&&g(n)||k(n,JSON.stringify(d),30),t.traffik=t.traffik||{},t.traffik.getData=function(){return h(m(),{account:f})},t.traffik.data=d,t.getTrackingData=t.traffik.getData,"complete"===e.readyState||"interactive"===e.readyState?v():t.addEventListener("DOMContentLoaded",v)}else t.console&&t.console.warn&&t.console.warn("[traffik] account ausente — verifique o snippet instalado.")}function g(t){var n=e.cookie.match("(^|;)\\s*"+t+"\\s*=\\s*([^;]+)");return n?decodeURIComponent(n.pop()):null}function k(t,n,r){var a=new Date(Date.now()+864e5*r).toUTCString();e.cookie=t+"="+encodeURIComponent(n)+";expires="+a+";path=/;SameSite=Lax"}function m(){try{return JSON.parse(g(n)||"{}")}catch(t){return{}}}function h(t,e){var n,r={};for(n in t)r[n]=t[n];for(n in e)r[n]=e[n];return r}function p(){var t,n=[];for(t=0;t<a.length;t++)d[a[t]]&&n.push(a[t]+"="+encodeURIComponent(d[a[t]]));if(d.click_id&&n.push("click_id="+encodeURIComponent(d.click_id)),n.length){var r=e.getElementsByTagName("a");for(t=0;t<r.length;t++){for(var o=r[t].getAttribute("href")||"",c=!1,f=0;f<i.length;f++)if(o.indexOf(i[f])>-1){c=!0;break}c&&(r[t].href=o+(o.indexOf("?")>-1?"&":"?")+n.join("&"))}}}function v(){if(sessionStorage.getItem(r))p();else{var a=h(d,{account:f,url:location.href,referrer:e.referrer||null}),i=u+"/api/track/click";"function"==typeof fetch?fetch(i,{method:"POST",headers:{"Content-Type":"text/plain"},body:JSON.stringify(a),keepalive:!0,mode:"cors"}).then(function(t){return t.ok?t.json():null}).then(function(t){o(t&&t.click_id)}).catch(function(){navigator.sendBeacon&&navigator.sendBeacon(i,JSON.stringify(a)),o(null)}):navigator.sendBeacon?(navigator.sendBeacon(i,JSON.stringify(a)),o(null)):p()}function o(e){e&&(d.click_id=e,k(n,JSON.stringify(d),30),t.traffik.data=d);try{sessionStorage.setItem(r,"1")}catch(t){}p()}}}(window,document);
+(function () {
+  "use strict";
+
+  var COOKIE = "traffik_track";
+  var SESSION = "traffik_session";
+  var MAX_AGE_DAYS = 30;
+
+  var script = document.currentScript;
+  if (!script) {
+    var all = document.getElementsByTagName("script");
+    for (var i = all.length - 1; i >= 0; i--) {
+      if (/pixel\.js(\?|$)/.test(all[i].src)) {
+        script = all[i];
+        break;
+      }
+    }
+  }
+  if (!script) return;
+
+  var account = script.getAttribute("data-account");
+  if (!account) {
+    console.warn("[traffik] atributo data-account ausente no <script>.");
+    return;
+  }
+
+  // Deriva o host da API a partir do src do próprio script.
+  var apiBase;
+  try {
+    apiBase = new URL(script.src).origin;
+  } catch (e) {
+    apiBase = "";
+  }
+
+  var UTM_KEYS = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"];
+  var CLICK_KEYS = ["fbclid", "gclid", "ttclid"];
+
+  function readCookie(name) {
+    var m = document.cookie.match("(^|;)\\s*" + name + "\\s*=\\s*([^;]+)");
+    return m ? decodeURIComponent(m.pop()) : null;
+  }
+
+  function writeCookie(name, value, days) {
+    var expires = new Date(Date.now() + days * 864e5).toUTCString();
+    document.cookie =
+      name + "=" + encodeURIComponent(value) + ";expires=" + expires + ";path=/;SameSite=Lax";
+  }
+
+  function parseStored() {
+    try {
+      return JSON.parse(readCookie(COOKIE) || "{}");
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function paramsFromUrl() {
+    var out = {};
+    var qs = new URLSearchParams(window.location.search);
+    UTM_KEYS.concat(CLICK_KEYS).forEach(function (k) {
+      var v = qs.get(k);
+      if (v) out[k] = v;
+    });
+    return out;
+  }
+
+  // Preserva a primeira atribuição: só sobrescreve quando a URL traz novos UTMs.
+  var stored = parseStored();
+  var fresh = paramsFromUrl();
+  var hasFresh = Object.keys(fresh).length > 0;
+  var data = hasFresh ? merge(stored, fresh) : stored;
+
+  function merge(base, extra) {
+    var out = {};
+    for (var k in base) out[k] = base[k];
+    for (var j in extra) out[j] = extra[j];
+    return out;
+  }
+
+  function send() {
+    // Uma vez por sessão para não inflar o volume de cliques.
+    if (sessionStorage.getItem(SESSION)) return;
+
+    var payload = merge(data, {
+      account: account,
+      url: window.location.href,
+      referrer: document.referrer || null,
+    });
+
+    var endpoint = apiBase + "/api/track/click";
+    var handled = false;
+
+    function onClickId(clickId) {
+      if (handled || !clickId) return;
+      handled = true;
+      data.click_id = clickId;
+      writeCookie(COOKIE, JSON.stringify(data), MAX_AGE_DAYS);
+      sessionStorage.setItem(SESSION, "1");
+      window.traffik = window.traffik || {};
+      window.traffik.data = data;
+    }
+
+    // fetch é preferível porque devolve o click_id; sendBeacon fica de fallback.
+    if (typeof fetch === "function") {
+      fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify(payload),
+        keepalive: true,
+        mode: "cors",
+      })
+        .then(function (r) {
+          return r.ok ? r.json() : null;
+        })
+        .then(function (res) {
+          if (res && res.click_id) onClickId(res.click_id);
+        })
+        .catch(function () {
+          if (navigator.sendBeacon) {
+            navigator.sendBeacon(endpoint, JSON.stringify(payload));
+            sessionStorage.setItem(SESSION, "1");
+          }
+        });
+    } else if (navigator.sendBeacon) {
+      navigator.sendBeacon(endpoint, JSON.stringify(payload));
+      sessionStorage.setItem(SESSION, "1");
+    }
+  }
+
+  // Persiste imediatamente o que já temos (mesmo antes da resposta do servidor).
+  if (hasFresh || !readCookie(COOKIE)) {
+    writeCookie(COOKIE, JSON.stringify(data), MAX_AGE_DAYS);
+  }
+
+  /** Dados de atribuição salvos, para o checkout enviar junto da venda. */
+  window.getTrackingData = function () {
+    return merge(parseStored(), { account: account });
+  };
+
+  window.traffik = window.traffik || {};
+  window.traffik.data = data;
+
+  if (document.readyState === "complete" || document.readyState === "interactive") {
+    send();
+  } else {
+    window.addEventListener("DOMContentLoaded", send);
+  }
+})();

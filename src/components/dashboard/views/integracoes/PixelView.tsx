@@ -14,7 +14,7 @@ import {
   type PixelFormInput,
 } from "@/lib/actions/pixels";
 import { getPublicAppUrl } from "@/lib/appUrl";
-import { pixelLoaderSnippet } from "@/lib/pixel/script";
+import { pixelScript } from "@/lib/pixel/script";
 import { sx } from "@/lib/sx";
 import { Drawer } from "../../ui/Drawer";
 import { SnippetBox } from "../../ui/SnippetBox";
@@ -151,7 +151,7 @@ export function PixelView() {
 
   function scriptText(px: PixelConfigDTO): string {
     const ic = px.rules.find((r) => r.eventType === "INITIATE_CHECKOUT");
-    return pixelLoaderSnippet({
+    return pixelScript({
       configId: px.id,
       apiBase: getPublicAppUrl(),
       lead: px.rules.find((r) => r.eventType === "LEAD")?.enabled ?? false,
@@ -371,7 +371,7 @@ export function PixelView() {
               <div style={sx("font-weight:600;font-size:13px")}>Script de instalação</div>
               <p className="card-body" style={sx("margin:0;font-size:12px")}>
                 Cole antes de <code>&lt;/head&gt;</code> do seu site (ou no campo de script do seu
-                gateway/checkout).
+                gateway/checkout). Dispara PageView em toda página, mais os eventos habilitados acima.
               </p>
               {local && (
                 <p className="card-body" style={sx("margin:0;font-size:12px;color:var(--color-warning,#fbbf24)")}>

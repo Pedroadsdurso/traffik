@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { getUtmCodes, type UtmCodesDTO } from "@/lib/actions/utm";
 import { getPublicAppUrl } from "@/lib/appUrl";
-import { backRedirectScript, utmLoaderSnippet } from "@/lib/utm/scripts";
+import { backRedirectScript, utmScript } from "@/lib/utm/scripts";
 import { sx } from "@/lib/sx";
 import { LogoGateway } from "../../ui/LogoGateway";
 import { Modal } from "../../ui/Modal";
@@ -112,7 +112,7 @@ function CodigosBlock({ codes }: { codes: UtmCodesDTO | null }) {
 function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
   const [backUrl, setBackUrl] = useState("");
 
-  const snippet = codes ? utmLoaderSnippet(codes.accountId, getPublicAppUrl()) : "";
+  const snippet = codes ? utmScript(codes.accountId, getPublicAppUrl()) : "";
 
   function baixarBack() {
     download("traffik-back-redirect.js", backRedirectScript(backUrl));
@@ -133,7 +133,7 @@ function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
         </p>
         <p className="card-body" style={sx("margin:0")}>
           Cole antes de <code>&lt;/head&gt;</code> do seu site (ou no campo de script do seu
-          gateway/checkout).
+          gateway/checkout). É o código completo — não depende de nenhum arquivo externo.
         </p>
         {getPublicAppUrl().includes("localhost") && (
           <p className="card-body" style={sx("margin:0;font-size:12px;color:var(--color-warning,#fbbf24)")}>
