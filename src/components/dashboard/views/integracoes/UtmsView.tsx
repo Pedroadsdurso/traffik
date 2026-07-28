@@ -8,6 +8,7 @@ import { backRedirectScript, utmLoaderJs, utmLoaderSnippet } from "@/lib/utm/scr
 import { sx } from "@/lib/sx";
 import { LogoGateway } from "../../ui/LogoGateway";
 import { Modal } from "../../ui/Modal";
+import { SnippetBox } from "../../ui/SnippetBox";
 
 type Destino = "hotmart" | "cartpanda" | "outros";
 const DESTINOS: { id: Destino; label: string }[] = [
@@ -108,52 +109,12 @@ function CodigosBlock({ codes }: { codes: UtmCodesDTO | null }) {
 
 // ─────────────────────────── Bloco 2: Scripts ───────────────────────────
 
-/**
- * Seletor de formato do snippet. Existe porque o campo onde o código é colado
- * varia: "código do cabeçalho" aceita HTML, mas vários campos de script de
- * gateway aceitam só JavaScript (e embrulham o conteúdo em `<script>` sozinhos).
- */
-export function FormatoTabs({ formato, onChange }: { formato: "html" | "js"; onChange: (f: "html" | "js") => void }) {
-  const opcoes: { id: "html" | "js"; label: string; dica: string }[] = [
-    { id: "html", label: "HTML", dica: "Campo de código do cabeçalho / <head> do site" },
-    { id: "js", label: "JavaScript", dica: "Campo que aceita só JS (scripts do checkout)" },
-  ];
-  return (
-    <div style={sx("display:flex;gap:6px")}>
-      {opcoes.map((o) => (
-        <button
-          key={o.id}
-          type="button"
-          title={o.dica}
-          onClick={() => onChange(o.id)}
-          style={sx(
-            `padding:5px 12px;border-radius:7px;font-size:12px;cursor:pointer;border:1px solid ${formato === o.id ? "var(--color-accent,#a78bfa)" : "var(--color-border)"};background:${formato === o.id ? "var(--color-accent-soft,rgba(139,92,246,.12))" : "transparent"};color:var(--color-text)`,
-          )}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
   const [backUrl, setBackUrl] = useState("");
-  const [copiado, setCopiado] = useState(false);
-  const [formato, setFormato] = useState<"html" | "js">("html");
 
-  const snippet = !codes
-    ? ""
-    : formato === "html"
-      ? utmLoaderSnippet(codes.accountId, getPublicAppUrl())
-      : utmLoaderJs(codes.accountId, getPublicAppUrl());
+  const snippet = codes ? utmLoaderSnippet(codes.accountId, getPublicAppUrl()) : "";
+  const snippetJs = codes ? utmLoaderJs(codes.accountId, getPublicAppUrl()) : "";
 
-  function copiarUtm() {
-    if (!snippet) return;
-    navigator.clipboard.writeText(snippet);
-    setCopiado(true);
-    setTimeout(() => setCopiado(false), 1500);
-  }
   function baixarBack() {
     download("traffik-back-redirect.js", backRedirectScript(backUrl));
   }
@@ -175,7 +136,6 @@ function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
           É uma linha só: o resto do código fica hospedado na Traffik e é carregado de forma assíncrona, sem
           atrasar o carregamento da sua página. Melhorias no rastreamento chegam sozinhas, sem reinstalar.
         </p>
-        <FormatoTabs formato={formato} onChange={setFormato} />
         <p className="card-body" style={sx("margin:0;font-size:12px")}>
           Os cliques serão enviados para{" "}
           <code style={sx("font-family:ui-monospace,monospace")}>{getPublicAppUrl()}</code>
@@ -186,14 +146,7 @@ function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
             </span>
           )}
         </p>
-        <pre
-          style={sx("background:var(--color-bg,#0b0b0f);border:1px solid var(--color-border);border-radius:8px;padding:var(--space-3);font-size:11px;font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-all;margin:0;max-height:200px;overflow:auto")}
-        >
-          {snippet || "…"}
-        </pre>
-        <button className="btn btn-primary" type="button" onClick={copiarUtm} disabled={!codes} style={sx("width:fit-content")}>
-          {copiado ? "Copiado!" : "Copiar script"}
-        </button>
+        <SnippetBox codigo={snippet} alternativo={snippetJs} />
       </div>
 
       <div style={sx("border-top:1px solid var(--color-border);padding-top:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)")}>

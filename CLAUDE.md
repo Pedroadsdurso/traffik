@@ -373,15 +373,20 @@ servida por nós, minificada com **terser** no build.
 | Servido | `public/t.js` (UTMs) · `public/px.js` (pixel) · `public/pixel.js` (**alias legado** do `t.js`) |
 | Gerador do snippet | `utmLoaderSnippet()`/`utmLoaderJs()` em `src/lib/utm/scripts.ts` · `pixelLoaderSnippet()`/`pixelLoaderJs()` em `src/lib/pixel/script.ts` |
 
-> ### ⚠️ DOIS formatos de snippet — e por quê
-> O snippet é oferecido em **HTML** (uma tag `<script async src … data-*>`) e em
-> **JavaScript puro** (a mesma tag montada por DOM). Não é enfeite: a primeira
-> versão saía só como HTML **com as tags `<script>` embutidas**, e vários campos de
+> ### ⚠️ UM script visível; o formato alternativo fica escondido
+> **A tela mostra UM snippet e UM botão "Copiar script"** — a tag HTML, igual ao
+> que Meta/Google/GTM entregam. O cliente copia e cola, ponto. Escolher formato
+> **não pode** ser decisão dele: chegou a existir um seletor `HTML | JavaScript`
+> e foi removido justamente por isso.
+>
+> A variante em **JavaScript puro** continua existindo (`utmLoaderJs` /
+> `pixelLoaderJs`), atrás de um `<details>` fechado — *"Colei e não funcionou?"* —
+> no componente `ui/SnippetBox.tsx`. Ela é necessária porque vários campos de
 > "script do checkout" de gateway **embrulham o conteúdo em `<script>` por conta
-> própria** — o resultado vira `<script><script>…</script></script>`, que não
-> executa. O gerador anterior (v1) devolvia JS puro, então quem colava num campo
-> desses funcionava; a mudança de formato quebrou silenciosamente essas
-> instalações. **Nunca voltar a um formato único.**
+> própria**: o snippet HTML vira `<script><script>…</script></script>` e não
+> executa. O gerador da v1 devolvia JS puro, então quem colava num campo desses
+> funcionava, e a mudança para HTML quebrou essas instalações em silêncio.
+> **Manter as duas saídas; nunca promover a segunda a decisão do usuário.**
 >
 > Pelo mesmo motivo o loader **não tem mais JavaScript inline**: além do problema
 > acima, CSP com `script-src` restrito bloqueia inline no site do cliente. A config

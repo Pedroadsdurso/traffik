@@ -17,7 +17,7 @@ import { getPublicAppUrl } from "@/lib/appUrl";
 import { pixelLoaderJs, pixelLoaderSnippet } from "@/lib/pixel/script";
 import { sx } from "@/lib/sx";
 import { Drawer } from "../../ui/Drawer";
-import { FormatoTabs } from "./UtmsView";
+import { SnippetBox } from "../../ui/SnippetBox";
 
 /** `savedToken` marca um pixel já persistido cujo token fica no servidor (nunca volta ao cliente). */
 type MetaDraft = { pixelId: string; accessToken: string; nickname: string; savedToken?: boolean };
@@ -89,8 +89,6 @@ export function PixelView() {
   const [metaOpen, setMetaOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [formatoScript, setFormatoScript] = useState<"html" | "js">("html");
 
   useEffect(() => {
     listPixels().then(setPixels).catch(() => {});
@@ -151,7 +149,7 @@ export function PixelView() {
     setPixels((list) => list.filter((p) => p.id !== id));
   }
 
-  function scriptText(px: PixelConfigDTO, formato: "html" | "js"): string {
+  function scriptText(px: PixelConfigDTO, formato: "html" | "js" = "html"): string {
     const ic = px.rules.find((r) => r.eventType === "INITIATE_CHECKOUT");
     const gerar = formato === "html" ? pixelLoaderSnippet : pixelLoaderJs;
     return gerar({
@@ -340,7 +338,8 @@ export function PixelView() {
         {editId && (() => {
           const px = pixels.find((p) => p.id === editId);
           if (!px) return null;
-          const codigo = scriptText(px, formatoScript);
+          const codigo = scriptText(px);
+          const codigoJs = scriptText(px, "js");
           const local = getPublicAppUrl().includes("localhost");
           const icUrl = px.rules.find((r) => r.eventType === "INITIATE_CHECKOUT");
           const noCheckout = icUrl?.enabled && icUrl.detectionType === "contem_url";
@@ -357,21 +356,19 @@ export function PixelView() {
                   </span>
                 )}
               </p>
-              {noCheckout && (
-                <p className="card-body" style={sx("margin:0;font-size:12px;color:var(--color-warning,#fbbf24)")}>
-                  Sua regra de Initiate Checkout é por <strong>URL</strong>, então este script precisa estar
-                  instalado <strong>na página de checkout</strong> (no campo de scripts do gateway), e não só
-                  no seu site. Se o campo lá não aceitar HTML, use a aba <strong>JavaScript</strong>.
-                </p>
-              )}
-              <FormatoTabs formato={formatoScript} onChange={setFormatoScript} />
-              <pre style={sx("background:var(--color-bg,#0b0b0f);border:1px solid var(--color-border);border-radius:8px;padding:var(--space-3);font-size:10.5px;font-family:ui-monospace,monospace;overflow:auto;max-height:220px;margin:0")}>
-                {codigo}
-              </pre>
-              <button className="btn btn-secondary" type="button" style={sx("align-self:flex-start")}
-                onClick={() => { navigator.clipboard.writeText(codigo); setCopied(true); setTimeout(() => setCopied(false), 1500); }}>
-                {copied ? "Copiado!" : "Copiar script"}
-              </button>
+              <SnippetBox
+                codigo={codigo}
+                alternativo={codigoJs}
+                nota={
+                  noCheckout ? (
+                    <p className="card-body" style={sx("margin:0;font-size:12px;color:var(--color-warning,#fbbf24)")}>
+                      Sua regra de Initiate Checkout é por <strong>URL</strong>, então este script também
+                      precisa estar <strong>na página de checkout</strong> (no campo de scripts do gateway) —
+                      é lá que a URL bate. Só no site de vendas o evento não dispara.
+                    </p>
+                  ) : undefined
+                }
+              />
             </div>
           );
         })()}
