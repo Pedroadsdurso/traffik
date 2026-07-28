@@ -1206,6 +1206,61 @@ removido depois. Mais 5 asserções da trava. `tsc` e `next build` limpos.
 dias e mantém o motor de regras rodando **com ninguém olhando a tela** — o
 auto-sync só dispara quando há requisição do painel.
 
+## 📋 Rotas de cron: como ler os retornos
+
+### ⛔ A Graph API esconde ARQUIVADOS — foi o bug do "metrics: 0"
+
+**`/campaigns`, `/adsets` e `/ads` excluem objetos ARQUIVADOS por padrão.** Uma
+conta com 7 campanhas arquivadas devolvia `0` nas três arestas, enquanto
+`/insights` seguia reportando **R$ 114,34** de gasto daquelas mesmas campanhas.
+
+A cadeia da falha:
+1. `/campaigns` → 0 ⇒ nenhuma `Campaign` local
+2. `/ads` → 0 ⇒ nenhum `Ad` ⇒ `adIdMap` vazio
+3. `/insights` → 16 linhas com `ad_id`
+4. `adIdMap.get(ad_id)` → `undefined` ⇒ **`continue` silencioso em toda linha**
+5. `metrics: 0`, `errors: 0`, gerenciador zerado
+
+Corrigido com `effective_status` explícito (`STATUS_SINCRONIZADOS` em `sync.ts`).
+Resultado real: 0 → **12 campanhas, 12 anúncios, R$ 103,41, 2.756 impressões**.
+
+> ⚠️ **`DELETED` não é recuperável.** A Meta não devolve objetos excluídos nessas
+> arestas de jeito nenhum, mas os insights deles continuam vindo. Esse gasto vira
+> **`metricasOrfas`** no retorno em vez de sumir — era exatamente ele que fazia
+> `errors: 0` mascarar perda de dado. No teste: 2 linhas órfãs = os R$ 10,93 de
+> diferença entre o total da Meta e o atribuído.
+
+### Glossário dos contadores
+
+| Campo | Significa |
+|---|---|
+| `users` | Usuários processados. **No `sync-facebook`**: com perfil do Facebook conectado. **No `run-rules`**: com ao menos uma regra ATIVA — `0` aqui significa "nenhuma regra cadastrada", não falha de query |
+| `accounts` | Contas de anúncio efetivamente sincronizadas |
+| `contasElegiveis` | Contas que passam no filtro `trackingEnabled: true` **e** têm perfil vinculado |
+| `contasTotais` | Todas as contas do usuário, elegíveis ou não |
+| `campaigns` / `adSets` / `ads` | Entidades criadas ou atualizadas |
+| `metrics` | Linhas de `DailyAdMetric` gravadas (uma por anúncio × dia) |
+| `metricasOrfas` | Insights descartados por não achar o anúncio local (anúncio excluído na Meta) |
+| `totalMetrics` | Soma de `metrics` de todos os usuários |
+| `errors` | Quantidade de falhas; `detalheErros` traz as mensagens |
+| `contasNovas` | Contas detectadas agora na BM que ainda não existiam |
+| `removidos` | Entidades apagadas localmente por não virem mais da Meta |
+| `evaluated` / `acted` | (`run-rules`) regras avaliadas / que dispararam ação |
+
+**Modos do `sync-facebook`:**
+
+| `modo` | O que houve |
+|---|---|
+| `pulado` + `motivo: "intervalo"` | **Normal e esperado.** Não venceu o intervalo (20s métricas / 3 min completo). É a proteção de rate limit — a maioria das chamadas de um cron de 1 min cai aqui |
+| `metricas` | Rodou o ciclo barato: 1 chamada por conta, só gasto/impressões/cliques |
+| `completo` | Rodou o ciclo caro: estrutura + contas novas da BM |
+| `completo-30d` | `?full=1` — janela de 30 dias, ignora intervalos |
+| `erro` | Falhou; o campo `erro` traz a mensagem |
+
+> **`accounts: 0` com `modo: "pulado"` é correto** — nada rodou, então não há o
+> que contar. Só investigue `accounts: 0` quando o modo for `metricas`,
+> `completo` ou `completo-30d`.
+
 ## 🎨 Marca e logos
 
 Arquivos em `public/logos/` (webp, vindos do designer):

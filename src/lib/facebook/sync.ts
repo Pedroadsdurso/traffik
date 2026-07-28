@@ -27,6 +27,32 @@ async function graphAll<T>(path: string, params: Record<string, string>, accessT
   return out;
 }
 
+/**
+ * Status que a sincronização traz da Meta.
+ *
+ * ⚠️ **As arestas `/campaigns`, `/adsets` e `/ads` excluem ARQUIVADOS por
+ * padrão.** Sem este filtro elas devolviam `0` numa conta que tinha 7 campanhas
+ * arquivadas — enquanto `/insights` continuava reportando R$ 114,34 de gasto
+ * daquelas mesmas campanhas. Resultado: nenhum `Ad` local, o `adIdMap` vazio, e
+ * TODA linha de insight caindo no `continue` por não achar o anúncio. O sync
+ * dizia `metrics: 0, errors: 0` e o gerenciador ficava zerado.
+ *
+ * `DELETED` não entra: a Meta não devolve objetos excluídos nestas arestas de
+ * jeito nenhum. O gasto histórico deles é contabilizado como `metricasOrfas`
+ * (ver `SyncSummary`) em vez de sumir em silêncio.
+ */
+const STATUS_SINCRONIZADOS = JSON.stringify([
+  "ACTIVE",
+  "PAUSED",
+  "ARCHIVED",
+  "ADSET_PAUSED",
+  "CAMPAIGN_PAUSED",
+  "DISAPPROVED",
+  "PENDING_REVIEW",
+  "IN_PROCESS",
+  "WITH_ISSUES",
+]);
+
 function mapStatus(s?: string): EntityStatus {
   switch (s) {
     case "ACTIVE":
@@ -120,6 +146,13 @@ export interface SyncSummary {
   removidos?: number;
   /** Contas de anúncio detectadas agora, que ainda não existiam no banco. */
   contasNovas?: number;
+  /**
+   * Linhas de insight cujo `ad_id` não existe localmente — quase sempre gasto de
+   * anúncio EXCLUÍDO na Meta, que não vem em `/ads` de forma alguma. Fica
+   * explícito no retorno porque antes esse gasto era descartado num `continue`
+   * silencioso e o cron reportava `errors: 0`.
+   */
+  metricasOrfas?: number;
   errors: string[];
 }
 
@@ -137,7 +170,10 @@ async function syncAccount(
   // 1. Campanhas
   const campaigns = await graphAll<FbCampaign>(
     `${act}/campaigns`,
-    { fields: "id,name,status,objective,daily_budget,lifetime_budget,bid_strategy,start_time,stop_time" },
+    {
+      fields: "id,name,status,objective,daily_budget,lifetime_budget,bid_strategy,start_time,stop_time",
+      effective_status: STATUS_SINCRONIZADOS,
+    },
     accessToken,
   );
   const campaignIdMap = new Map<string, string>(); // fbCampaignId → interno
@@ -175,7 +211,10 @@ async function syncAccount(
   // 2. Conjuntos
   const adSets = await graphAll<FbAdSet>(
     `${act}/adsets`,
-    { fields: "id,name,status,daily_budget,lifetime_budget,optimization_goal,bid_amount,campaign_id" },
+    {
+      fields: "id,name,status,daily_budget,lifetime_budget,optimization_goal,bid_amount,campaign_id",
+      effective_status: STATUS_SINCRONIZADOS,
+    },
     accessToken,
   );
   const adSetIdMap = new Map<string, string>();
@@ -216,6 +255,7 @@ async function syncAccount(
     {
       fields:
         "id,name,status,campaign_id,adset_id,creative{id,name,title,body,thumbnail_url,image_url,video_id,call_to_action_type,object_story_spec}",
+      effective_status: STATUS_SINCRONIZADOS,
     },
     accessToken,
   );
@@ -299,7 +339,10 @@ async function syncAccount(
   );
   for (const ins of insights) {
     const adId = ins.ad_id ? adIdMap.get(ins.ad_id) : undefined;
-    if (!adId || !ins.date_start) continue;
+    if (!adId || !ins.date_start) {
+      summary.metricasOrfas = (summary.metricasOrfas ?? 0) + 1;
+      continue;
+    }
     const date = new Date(ins.date_start);
     const metric = {
       spend: Number(ins.spend ?? 0),
@@ -365,7 +408,10 @@ export async function syncAccountMetrics(
 
   for (const ins of insights) {
     const adId = ins.ad_id ? adIdMap.get(ins.ad_id) : undefined;
-    if (!adId || !ins.date_start) continue;
+    if (!adId || !ins.date_start) {
+      summary.metricasOrfas = (summary.metricasOrfas ?? 0) + 1;
+      continue;
+    }
     const date = new Date(ins.date_start);
     const metric = {
       spend: Number(ins.spend ?? 0),
