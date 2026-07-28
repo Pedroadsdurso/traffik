@@ -1,5 +1,7 @@
 import type { NextRequest } from "next/server";
 
+import { cronAutorizado, naoAutorizado } from "@/lib/cronAuth";
+
 import { generateReportNotification } from "@/lib/reports/generate";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_TIMEZONE, hourInTz } from "@/lib/timezone";
@@ -21,10 +23,7 @@ export const maxDuration = 60;
  * nenhum campo.
  */
 export async function GET(req: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  if (secret && req.headers.get("authorization") !== `Bearer ${secret}`) {
-    return Response.json({ error: "Não autorizado." }, { status: 401 });
-  }
+  if (!cronAutorizado(req)) return naoAutorizado();
 
   const settings = await prisma.notificationSettings.findMany({
     where: { OR: [{ report08: true }, { report12: true }, { report18: true }, { report23: true }] },
@@ -52,6 +51,22 @@ export async function GET(req: NextRequest) {
       (hora === 18 && s.report18) ||
       (hora === 23 && s.report23);
     if (!ligado) continue;
+
+    // ⚠️ Guarda de idempotência — SEM ela esta rota não pode ser chamada mais de
+    // uma vez por hora. `generateReportNotification` cria uma Notification
+    // incondicionalmente, então um cron de 1 minuto geraria **60 relatórios**
+    // durante a hora das 08h. Como o gatilho externo passou a ser configurável
+    // pelo usuário, a rota não pode depender de quem chama para estar correta.
+    //
+    // A janela é a hora cheia do fuso DAQUELE usuário — é o mesmo relógio que
+    // decidiu disparar o relatório.
+    const inicioDaHora = new Date(agora.getTime() - (agora.getTime() % 3_600_000));
+    const jaEnviado = await prisma.notification.findFirst({
+      where: { userId: s.userId, type: "RELATORIO", timestamp: { gte: inicioDaHora } },
+      select: { id: true },
+    });
+    if (jaEnviado) continue;
+
     try {
       await generateReportNotification(s.userId, s.reportPattern);
       generated++;

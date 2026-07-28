@@ -1,5 +1,7 @@
 import type { NextRequest } from "next/server";
 
+import { cronAutorizado, naoAutorizado } from "@/lib/cronAuth";
+
 import { runUserRules } from "@/lib/rules/engine";
 import { prisma } from "@/lib/prisma";
 
@@ -7,10 +9,7 @@ export const maxDuration = 60;
 
 /** Vercel Cron: avalia as regras ativas de todos os usuários. Protegido por CRON_SECRET. */
 export async function GET(req: NextRequest) {
-  const secret = process.env.CRON_SECRET;
-  if (secret && req.headers.get("authorization") !== `Bearer ${secret}`) {
-    return Response.json({ error: "Não autorizado." }, { status: 401 });
-  }
+  if (!cronAutorizado(req)) return naoAutorizado();
 
   const users = await prisma.automationRule.findMany({
     where: { active: true },
