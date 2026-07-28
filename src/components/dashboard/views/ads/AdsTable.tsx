@@ -32,8 +32,8 @@ const COLUNAS: { chave: string; label: string; dica?: string }[] = [
   { chave: "lucro", label: "Lucro", dica: "Faturamento − gasto (bruto, sem taxas)" },
   { chave: "roas", label: "ROAS", dica: "Faturamento ÷ gasto" },
   { chave: "roi", label: "ROI", dica: "Lucro ÷ gasto" },
-  { chave: "ic", label: "IC", dica: "Initiate Checkout — ainda sem atribuição por campanha" },
-  { chave: "cpi", label: "CPI", dica: "Custo por Initiate Checkout — depende do IC" },
+  { chave: "ic", label: "IC", dica: "Initiate Checkout — visitantes distintos atribuídos por UTM" },
+  { chave: "cpi", label: "CPI", dica: "Custo por Initiate Checkout (gasto ÷ IC)" },
   { chave: "cpc", label: "CPC", dica: "Gasto ÷ cliques" },
   { chave: "ctr", label: "CTR", dica: "Cliques ÷ impressões" },
   { chave: "cpm", label: "CPM", dica: "Gasto por mil impressões" },
@@ -214,8 +214,8 @@ export function AdsTable({
                   <td style={sx(`color:${m.lucro > 0 ? "#4ade80" : m.lucro < 0 ? "#f87171" : "inherit"}`)}>{brl(m.lucro)}</td>
                   <td>{m.roas != null ? `${m.roas.toFixed(2).replace(".", ",")}x` : traco}</td>
                   <td>{m.roi != null ? `${m.roi.toFixed(2).replace(".", ",")}x` : traco}</td>
-                  <td>{traco}</td>
-                  <td>{traco}</td>
+                  <td>{(l.ic ?? 0) > 0 ? n0(l.ic ?? 0) : traco}</td>
+                  <td>{m.cpi != null ? brl(m.cpi) : traco}</td>
                   <td>{m.cpc != null ? brl(m.cpc) : traco}</td>
                   <td>{m.ctr != null ? pct(m.ctr) : traco}</td>
                   <td>{m.cpm != null ? brl(m.cpm) : traco}</td>
@@ -241,8 +241,8 @@ export function AdsTable({
               <td style={sx(`color:${md.lucro > 0 ? "#4ade80" : md.lucro < 0 ? "#f87171" : "inherit"}`)}>{brl(md.lucro)}</td>
               <td>{md.roas != null ? `${md.roas.toFixed(2).replace(".", ",")}x` : traco}</td>
               <td>{md.roi != null ? `${md.roi.toFixed(2).replace(".", ",")}x` : traco}</td>
-              <td>{traco}</td>
-              <td>{traco}</td>
+              <td>{(totais.ic ?? 0) > 0 ? n0(totais.ic ?? 0) : traco}</td>
+              <td>{md.cpi != null ? brl(md.cpi) : traco}</td>
               <td>{md.cpc != null ? brl(md.cpc) : traco}</td>
               <td>{md.ctr != null ? pct(md.ctr) : traco}</td>
               <td>{md.cpm != null ? brl0(md.cpm) : traco}</td>

@@ -6,22 +6,32 @@ export function brl0(n: number): string {
   return "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
+/**
+ * Percentual de métrica com **2 casas**.
+ *
+ * Era `toFixed(1)`, que transformava um CTR de 3,73% em "3,7%". Toda métrica
+ * numérica da ferramenta agora mostra 2 casas: o arredondamento escondia
+ * variação real entre criativos que diferem na segunda casa.
+ */
 export function pct(n: number): string {
-  return n.toFixed(1).replace(".", ",") + "%";
-}
-
-export function roasFmt(n: number): string {
-  return n.toFixed(1).replace(".", ",") + "x";
+  return n.toFixed(2).replace(".", ",") + "%";
 }
 
 /**
- * Multiplicador com 2 casas — o formato que o Bloco 4 pediu para o ROI
- * (`1,87x`, `0,80x`). O `roasFmt` continua com 1 casa por ora: mexer nele
- * mudaria o ROAS, que não estava no escopo.
+ * Multiplicador com 2 casas — ROAS e ROI usam o MESMO formato.
+ *
+ * O `roasFmt` tinha 1 casa e o `multFmt` 2, então o mesmo número aparecia
+ * diferente dependendo do card: um ROAS real de 3,73 virava "3,7x" enquanto o
+ * ROI de 3,73 virava "3,73x". `toFixed` arredonda para a casa pedida (3,75 →
+ * "3,8" com 1 casa), e era daí que vinha a impressão de "número fechado".
+ * Ambos agora são a mesma função — `roasFmt` fica como alias para não quebrar
+ * os pontos que já o importavam.
  */
 export function multFmt(n: number): string {
   return n.toFixed(2).replace(".", ",") + "x";
 }
+
+export const roasFmt = multFmt;
 
 /**
  * Tempo relativo com escala completa: segundos → minutos → horas → dias →

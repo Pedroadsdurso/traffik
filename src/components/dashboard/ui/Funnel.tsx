@@ -10,6 +10,20 @@ export interface EtapaFunil {
   /** Rótulo curto para o cabeçalho da coluna. */
   curto: string;
   value: number;
+  /** De onde sai a contagem — aparece no tooltip. */
+  fonte?: string;
+}
+
+/**
+ * Taxa de uma etapa em relação à anterior.
+ *
+ * `null` quando a etapa anterior é ZERO: a conversão é indefinida, não 0%.
+ * Mostrar "0,0%" com 220 visitas embaixo (o caso de quem ainda não sincronizou
+ * o Facebook, onde "cliques no anúncio" é 0) fazia o funil parecer quebrado.
+ */
+function taxaVsAnterior(atual: number, anterior: number | null): number | null {
+  if (anterior === null || anterior <= 0) return null;
+  return (atual / anterior) * 100;
 }
 
 const W = 1000;
@@ -132,15 +146,23 @@ export function Funnel({ etapas }: { etapas: EtapaFunil[] }) {
         {/* Taxa de conversão no centro de cada segmento (HTML: o SVG está esticado) */}
         <div style={sx(`position:absolute;inset:0;display:grid;grid-template-columns:repeat(${n},1fr);align-items:center;text-align:center;pointer-events:none`)}>
           {etapas.map((e, i) => {
-            const ant = i > 0 ? etapas[i - 1]!.value : null;
-            const taxa = i === 0 ? null : ant && ant > 0 ? (e.value / ant) * 100 : 0;
+            const taxa = taxaVsAnterior(e.value, i > 0 ? etapas[i - 1]!.value : null);
+            // Acima de 100% a etapa tem MAIS gente do que a anterior, o que é
+            // impossível num funil de verdade e sinaliza que as duas contagens
+            // vêm de fontes diferentes (ex.: cliques do Meta vs. visitas do
+            // nosso script). Pinta de âmbar em vez de esconder: o número é real
+            // e o problema está nos dados, não no cálculo.
+            const incoerente = taxa != null && taxa > 100;
+            const fundo = incoerente ? "rgba(120,53,15,.72)" : "rgba(10,12,24,.42)";
             return (
               <span key={e.label} style={sx("display:flex;justify-content:center")}>
                 {/* Fundo semi-transparente + sombra: o gradiente por baixo varia
                     muito de luminosidade e o número branco puro sumia em cima
                     dos tons claros. */}
-                <span style={sx(`font-size:14px;font-weight:700;color:#fff;padding:2px 9px;border-radius:999px;background:rgba(10,12,24,.42);backdrop-filter:blur(2px);text-shadow:0 1px 3px rgba(0,0,0,.8);opacity:${pronto ? 1 : 0};transition:opacity 500ms 400ms var(--ease-out)`)}>
-                  {taxa === null ? "—" : `${taxa.toFixed(1).replace(".", ",")}%`}
+                <span
+                  title={incoerente ? "Mais que a etapa anterior — as duas contagens vêm de fontes diferentes." : undefined}
+                  style={sx(`font-size:14px;font-weight:700;color:${incoerente ? "#fcd34d" : "#fff"};padding:2px 9px;border-radius:999px;background:${fundo};backdrop-filter:blur(2px);text-shadow:0 1px 3px rgba(0,0,0,.8);opacity:${pronto ? 1 : 0};transition:opacity 500ms 400ms var(--ease-out)`)}>
+                  {taxa === null ? "—" : `${incoerente ? "⚠ " : ""}${taxa.toFixed(2).replace(".", ",")}%`}
                 </span>
               </span>
             );
@@ -166,21 +188,23 @@ export function Funnel({ etapas }: { etapas: EtapaFunil[] }) {
           titulo={etapas[tip.i]!.label}
           linhas={[
             { cor: GRAD_FUNIL[Math.min(tip.i, GRAD_FUNIL.length - 1)], label: "Total", valor: etapas[tip.i]!.value.toLocaleString("pt-BR") },
+            ...(etapas[tip.i]!.fonte ? [{ label: "Origem", valor: etapas[tip.i]!.fonte! }] : []),
             ...(tip.i > 0
               ? [
                   {
                     label: `vs. ${etapas[tip.i - 1]!.curto}`,
-                    valor:
-                      etapas[tip.i - 1]!.value > 0
-                        ? `${((etapas[tip.i]!.value / etapas[tip.i - 1]!.value) * 100).toFixed(1).replace(".", ",")}%`
-                        : "—",
+                    valor: (() => {
+                      const t = taxaVsAnterior(etapas[tip.i]!.value, etapas[tip.i - 1]!.value);
+                      if (t === null) return "—";
+                      return `${t > 100 ? "⚠ " : ""}${t.toFixed(2).replace(".", ",")}%`;
+                    })(),
                   },
                   {
                     label: `vs. ${etapas[0]!.curto} (topo)`,
-                    valor:
-                      etapas[0]!.value > 0
-                        ? `${((etapas[tip.i]!.value / etapas[0]!.value) * 100).toFixed(1).replace(".", ",")}%`
-                        : "—",
+                    valor: (() => {
+                      const t = taxaVsAnterior(etapas[tip.i]!.value, etapas[0]!.value);
+                      return t === null ? "—" : `${t.toFixed(2).replace(".", ",")}%`;
+                    })(),
                   },
                 ]
               : []),

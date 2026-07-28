@@ -25,6 +25,8 @@ export interface CampaignRow {
   clicks: number;
   results: number;
   revenue: number;
+  /** Initiate Checkout atribuídos (visitantes distintos). */
+  ic: number;
 }
 export interface AdSetRow extends Omit<CampaignRow, "dailyBudget"> {
   campaignId: string;
@@ -84,7 +86,7 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
   const { start, startKey } = rangeStart(filters.period, tz);
   const accountWhere = filters.account !== "todas" ? { id: filters.account } : {};
 
-  const [accounts, campaigns, adSets, ads, metrics, sales] = await Promise.all([
+  const [accounts, campaigns, adSets, ads, metrics, sales, icEvents] = await Promise.all([
     prisma.adAccount.findMany({
       where: { userId, ...accountWhere },
       select: { id: true, fbAccountId: true, name: true, currency: true, trackingEnabled: true },
@@ -120,7 +122,51 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
       where: { userId, status: "APROVADA", timestamp: { gte: start } },
       select: { value: true, click: { select: { utmCampaign: true } } },
     }),
+    // Initiate Checkout do período. O evento não carrega campanha, mas carrega
+    // o `fbclid` — e é por ele que se chega ao `Click`, que tem os UTMs. É o
+    // mesmo caminho de atribuição das vendas, só que via fbclid em vez da FK.
+    prisma.pixelEvent.findMany({
+      where: { userId, event: "InitiateCheckout", timestamp: { gte: start } },
+      select: { id: true, fbclid: true, eventId: true },
+    }),
   ]);
+
+  // Um IC = um VISITANTE distinto, não um evento: o `px.js` dispara a cada
+  // clique no link de checkout, e quem clica duas vezes gerava dois eventos.
+  const icPorFbclid = new Map<string, Set<string>>();
+  for (const e of icEvents) {
+    if (!e.fbclid) continue; // sem fbclid não há como ligar a uma campanha
+    const visitante = e.fbclid;
+    const set = icPorFbclid.get(visitante) ?? new Set<string>();
+    set.add(e.eventId || `row:${e.id}`);
+    icPorFbclid.set(visitante, set);
+  }
+
+  const fbclids = [...icPorFbclid.keys()];
+  const cliquesDoIc = fbclids.length
+    ? await prisma.click.findMany({
+        where: { userId, fbclid: { in: fbclids } },
+        select: { fbclid: true, utmCampaign: true, utmContent: true },
+      })
+    : [];
+
+  // fbclid → campanha/anúncio. Cada visitante conta UMA vez por campanha.
+  const icByCampaignId = new Map<string, number>();
+  const icByCampaignName = new Map<string, number>();
+  const icByContentId = new Map<string, number>();
+  const icByContentName = new Map<string, number>();
+  const jaContado = new Set<string>();
+  for (const c of cliquesDoIc) {
+    if (!c.fbclid || jaContado.has(c.fbclid)) continue;
+    jaContado.add(c.fbclid);
+    const camp = splitPipe(c.utmCampaign);
+    const cont = splitPipe(c.utmContent);
+    const inc = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
+    if (camp.id) inc(icByCampaignId, camp.id);
+    else if (camp.name) inc(icByCampaignName, camp.name.toLowerCase());
+    if (cont.id) inc(icByContentId, cont.id);
+    else if (cont.name) inc(icByContentName, cont.name.toLowerCase());
+  }
 
   // Métricas por anúncio
   const metByAd = new Map<string, { spend: number; impressions: number; clicks: number }>();
@@ -170,6 +216,9 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
       clicks: met.clicks,
       results: 0,
       revenue: 0,
+      // IC do anúncio vem do utm_content (`nome|id`), somando id + nome como a
+      // atribuição de vendas: cada visitante cai em só um dos dois mapas.
+      ic: (icByContentId.get(a.fbAdId) ?? 0) + (icByContentName.get(a.name.toLowerCase()) ?? 0),
     };
   });
 
@@ -186,8 +235,9 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
         spend: acc.spend + a.spend,
         impressions: acc.impressions + a.impressions,
         clicks: acc.clicks + a.clicks,
+        ic: acc.ic + a.ic,
       }),
-      { spend: 0, impressions: 0, clicks: 0 },
+      { spend: 0, impressions: 0, clicks: 0, ic: 0 },
     );
 
   const campaignNameById = new Map(campaigns.map((c) => [c.id, c.name]));
@@ -215,6 +265,11 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
       clicks: agg.clicks,
       results: attr.results,
       revenue: attr.revenue,
+      // Na campanha o IC vem do utm_campaign; se nada casar, cai na soma dos
+      // anúncios (que atribuem por utm_content).
+      ic:
+        (icByCampaignId.get(c.fbCampaignId) ?? 0) + (icByCampaignName.get(c.name.toLowerCase()) ?? 0) ||
+        agg.ic,
     };
   });
 
@@ -237,6 +292,8 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
       clicks: agg.clicks,
       results: 0,
       revenue: 0,
+      // Conjunto não tem UTM próprio: soma o IC dos anúncios dele.
+      ic: agg.ic,
     };
   });
 

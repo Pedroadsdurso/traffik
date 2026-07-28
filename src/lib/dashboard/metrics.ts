@@ -37,7 +37,8 @@ export interface DashboardData {
     ticket: number;
     cpa: number;
     roas: number;
-    roi: number;
+    /** `null` quando não houve custo nenhum — ROI é indefinido, não zero. */
+    roi: number | null;
     margin: number;
     ctr: number;
     clicks: number;
@@ -268,13 +269,33 @@ async function windowAggregate(
       take: 200,
     }),
     // O funil conta só Initiate Checkout, e conta a janela inteira — por isso é
-    // um count separado, e não o tamanho da lista acima (que é truncada em 200).
-    prisma.pixelEvent.count({
+    // uma consulta separada, e não a lista acima (que é truncada em 200).
+    //
+    // Traz as chaves em vez de `count()` porque o funil precisa de VISITANTES
+    // distintos, não de eventos: o `px.js` dispara um IC a cada clique no link
+    // de checkout, e quem clica duas vezes gerava dois eventos. Medido no banco:
+    // 31 eventos para 25 visitantes. Esse era o inflador que fazia uma etapa
+    // ultrapassar a anterior.
+    prisma.pixelEvent.findMany({
       where: { userId, event: "InitiateCheckout", timestamp: { gte: start, lte: end } },
+      select: { id: true, fbclid: true, eventId: true },
     }),
   ]);
 
-  return { sales, clicks, metrics, expenses, pixelEvents, initiateCheckouts, janela: { start, end, startKey, endKey, tz } };
+  // Visitantes distintos que iniciaram checkout. A chave é o `fbclid` (o mesmo
+  // visitante clicando várias vezes carrega o mesmo), caindo no `eventId` e por
+  // fim no id da linha quando não há como identificar — sem fbclid não dá para
+  // afirmar que dois eventos são a mesma pessoa, e contar a mais é melhor do
+  // que fundir visitantes diferentes num só.
+  const checkoutsDistintos = new Set(
+    initiateCheckouts.map((e) => e.fbclid || e.eventId || `row:${e.id}`),
+  ).size;
+
+  return {
+    sales, clicks, metrics, expenses, pixelEvents,
+    initiateCheckouts: checkoutsDistintos,
+    janela: { start, end, startKey, endKey, tz },
+  };
 }
 
 export async function computeDashboard(userId: string, filters: DashboardFilters): Promise<DashboardData> {
@@ -378,8 +399,20 @@ function summarize(w: Window) {
   const profit = revenue - spend - exp.total;
   const totalCost = spend + exp.total;
   // ROI como **multiplicador** (Bloco 4), na mesma escala do ROAS: 1,87x.
-  // Antes era `* 100` e a UI mostrava "1331%".
-  const roi = totalCost ? profit / totalCost : 0;
+  //
+  // ⚠️ NÃO existe clamp aqui, e o piso de −1,00x é matemático, não um bug:
+  //   roi = (revenue − custo) / custo = revenue/custo − 1
+  // Com `revenue = 0` o resultado é exatamente −1 por qualquer custo, porque
+  // não dá para perder mais do que 100% do que se investiu. Um ROI "cada vez
+  // mais negativo" só existe se o faturamento for NEGATIVO — e os reembolsos
+  // hoje saem do faturamento (viram status REEMBOLSADA) em vez de subtraí-lo.
+  // Quem varia com o tamanho do prejuízo é o LUCRO, em reais.
+  // Ver a nota "ROI travado em −1,00x" no CLAUDE.md.
+  //
+  // Sem custo nenhum o ROI é indefinido (dividir por zero), não "zero": devolver
+  // 0 fazia a tela dizer "0,00x" — que se lê como empate — para uma conta que
+  // faturou sem gastar. Agora vira `null` e a UI mostra "—".
+  const roi = totalCost > 0 ? profit / totalCost : null;
   const margin = revenue ? (profit / revenue) * 100 : 0;
 
   // ARPU = faturamento ÷ compradores únicos. O comprador é identificado pelo
@@ -529,8 +562,8 @@ function summarize(w: Window) {
   };
 }
 
-function pctDelta(cur: number, prev: number): number | null {
-  if (!prev) return null;
+function pctDelta(cur: number | null, prev: number | null): number | null {
+  if (cur == null || prev == null || !prev) return null;
   return ((cur - prev) / Math.abs(prev)) * 100;
 }
 

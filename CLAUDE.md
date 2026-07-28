@@ -1025,6 +1025,91 @@ bug antigo** (17h vira 20h, a venda de ontem vaza para hoje) — é o que mostra
 que o fuso realmente comanda a agregação agora. `tsc --noEmit` e `next build`
 limpos; dados de teste removidos.
 
+## 📐 Precisão das métricas e coerência do funil (28/07/2026)
+
+### ⚠️ ROI travado em −1,00x NÃO é bug — é o piso matemático
+
+Não existe clamp no código. A conta é `roi = (faturamento − custo) / custo`, que
+é o mesmo que `faturamento/custo − 1`. **Com faturamento 0 o resultado é −1 para
+qualquer custo**, porque não dá para perder mais do que 100% do que se investiu.
+Um ROI "cada vez mais negativo" exigiria faturamento NEGATIVO, e reembolso aqui
+muda o status da venda (sai do faturamento) em vez de subtrair.
+
+Quem varia com o tamanho do prejuízo é o **Lucro, em reais** — já é um card.
+Se o ROI está −1,00x em tudo, a pergunta certa é *"por que o faturamento é 0?"*,
+e a resposta costuma ser atribuição: sem os UTMs do Bloco 11 casando, a venda não
+cola na campanha e o Gerenciador mostra faturamento 0 por linha.
+
+**O que era bug de verdade e foi corrigido:** `totalCost === 0` devolvia `0`, e a
+tela mostrava "0,00x" — que se lê como empate — para uma conta que faturou sem
+gastar nada. Agora é `null` → "—". `DashboardData.kpis.roi` virou `number | null`.
+
+### Arredondamento: 2 casas em tudo
+
+`roasFmt` tinha **1 casa** e `multFmt` **2**, então o mesmo número aparecia
+diferente conforme o card (ROAS 3,73 → "3,7x"; ROI 3,73 → "3,73x"). `toFixed`
+arredonda para a casa pedida (3,75 → "3,8" com 1 casa) — era daí que vinha a
+sensação de "número fechado". Hoje **`roasFmt` é alias de `multFmt`** e `pct`
+passou de 1 para 2 casas (CTR, margem). CPA/CPC/CPM usam `brl`, que já tinha 2.
+
+### Funil: de onde vem cada etapa
+
+As 5 etapas **não saem da mesma fonte**, e é isso que explica uma passar de 100%
+da anterior:
+
+| Etapa | Fonte |
+|---|---|
+| Cliques no anúncio | Meta Ads (`DailyAdMetric`) |
+| Visita na página | Nosso script (`Click`) — 1 por sessão |
+| Initiate Checkout | `PixelEvent` + webhook — **visitantes distintos** |
+| Vendas iniciadas | Gateway (`Sale`, todos os status) |
+| Vendas aprovadas | Gateway (`Sale`, status APROVADA) |
+
+Só **aprovadas ⊆ iniciadas** é garantido por construção. As demais podem cruzar
+legitimamente: tráfego orgânico gera visita sem clique no anúncio, e o Meta
+subnotifica cliques.
+
+**Dois bugs de contagem corrigidos:**
+1. **IC contava EVENTOS, não visitantes.** O `px.js` dispara um IC a cada clique
+   no link de checkout, então quem clicava duas vezes contava duas. Medido no
+   banco: **31 eventos para 25 visitantes**. Agora deduplica por
+   `fbclid → eventId → id da linha`.
+2. **Etapa anterior zerada mostrava "0,0%"** em vez de "—". Com o Facebook não
+   sincronizado ("cliques" = 0), "Visitas" exibia 0,0% tendo 220 visitas.
+   Conversão sobre zero é **indefinida**, não zero.
+
+> ⚠️ **Passar de 100% não é escondido nem clampado.** A etapa aparece em âmbar
+> com "⚠" e o tooltip diz de qual fonte cada número veio. Clampar em 100%
+> esconderia justamente o sinal de que as fontes não estão casando — que é
+> informação de diagnóstico, não ruído. O tooltip mostra as duas taxas (vs.
+> etapa anterior e vs. topo).
+
+### IC e CPI no Gerenciador — agora preenchidos
+
+O `PixelEvent` não guarda campanha, mas guarda **`fbclid`** — e é por ele que se
+chega ao `Click`, que tem os UTMs. `overview.ts` faz o mesmo caminho de
+atribuição das vendas: `fbclid → Click.utmCampaign/utmContent → splitPipe` (id do
+Facebook, com fallback por nome). **Não precisou de migration.**
+
+- **Campanha:** por `utm_campaign`; se nada casar, cai na soma dos anúncios.
+- **Anúncio:** por `utm_content`. **Conjunto:** soma dos anúncios (não tem UTM próprio).
+- **CPI** = gasto ÷ IC, em `ads/metrics.ts`, `null` quando IC é 0.
+
+> ⚠️ **IC só é atribuído quando o evento tem `fbclid`.** Visitante que chegou sem
+> `fbclid` (orgânico, ou o script de UTM não instalado) entra no funil do
+> Dashboard mas **não** na coluna IC do Gerenciador — lá o total pode ser menor.
+
+**Testado:** 11 asserções de formatação/ROI e 6 ponta a ponta com conta semeada
+(3 eventos de IC de 2 visitantes → IC = 2 em campanha/conjunto/anúncio, CPI
+120÷2 = 60, ROI −1,00x sem faturamento). No funil real do dono: IC 31→25 e as
+taxas saíram 11,36% → 56,00% → 14,29%, nenhuma acima de 100%. Dados de teste
+removidos.
+
+### Filtro do Dashboard abre em HOJE
+
+`dashPeriod` inicial era `"7d"`. O período **não é persistido de propósito** — é
+filtro de sessão, não preferência —, então mudar o padrão bastou.
+
 ## 🎨 Marca e logos
 
 Arquivos em `public/logos/` (webp, vindos do designer):

@@ -12,6 +12,8 @@ export interface LinhaBase {
   clicks: number;
   results: number;
   revenue: number;
+  /** Initiate Checkout atribuídos. Opcional: nem toda chamada tem o dado. */
+  ic?: number;
 }
 
 export interface MetricasDerivadas {
@@ -29,6 +31,8 @@ export interface MetricasDerivadas {
   ctr: number | null;
   /** Gasto por mil impressões. */
   cpm: number | null;
+  /** Custo por Initiate Checkout: gasto ÷ IC. */
+  cpi: number | null;
 }
 
 /** Divisão que devolve `null` em vez de `Infinity`/`NaN`. */
@@ -52,6 +56,7 @@ export function derivar(r: LinhaBase): MetricasDerivadas {
     cpc: div(r.spend, r.clicks),
     ctr: r.impressions > 0 ? (r.clicks / r.impressions) * 100 : null,
     cpm: r.impressions > 0 ? (r.spend / r.impressions) * 1000 : null,
+    cpi: div(r.spend, r.ic ?? 0),
   };
 }
 
@@ -64,7 +69,8 @@ export function somar(linhas: LinhaBase[]): LinhaBase {
       clicks: a.clicks + r.clicks,
       results: a.results + r.results,
       revenue: a.revenue + r.revenue,
+      ic: (a.ic ?? 0) + (r.ic ?? 0),
     }),
-    { spend: 0, impressions: 0, clicks: 0, results: 0, revenue: 0 },
+    { spend: 0, impressions: 0, clicks: 0, results: 0, revenue: 0, ic: 0 },
   );
 }

@@ -206,7 +206,11 @@ function initialState(
     accountSync: {},
     pixels: initialPixels,
     editDashOpen: false,
-    dashPeriod: "7d",
+    // O filtro sempre abre em HOJE. Era "7d", então sair e voltar à ferramenta
+    // mostrava a semana inteira e dava a impressão de que os números do dia
+    // estavam errados. O período não é persistido de propósito: é um filtro de
+    // sessão, não uma preferência.
+    dashPeriod: "hoje",
     dashFrom: null,
     dashTo: null,
     dashAccount: "todas",
@@ -496,7 +500,9 @@ export function useTraffikState(
   const arpu = k?.arpu ?? 0;
   const buyers = k?.buyers ?? 0;
   const roas = k?.roas ?? 0;
-  const roi = k?.roi ?? 0;
+  // `null` = sem custo no período, ROI indefinido. Não colapsar para 0: "0,00x"
+  // se lê como empate, e empate é diferente de "não dá para calcular".
+  const roi = k?.roi ?? null;
   const margin = k?.margin ?? 0;
   const ctr = k?.ctr ?? 0;
   const pendentes = k?.pendentes ?? 0;
@@ -532,8 +538,8 @@ export function useTraffikState(
     gasto: { label: "Gasto total", value: brl(spend), ...trendOf("spend", true) },
     roas: { label: "ROAS", value: roasFmt(roas), ...trendOf("roas") },
     // Bloco 4: ROI passa a ser multiplicador (era "1331%"), com 2 casas como
-    // nos exemplos do roteiro.
-    roi: { label: "ROI", value: multFmt(roi), ...trendOf("roi") },
+    // nos exemplos do roteiro. Sem custo no período não há ROI — mostra "—".
+    roi: { label: "ROI", value: roi != null ? multFmt(roi) : "—", ...trendOf("roi") },
     margem: { label: "Margem de lucro", value: pct(margin), ...trendOf("margem") },
     vendas: { label: "Vendas", value: String(sales), ...trendOf("sales") },
     cpa: { label: "CPA", value: brl(cpa), ...trendOf("cpa", true) },
@@ -1020,12 +1026,16 @@ export function useTraffikState(
     // Séries do Bloco 4 (por horário / por dia), já filtradas no servidor.
     // Bloco 5: séries brutas para os gráficos novos (o front formata).
     chartSerie: { labels: d?.chart.labels ?? [], revenue: d?.chart.revenue ?? [], spend: d?.chart.spend ?? [] },
+    // Cada etapa declara de ONDE vem a contagem, porque as cinco não saem da
+    // mesma fonte — e é exatamente isso que explica uma etapa passar de 100%
+    // da anterior. Só "vendas aprovadas ⊆ vendas iniciadas" é garantido por
+    // construção (mesma tabela, filtro de status).
     funnelStages: [
-      { label: "Cliques no anúncio", curto: "Cliques", value: d?.funnel.cliques ?? 0 },
-      { label: "Visita na página", curto: "Vis. Página", value: d?.funnel.visitas ?? 0 },
-      { label: "Initiate Checkout", curto: "ICs", value: d?.funnel.checkouts ?? 0 },
-      { label: "Vendas iniciadas", curto: "Vendas Inic.", value: d?.funnel.iniciadas ?? 0 },
-      { label: "Vendas aprovadas", curto: "Vendas Apr.", value: d?.funnel.vendas ?? 0 },
+      { label: "Cliques no anúncio", curto: "Cliques", value: d?.funnel.cliques ?? 0, fonte: "Meta Ads (métrica diária)" },
+      { label: "Visita na página", curto: "Vis. Página", value: d?.funnel.visitas ?? 0, fonte: "Nosso script — 1 por sessão" },
+      { label: "Initiate Checkout", curto: "ICs", value: d?.funnel.checkouts ?? 0, fonte: "Pixel + webhook — visitantes distintos" },
+      { label: "Vendas iniciadas", curto: "Vendas Inic.", value: d?.funnel.iniciadas ?? 0, fonte: "Gateway — todos os status" },
+      { label: "Vendas aprovadas", curto: "Vendas Apr.", value: d?.funnel.vendas ?? 0, fonte: "Gateway — status APROVADA" },
     ],
     sparklines: d?.chart.sparklines ?? {},
     /** Recarrega os dados do Dashboard sem recarregar a página. */
