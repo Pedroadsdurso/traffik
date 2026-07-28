@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { getUtmCodes, type UtmCodesDTO } from "@/lib/actions/utm";
 import { getPublicAppUrl } from "@/lib/appUrl";
-import { backRedirectScript, utmScript } from "@/lib/utm/scripts";
+import { backRedirectScript, utmLoaderSnippet } from "@/lib/utm/scripts";
 import { sx } from "@/lib/sx";
 import { LogoGateway } from "../../ui/LogoGateway";
 import { Modal } from "../../ui/Modal";
@@ -110,10 +110,15 @@ function CodigosBlock({ codes }: { codes: UtmCodesDTO | null }) {
 
 function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
   const [backUrl, setBackUrl] = useState("");
+  const [copiado, setCopiado] = useState(false);
 
-  function baixarUtm() {
-    if (!codes) return;
-    download("traffik-utm.js", utmScript(codes.accountId, getPublicAppUrl()));
+  const snippet = codes ? utmLoaderSnippet(codes.accountId, getPublicAppUrl()) : "";
+
+  function copiarUtm() {
+    if (!snippet) return;
+    navigator.clipboard.writeText(snippet);
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 1500);
   }
   function baixarBack() {
     download("traffik-back-redirect.js", backRedirectScript(backUrl));
@@ -133,17 +138,26 @@ function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
           clique para a Traffik. Cole no <code>&lt;head&gt;</code> do seu site.
         </p>
         <p className="card-body" style={sx("margin:0;font-size:12px")}>
+          São 3 linhas: o resto do código fica hospedado na Traffik e é carregado de forma assíncrona, sem
+          atrasar o carregamento da sua página. Melhorias no rastreamento chegam sozinhas, sem reinstalar.
+        </p>
+        <p className="card-body" style={sx("margin:0;font-size:12px")}>
           Os cliques serão enviados para{" "}
           <code style={sx("font-family:ui-monospace,monospace")}>{getPublicAppUrl()}</code>
           {getPublicAppUrl().includes("localhost") && (
             <span style={sx("color:var(--color-warning,#fbbf24)")}>
               {" "}— é um endereço local. Defina <code>NEXT_PUBLIC_APP_URL</code> com o domínio de produção
-              e baixe o script de novo antes de instalar no site.
+              e copie o snippet de novo antes de instalar no site.
             </span>
           )}
         </p>
-        <button className="btn btn-primary" type="button" onClick={baixarUtm} disabled={!codes} style={sx("width:fit-content")}>
-          Baixar traffik-utm.js
+        <pre
+          style={sx("background:var(--color-bg,#0b0b0f);border:1px solid var(--color-border);border-radius:8px;padding:var(--space-3);font-size:11px;font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-all;margin:0;max-height:200px;overflow:auto")}
+        >
+          {snippet || "…"}
+        </pre>
+        <button className="btn btn-primary" type="button" onClick={copiarUtm} disabled={!codes} style={sx("width:fit-content")}>
+          {copiado ? "Copiado!" : "Copiar script"}
         </button>
       </div>
 

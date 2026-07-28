@@ -14,7 +14,7 @@ import {
   type PixelFormInput,
 } from "@/lib/actions/pixels";
 import { getPublicAppUrl } from "@/lib/appUrl";
-import { pixelScript } from "@/lib/pixel/script";
+import { pixelLoaderSnippet } from "@/lib/pixel/script";
 import { sx } from "@/lib/sx";
 import { Drawer } from "../../ui/Drawer";
 
@@ -151,7 +151,7 @@ export function PixelView() {
 
   function scriptText(px: PixelConfigDTO): string {
     const ic = px.rules.find((r) => r.eventType === "INITIATE_CHECKOUT");
-    return pixelScript({
+    return pixelLoaderSnippet({
       configId: px.id,
       apiBase: getPublicAppUrl(),
       lead: px.rules.find((r) => r.eventType === "LEAD")?.enabled ?? false,

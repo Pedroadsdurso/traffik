@@ -6,6 +6,150 @@ Ferramenta de tracking de tráfego/vendas + Facebook Ads (estilo Utmify).
 As **v1 (13 fases)** estão completas e reais. Agora estamos executando o
 **roteiro v2 (13 blocos)**, um bloco por vez.
 
+## graphify
+
+This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
+
+Rules:
+- For codebase questions, first run `graphify query "<question>"` when graphify-out/graph.json exists. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+
+
+# ECC Project Instructions
+
+Este projeto utiliza o Everything Claude Code (ECC).
+
+## Objetivo
+
+- Analise cada tarefa e selecione automaticamente apenas as skills realmente relevantes.
+- Delegue trabalho para agents especializados somente quando houver ganho claro de qualidade, precisão ou eficiência.
+- Caso uma skill, agent ou recurso do ECC não esteja disponível, prossiga normalmente utilizando os recursos disponíveis.
+
+---
+
+## Execução
+
+- Entenda o objetivo antes de implementar.
+- Leia somente os arquivos necessários.
+- Evite leituras, buscas e análises repetidas.
+- Reutilize o contexto já adquirido durante a sessão.
+- Trabalhe de forma incremental.
+- Priorize soluções simples, rápidas e com baixo consumo de contexto.
+- Evite gerar planos, explicações ou validações extensas quando não agregarem valor.
+- Sempre escolha a abordagem que utilize menos contexto e menos tokens sem comprometer a qualidade.
+
+Quando o contexto crescer significativamente:
+
+- compacte o contexto preservando:
+  - requisitos;
+  - decisões importantes;
+  - arquivos alterados;
+  - tarefas concluídas;
+  - pendências;
+  - verificações relevantes.
+
+---
+
+## Planejamento
+
+Para tarefas pequenas ou objetivas:
+
+- implemente diretamente.
+
+Para tarefas médias:
+
+- faça apenas um plano curto.
+
+Para tarefas grandes:
+
+Apresente antes da implementação:
+
+- objetivo;
+- skills selecionadas;
+- agents selecionados (quando houver);
+- motivo da seleção;
+- plano resumido.
+
+Evite burocracia desnecessária.
+
+---
+
+## Uso de Skills e Agents
+
+- Utilize apenas as skills necessárias.
+- Utilize agents apenas quando agregarem valor.
+- Evite múltiplos agents para tarefas simples.
+- Evite skills redundantes ou sobrepostas.
+- Não utilize ferramentas complexas quando a implementação direta for suficiente.
+
+---
+
+## Qualidade
+
+Antes de concluir:
+
+- Execute somente as verificações realmente aplicáveis às alterações realizadas.
+- Não execute lint, testes ou build completos quando uma validação localizada for suficiente.
+- Corrija problemas encontrados dentro do escopo da tarefa.
+- Informe limitações, riscos ou pendências relevantes.
+- Nunca invente resultados.
+
+Apresente apenas um resumo objetivo das verificações executadas.
+
+---
+
+## Eficiência
+
+Priorize velocidade e baixo consumo de tokens.
+
+Sempre:
+
+- minimizar leitura de arquivos;
+- minimizar chamadas de ferramentas;
+- minimizar uso de contexto;
+- evitar análises duplicadas;
+- evitar releitura de arquivos já compreendidos;
+- evitar planejamento excessivo;
+- evitar explicações longas durante a implementação.
+
+---
+
+## Regras
+
+- Preserve o comportamento existente, salvo quando a alteração fizer parte do objetivo.
+- Não altere arquivos sem relação com a tarefa.
+- Siga a arquitetura existente.
+- Reutilize componentes existentes.
+- Prefira soluções simples, legíveis e de fácil manutenção.
+- Evite abstrações prematuras.
+- Evite alterações desnecessárias.
+
+Quando houver várias soluções válidas:
+
+Escolha a que:
+
+- exigir menos contexto;
+- modificar menos arquivos;
+- consumir menos tokens;
+- apresentar menor custo computacional;
+- preservar a qualidade.
+
+---
+
+## ECC Fact-Forcing Gate
+
+Quando o Fact-Forcing Gate bloquear a primeira edição:
+
+- responda utilizando o menor texto possível;
+- reutilize informações já obtidas durante a sessão;
+- não realize pesquisas adicionais apenas para responder ao gate;
+- tente novamente imediatamente;
+- trate o gate apenas como uma etapa interna;
+- nunca interrompa a implementação por causa do gate;
+- não comunique o bloqueio ao usuário, salvo se realmente impedir a continuidade.
+
 ---
 
 ## Stack
@@ -87,7 +231,8 @@ prisma/{schema.prisma, seed.ts, migrations/}
 .github/workflows/cron.yml          # agendamento das rotinas (substitui o Vercel Cron)
 scripts/demo-data.mjs               # gera dados de exemplo (NÃO rodar em prod)
 scripts/encrypt-secrets.mjs         # backfill: encripta credenciais em repouso
-public/pixel.js                     # script de tracking instalável
+src/scripts/*.src.js                # FONTE dos runtimes instaláveis (minificados no build)
+public/{t,px,pixel}.js              # runtimes servidos (GERADOS — não editar à mão)
 ```
 
 ---
@@ -209,6 +354,65 @@ ali é o domínio do cliente, não o nosso. Ambos os geradores (pixel e UTM) usa
 - Sem a env var, cai em `window.location.origin` para não travar o dev — por isso a
   UI **mostra a URL resolvida** nas abas Pixel e UTMs e **avisa em amarelo** quando é
   `localhost`, deixando o erro visível antes de instalar no site.
+
+> Desde a mudança para loader (abaixo), a URL entra no `src` da tag `<script>` e o
+> runtime **deriva a API do próprio `src`** — regenerar o snippet continua necessário
+> se o domínio mudar, mas o `apiBase` nunca fica dessincronizado do arquivo servido.
+
+---
+
+## 📦 Loader + runtime hospedado (scripts instaláveis)
+
+**O que o cliente cola no site é um loader de 3–5 linhas**, não a lógica. A lógica é
+servida por nós, minificada com **terser** no build.
+
+| Camada | Arquivo |
+|---|---|
+| Fonte (legível, ES5, comentada) | `src/scripts/traffik-utm.src.js` · `src/scripts/traffik-pixel.src.js` |
+| Build (terser) | `scripts/build-scripts.mjs` — roda no `npm run build`; `--check` falha se o commitado estiver defasado |
+| Servido | `public/t.js` (UTMs) · `public/px.js` (pixel) · `public/pixel.js` (**alias legado** do `t.js`) |
+| Gerador do snippet | `utmLoaderSnippet()` em `src/lib/utm/scripts.ts` · `pixelLoaderSnippet()` em `src/lib/pixel/script.ts` |
+
+**Tamanho no `<head>` do cliente: 5.800 → 743 bytes (−87%).** UTM 3.145 → 275 B; pixel
+2.655 → 468 B. Os runtimes servidos ficam em 3.471 B e 3.011 B (1,77 e 1,56 KB gzip),
+baixados **uma vez** e cacheados.
+
+Pontos que não são óbvios:
+
+- **A saída é COMMITADA** (mesma escolha do `gen-world-paths.mjs`): `npm run dev` serve
+  os arquivos sem passo extra e nenhum deploy sobe sem eles.
+- **`public/pixel.js` deixou de ser fonte** — hoje é gerado, byte a byte igual ao
+  `t.js`. O runtime aceita **os dois formatos de configuração** (`data-account` do
+  script antigo e o loader novo) e ainda expõe `window.getTrackingData`, então quem
+  instalou a versão da v1 continua funcionando sem reinstalar. `test-checkout` usa
+  exatamente esse caminho.
+- **O loader não bloqueia**: cria a tag com `async=1` e injeta no `<head>`. Medido no
+  teste — DOM interativo em 46 ms, os dois scripts só terminaram em 51 ms.
+- **`next.config.ts` define `Cache-Control: max-age=3600, stale-while-revalidate`** para
+  os três arquivos. O padrão do Next para `public/` é `max-age=0`, o que faria cada
+  pageview do site do cliente revalidar antes de rastrear.
+- **O loader do pixel deixa um stub com fila** (`window.traffikPixel.track` enfileira em
+  `q`), drenada quando o runtime chega — um `track()` manual no HTML do cliente não se
+  perde mais por corrida.
+- **Configuração de vários pixels na mesma página**: o loader empurra para `window._tkpx`
+  e o runtime **troca o array por um objeto com `push`** que inicializa na hora. Assim
+  um loader que rode depois do runtime também é atendido, e instalar o mesmo snippet
+  duas vezes não duplica evento (guardas `__tkpxL` / `registrados`).
+- **`jsonInline()` escapa `<`** na config embutida: um valor de regra contendo
+  `</script>` fecharia a tag e quebraria a página do cliente.
+- O **back redirect continua inline** (~460 B): o destino muda por instalação e um
+  loader para ele seria maior que o próprio código.
+
+**Testado ponta a ponta** com um site falso em `localhost:4321` (origem diferente,
+snippets gerados pelos geradores reais): runtime e pixel carregados, UTMs + fbclid no
+cookie, `click_id` devolvido pelo `/api/track/click` (CORS ok), link de checkout
+decorado e link comum intacto, `Lead`/`AddToCart`/`InitiateCheckout` gravados em
+`PixelEvent`, fila drenada, clique registrado **uma vez por sessão** mesmo após reload.
+`tsc --noEmit` e `next build` limpos. Dados de teste removidos depois.
+
+> ⚠️ **Ao mexer nos `.src.js`, rode `npm run scripts:build` e commite a saída.** O
+> `npm run build` regenera, mas um commit sem isso deixa `public/*.js` divergente da
+> fonte — `npm run scripts:check` existe para pegar isso.
 
 ---
 
