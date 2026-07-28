@@ -150,11 +150,12 @@ export function AdsActionBar({
           Abrir no Facebook ↗
         </button>
 
+        {/* O botão "Sincronizar métricas" saiu daqui: a sincronização manual é
+            uma só, no "Atualizar" do Dashboard. Continua havendo sincronização
+            automática (polling + crons), então o que faltava aqui não era o
+            botão e sim saber a IDADE do dado — que é o que fica. */}
         <div style={sx("margin-left:auto;display:flex;align-items:center;gap:var(--space-2)")}>
           {ultimaSync && <span className="text-muted" style={sx("font-size:11.5px")}>{ultimaSync}</span>}
-          <button className="btn btn-primary" type="button" onClick={onSincronizar} disabled={sincronizando}>
-            {sincronizando ? "Sincronizando…" : "Sincronizar métricas"}
-          </button>
         </div>
       </div>
 

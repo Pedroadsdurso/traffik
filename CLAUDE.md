@@ -1259,6 +1259,42 @@ Resultado real: 0 → **12 campanhas, 12 anúncios, R$ 103,41, 2.756 impressões
 > ⚠️ `pausado` significava `status !== "ACTIVE"`, que varria arquivados junto.
 > Hoje é `PAUSED` estrito.
 
+### Botão "Atualizar" — ponto ÚNICO de sincronização manual
+
+Os botões "Sincronizar métricas" (Gerenciador) e "Sincronizar tudo" (Integrações)
+foram removidos. O **"Atualizar" do Dashboard** é o único gatilho manual — ele
+chama `POST /api/sync/manual`, que delega ao **mesmo `autoSyncSeNecessario`** dos
+crons e do polling. Ou seja: o botão respeita os mesmos intervalos e **não
+sincroniza cegamente**.
+
+> O botão "Sincronizar" **por conta** em Integrações continua: é ação dirigida
+> ("só esta conta agora"), não um segundo botão global.
+
+**Custo medido** (1 perfil, 2 contas elegíveis), interceptando o `fetch`:
+
+| Cenário do clique | Modo | Chamadas à Graph |
+|---|---|---|
+| Tudo em dia (< 20s) | `pulado` | **0** |
+| Métricas vencidas | `metricas` | **2** (1 `/insights` por conta) |
+| Estrutura vencida (**pior caso**) | `completo` | **9** |
+| 5 cliques seguidos após um sync | `pulado` ×5 | **0** |
+
+O pior caso se decompõe em `1 × /me/adaccounts` + `2 × (/campaigns + /adsets +
+/ads + /insights)`. A fórmula é **`perfis + contas_elegíveis × 4`** — com N
+contas rastreadas, `1 + 4N`.
+
+**Trava contra clique repetido, em duas camadas:**
+1. **Cliente** — botão desabilitado com spinner. O `syncManualBusy` é lido de
+   dentro do `setS` (não num `if` antes), porque entre um `if` e o `setS` cabe
+   outro clique e dois cliques rápidos disparariam duas requisições.
+2. **Banco** — a reserva do `autoSync`. É a única que protege de verdade: duas
+   abas, dois dispositivos ou um F5 no meio passariam pela primeira sem esbarrar
+   em nada.
+
+O botão também **recarrega o painel só DEPOIS** de sincronizar. Antes ele apenas
+recarregava a tela, relendo o mesmo dado do banco — daí a impressão de que não
+fazia nada.
+
 ### Glossário dos contadores
 
 | Campo | Significa |

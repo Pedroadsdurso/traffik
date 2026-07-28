@@ -96,6 +96,10 @@ interface State {
   /** Última sincronização concluída (ISO) e se há uma em andamento. */
   syncLastAt: string | null;
   syncRodando: boolean;
+  /** Sincronização manual (botão "Atualizar") em andamento. */
+  syncManualBusy: boolean;
+  /** Texto do resultado da última sincronização manual. */
+  syncManualMsg: string | null;
   dashPeriod: DashPeriod;
   /** Intervalo do período "Personalizado" (ISO `YYYY-MM-DD`). */
   dashFrom: string | null;
@@ -212,6 +216,8 @@ function initialState(
     editDashOpen: false,
     syncLastAt: null,
     syncRodando: false,
+    syncManualBusy: false,
+    syncManualMsg: null,
     // O filtro sempre abre em HOJE. Era "7d", então sair e voltar à ferramenta
     // mostrava a semana inteira e dava a impressão de que os números do dia
     // estavam errados. O período não é persistido de propósito: é um filtro de
@@ -1082,8 +1088,49 @@ export function useTraffikState(
       { label: "Vendas aprovadas", curto: "Vendas Apr.", value: d?.funnel.vendas ?? 0, fonte: "Gateway — status APROVADA" },
     ],
     sparklines: d?.chart.sparklines ?? {},
-    /** Recarrega os dados do Dashboard sem recarregar a página. */
-    refreshDashboard: () => setS((st) => ({ ...st, dashLoading: true, refreshKey: st.refreshKey + 1 })),
+    /**
+     * Botão "Atualizar" do Dashboard — **ponto único de sincronização manual**.
+     *
+     * Sincroniza com o Facebook (respeitando os intervalos) e só então recarrega
+     * os dados da tela. Antes só recarregava a tela, o que relia o mesmo dado do
+     * banco e dava a impressão de que o botão não fazia nada.
+     *
+     * O `syncManualBusy` é lido do estado ANTERIOR dentro do `setS` em vez de
+     * checado antes: entre um `if` e o `setS` cabe outro clique, e dois cliques
+     * rápidos disparariam duas requisições. Aqui o próprio `setS` é a seção
+     * crítica. (O servidor ainda tem a reserva no banco como rede de segurança
+     * para o caso de duas abas.)
+     */
+    refreshDashboard: () => {
+      let jaRodando = false;
+      setS((st) => {
+        jaRodando = st.syncManualBusy;
+        return jaRodando ? st : { ...st, syncManualBusy: true, syncManualMsg: null };
+      });
+      if (jaRodando) return;
+
+      void (async () => {
+        try {
+          const res = await fetch("/api/sync/manual", { method: "POST" });
+          const data = (await res.json()) as { mensagem?: string; error?: string };
+          setS((st) => ({
+            ...st,
+            syncManualBusy: false,
+            syncManualMsg: data.mensagem ?? data.error ?? "Não foi possível sincronizar.",
+            // Recarrega o painel só depois da sincronização — senão a tela
+            // buscaria o dado antigo e o número só mudaria no polling seguinte.
+            dashLoading: true,
+            refreshKey: st.refreshKey + 1,
+            adsRefreshKey: st.adsRefreshKey + 1,
+          }));
+        } catch {
+          setS((st) => ({ ...st, syncManualBusy: false, syncManualMsg: "Falha de rede ao sincronizar." }));
+        }
+      })();
+    },
+    syncManualBusy: s.syncManualBusy,
+    syncManualMsg: s.syncManualMsg,
+    limparSyncMsg: () => setS((st) => ({ ...st, syncManualMsg: null })),
     byCountry: d?.byCountry ?? [],
     approval: d?.approval ?? [],
     byHour: d?.byHour ?? [],

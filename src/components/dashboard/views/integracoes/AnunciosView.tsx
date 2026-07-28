@@ -124,10 +124,13 @@ export function AnunciosView({ v }: { v: TraffikView }) {
 
   return (
     <div style={sx("display:flex;flex-direction:column;gap:var(--space-3)")}>
+      {/* "Sincronizar tudo" saiu: a sincronização manual é uma só, no botão
+          "Atualizar" do Dashboard. O botão POR CONTA continua, porque é uma
+          ação dirigida ("só esta conta agora"), não um segundo botão global. */}
       <div style={sx("display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap")}>
-        <button className="btn btn-primary" type="button" onClick={v.runSync} disabled={v.syncBusy}>
-          {v.syncBusy ? "Sincronizando…" : "Sincronizar tudo"}
-        </button>
+        <span className="text-muted" style={sx("font-size:13px")}>
+          A sincronização é automática. Para forçar, use “Atualizar” no Dashboard.
+        </span>
         {v.syncResult && <span className="text-muted" style={sx("font-size:13px")}>{v.syncResult}</span>}
       </div>
 

@@ -101,16 +101,29 @@ export function DashboardView({ v }: { v: TraffikView }) {
         </div>
 
         <div style={sx("display:flex;gap:var(--space-2);align-items:center;flex-wrap:wrap")}>
+          {/* Resultado da última sincronização manual — o usuário precisa saber
+              se algo foi feito ou se já estava em dia, senão clica de novo. */}
+          {v.syncManualMsg && (
+            <span
+              onClick={v.limparSyncMsg}
+              title="Clique para dispensar"
+              style={sx("font-size:12px;color:var(--color-text-muted);background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:999px;padding:4px 11px;cursor:pointer;max-width:520px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap")}>
+              {v.syncManualMsg}
+            </span>
+          )}
           {!grid.editing && (
             <button className="btn btn-secondary" type="button" onClick={v.refreshDashboard}
-              disabled={v.dashLoading} title="Recarregar os dados sem atualizar a página"
+              // Desabilitado enquanto sincroniza: é a 1ª camada contra clique
+              // repetido. A 2ª é a reserva no banco, que cobre duas abas.
+              disabled={v.syncManualBusy || v.dashLoading}
+              title="Sincroniza com o Facebook e recarrega os dados"
               style={sx("display:inline-flex;align-items:center;gap:7px;white-space:nowrap")}>
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2}
                 strokeLinecap="round" strokeLinejoin="round" aria-hidden
-                style={{ animation: v.dashLoading ? "girar 900ms linear infinite" : undefined }}>
+                style={{ animation: v.syncManualBusy || v.dashLoading ? "girar 900ms linear infinite" : undefined }}>
                 <path d="M21 12a9 9 0 11-2.6-6.4M21 3v6h-6" />
               </svg>
-              {v.dashLoading ? "Atualizando…" : "Atualizar"}
+              {v.syncManualBusy ? "Sincronizando…" : v.dashLoading ? "Atualizando…" : "Atualizar"}
             </button>
           )}
 
