@@ -23,29 +23,45 @@ function jsStr(v: string): string {
   return v.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-/**
- * JSON seguro para dentro de um `<script>` inline: o `<` escapado impede que um
- * valor de regra contendo `</script>` feche a tag e quebre a página do cliente.
- */
-function jsonInline(v: unknown): string {
-  return JSON.stringify(v).replace(/</g, "\\u003c");
+/** Escapa para dentro de um atributo HTML com aspas duplas. */
+function attr(v: string): string {
+  return v.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export function pixelLoaderSnippet(cfg: PixelScriptConfig): string {
+/** Os atributos `data-*` que carregam a configuração do pixel na própria tag. */
+function dados(cfg: PixelScriptConfig): { chave: string; valor: string }[] {
   const ic = cfg.initiateCheckout;
-  // Chaves curtas: o objeto viaja no HTML de todas as páginas do cliente.
-  const conf = {
-    c: cfg.configId,
-    l: cfg.lead ? 1 : 0,
-    a: cfg.addToCart ? 1 : 0,
-    i: ic.enabled && ic.value ? { t: ic.type || "", v: ic.value } : 0,
-  };
-  const src = `${cfg.apiBase.replace(/\/+$/, "")}/px.js`;
+  const out = [{ chave: "data-cfg", valor: cfg.configId }];
+  if (cfg.lead) out.push({ chave: "data-lead", valor: "1" });
+  if (cfg.addToCart) out.push({ chave: "data-atc", valor: "1" });
+  if (ic.enabled && ic.value) {
+    out.push({ chave: "data-ic-t", valor: ic.type || "" });
+    out.push({ chave: "data-ic-v", valor: ic.value });
+  }
+  return out;
+}
 
-  return `<!-- Traffik Pixel (cole antes de </head>) -->
-<script>
-(function(w,d,c,s){w.traffikPixel=w.traffikPixel||{q:[],track:function(){w.traffikPixel.q.push([].slice.call(arguments))}};
-(w._tkpx=w._tkpx||[]).push(c);if(w.__tkpxL)return;w.__tkpxL=1;
-s=d.createElement("script");s.async=1;s.src="${jsStr(src)}";d.head.appendChild(s)})(window,document,${jsonInline(conf)});
-</script>`;
+const fonte = (cfg: PixelScriptConfig) => `${cfg.apiBase.replace(/\/+$/, "")}/px.js`;
+
+/**
+ * Formato **HTML**: uma tag externa, sem JavaScript inline. É o formato mais
+ * robusto — sobrevive a campos que embrulham o conteúdo em `<script>` sozinhos
+ * (o que quebrava um snippet que já trazia as próprias tags) e a Content
+ * Security Policy que bloqueia script inline.
+ */
+export function pixelLoaderSnippet(cfg: PixelScriptConfig): string {
+  const attrs = dados(cfg).map((d) => ` ${d.chave}="${attr(d.valor)}"`).join("");
+  return `<script async src="${attr(fonte(cfg))}"${attrs}></script>`;
+}
+
+/**
+ * Formato **JavaScript puro**, para campos que aceitam só JS (é o caso de vários
+ * "scripts do checkout" de gateway, que embrulham o conteúdo em `<script>`).
+ * Monta a mesma tag por DOM, mantendo o `async`.
+ */
+export function pixelLoaderJs(cfg: PixelScriptConfig): string {
+  const sets = dados(cfg)
+    .map((d) => `s.setAttribute("${d.chave}","${jsStr(d.valor)}");`)
+    .join("");
+  return `(function(d,s){s=d.createElement("script");s.async=1;s.src="${jsStr(fonte(cfg))}";${sets}(d.head||d.documentElement).appendChild(s)})(document);`;
 }

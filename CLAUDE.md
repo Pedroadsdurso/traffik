@@ -371,7 +371,27 @@ servida por nós, minificada com **terser** no build.
 | Fonte (legível, ES5, comentada) | `src/scripts/traffik-utm.src.js` · `src/scripts/traffik-pixel.src.js` |
 | Build (terser) | `scripts/build-scripts.mjs` — roda no `npm run build`; `--check` falha se o commitado estiver defasado |
 | Servido | `public/t.js` (UTMs) · `public/px.js` (pixel) · `public/pixel.js` (**alias legado** do `t.js`) |
-| Gerador do snippet | `utmLoaderSnippet()` em `src/lib/utm/scripts.ts` · `pixelLoaderSnippet()` em `src/lib/pixel/script.ts` |
+| Gerador do snippet | `utmLoaderSnippet()`/`utmLoaderJs()` em `src/lib/utm/scripts.ts` · `pixelLoaderSnippet()`/`pixelLoaderJs()` em `src/lib/pixel/script.ts` |
+
+> ### ⚠️ DOIS formatos de snippet — e por quê
+> O snippet é oferecido em **HTML** (uma tag `<script async src … data-*>`) e em
+> **JavaScript puro** (a mesma tag montada por DOM). Não é enfeite: a primeira
+> versão saía só como HTML **com as tags `<script>` embutidas**, e vários campos de
+> "script do checkout" de gateway **embrulham o conteúdo em `<script>` por conta
+> própria** — o resultado vira `<script><script>…</script></script>`, que não
+> executa. O gerador anterior (v1) devolvia JS puro, então quem colava num campo
+> desses funcionava; a mudança de formato quebrou silenciosamente essas
+> instalações. **Nunca voltar a um formato único.**
+>
+> Pelo mesmo motivo o loader **não tem mais JavaScript inline**: além do problema
+> acima, CSP com `script-src` restrito bloqueia inline no site do cliente. A config
+> viaja em `data-cfg` / `data-lead` / `data-atc` / `data-ic-t` / `data-ic-v`, e o
+> runtime registra **todas** as tags do `px.js` na página (um pixel por tag).
+>
+> **Regra de IC por URL (`contem_url`) exige o script NO CHECKOUT**, não no site de
+> vendas — é a URL do checkout que precisa casar. A gaveta do Pixel agora avisa
+> isso em amarelo quando detecta esse tipo de regra, porque é um erro de instalação
+> invisível: tudo parece configurado e nenhum evento chega.
 
 **Tamanho no `<head>` do cliente: 5.800 → 743 bytes (−87%).** UTM 3.145 → 275 B; pixel
 2.655 → 468 B. Os runtimes servidos ficam em 3.471 B e 3.011 B (1,77 e 1,56 KB gzip),

@@ -9,9 +9,12 @@
  * à Conversions API dos pixels da Meta cadastrados. Purchase NÃO passa por aqui:
  * é server-side, no webhook da venda.
  *
- * A configuração chega pelo array `window._tkpx` (um item por pixel). Como o
- * runtime é async, ele troca o array por um objeto com `push` que inicializa na
- * hora — assim um loader que rode depois do runtime também é atendido.
+ * A configuração chega por DOIS caminhos, porque campos de "script do checkout"
+ * de gateway costumam aceitar só um dos formatos:
+ *   1. atributos `data-*` na própria tag `<script>` (instalação sem JS inline);
+ *   2. o array `window._tkpx` (loader com bootstrap inline).
+ * Como o runtime é async, ele troca o array por um objeto com `push` que
+ * inicializa na hora — assim um loader que rode depois do runtime é atendido.
  *
  * ES5 de propósito: roda em páginas de venda de terceiros, sem transpilação.
  */
@@ -21,17 +24,18 @@
   if (w.__traffikPixel) return;
   w.__traffikPixel = 1;
 
-  /** O <script> que carregou este arquivo — dá a URL da API. */
-  function own() {
-    if (d.currentScript) return d.currentScript;
-    var all = d.getElementsByTagName("script");
-    for (var i = all.length - 1; i >= 0; i--) {
-      if (/\/px\.js(\?|$)/.test(all[i].src || "")) return all[i];
+  /** Todas as tags deste arquivo na página — pode haver uma por pixel instalado. */
+  function tags() {
+    var out = [], all = d.getElementsByTagName("script"), i;
+    for (i = 0; i < all.length; i++) {
+      if (/\/px\.js(\?|$)/.test(all[i].src || "")) out.push(all[i]);
     }
-    return null;
+    if (!out.length && d.currentScript) out.push(d.currentScript);
+    return out;
   }
 
-  var el = own();
+  var minhas = tags();
+  var el = d.currentScript || minhas[0] || null;
   var API = "";
   if (el && el.src) {
     try {
@@ -123,7 +127,20 @@
     var ic = c.i;
     if (!ic || !ic.v) return;
     if (ic.t === "contem_url") {
-      if (location.href.indexOf(ic.v) > -1) send(id, "InitiateCheckout");
+      // O runtime é async: numa página que troca a URL depois do load (checkout
+      // em etapas, SPA) a checagem única no init perderia o evento. Confere
+      // agora e reconfere nas trocas de URL, sem repetir o disparo.
+      var jaMandou = false;
+      var confere = function () {
+        if (jaMandou || location.href.indexOf(ic.v) < 0) return;
+        jaMandou = true;
+        send(id, "InitiateCheckout");
+      };
+      confere();
+      if (!jaMandou) {
+        w.addEventListener("popstate", confere);
+        w.addEventListener("hashchange", confere);
+      }
       return;
     }
     var alvoCss = ic.t === "contem_css" ? (ic.v.charAt(0) === "." || ic.v.charAt(0) === "#" ? ic.v : "." + ic.v) : "";
@@ -155,10 +172,30 @@
     for (var id in registrados) send(id, event, extra);
   }
 
+  /** Configuração vinda dos atributos da tag: `<script src=".../px.js" data-cfg="..." …>`. */
+  function daTag(tag) {
+    var cfg = tag.getAttribute("data-cfg");
+    if (!cfg) return null;
+    var tipo = tag.getAttribute("data-ic-t"), valor = tag.getAttribute("data-ic-v");
+    return {
+      c: cfg,
+      l: tag.getAttribute("data-lead") === "1",
+      a: tag.getAttribute("data-atc") === "1",
+      i: valor ? { t: tipo || "", v: valor } : 0,
+    };
+  }
+
   // O loader deixa um stub com fila; drena o que foi chamado antes deste arquivo carregar.
   var fila = w.traffikPixel && w.traffikPixel.q;
   w.traffikPixel = { track: track };
 
+  // 1) Instalação por tag: registra TODAS as tags do px.js, uma por pixel.
+  for (var t = 0; t < minhas.length; t++) {
+    var viaTag = daTag(minhas[t]);
+    if (viaTag) init(viaTag);
+  }
+
+  // 2) Instalação por loader inline.
   var pendentes = w._tkpx || [];
   // A partir daqui, `push` inicializa na hora (loader que rode depois do runtime).
   w._tkpx = { push: init };

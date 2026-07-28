@@ -14,9 +14,10 @@ import {
   type PixelFormInput,
 } from "@/lib/actions/pixels";
 import { getPublicAppUrl } from "@/lib/appUrl";
-import { pixelLoaderSnippet } from "@/lib/pixel/script";
+import { pixelLoaderJs, pixelLoaderSnippet } from "@/lib/pixel/script";
 import { sx } from "@/lib/sx";
 import { Drawer } from "../../ui/Drawer";
+import { FormatoTabs } from "./UtmsView";
 
 /** `savedToken` marca um pixel já persistido cujo token fica no servidor (nunca volta ao cliente). */
 type MetaDraft = { pixelId: string; accessToken: string; nickname: string; savedToken?: boolean };
@@ -89,6 +90,7 @@ export function PixelView() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [formatoScript, setFormatoScript] = useState<"html" | "js">("html");
 
   useEffect(() => {
     listPixels().then(setPixels).catch(() => {});
@@ -149,9 +151,10 @@ export function PixelView() {
     setPixels((list) => list.filter((p) => p.id !== id));
   }
 
-  function scriptText(px: PixelConfigDTO): string {
+  function scriptText(px: PixelConfigDTO, formato: "html" | "js"): string {
     const ic = px.rules.find((r) => r.eventType === "INITIATE_CHECKOUT");
-    return pixelLoaderSnippet({
+    const gerar = formato === "html" ? pixelLoaderSnippet : pixelLoaderJs;
+    return gerar({
       configId: px.id,
       apiBase: getPublicAppUrl(),
       lead: px.rules.find((r) => r.eventType === "LEAD")?.enabled ?? false,
@@ -337,8 +340,10 @@ export function PixelView() {
         {editId && (() => {
           const px = pixels.find((p) => p.id === editId);
           if (!px) return null;
-          const codigo = scriptText(px);
+          const codigo = scriptText(px, formatoScript);
           const local = getPublicAppUrl().includes("localhost");
+          const icUrl = px.rules.find((r) => r.eventType === "INITIATE_CHECKOUT");
+          const noCheckout = icUrl?.enabled && icUrl.detectionType === "contem_url";
           return (
             <div style={sx("border-top:1px solid var(--color-divider);padding-top:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)")}>
               <div style={sx("font-weight:600;font-size:13px")}>Script de instalação</div>
@@ -352,6 +357,14 @@ export function PixelView() {
                   </span>
                 )}
               </p>
+              {noCheckout && (
+                <p className="card-body" style={sx("margin:0;font-size:12px;color:var(--color-warning,#fbbf24)")}>
+                  Sua regra de Initiate Checkout é por <strong>URL</strong>, então este script precisa estar
+                  instalado <strong>na página de checkout</strong> (no campo de scripts do gateway), e não só
+                  no seu site. Se o campo lá não aceitar HTML, use a aba <strong>JavaScript</strong>.
+                </p>
+              )}
+              <FormatoTabs formato={formatoScript} onChange={setFormatoScript} />
               <pre style={sx("background:var(--color-bg,#0b0b0f);border:1px solid var(--color-border);border-radius:8px;padding:var(--space-3);font-size:10.5px;font-family:ui-monospace,monospace;overflow:auto;max-height:220px;margin:0")}>
                 {codigo}
               </pre>

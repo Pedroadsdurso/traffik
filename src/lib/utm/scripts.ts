@@ -18,15 +18,27 @@ function base(apiBase: string): string {
   return apiBase.replace(/\/+$/, "");
 }
 
+/** Escapa para dentro de um atributo HTML com aspas duplas. */
+function attr(v: string): string {
+  return v.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 /**
- * Loader do rastreamento de UTMs. `async` = não bloqueia o parser nem a
- * renderização da página do cliente; o runtime lida com o DOM já pronto.
+ * Loader do rastreamento de UTMs, formato **HTML**: uma tag externa, sem
+ * JavaScript inline. `async` não bloqueia o parser nem a renderização.
+ *
+ * Sem JS inline de propósito: campos de "código do cabeçalho" de gateway e
+ * construtor de página às vezes embrulham o conteúdo em `<script>` por conta
+ * própria, e um snippet que já trouxesse as tags viraria `<script><script>…`,
+ * que não executa. Além disso, CSP com `script-src` restrito bloqueia inline.
  */
 export function utmLoaderSnippet(accountId: string, apiBase: string): string {
-  return `<!-- Traffik — rastreamento de UTMs (cole antes de </head>) -->
-<script>
-(function(d,s){s=d.createElement("script");s.async=1;s.src="${jsString(base(apiBase))}/t.js";s.setAttribute("data-account","${jsString(accountId)}");d.head.appendChild(s)})(document);
-</script>`;
+  return `<script async src="${attr(base(apiBase))}/t.js" data-account="${attr(accountId)}"></script>`;
+}
+
+/** Mesmo loader em **JavaScript puro**, para campos que não aceitam HTML. */
+export function utmLoaderJs(accountId: string, apiBase: string): string {
+  return `(function(d,s){s=d.createElement("script");s.async=1;s.src="${jsString(base(apiBase))}/t.js";s.setAttribute("data-account","${jsString(accountId)}");(d.head||d.documentElement).appendChild(s)})(document);`;
 }
 
 /**

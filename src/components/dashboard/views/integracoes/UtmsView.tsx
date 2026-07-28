@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { getUtmCodes, type UtmCodesDTO } from "@/lib/actions/utm";
 import { getPublicAppUrl } from "@/lib/appUrl";
-import { backRedirectScript, utmLoaderSnippet } from "@/lib/utm/scripts";
+import { backRedirectScript, utmLoaderJs, utmLoaderSnippet } from "@/lib/utm/scripts";
 import { sx } from "@/lib/sx";
 import { LogoGateway } from "../../ui/LogoGateway";
 import { Modal } from "../../ui/Modal";
@@ -108,11 +108,45 @@ function CodigosBlock({ codes }: { codes: UtmCodesDTO | null }) {
 
 // ─────────────────────────── Bloco 2: Scripts ───────────────────────────
 
+/**
+ * Seletor de formato do snippet. Existe porque o campo onde o código é colado
+ * varia: "código do cabeçalho" aceita HTML, mas vários campos de script de
+ * gateway aceitam só JavaScript (e embrulham o conteúdo em `<script>` sozinhos).
+ */
+export function FormatoTabs({ formato, onChange }: { formato: "html" | "js"; onChange: (f: "html" | "js") => void }) {
+  const opcoes: { id: "html" | "js"; label: string; dica: string }[] = [
+    { id: "html", label: "HTML", dica: "Campo de código do cabeçalho / <head> do site" },
+    { id: "js", label: "JavaScript", dica: "Campo que aceita só JS (scripts do checkout)" },
+  ];
+  return (
+    <div style={sx("display:flex;gap:6px")}>
+      {opcoes.map((o) => (
+        <button
+          key={o.id}
+          type="button"
+          title={o.dica}
+          onClick={() => onChange(o.id)}
+          style={sx(
+            `padding:5px 12px;border-radius:7px;font-size:12px;cursor:pointer;border:1px solid ${formato === o.id ? "var(--color-accent,#a78bfa)" : "var(--color-border)"};background:${formato === o.id ? "var(--color-accent-soft,rgba(139,92,246,.12))" : "transparent"};color:var(--color-text)`,
+          )}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
   const [backUrl, setBackUrl] = useState("");
   const [copiado, setCopiado] = useState(false);
+  const [formato, setFormato] = useState<"html" | "js">("html");
 
-  const snippet = codes ? utmLoaderSnippet(codes.accountId, getPublicAppUrl()) : "";
+  const snippet = !codes
+    ? ""
+    : formato === "html"
+      ? utmLoaderSnippet(codes.accountId, getPublicAppUrl())
+      : utmLoaderJs(codes.accountId, getPublicAppUrl());
 
   function copiarUtm() {
     if (!snippet) return;
@@ -138,9 +172,10 @@ function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
           clique para a Traffik. Cole no <code>&lt;head&gt;</code> do seu site.
         </p>
         <p className="card-body" style={sx("margin:0;font-size:12px")}>
-          São 3 linhas: o resto do código fica hospedado na Traffik e é carregado de forma assíncrona, sem
+          É uma linha só: o resto do código fica hospedado na Traffik e é carregado de forma assíncrona, sem
           atrasar o carregamento da sua página. Melhorias no rastreamento chegam sozinhas, sem reinstalar.
         </p>
+        <FormatoTabs formato={formato} onChange={setFormato} />
         <p className="card-body" style={sx("margin:0;font-size:12px")}>
           Os cliques serão enviados para{" "}
           <code style={sx("font-family:ui-monospace,monospace")}>{getPublicAppUrl()}</code>
