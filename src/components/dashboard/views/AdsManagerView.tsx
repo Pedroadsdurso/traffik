@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 
+import { combinaStatus } from "@/lib/ads/status";
 import { sx } from "@/lib/sx";
 import { AdsActionBar, type Acao, type AlvoSelecionado, type Nivel } from "./ads/AdsActionBar";
 import { AdsTable, type LinhaTabela } from "./ads/AdsTable";
@@ -37,9 +38,11 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
   /** Linhas do nível ativo, já filtradas e ordenadas por gasto. */
   const linhas: LinhaTabela[] = useMemo(() => {
     if (!raw) return [];
+    // Mesmo filtro do servidor (`lib/ads/status.ts`) — era duplicado aqui com
+    // a lógica antiga, e como esta cópia refiltra o que o servidor já mandou,
+    // corrigir só o servidor não mudava nada na tela.
     const filtra = (nome: string, status: string) =>
-      nome.toLowerCase().includes(v.adsSearch.toLowerCase()) &&
-      (v.adsStatus === "todos" || (v.adsStatus === "ativo" ? status === "ACTIVE" : status !== "ACTIVE"));
+      nome.toLowerCase().includes(v.adsSearch.toLowerCase()) && combinaStatus(status, v.adsStatus);
 
     let base: LinhaTabela[] = [];
     if (v.adsSub === "campaigns") {
@@ -208,6 +211,9 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
           <option value="todos">Todos os status</option>
           <option value="ativo">Ativos</option>
           <option value="pausado">Pausados</option>
+          {/* Arquivadas ficam fora de "Todos": no Facebook, "excluir" arquiva,
+              e elas voltariam a poluir a lista com o que o usuário apagou. */}
+          <option value="arquivado">Arquivados</option>
         </select>
         <select className="input" style={sx("width:auto")} value={v.adsPeriod} onChange={v.onAdsPeriod}>
           <option value="hoje">Hoje</option>

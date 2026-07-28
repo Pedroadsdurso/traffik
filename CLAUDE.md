@@ -1230,6 +1230,24 @@ Resultado real: 0 → **12 campanhas, 12 anúncios, R$ 103,41, 2.756 impressões
 > `errors: 0` mascarar perda de dado. No teste: 2 linhas órfãs = os R$ 10,93 de
 > diferença entre o total da Meta e o atribuído.
 
+> ### ⚠️ "Excluir" no Facebook = ARQUIVAR
+> Trazer arquivados resolveu o gasto sumido e **criou outro problema**: a
+> listagem encheu de campanha que o usuário já tinha apagado — no Gerenciador do
+> Facebook, "excluir" apenas arquiva.
+>
+> A separação que resolve os dois: o **dado** fica no banco (o gasto do Dashboard
+> segue completo, porque soma `DailyAdMetric` direto) e a **listagem** esconde
+> arquivados. `lib/ads/status.ts` é a fonte única — "Todos os status" exclui
+> ARCHIVED/DELETED, e existe a opção "Arquivados" para vê-los.
+>
+> ⚠️ O filtro estava **duplicado** (servidor em `overview.ts` + cliente em
+> `AdsManagerView.tsx`), e a cópia do cliente refiltrava o que o servidor já
+> tinha mandado: corrigir só um lado não mudava nada na tela. Se for mexer em
+> filtro de status, é em `lib/ads/status.ts` — os dois importam de lá.
+>
+> ⚠️ `pausado` significava `status !== "ACTIVE"`, que varria arquivados junto.
+> Hoje é `PAUSED` estrito.
+
 ### Glossário dos contadores
 
 | Campo | Significa |

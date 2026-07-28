@@ -1,6 +1,7 @@
 import { getUserTimezone } from "@/lib/userTimezone";
 import { prisma } from "@/lib/prisma";
 import { addDaysToKey, dayStart, keyToDateColumn, todayKey } from "@/lib/timezone";
+import { combinaStatus } from "@/lib/ads/status";
 import { splitPipe } from "@/lib/utm/parse";
 
 export interface AdsFilters {
@@ -75,11 +76,6 @@ function num(v: unknown): number {
   return typeof v === "number" ? v : Number(v ?? 0);
 }
 
-function matchesStatus(status: string, filter: string): boolean {
-  if (filter === "ativo") return status === "ACTIVE";
-  if (filter === "pausado") return status !== "ACTIVE";
-  return true;
-}
 
 export async function computeAdsOverview(userId: string, filters: AdsFilters): Promise<AdsOverview> {
   const tz = await getUserTimezone(userId);
@@ -317,7 +313,7 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
   // Filtros de status + busca (contas sempre completas)
   const search = filters.search.trim().toLowerCase();
   const byFilters = <T extends { name: string; status: string }>(rows: T[]) =>
-    rows.filter((r) => matchesStatus(r.status, filters.status) && (!search || r.name.toLowerCase().includes(search)));
+    rows.filter((r) => combinaStatus(r.status, filters.status) && (!search || r.name.toLowerCase().includes(search)));
 
   return {
     campaigns: byFilters(campaignRows),
