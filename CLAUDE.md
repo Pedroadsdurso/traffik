@@ -1124,12 +1124,44 @@ sai primeiro, a Graph API é chamada depois. Ciclo: polling → dado velho →
 sincroniza → o polling seguinte já mostra o número novo. O botão manual continua
 existindo para forçar.
 
+### Dois ritmos, porque as chamadas não custam a mesma coisa
+
+O ciclo COMPLETO lê campanhas + conjuntos + anúncios + insights: **4 chamadas por
+conta**. As métricas sozinhas são **1** (`syncAccountMetrics`, que tira o mapa
+`fbAdId → id` do banco em vez da Graph). Estrutura muda raramente — criar
+campanha é ato humano; o gasto muda o tempo todo.
+
+| Ciclo | Intervalo | Custo (5 contas) | O que traz |
+|---|---|---|---|
+| Métricas | **20s** | 5 chamadas | gasto, impressões, cliques, CTR/CPC/CPM |
+| Completo | **3 min** | ~20 + 1 por perfil | campanhas/conjuntos/anúncios novos, **contas novas da BM** |
+
+Carga média ~15 chamadas/min — parecida com a do ciclo único de 90s que existia
+antes, mas com o gasto **4,5× mais fresco**.
+
+> ⚠️ **`lastSyncedAt` NÃO avança no ciclo de métricas.** São dois relógios
+> (`lastSyncedAt` = estrutura, `lastMetricsAt` = gasto): marcar o barato como
+> completo adiaria indefinidamente a descoberta de contas novas. A UI mostra a
+> idade das MÉTRICAS, que é o número que o usuário fica olhando subir.
+>
+> ⚠️ **Anúncio criado depois do último ciclo completo não recebe métrica ainda** —
+> entra no ciclo seguinte (≤3 min). É o trade-off do mapa vir do banco.
+
 | Constante | Valor | Por quê |
 |---|---|---|
-| `INTERVALO_MS` | 90s | Teto de defasagem do gasto |
+| `METRICAS_MS` | 20s | Teto de defasagem do gasto |
+| `COMPLETO_MS` | 3 min | Estrutura + contas novas da BM |
 | `DIAS_AUTO` | 2 | Auto-sync só precisa de hoje + ontem; os 30 dias ficam no cron e no botão |
 | `LOCK_EXPIRA_MS` | 10 min | Libera reserva órfã de instância que morreu no meio |
 | `PROFILES_POLL_MS` | 30s | Vitrine de Integrações › Anúncios |
+
+> ### ⛔ Por que NÃO dá para ser instantâneo
+> **A Meta não empurra gasto para nós.** Não existe webhook de insights na
+> Marketing API — o dado só chega se formos buscar. E os próprios números da Meta
+> têm atraso de consolidação de alguns minutos: o gasto de agora não está pronto
+> nem do lado deles. Baixar o intervalo além disto queima rate limit sem trazer
+> número mais novo. WebSocket/SSE também não ajudaria: eles acelerariam o trecho
+> banco → tela, que já leva 5–8s, e não o trecho Meta → banco, que é o gargalo.
 
 > ### 🔒 A trava é do BANCO, não do processo
 > Em serverless não há estado compartilhado entre instâncias, e o polling bate a

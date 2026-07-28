@@ -321,6 +321,92 @@ async function syncAccount(
 }
 
 /**
+ * Só as MÉTRICAS de uma conta — **1 chamada à Graph**, contra 4 do sync cheio.
+ *
+ * É o que torna a atualização quase em tempo real viável. O ciclo completo lê
+ * campanhas + conjuntos + anúncios + insights; estrutura muda raramente (criar
+ * campanha é ato humano), enquanto o **gasto muda o tempo todo**. Repetir as 4
+ * chamadas a cada poucos segundos só para ver o gasto subir estouraria o rate
+ * limit da Meta sem entregar nada a mais.
+ *
+ * Aqui o mapa `fbAdId → id interno` sai do BANCO em vez da Graph. A consequência
+ * é que **anúncio criado depois do último ciclo completo não recebe métrica
+ * ainda** — ele entra no ciclo seguinte. É o trade-off aceito: gasto fresco a
+ * cada poucos segundos, estrutura nova em poucos minutos.
+ */
+export async function syncAccountMetrics(
+  account: { id: string; userId: string; fbAccountId: string },
+  accessToken: string,
+  summary: SyncSummary,
+  days: number,
+) {
+  const ads = await prisma.ad.findMany({
+    where: { adAccountId: account.id },
+    select: { id: true, fbAdId: true },
+  });
+  if (ads.length === 0) return; // nada mapeado ainda: espera o ciclo completo
+  const adIdMap = new Map(ads.map((a) => [a.fbAdId, a.id]));
+
+  const tz = await getUserTimezone(account.userId);
+  const hoje = todayKey(tz);
+  const desde = addDaysToKey(hoje, -days);
+
+  const insights = await graphAll<FbInsight>(
+    `/act_${account.fbAccountId}/insights`,
+    {
+      level: "ad",
+      fields: "ad_id,spend,impressions,clicks,ctr,cpc,cpm,reach,frequency",
+      time_increment: "1",
+      time_range: JSON.stringify({ since: desde, until: hoje }),
+      action_report_time: "impression",
+    },
+    accessToken,
+  );
+
+  for (const ins of insights) {
+    const adId = ins.ad_id ? adIdMap.get(ins.ad_id) : undefined;
+    if (!adId || !ins.date_start) continue;
+    const date = new Date(ins.date_start);
+    const metric = {
+      spend: Number(ins.spend ?? 0),
+      impressions: parseInt(ins.impressions ?? "0", 10),
+      clicks: parseInt(ins.clicks ?? "0", 10),
+      ctr: Number(ins.ctr ?? 0),
+      cpc: Number(ins.cpc ?? 0),
+      cpm: Number(ins.cpm ?? 0),
+      reach: parseInt(ins.reach ?? "0", 10),
+      frequency: Number(ins.frequency ?? 0),
+    };
+    await prisma.dailyAdMetric.upsert({
+      where: { adId_date: { adId, date } },
+      update: metric,
+      create: { adId, date, ...metric },
+    });
+    summary.metrics++;
+  }
+}
+
+/** Atualiza só as métricas de todas as contas rastreadas de um usuário. */
+export async function syncUserMetrics(userId: string, days = 2): Promise<SyncSummary> {
+  const summary: SyncSummary = { accounts: 0, campaigns: 0, adSets: 0, ads: 0, metrics: 0, errors: [] };
+  const accounts = await prisma.adAccount.findMany({
+    where: { userId, trackingEnabled: true, adProfile: { isNot: null } },
+    select: { id: true, userId: true, fbAccountId: true, name: true, adProfile: { select: { accessToken: true } } },
+  });
+  for (const acc of accounts) {
+    const token = acc.adProfile?.accessToken;
+    if (!token) continue;
+    try {
+      await syncAccountMetrics({ id: acc.id, userId: acc.userId, fbAccountId: acc.fbAccountId }, token, summary, days);
+      summary.accounts++;
+    } catch (e) {
+      summary.errors.push(`${acc.name}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  return summary;
+}
+
+/**
  * Remove da base local o que não veio mais na resposta do Facebook.
  * A ordem importa: anúncios → conjuntos → campanhas, para não esbarrar em FK.
  */

@@ -175,6 +175,9 @@ model AdProfile {
   /// Quando a última sincronização **terminou com sucesso**. É o que a UI mostra
   /// como "atualizado há X" — por isso não é tocado numa tentativa que falhou.
   lastSyncedAt   DateTime?
+  /// Última atualização SÓ das métricas (1 chamada à Graph). Roda muito mais
+  /// vezes que a completa — ver `autoSync.ts`.
+  lastMetricsAt  DateTime?
   /// Quando a sincronização atual foi RESERVADA. Serve de trava distribuída: o
   /// polling roda a cada poucos segundos em várias abas, e sem isso cada
   /// requisição dispararia uma sincronização concorrente contra a Graph API.
