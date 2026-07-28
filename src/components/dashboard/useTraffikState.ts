@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { saveDashboardPrefs, type DashboardPrefsDTO } from "@/lib/actions/dashboardPrefs";
 import {
   disconnectProfile,
+  listAdProfiles,
   setProfileTracking,
   toggleAccountTracking,
   type AdProfileDTO,
@@ -92,6 +93,9 @@ interface State {
   accountSync: Record<string, { busy: boolean; msg: string | null }>;
   pixels: PixelConfigDTO[];
   editDashOpen: boolean;
+  /** Última sincronização concluída (ISO) e se há uma em andamento. */
+  syncLastAt: string | null;
+  syncRodando: boolean;
   dashPeriod: DashPeriod;
   /** Intervalo do período "Personalizado" (ISO `YYYY-MM-DD`). */
   dashFrom: string | null;
@@ -206,6 +210,8 @@ function initialState(
     accountSync: {},
     pixels: initialPixels,
     editDashOpen: false,
+    syncLastAt: null,
+    syncRodando: false,
     // O filtro sempre abre em HOJE. Era "7d", então sair e voltar à ferramenta
     // mostrava a semana inteira e dava a impressão de que os números do dia
     // estavam errados. O período não é persistido de propósito: é um filtro de
@@ -327,6 +333,8 @@ const DOWN_PATH = "M32 80 L96 144 L136 112 L224 192 M176 192 L224 192 L224 144";
 const DASH_POLL_MS = 5000;
 /** Gerenciador de Anúncios: reflete o Facebook sem depender do botão manual. */
 const ADS_POLL_MS = 8000;
+/** Contas/perfis mudam raramente — 30s basta e mantém a chamada barata. */
+const PROFILES_POLL_MS = 30000;
 
 function startPolling(load: () => void, intervalMs: number): () => void {
   let timer: ReturnType<typeof setInterval> | null = null;
@@ -434,8 +442,18 @@ export function useTraffikState(
       try {
         const res = await fetch(`/api/ads?${qs.toString()}`, { signal: controller.signal });
         if (!res.ok) return;
-        const data = (await res.json()) as AdsOverview;
-        if (active) setS((st) => ({ ...st, adsData: data, adsLoading: false }));
+        const data = (await res.json()) as AdsOverview & {
+          sync?: { lastSyncedAt: string | null; sincronizando: boolean };
+        };
+        if (active) {
+          setS((st) => ({
+            ...st,
+            adsData: data,
+            adsLoading: false,
+            syncLastAt: data.sync?.lastSyncedAt ?? null,
+            syncRodando: data.sync?.sincronizando ?? false,
+          }));
+        }
       } catch {
         /* abortado ou erro de rede */
       }
@@ -465,6 +483,32 @@ export function useTraffikState(
     })();
     return () => { active = false; controller.abort(); };
   }, [s.creativesPeriod, s.creativesSort, s.adsRefreshKey]);
+
+  // Perfis e contas de anúncio: repescagem a cada 30s.
+  //
+  // A vitrine de Integrações › Anúncios era montada só com os dados do servidor
+  // no carregamento da página. Como a sincronização agora descobre contas novas
+  // da BM sozinha, sem isto a conta nova só apareceria ao navegar/recarregar —
+  // que é justamente a intervenção manual que este bloco existe para eliminar.
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      try {
+        const perfis = await listAdProfiles();
+        if (!active) return;
+        setS((st) => {
+          // Só troca o estado quando algo mudou de verdade: substituir o array
+          // a cada 30s remontaria a lista e derrubaria a gaveta aberta.
+          const igual = JSON.stringify(st.adProfiles) === JSON.stringify(perfis);
+          return igual ? st : { ...st, adProfiles: perfis, fbConnected: perfis.length > 0 };
+        });
+      } catch {
+        /* erro de rede: a próxima volta tenta de novo */
+      }
+    }
+    const stop = startPolling(() => { void load(); }, PROFILES_POLL_MS);
+    return () => { active = false; stop(); };
+  }, []);
 
   // Notificações: polling do sino a cada 15s.
   useEffect(() => {
@@ -1068,6 +1112,17 @@ export function useTraffikState(
     adsStatus: s.adsStatus,
     adsPeriod: s.adsPeriod,
     adsAccount: s.adsAccount,
+    /**
+     * Idade do dado vindo do Facebook. Existe para o usuário PARAR de clicar em
+     * "Sincronizar": sem um sinal na tela de que a atualização é automática, a
+     * reação natural é apertar o botão de novo.
+     */
+    syncLabel: s.syncRodando
+      ? "Sincronizando…"
+      : s.syncLastAt
+        ? `Atualizado ${elapsed(new Date(s.syncLastAt).getTime())}`
+        : "Aguardando 1ª sincronização",
+    syncRodando: s.syncRodando,
     adsLoading: s.adsLoading,
     onAdsSearch: (e: React.ChangeEvent<HTMLInputElement>) => set({ adsSearch: e.target.value }),
     onAdsStatus: (e: React.ChangeEvent<HTMLSelectElement>) => set({ adsStatus: e.target.value }),

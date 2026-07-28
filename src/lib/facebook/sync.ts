@@ -1,5 +1,5 @@
 import { getUserTimezone } from "@/lib/userTimezone";
-import { GRAPH_URL } from "@/lib/facebook/graph";
+import { GRAPH_URL, getAdAccounts, mapAccountStatus } from "@/lib/facebook/graph";
 import { prisma } from "@/lib/prisma";
 import { addDaysToKey, todayKey } from "@/lib/timezone";
 import type { EntityStatus } from "@/generated/prisma/enums";
@@ -118,6 +118,8 @@ export interface SyncSummary {
   metrics: number;
   /** Entidades apagadas localmente por não existirem mais no Facebook. */
   removidos?: number;
+  /** Contas de anúncio detectadas agora, que ainda não existiam no banco. */
+  contasNovas?: number;
   errors: string[];
 }
 
@@ -362,9 +364,77 @@ export async function syncSingleAccount(userId: string, accountId: string, days 
   return summary;
 }
 
+/**
+ * Redescobre as contas de anúncio de cada perfil conectado.
+ *
+ * **Por que existe:** o `syncUser` só iterava as `AdAccount` que já estavam no
+ * banco, e a única coisa que já chamou `/me/adaccounts` era o callback do OAuth.
+ * Resultado: uma conta criada na BM depois da conexão **nunca aparecia** — a
+ * saída era desconectar e reconectar o perfil, que é o que o usuário vinha
+ * fazendo. Agora toda sincronização reconsulta a lista.
+ *
+ * O `upsert` por `userId_fbAccountId` também atualiza nome, moeda e status das
+ * contas que já existiam, então renomear uma conta na BM passa a refletir aqui.
+ *
+ * Conta nova entra com `trackingEnabled: true` — é o mesmo padrão do callback,
+ * e uma conta que aparece desligada por padrão pareceria "não detectada".
+ * Contas que somem da resposta **não são apagadas**: perda de permissão é
+ * temporária com frequência, e apagar levaria junto o histórico de métricas.
+ */
+export async function descobrirContas(userId: string, summary: SyncSummary): Promise<number> {
+  const perfis = await prisma.adProfile.findMany({
+    where: { userId },
+    select: { id: true, name: true, accessToken: true },
+  });
+
+  let novas = 0;
+  for (const p of perfis) {
+    if (!p.accessToken) continue;
+    try {
+      const contas = await getAdAccounts(p.accessToken);
+      for (const a of contas) {
+        const existente = await prisma.adAccount.findUnique({
+          where: { userId_fbAccountId: { userId, fbAccountId: a.account_id } },
+          select: { id: true },
+        });
+        await prisma.adAccount.upsert({
+          where: { userId_fbAccountId: { userId, fbAccountId: a.account_id } },
+          update: {
+            name: a.name,
+            currency: a.currency,
+            timezone: a.timezone_name ?? null,
+            status: mapAccountStatus(a.account_status),
+            adProfileId: p.id,
+          },
+          create: {
+            userId,
+            fbAccountId: a.account_id,
+            name: a.name,
+            currency: a.currency,
+            timezone: a.timezone_name ?? null,
+            status: mapAccountStatus(a.account_status),
+            adProfileId: p.id,
+            trackingEnabled: true,
+          },
+        });
+        if (!existente) novas++;
+      }
+    } catch (e) {
+      // Falhar a descoberta não pode impedir a sincronização das contas que já
+      // existem — token de UM perfil expirado não derruba os outros.
+      summary.errors.push(`Contas de ${p.name}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  return novas;
+}
+
 /** Sincroniza todas as contas rastreadas de um usuário. */
 export async function syncUser(userId: string, days = 30): Promise<SyncSummary> {
   const summary: SyncSummary = { accounts: 0, campaigns: 0, adSets: 0, ads: 0, metrics: 0, errors: [] };
+
+  // Antes de sincronizar, descobre contas novas — senão uma conta criada hoje
+  // na BM só entraria no próximo reconectar.
+  summary.contasNovas = await descobrirContas(userId, summary);
 
   const accounts = await prisma.adAccount.findMany({
     where: { userId, trackingEnabled: true, adProfile: { isNot: null } },

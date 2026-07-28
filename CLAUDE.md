@@ -1110,6 +1110,70 @@ removidos.
 `dashPeriod` inicial era `"7d"`. O período **não é persistido de propósito** — é
 filtro de sessão, não preferência —, então mudar o padrão bastou.
 
+## 🔄 Sincronização automática do Facebook (28/07/2026)
+
+**O polling da UI sempre existiu** (5s no Dashboard, 8s no Gerenciador) — mas ele
+lê o NOSSO banco. Quem trazia dado novo do Facebook era o `syncUser`, e ele só
+rodava no botão "Sincronizar métricas" e no cron do GitHub Actions a cada 15 min
+— que é *best-effort*, atrasa 5–20 min em pico e **é desativado sozinho após 60
+dias sem commits**. Daí a impressão de que era preciso clicar e recarregar.
+
+Agora **toda requisição do painel dispara a sincronização quando o dado está
+velho** (`src/lib/facebook/autoSync.ts`), via `after()` do Next 16 — a resposta
+sai primeiro, a Graph API é chamada depois. Ciclo: polling → dado velho →
+sincroniza → o polling seguinte já mostra o número novo. O botão manual continua
+existindo para forçar.
+
+| Constante | Valor | Por quê |
+|---|---|---|
+| `INTERVALO_MS` | 90s | Teto de defasagem do gasto |
+| `DIAS_AUTO` | 2 | Auto-sync só precisa de hoje + ontem; os 30 dias ficam no cron e no botão |
+| `LOCK_EXPIRA_MS` | 10 min | Libera reserva órfã de instância que morreu no meio |
+| `PROFILES_POLL_MS` | 30s | Vitrine de Integrações › Anúncios |
+
+> ### 🔒 A trava é do BANCO, não do processo
+> Em serverless não há estado compartilhado entre instâncias, e o polling bate a
+> cada poucos segundos — de várias abas e às vezes vários dispositivos. Uma trava
+> em memória deixaria N sincronizações concorrentes batendo na Graph API e
+> estourando rate limit.
+>
+> A reserva é um **`updateMany` condicional**: o `WHERE` só passa se o lock ainda
+> estiver livre. Quem atualiza a linha ganhou a vez; quem recebe `count: 0`
+> desiste em silêncio. É o mesmo padrão do upsert monotônico de vendas — quem
+> decide o vencedor é o banco. **Testado com 5 reservas concorrentes: 1 vencedor.**
+>
+> `lastSyncedAt` só avança quando a sincronização **conclui com sucesso**;
+> `syncLockedAt` marca a tentativa. Separar os dois é o que impede a UI de dizer
+> "atualizado agora" depois de uma sincronização que falhou.
+
+### Contas novas na BM aparecem sozinhas
+
+`syncUser` só iterava as `AdAccount` **já existentes**, e a única coisa que
+chamava `/me/adaccounts` era o callback do OAuth. Uma conta criada na BM depois
+da conexão nunca aparecia — a saída era desconectar e reconectar o perfil.
+
+`descobrirContas()` roda no início de toda sincronização e reconsulta
+`/me/adaccounts` por perfil. O upsert também corrige **nome, moeda e status** de
+contas existentes, então renomear na BM passa a refletir aqui.
+
+> ⚠️ **Conta que some da resposta NÃO é apagada.** Perda de permissão costuma ser
+> temporária, e apagar levaria junto o histórico de métricas por cascade. Isso é
+> deliberadamente diferente da `podar()` de campanhas/anúncios, que só roda
+> depois de uma resposta bem-sucedida daquela conta específica.
+>
+> ⚠️ Token de UM perfil expirado **não derruba os outros**: a descoberta é por
+> perfil, dentro de `try/catch`, e o erro entra em `summary.errors`.
+
+**Testado contra a Graph API real** (token do dono, 5 contas na BM): um usuário
+descartável sem conta nenhuma descobriu as 5 sozinho, todas rastreando e ligadas
+ao perfil; a 2ª passada não duplicou nem contou como nova (idempotente); e um
+nome adulterado no banco foi corrigido pela descoberta seguinte. Usuário de teste
+removido depois. Mais 5 asserções da trava. `tsc` e `next build` limpos.
+
+**O cron do GitHub Actions continua**, e ainda importa: ele cobre a janela de 30
+dias e mantém o motor de regras rodando **com ninguém olhando a tela** — o
+auto-sync só dispara quando há requisição do painel.
+
 ## 🎨 Marca e logos
 
 Arquivos em `public/logos/` (webp, vindos do designer):

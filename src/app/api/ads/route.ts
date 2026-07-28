@@ -1,7 +1,9 @@
+import { after } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { auth } from "@/auth";
 import { computeAdsOverview, type AdsFilters } from "@/lib/ads/overview";
+import { autoSyncSeNecessario, estadoSync } from "@/lib/facebook/autoSync";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -16,6 +18,16 @@ export async function GET(req: NextRequest) {
     search: sp.get("search") || "",
   };
 
-  const data = await computeAdsOverview(session.user.id, filters);
-  return Response.json(data);
+  const userId = session.user.id;
+  const [data, sync] = await Promise.all([computeAdsOverview(userId, filters), estadoSync(userId)]);
+
+  // `after()` roda DEPOIS da resposta sair: o polling não fica esperando a Graph
+  // API. Na maioria das chamadas a função sai no primeiro `if` (ainda não deu o
+  // intervalo) e não custa nada.
+  after(() => autoSyncSeNecessario(userId));
+
+  return Response.json({
+    ...data,
+    sync: { lastSyncedAt: sync.lastSyncedAt?.toISOString() ?? null, sincronizando: sync.sincronizando },
+  });
 }

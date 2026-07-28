@@ -172,6 +172,13 @@ model AdProfile {
   tokenExpiresAt DateTime?
   connectedAt    DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+  /// Quando a última sincronização **terminou com sucesso**. É o que a UI mostra
+  /// como "atualizado há X" — por isso não é tocado numa tentativa que falhou.
+  lastSyncedAt   DateTime?
+  /// Quando a sincronização atual foi RESERVADA. Serve de trava distribuída: o
+  /// polling roda a cada poucos segundos em várias abas, e sem isso cada
+  /// requisição dispararia uma sincronização concorrente contra a Graph API.
+  syncLockedAt   DateTime?
 
   userId     String
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)

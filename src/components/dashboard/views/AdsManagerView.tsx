@@ -229,7 +229,9 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
           onOrdenar={() => setOrdemGasto((o) => (o === "desc" ? "asc" : "desc"))}
           onSincronizar={v.runSync}
           sincronizando={v.syncBusy}
-          ultimaSync={v.syncResult}
+          // Mostra a idade do dado (atualizada sozinha pelo polling) e só troca
+          // pelo resultado do clique manual enquanto ele existir.
+          ultimaSync={v.syncResult ?? v.syncLabel}
           onFixar={fixar}
           onCopiarId={copiarId}
           onAbrirNoFacebook={abrirNoFacebook}

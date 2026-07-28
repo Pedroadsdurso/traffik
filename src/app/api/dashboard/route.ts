@@ -1,7 +1,9 @@
+import { after } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { auth } from "@/auth";
 import { computeDashboard, type DashPeriod, type DashboardFilters } from "@/lib/dashboard/metrics";
+import { autoSyncSeNecessario, estadoSync } from "@/lib/facebook/autoSync";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -21,6 +23,16 @@ export async function GET(req: NextRequest) {
     to: sp.get("to") || undefined,
   };
 
-  const data = await computeDashboard(session.user.id, filters);
-  return Response.json(data);
+  const userId = session.user.id;
+  const [data, sync] = await Promise.all([computeDashboard(userId, filters), estadoSync(userId)]);
+
+  // Sincroniza em segundo plano, depois da resposta (ver `autoSync.ts`). O
+  // Dashboard também dispara, e não só o Gerenciador: quem deixa a ferramenta
+  // aberta no Dashboard espera ver o gasto subir ali também.
+  after(() => autoSyncSeNecessario(userId));
+
+  return Response.json({
+    ...data,
+    sync: { lastSyncedAt: sync.lastSyncedAt?.toISOString() ?? null, sincronizando: sync.sincronizando },
+  });
 }
