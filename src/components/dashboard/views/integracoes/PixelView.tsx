@@ -35,7 +35,7 @@ const EMPTY_FORM: Form = {
   metaPixels: [],
   lead: false,
   addToCart: false,
-  ic: { enabled: false, type: "contem_texto", value: "" },
+  ic: { enabled: false, type: "clique_checkout", value: "" },
   purchase: { enabled: true, sendMode: "APENAS_APROVADAS", valueMode: "VALOR_DA_VENDA", fixedValue: "", targetProduct: "" },
 };
 
@@ -64,7 +64,7 @@ function dtoToForm(px: PixelConfigDTO): Form {
     metaPixels: px.metaPixels.map((m) => ({ pixelId: m.pixelId, accessToken: "", nickname: m.nickname ?? "", savedToken: m.hasToken })),
     lead: px.rules.find((r) => r.eventType === "LEAD")?.enabled ?? false,
     addToCart: px.rules.find((r) => r.eventType === "ADD_TO_CART")?.enabled ?? false,
-    ic: { enabled: ic?.enabled ?? false, type: (ic?.detectionType as DetectionType) ?? "contem_texto", value: ic?.detectionValue ?? "" },
+    ic: { enabled: ic?.enabled ?? false, type: (ic?.detectionType as DetectionType) ?? "clique_checkout", value: ic?.detectionValue ?? "" },
     purchase: {
       enabled: pu?.enabled ?? true,
       sendMode: pu?.sendMode ?? "APENAS_APROVADAS",
@@ -280,15 +280,42 @@ export function PixelView() {
                     <div className="field">
                       <label>Regra de detecção</label>
                       <select className="input" value={form.ic.type} onChange={(e) => setForm({ ...form, ic: { ...form.ic, type: e.target.value as DetectionType } })}>
+                        <option value="clique_checkout">Clique no link de checkout (recomendado)</option>
                         <option value="contem_texto">Contém texto</option>
                         <option value="contem_css">Contém CSS</option>
-                        <option value="contem_url">Contém URL</option>
+                        <option value="contem_url">Contém URL da página</option>
                       </select>
                     </div>
                     <input className="input" value={form.ic.value} onChange={(e) => setForm({ ...form, ic: { ...form.ic, value: e.target.value } })}
-                      placeholder={form.ic.type === "contem_texto" ? "Ex.: COMPRAR AGORA" : form.ic.type === "contem_css" ? "Ex.: .btn-checkout" : "Ex.: /checkout"} />
+                      placeholder={
+                        form.ic.type === "clique_checkout" ? "Domínios do checkout, separados por vírgula (deixe vazio para os padrões)"
+                        : form.ic.type === "contem_texto" ? "Ex.: COMPRAR AGORA"
+                        : form.ic.type === "contem_css" ? "Ex.: .btn-checkout"
+                        : "Ex.: /checkout"
+                      } />
+                    <p className="card-body" style={sx("margin:0;font-size:11.5px")}>
+                      {form.ic.type === "clique_checkout" ? (
+                        <>
+                          Dispara quando o visitante clica num link que leva ao checkout, ainda no seu site.
+                          Vazio já cobre Kirvano, Hotmart, Cartpanda, Kiwify e Monetizze.
+                        </>
+                      ) : form.ic.type === "contem_url" ? (
+                        <span style={sx("color:var(--color-warning,#fbbf24)")}>
+                          Este modo compara a URL da página onde o script está rodando. Se o seu checkout é
+                          hospedado pelo gateway (ex.: <code>pay.kirvano.com</code>), não há como instalar o
+                          script lá — use “Clique no link de checkout”.
+                        </span>
+                      ) : (
+                        <>Dispara no clique em um elemento que casa com o valor acima, no seu site.</>
+                      )}
+                    </p>
                   </>
                 )}
+                <p className="card-body" style={sx("margin:0;font-size:11.5px")}>
+                  Independente desta regra, todo pedido gerado e não pago que chega pelo webhook do gateway
+                  (Pix/boleto gerado, carrinho abandonado) também entra como checkout iniciado — sem
+                  duplicar quando o clique já foi capturado.
+                </p>
               </div>
 
               {/* Purchase */}

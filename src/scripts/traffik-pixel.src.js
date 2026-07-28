@@ -24,6 +24,9 @@
   if (w.__traffikPixel) return;
   w.__traffikPixel = 1;
 
+  /** Domínios de checkout usados quando a regra por clique não lista os seus. */
+  var CHECKOUT_PADRAO = ["pay.kirvano.com", "hotmart", "cartpanda", "kiwify", "monetizze", "pay.", "checkout"];
+
   /** Todas as tags deste arquivo na página — pode haver uma por pixel instalado. */
   function tags() {
     var out = [], all = d.getElementsByTagName("script"), i;
@@ -125,7 +128,46 @@
 
     // InitiateCheckout conforme a regra de detecção configurada na UI.
     var ic = c.i;
-    if (!ic || !ic.v) return;
+    if (!ic || !ic.t) return;
+
+    /**
+     * Modo padrão: clique num link que leva ao checkout, capturado AQUI, na
+     * página de vendas. É o único que funciona com checkout hospedado pelo
+     * gateway (pay.kirvano.com e afins), onde não há como instalar script.
+     */
+    if (ic.t === "clique_checkout") {
+      var dominios = [];
+      if (ic.v) {
+        var partes = ic.v.split(",");
+        for (var p = 0; p < partes.length; p++) {
+          var limpo = partes[p].replace(/^\s+|\s+$/g, "").toLowerCase();
+          if (limpo) dominios.push(limpo);
+        }
+      }
+      if (!dominios.length) dominios = CHECKOUT_PADRAO;
+      d.addEventListener("click", function (e) {
+        var alvo = e.target, href = "";
+        // Sobe até o <a>: o clique costuma cair num <span>/<img> dentro do link.
+        while (alvo && alvo !== d.body) {
+          if (alvo.tagName === "A" && alvo.getAttribute("href")) {
+            href = alvo.getAttribute("href");
+            break;
+          }
+          alvo = alvo.parentElement;
+        }
+        if (!href) return;
+        var alvoMin = href.toLowerCase();
+        for (var i = 0; i < dominios.length; i++) {
+          if (alvoMin.indexOf(dominios[i]) > -1) {
+            send(id, "InitiateCheckout", { destino: href.slice(0, 500) });
+            return;
+          }
+        }
+      }, true);
+      return;
+    }
+
+    if (!ic.v) return;
     if (ic.t === "contem_url") {
       // O runtime é async: numa página que troca a URL depois do load (checkout
       // em etapas, SPA) a checagem única no init perderia o evento. Confere
@@ -181,7 +223,10 @@
       c: cfg,
       l: tag.getAttribute("data-lead") === "1",
       a: tag.getAttribute("data-atc") === "1",
-      i: valor ? { t: tipo || "", v: valor } : 0,
+      // Quem manda é o TIPO, não o valor: `clique_checkout` roda sem valor
+      // (cai nos domínios padrão), então exigir `data-ic-v` aqui descartava a
+      // regra em silêncio. Os modos que precisam de valor validam depois.
+      i: tipo ? { t: tipo, v: valor || "" } : 0,
     };
   }
 

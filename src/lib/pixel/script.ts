@@ -14,7 +14,11 @@ export interface PixelScriptConfig {
   apiBase: string;
   lead: boolean;
   addToCart: boolean;
-  initiateCheckout: { enabled: boolean; type?: "contem_texto" | "contem_css" | "contem_url"; value?: string };
+  initiateCheckout: {
+    enabled: boolean;
+    type?: "clique_checkout" | "contem_texto" | "contem_css" | "contem_url";
+    value?: string;
+  };
 }
 
 /** Escapa uma string para embutir com segurança dentro de aspas duplas JS. */
@@ -28,9 +32,11 @@ function dados(cfg: PixelScriptConfig): [string, string][] {
   const out: [string, string][] = [["data-cfg", cfg.configId]];
   if (cfg.lead) out.push(["data-lead", "1"]);
   if (cfg.addToCart) out.push(["data-atc", "1"]);
-  if (ic.enabled && ic.value) {
-    out.push(["data-ic-t", ic.type || ""]);
-    out.push(["data-ic-v", ic.value]);
+  // `clique_checkout` funciona sem valor (cai na lista de domínios padrão do
+  // runtime); os demais modos só fazem sentido com o valor preenchido.
+  if (ic.enabled && ic.type && (ic.value || ic.type === "clique_checkout")) {
+    out.push(["data-ic-t", ic.type]);
+    if (ic.value) out.push(["data-ic-v", ic.value]);
   }
   return out;
 }

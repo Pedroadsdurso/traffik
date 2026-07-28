@@ -58,7 +58,7 @@ export interface DashboardData {
   activity: {
     id: string;
     /** Tipos do feed unificado — cada um com badge e cor próprios na UI. */
-    type: "clique" | "checkout" | "venda_pendente" | "venda_aprovada" | "reembolso" | "chargeback";
+    type: "clique" | "checkout" | "lead" | "add_to_cart" | "venda_pendente" | "venda_aprovada" | "reembolso" | "chargeback";
     source: string;
     campaign: string;
     value: number | null;
@@ -123,7 +123,7 @@ async function windowAggregate(userId: string, filters: DashboardFilters, start:
   const sourceFilter = filters.source !== "todas" ? filters.source : null;
   const productFilter = filters.product !== "todos" ? filters.product : null;
 
-  const [sales, clicks, metrics, expenses, pixelEvents] = await Promise.all([
+  const [sales, clicks, metrics, expenses, pixelEvents, initiateCheckouts] = await Promise.all([
     prisma.sale.findMany({
       where: {
         userId,
@@ -168,16 +168,23 @@ async function windowAggregate(userId: string, filters: DashboardFilters, start:
       where: { userId, active: true },
       select: { type: true, calc: true, amount: true, paymentMethod: true },
     }),
-    // Alimenta o estágio "Initiate Checkout" do funil E o feed de atividade.
+    // Feed de atividade: TODOS os eventos do pixel, cada um com seu badge.
+    // Antes esta consulta filtrava `event: "InitiateCheckout"`, então Lead e
+    // AddToCart eram gravados mas nunca apareciam na tela.
     prisma.pixelEvent.findMany({
-      where: { userId, event: "InitiateCheckout", timestamp: { gte: start, lte: end } },
-      select: { id: true, url: true, timestamp: true },
+      where: { userId, timestamp: { gte: start, lte: end } },
+      select: { id: true, event: true, url: true, timestamp: true },
       orderBy: { timestamp: "desc" },
       take: 200,
     }),
+    // O funil conta só Initiate Checkout, e conta a janela inteira — por isso é
+    // um count separado, e não o tamanho da lista acima (que é truncada em 200).
+    prisma.pixelEvent.count({
+      where: { userId, event: "InitiateCheckout", timestamp: { gte: start, lte: end } },
+    }),
   ]);
 
-  return { sales, clicks, metrics, expenses, pixelEvents, initiateCheckouts: pixelEvents.length, janela: { start, end } };
+  return { sales, clicks, metrics, expenses, pixelEvents, initiateCheckouts, janela: { start, end } };
 }
 
 export async function computeDashboard(userId: string, filters: DashboardFilters): Promise<DashboardData> {
@@ -536,7 +543,7 @@ function buildActivity(w: Window) {
   for (const e of w.pixelEvents.slice(0, 40)) {
     items.push({
       id: "p-" + e.id,
-      type: "checkout",
+      type: e.event === "Lead" ? "lead" : e.event === "AddToCart" ? "add_to_cart" : "checkout",
       source: "Pixel",
       campaign: e.url ? e.url.replace(/^https?:\/\//, "").slice(0, 48) : "—",
       value: null,

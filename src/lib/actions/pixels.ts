@@ -5,7 +5,12 @@ import { encryptSecret } from "@/lib/crypto/secrets";
 import { prisma } from "@/lib/prisma";
 import type { PixelEventType, PurchaseSendMode, PurchaseValueMode } from "@/generated/prisma/enums";
 
-export type DetectionType = "contem_texto" | "contem_css" | "contem_url";
+/**
+ * `clique_checkout` é o padrão: dispara no clique num link que leva ao gateway,
+ * na página de vendas. É o único modo que funciona quando o checkout é hospedado
+ * pelo gateway (pay.kirvano.com), onde o cliente não consegue instalar script.
+ */
+export type DetectionType = "clique_checkout" | "contem_texto" | "contem_css" | "contem_url";
 
 export interface MetaPixelDTO {
   id: string;

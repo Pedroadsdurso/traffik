@@ -3,6 +3,7 @@ import { after } from "next/server";
 import type { Prisma } from "@/generated/prisma/client";
 import type { SaleStatus } from "@/generated/prisma/enums";
 import { prisma } from "@/lib/prisma";
+import { registrarCheckoutDoGateway } from "@/lib/webhook/checkoutEvent";
 import { dispatchSaleNotification } from "@/lib/webhook/dispatchNotification";
 import { dispatchPurchaseEvents } from "@/lib/webhook/dispatchPixel";
 import { matchClick } from "@/lib/webhook/matchClick";
@@ -73,6 +74,10 @@ export async function ingestSale(
   // O gateway recebe o 200 assim que a venda está gravada.
   after(async () => {
     try {
+      // Venda gerada e ainda não paga = checkout iniciado, direto da fonte.
+      // É a única via que funciona com checkout hospedado pelo gateway, onde
+      // não há como instalar o nosso script na página.
+      await registrarCheckoutDoGateway(sale.id);
       await dispatchPurchaseEvents(sale.id);
       await dispatchSaleNotification(sale.id);
     } catch (e) {

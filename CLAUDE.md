@@ -241,6 +241,43 @@ servida por nós, minificada com **terser** no build.
 | Gerador do snippet | `utmLoaderSnippet()` em `src/lib/utm/scripts.ts` · `pixelLoaderSnippet()` em `src/lib/pixel/script.ts` (um por pixel cadastrado) |
 | Tela | `ui/SnippetBox.tsx` — um bloco, um botão, **sem alternativa** |
 
+> ### 🎯 InitiateCheckout: por que NÃO dá para detectar por URL do checkout
+> **O checkout da Kirvano é hospedado pelo gateway (`pay.kirvano.com`) e o cliente
+> não tem acesso ao código daquela página.** A regra `contem_url` compara a URL da
+> página onde o script está rodando — se o script não roda lá, o evento nunca
+> dispara. Foi exatamente essa a configuração que ficou sem gerar eventos.
+> Existem duas vias, e as duas funcionam **sem script no checkout**:
+>
+> 1. **Clique no link de checkout** (`clique_checkout`, o padrão): o `px.js` na
+>    página de vendas escuta cliques e sobe do alvo até o `<a>` — o clique quase
+>    sempre cai num `<span>`/`<img>` dentro do link. Se o `href` casa com um
+>    domínio de gateway (lista padrão: `pay.kirvano.com`, `hotmart`, `cartpanda`,
+>    `kiwify`, `monetizze`, `pay.`, `checkout`, ou a lista do usuário), dispara.
+> 2. **Webhook do gateway** (`src/lib/webhook/checkoutEvent.ts`): toda venda que
+>    chega **PENDENTE** vira um InitiateCheckout — cobre `PIX_GENERATED`,
+>    `BANK_SLIP_GENERATED`, `SALE_PENDING` e `ABANDONED_CART`. Venda que já chega
+>    APROVADA **não** gera checkout (ela já conta como venda no funil).
+>
+> **Dedup em duas camadas:** `eventId = "gw:<externalId>"` mata a reentrega do
+> gateway (a Kirvano reenvia o mesmo `PIX_GENERATED` — visto em produção), e o
+> `fbclid` do clique casado mata a contagem dupla clique+webhook dentro de 6h.
+>
+> ⚠️ Os modos `contem_texto`/`contem_css`/`contem_url` continuam disponíveis, mas
+> `contem_url` só serve para checkout **no seu próprio domínio**. A UI avisa isso.
+
+> ### 🐛 Regressão: Lead e AddToCart nunca apareciam no feed (corrigido)
+> `computeDashboard` filtrava `where: { event: "InitiateCheckout" }` ao buscar os
+> `PixelEvent` do feed de Atividade Recente. Os eventos eram gravados normalmente,
+> mas **só o InitiateCheckout chegava à tela** — Lead e AddToCart existiam no banco
+> e sumiam na consulta. Agora a consulta traz todos, e o feed tem badge próprio
+> para `lead` e `add_to_cart`. O funil continua contando só InitiateCheckout, mas
+> por um `count()` separado: antes usava o tamanho da lista, que é truncada em 200
+> e agora inclui outros eventos — usar o mesmo dado subcontaria o funil.
+>
+> ⚠️ **PageView nunca existiu** neste projeto: não está no script antigo, não é
+> enviado, não é gravado e não é um tipo do feed. Se for pedido, é feature nova —
+> e vale lembrar que o "Clique" do `t.js` já registra a visita uma vez por sessão.
+
 > ### ⚠️ UMA opção de instalação, sem ramificação — decisão do usuário (28/07/2026)
 > **A tela mostra UM snippet e UM botão "Copiar script". Não existe formato
 > alternativo, nem "colei e não funcionou?", nem seletor.** Os dois já existiram

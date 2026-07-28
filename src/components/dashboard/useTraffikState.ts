@@ -616,6 +616,8 @@ export function useTraffikState(
   const EVENTO_META: Record<string, { label: string; cor: string }> = {
     clique: { label: "Clique", cor: "#60a5fa" },
     checkout: { label: "Checkout", cor: "#a78bfa" },
+    lead: { label: "Lead", cor: "#38bdf8" },
+    add_to_cart: { label: "Add to cart", cor: "#c084fc" },
     venda_pendente: { label: "Venda pendente", cor: "#fbbf24" },
     venda_aprovada: { label: "Venda aprovada", cor: "#4ade80" },
     reembolso: { label: "Reembolso", cor: "#f87171" },
