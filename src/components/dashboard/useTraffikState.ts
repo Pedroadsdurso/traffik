@@ -1080,6 +1080,8 @@ export function useTraffikState(
     // mesma fonte — e é exatamente isso que explica uma etapa passar de 100%
     // da anterior. Só "vendas aprovadas ⊆ vendas iniciadas" é garantido por
     // construção (mesma tabela, filtro de status).
+    /** Ticket médio cru — o funil usa para estimar o faturamento perdido. */
+    ticketMedio: k?.ticket ?? 0,
     funnelStages: [
       { label: "Cliques no anúncio", curto: "Cliques", value: d?.funnel.cliques ?? 0, fonte: "Meta Ads (métrica diária)" },
       { label: "Visita na página", curto: "Vis. Página", value: d?.funnel.visitas ?? 0, fonte: "Nosso script — 1 por sessão" },

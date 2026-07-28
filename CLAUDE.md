@@ -1230,6 +1230,39 @@ Resultado real: 0 → **12 campanhas, 12 anúncios, R$ 103,41, 2.756 impressões
 > `errors: 0` mascarar perda de dado. No teste: 2 linhas órfãs = os R$ 10,93 de
 > diferença entre o total da Meta e o atribuído.
 
+### Funil: percentual sobre a MAIOR etapa (método Utmify) + análise de gargalo
+
+O percentual era **sobre a etapa anterior**, e por isso passava de 100% sempre
+que uma etapa era maior que a precedente — "Visita na página" (220, do nosso
+script) sobre "Cliques no anúncio" (98, do Meta) dava **224,49%**. Não era erro
+de conta: as duas contagens vêm de fontes independentes e se cruzam de verdade.
+
+Hoje cada etapa mostra **% da maior etapa** (`src/lib/funnel.ts`): a maior fica
+em 100% e nada a ultrapassa por construção. A espessura do segmento usa esse
+mesmo percentual, então desenho e número contam a mesma história. O ⚠️ de
+"acima de 100%" saiu — deixou de existir o caso.
+
+Dados reais: `98, 220, 25, 14, 2` → `44,5% · 100% · 11,4% · 6,4% · 0,9%`.
+
+> ⚠️ **A taxa vs. etapa anterior não sumiu** — é a informação analítica de
+> verdade e continua no tooltip (visitas vs. cliques segue mostrando 224,5%). Só
+> deixou de ser o número em destaque.
+
+**O funil aponta o gargalo.** Por transição calcula perda absoluta, perda %, e
+o faturamento estimado na mesa; elege a transição com a maior QUEDA e a marca
+com divisória âmbar + resumo no rodapé. Entre as etapas aparece "−195 · 88,6%"
+sem precisar de hover.
+
+> ⚠️ **Valor financeiro só a partir do Initiate Checkout** (`INDICE_MIN_FINANCEIRO`).
+> Quem chegou ao checkout e não comprou é receita que estava ao alcance, e o
+> ticket médio é estimativa defensável. Multiplicar *visitante* perdido por
+> ticket médio produziria um número enorme e fictício — a maioria dos visitantes
+> nunca compraria.
+>
+> ⚠️ **Etapa que CRESCE não é gargalo.** Só quedas reais concorrem; sem esse
+> filtro o "maior" cairia numa transição saudável quando o funil inteiro
+> estivesse crescendo.
+
 > ### ⚠️ "Excluir" no Facebook = ARQUIVAR
 > Trazer arquivados resolveu o gasto sumido e **criou outro problema**: a
 > listagem encheu de campanha que o usuário já tinha apagado — no Gerenciador do
