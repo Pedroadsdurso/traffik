@@ -18,26 +18,20 @@ function base(apiBase: string): string {
   return apiBase.replace(/\/+$/, "");
 }
 
-/** Escapa para dentro de um atributo HTML com aspas duplas. */
-function attr(v: string): string {
-  return v.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
 /**
- * Loader do rastreamento de UTMs, formato **HTML**: uma tag externa, sem
- * JavaScript inline. `async` não bloqueia o parser nem a renderização.
+ * Snippet de instalação do rastreamento de UTMs — **opção única e universal**.
  *
- * Sem JS inline de propósito: campos de "código do cabeçalho" de gateway e
- * construtor de página às vezes embrulham o conteúdo em `<script>` por conta
- * própria, e um snippet que já trouxesse as tags viraria `<script><script>…`,
- * que não executa. Além disso, CSP com `script-src` restrito bloqueia inline.
+ * É um IIFE em JavaScript puro, sem tags `<script>` próprias, porque essa é a
+ * única forma que funciona nos DOIS lugares onde ele é colado:
+ *   - campo de "código do cabeçalho" de site, que embrulha o conteúdo em
+ *     `<script>` (uma tag própria aqui viraria `<script><script>…`, que não roda);
+ *   - campo de script de gateway/checkout, que aceita só JavaScript.
+ *
+ * Por ser universal, **não existe formato alternativo** — oferecer dois códigos
+ * transformava um detalhe de bastidor em decisão de quem só quer copiar e colar.
+ * `async` garante que não bloqueia a renderização da página do cliente.
  */
 export function utmLoaderSnippet(accountId: string, apiBase: string): string {
-  return `<script async src="${attr(base(apiBase))}/t.js" data-account="${attr(accountId)}"></script>`;
-}
-
-/** Mesmo loader em **JavaScript puro**, para campos que não aceitam HTML. */
-export function utmLoaderJs(accountId: string, apiBase: string): string {
   return `(function(d,s){s=d.createElement("script");s.async=1;s.src="${jsString(base(apiBase))}/t.js";s.setAttribute("data-account","${jsString(accountId)}");(d.head||d.documentElement).appendChild(s)})(document);`;
 }
 

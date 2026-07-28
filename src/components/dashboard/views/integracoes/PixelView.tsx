@@ -14,7 +14,7 @@ import {
   type PixelFormInput,
 } from "@/lib/actions/pixels";
 import { getPublicAppUrl } from "@/lib/appUrl";
-import { pixelLoaderJs, pixelLoaderSnippet } from "@/lib/pixel/script";
+import { pixelLoaderSnippet } from "@/lib/pixel/script";
 import { sx } from "@/lib/sx";
 import { Drawer } from "../../ui/Drawer";
 import { SnippetBox } from "../../ui/SnippetBox";
@@ -149,10 +149,9 @@ export function PixelView() {
     setPixels((list) => list.filter((p) => p.id !== id));
   }
 
-  function scriptText(px: PixelConfigDTO, formato: "html" | "js" = "html"): string {
+  function scriptText(px: PixelConfigDTO): string {
     const ic = px.rules.find((r) => r.eventType === "INITIATE_CHECKOUT");
-    const gerar = formato === "html" ? pixelLoaderSnippet : pixelLoaderJs;
-    return gerar({
+    return pixelLoaderSnippet({
       configId: px.id,
       apiBase: getPublicAppUrl(),
       lead: px.rules.find((r) => r.eventType === "LEAD")?.enabled ?? false,
@@ -339,36 +338,21 @@ export function PixelView() {
           const px = pixels.find((p) => p.id === editId);
           if (!px) return null;
           const codigo = scriptText(px);
-          const codigoJs = scriptText(px, "js");
           const local = getPublicAppUrl().includes("localhost");
-          const icUrl = px.rules.find((r) => r.eventType === "INITIATE_CHECKOUT");
-          const noCheckout = icUrl?.enabled && icUrl.detectionType === "contem_url";
           return (
             <div style={sx("border-top:1px solid var(--color-divider);padding-top:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)")}>
               <div style={sx("font-weight:600;font-size:13px")}>Script de instalação</div>
               <p className="card-body" style={sx("margin:0;font-size:12px")}>
-                Cole antes do <code>&lt;/head&gt;</code> do seu site. Os eventos vão para{" "}
-                <code style={sx("font-family:ui-monospace,monospace")}>{getPublicAppUrl()}</code>
-                {local && (
-                  <span style={sx("color:var(--color-warning,#fbbf24)")}>
-                    {" "}— endereço local. Defina <code>NEXT_PUBLIC_APP_URL</code> com o domínio de produção
-                    e gere o script de novo antes de instalar.
-                  </span>
-                )}
+                Cole antes de <code>&lt;/head&gt;</code> do seu site (ou no campo de script do seu
+                gateway/checkout).
               </p>
-              <SnippetBox
-                codigo={codigo}
-                alternativo={codigoJs}
-                nota={
-                  noCheckout ? (
-                    <p className="card-body" style={sx("margin:0;font-size:12px;color:var(--color-warning,#fbbf24)")}>
-                      Sua regra de Initiate Checkout é por <strong>URL</strong>, então este script também
-                      precisa estar <strong>na página de checkout</strong> (no campo de scripts do gateway) —
-                      é lá que a URL bate. Só no site de vendas o evento não dispara.
-                    </p>
-                  ) : undefined
-                }
-              />
+              {local && (
+                <p className="card-body" style={sx("margin:0;font-size:12px;color:var(--color-warning,#fbbf24)")}>
+                  O script aponta para <code>{getPublicAppUrl()}</code>, um endereço local. Defina{" "}
+                  <code>NEXT_PUBLIC_APP_URL</code> com o domínio de produção e copie de novo antes de instalar.
+                </p>
+              )}
+              <SnippetBox codigo={codigo} />
             </div>
           );
         })()}

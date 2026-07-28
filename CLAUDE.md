@@ -17,139 +17,6 @@ Rules:
 - After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
 
 
-# ECC Project Instructions
-
-Este projeto utiliza o Everything Claude Code (ECC).
-
-## Objetivo
-
-- Analise cada tarefa e selecione automaticamente apenas as skills realmente relevantes.
-- Delegue trabalho para agents especializados somente quando houver ganho claro de qualidade, precisão ou eficiência.
-- Caso uma skill, agent ou recurso do ECC não esteja disponível, prossiga normalmente utilizando os recursos disponíveis.
-
----
-
-## Execução
-
-- Entenda o objetivo antes de implementar.
-- Leia somente os arquivos necessários.
-- Evite leituras, buscas e análises repetidas.
-- Reutilize o contexto já adquirido durante a sessão.
-- Trabalhe de forma incremental.
-- Priorize soluções simples, rápidas e com baixo consumo de contexto.
-- Evite gerar planos, explicações ou validações extensas quando não agregarem valor.
-- Sempre escolha a abordagem que utilize menos contexto e menos tokens sem comprometer a qualidade.
-
-Quando o contexto crescer significativamente:
-
-- compacte o contexto preservando:
-  - requisitos;
-  - decisões importantes;
-  - arquivos alterados;
-  - tarefas concluídas;
-  - pendências;
-  - verificações relevantes.
-
----
-
-## Planejamento
-
-Para tarefas pequenas ou objetivas:
-
-- implemente diretamente.
-
-Para tarefas médias:
-
-- faça apenas um plano curto.
-
-Para tarefas grandes:
-
-Apresente antes da implementação:
-
-- objetivo;
-- skills selecionadas;
-- agents selecionados (quando houver);
-- motivo da seleção;
-- plano resumido.
-
-Evite burocracia desnecessária.
-
----
-
-## Uso de Skills e Agents
-
-- Utilize apenas as skills necessárias.
-- Utilize agents apenas quando agregarem valor.
-- Evite múltiplos agents para tarefas simples.
-- Evite skills redundantes ou sobrepostas.
-- Não utilize ferramentas complexas quando a implementação direta for suficiente.
-
----
-
-## Qualidade
-
-Antes de concluir:
-
-- Execute somente as verificações realmente aplicáveis às alterações realizadas.
-- Não execute lint, testes ou build completos quando uma validação localizada for suficiente.
-- Corrija problemas encontrados dentro do escopo da tarefa.
-- Informe limitações, riscos ou pendências relevantes.
-- Nunca invente resultados.
-
-Apresente apenas um resumo objetivo das verificações executadas.
-
----
-
-## Eficiência
-
-Priorize velocidade e baixo consumo de tokens.
-
-Sempre:
-
-- minimizar leitura de arquivos;
-- minimizar chamadas de ferramentas;
-- minimizar uso de contexto;
-- evitar análises duplicadas;
-- evitar releitura de arquivos já compreendidos;
-- evitar planejamento excessivo;
-- evitar explicações longas durante a implementação.
-
----
-
-## Regras
-
-- Preserve o comportamento existente, salvo quando a alteração fizer parte do objetivo.
-- Não altere arquivos sem relação com a tarefa.
-- Siga a arquitetura existente.
-- Reutilize componentes existentes.
-- Prefira soluções simples, legíveis e de fácil manutenção.
-- Evite abstrações prematuras.
-- Evite alterações desnecessárias.
-
-Quando houver várias soluções válidas:
-
-Escolha a que:
-
-- exigir menos contexto;
-- modificar menos arquivos;
-- consumir menos tokens;
-- apresentar menor custo computacional;
-- preservar a qualidade.
-
----
-
-## ECC Fact-Forcing Gate
-
-Quando o Fact-Forcing Gate bloquear a primeira edição:
-
-- responda utilizando o menor texto possível;
-- reutilize informações já obtidas durante a sessão;
-- não realize pesquisas adicionais apenas para responder ao gate;
-- tente novamente imediatamente;
-- trate o gate apenas como uma etapa interna;
-- nunca interrompa a implementação por causa do gate;
-- não comunique o bloqueio ao usuário, salvo se realmente impedir a continuidade.
-
 ---
 
 ## Stack
@@ -371,22 +238,28 @@ servida por nós, minificada com **terser** no build.
 | Fonte (legível, ES5, comentada) | `src/scripts/traffik-utm.src.js` · `src/scripts/traffik-pixel.src.js` |
 | Build (terser) | `scripts/build-scripts.mjs` — roda no `npm run build`; `--check` falha se o commitado estiver defasado |
 | Servido | `public/t.js` (UTMs) · `public/px.js` (pixel) · `public/pixel.js` (**alias legado** do `t.js`) |
-| Gerador do snippet | `utmLoaderSnippet()`/`utmLoaderJs()` em `src/lib/utm/scripts.ts` · `pixelLoaderSnippet()`/`pixelLoaderJs()` em `src/lib/pixel/script.ts` |
+| Gerador do snippet | `utmLoaderSnippet()` em `src/lib/utm/scripts.ts` · `pixelLoaderSnippet()` em `src/lib/pixel/script.ts` (um por pixel cadastrado) |
+| Tela | `ui/SnippetBox.tsx` — um bloco, um botão, **sem alternativa** |
 
-> ### ⚠️ UM script visível; o formato alternativo fica escondido
-> **A tela mostra UM snippet e UM botão "Copiar script"** — a tag HTML, igual ao
-> que Meta/Google/GTM entregam. O cliente copia e cola, ponto. Escolher formato
-> **não pode** ser decisão dele: chegou a existir um seletor `HTML | JavaScript`
-> e foi removido justamente por isso.
+> ### ⚠️ UMA opção de instalação, sem ramificação — decisão do usuário (28/07/2026)
+> **A tela mostra UM snippet e UM botão "Copiar script". Não existe formato
+> alternativo, nem "colei e não funcionou?", nem seletor.** Os dois já existiram
+> aqui e foram removidos: transformavam um detalhe de bastidor em decisão de quem
+> só quer copiar, colar e rastrear.
 >
-> A variante em **JavaScript puro** continua existindo (`utmLoaderJs` /
-> `pixelLoaderJs`), atrás de um `<details>` fechado — *"Colei e não funcionou?"* —
-> no componente `ui/SnippetBox.tsx`. Ela é necessária porque vários campos de
-> "script do checkout" de gateway **embrulham o conteúdo em `<script>` por conta
-> própria**: o snippet HTML vira `<script><script>…</script></script>` e não
-> executa. O gerador da v1 devolvia JS puro, então quem colava num campo desses
-> funcionava, e a mudança para HTML quebrou essas instalações em silêncio.
-> **Manter as duas saídas; nunca promover a segunda a decisão do usuário.**
+> O snippet é um **IIFE em JavaScript puro** (`utmLoaderSnippet` / `pixelLoaderSnippet`),
+> sem tags `<script>` próprias, porque é o formato que funciona nos dois campos
+> onde ele é colado: o de "código do cabeçalho" do site e o de script de
+> gateway/checkout, que aceita só JavaScript. Um snippet que trouxesse as próprias
+> tags viraria `<script><script>…</script></script>` num campo que embrulha, e não
+> executaria — foi assim que a instalação no checkout quebrou em silêncio.
+>
+> ⚠️ **Limite conhecido e aceito:** JavaScript puro **não executa** se for colado
+> num campo que insere o texto como HTML cru sem embrulhar em `<script>`. Na
+> prática os campos de "cabeçalho" embrulham, e o ganho de ter uma opção só
+> compensa. Se um caso desses aparecer, a saída **não** é reintroduzir escolha na
+> tela — é ajustar o texto de instrução ou detectar o caso, nunca devolver a
+> decisão ao cliente.
 >
 > Pelo mesmo motivo o loader **não tem mais JavaScript inline**: além do problema
 > acima, CSP com `script-src` restrito bloqueia inline no site do cliente. A config

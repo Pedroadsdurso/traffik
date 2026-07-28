@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 import { getUtmCodes, type UtmCodesDTO } from "@/lib/actions/utm";
 import { getPublicAppUrl } from "@/lib/appUrl";
-import { backRedirectScript, utmLoaderJs, utmLoaderSnippet } from "@/lib/utm/scripts";
+import { backRedirectScript, utmLoaderSnippet } from "@/lib/utm/scripts";
 import { sx } from "@/lib/sx";
 import { LogoGateway } from "../../ui/LogoGateway";
 import { Modal } from "../../ui/Modal";
@@ -113,7 +113,6 @@ function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
   const [backUrl, setBackUrl] = useState("");
 
   const snippet = codes ? utmLoaderSnippet(codes.accountId, getPublicAppUrl()) : "";
-  const snippetJs = codes ? utmLoaderJs(codes.accountId, getPublicAppUrl()) : "";
 
   function baixarBack() {
     download("traffik-back-redirect.js", backRedirectScript(backUrl));
@@ -130,23 +129,19 @@ function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
         <div style={sx("font-size:14px;font-weight:600")}>Script de UTMs</div>
         <p className="card-body" style={sx("margin:0")}>
           Captura UTMs + fbclid, salva em cookie de 30 dias, propaga para os links de checkout e envia o
-          clique para a Traffik. Cole no <code>&lt;head&gt;</code> do seu site.
+          clique para a Traffik.
         </p>
-        <p className="card-body" style={sx("margin:0;font-size:12px")}>
-          É uma linha só: o resto do código fica hospedado na Traffik e é carregado de forma assíncrona, sem
-          atrasar o carregamento da sua página. Melhorias no rastreamento chegam sozinhas, sem reinstalar.
+        <p className="card-body" style={sx("margin:0")}>
+          Cole antes de <code>&lt;/head&gt;</code> do seu site (ou no campo de script do seu
+          gateway/checkout).
         </p>
-        <p className="card-body" style={sx("margin:0;font-size:12px")}>
-          Os cliques serão enviados para{" "}
-          <code style={sx("font-family:ui-monospace,monospace")}>{getPublicAppUrl()}</code>
-          {getPublicAppUrl().includes("localhost") && (
-            <span style={sx("color:var(--color-warning,#fbbf24)")}>
-              {" "}— é um endereço local. Defina <code>NEXT_PUBLIC_APP_URL</code> com o domínio de produção
-              e copie o snippet de novo antes de instalar no site.
-            </span>
-          )}
-        </p>
-        <SnippetBox codigo={snippet} alternativo={snippetJs} />
+        {getPublicAppUrl().includes("localhost") && (
+          <p className="card-body" style={sx("margin:0;font-size:12px;color:var(--color-warning,#fbbf24)")}>
+            O script aponta para <code>{getPublicAppUrl()}</code>, um endereço local. Defina{" "}
+            <code>NEXT_PUBLIC_APP_URL</code> com o domínio de produção e copie de novo antes de instalar.
+          </p>
+        )}
+        <SnippetBox codigo={snippet} />
       </div>
 
       <div style={sx("border-top:1px solid var(--color-border);padding-top:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)")}>

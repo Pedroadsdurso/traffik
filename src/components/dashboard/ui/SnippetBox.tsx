@@ -5,29 +5,22 @@ import { useState, type ReactNode } from "react";
 import { sx } from "@/lib/sx";
 
 /**
- * Bloco de código instalável: UM script visível e UM botão de copiar.
+ * Bloco de código instalável: UM script e UM botão de copiar.
  *
- * A alternativa em JavaScript existe porque alguns campos de "script do
- * checkout" de gateway embrulham o conteúdo colado numa tag `<script>` por
- * conta própria — nesse caso um snippet que já traz as próprias tags aninha e
- * não executa. Mas isso é problema NOSSO, não do cliente: ele copia o principal
- * e pronto. A saída de emergência fica fechada, para quem colou e não funcionou.
+ * Sem formato alternativo, de propósito. O snippet gerado é um IIFE em
+ * JavaScript puro, que funciona tanto no `<head>` do site quanto no campo de
+ * script de gateway/checkout — como é universal, não há o que escolher. Chegou a
+ * existir aqui um seletor `HTML | JavaScript` e depois um "Colei e não
+ * funcionou?"; os dois transformavam um detalhe de bastidor em decisão de quem
+ * só quer copiar e colar. **Não reintroduzir ramificação nesta tela.**
  */
-export function SnippetBox({
-  codigo,
-  alternativo,
-  nota,
-}: {
-  codigo: string;
-  alternativo?: string;
-  nota?: ReactNode;
-}) {
-  const [copiado, setCopiado] = useState<"principal" | "alt" | null>(null);
+export function SnippetBox({ codigo, nota }: { codigo: string; nota?: ReactNode }) {
+  const [copiado, setCopiado] = useState(false);
 
-  function copiar(texto: string, qual: "principal" | "alt") {
+  function copiar(texto: string) {
     navigator.clipboard.writeText(texto);
-    setCopiado(qual);
-    setTimeout(() => setCopiado(null), 1500);
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 1500);
   }
 
   const preStyle = sx(
@@ -41,35 +34,12 @@ export function SnippetBox({
       <button
         className="btn btn-primary"
         type="button"
-        onClick={() => copiar(codigo, "principal")}
+        onClick={() => copiar(codigo)}
         disabled={!codigo}
         style={sx("width:fit-content")}
       >
-        {copiado === "principal" ? "Copiado!" : "Copiar script"}
+        {copiado ? "Copiado!" : "Copiar script"}
       </button>
-
-      {alternativo && (
-        <details style={sx("margin-top:2px")}>
-          <summary style={sx("cursor:pointer;font-size:12px;color:var(--color-text-muted,#9ca3af)")}>
-            Colei e não funcionou?
-          </summary>
-          <div style={sx("display:flex;flex-direction:column;gap:8px;padding-top:8px")}>
-            <p className="card-body" style={sx("margin:0;font-size:12px")}>
-              Alguns campos de script (principalmente os de checkout de gateway) aceitam só JavaScript e
-              recusam HTML. Se for o seu caso, use esta versão no lugar — ela faz exatamente a mesma coisa.
-            </p>
-            <pre style={preStyle}>{alternativo}</pre>
-            <button
-              className="btn btn-secondary"
-              type="button"
-              onClick={() => copiar(alternativo, "alt")}
-              style={sx("width:fit-content")}
-            >
-              {copiado === "alt" ? "Copiado!" : "Copiar versão JavaScript"}
-            </button>
-          </div>
-        </details>
-      )}
     </div>
   );
 }

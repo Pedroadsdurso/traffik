@@ -1,11 +1,10 @@
 /**
  * Gerador do snippet do pixel próprio da Traffik (Bloco 12).
  *
- * O que o usuário cola no site é só um LOADER: registra a configuração deste
- * pixel em `window._tkpx`, cria um stub de `window.traffikPixel.track` com fila
- * (para disparos manuais feitos antes do arquivo chegar) e injeta `/px.js` de
- * forma assíncrona. A lógica dos eventos vive em `src/scripts/traffik-pixel.src.js`,
- * minificada para `public/px.js` por `scripts/build-scripts.mjs`.
+ * Um snippet por pixel cadastrado. É só um LOADER: injeta `/px.js` de forma
+ * assíncrona com a configuração nos atributos `data-*`. A lógica dos eventos
+ * vive em `src/scripts/traffik-pixel.src.js`, minificada para `public/px.js`
+ * por `scripts/build-scripts.mjs`.
  *
  * Purchase continua fora daqui: é server-side, disparado pelo webhook da venda.
  */
@@ -23,45 +22,32 @@ function jsStr(v: string): string {
   return v.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-/** Escapa para dentro de um atributo HTML com aspas duplas. */
-function attr(v: string): string {
-  return v.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-/** Os atributos `data-*` que carregam a configuração do pixel na própria tag. */
-function dados(cfg: PixelScriptConfig): { chave: string; valor: string }[] {
+/** Os atributos `data-*` que carregam a configuração deste pixel. */
+function dados(cfg: PixelScriptConfig): [string, string][] {
   const ic = cfg.initiateCheckout;
-  const out = [{ chave: "data-cfg", valor: cfg.configId }];
-  if (cfg.lead) out.push({ chave: "data-lead", valor: "1" });
-  if (cfg.addToCart) out.push({ chave: "data-atc", valor: "1" });
+  const out: [string, string][] = [["data-cfg", cfg.configId]];
+  if (cfg.lead) out.push(["data-lead", "1"]);
+  if (cfg.addToCart) out.push(["data-atc", "1"]);
   if (ic.enabled && ic.value) {
-    out.push({ chave: "data-ic-t", valor: ic.type || "" });
-    out.push({ chave: "data-ic-v", valor: ic.value });
+    out.push(["data-ic-t", ic.type || ""]);
+    out.push(["data-ic-v", ic.value]);
   }
   return out;
 }
 
-const fonte = (cfg: PixelScriptConfig) => `${cfg.apiBase.replace(/\/+$/, "")}/px.js`;
-
 /**
- * Formato **HTML**: uma tag externa, sem JavaScript inline. É o formato mais
- * robusto — sobrevive a campos que embrulham o conteúdo em `<script>` sozinhos
- * (o que quebrava um snippet que já trazia as próprias tags) e a Content
- * Security Policy que bloqueia script inline.
+ * Snippet de instalação do pixel — **opção única e universal**.
+ *
+ * IIFE em JavaScript puro, sem tags `<script>` próprias: é a única forma que
+ * funciona tanto no `<head>` de um site (onde o campo embrulha o conteúdo em
+ * `<script>`) quanto nos campos de script de gateway/checkout, que só aceitam
+ * JavaScript. Por ser universal, **não existe formato alternativo** — o cliente
+ * copia um código só e cola onde precisar.
  */
 export function pixelLoaderSnippet(cfg: PixelScriptConfig): string {
-  const attrs = dados(cfg).map((d) => ` ${d.chave}="${attr(d.valor)}"`).join("");
-  return `<script async src="${attr(fonte(cfg))}"${attrs}></script>`;
-}
-
-/**
- * Formato **JavaScript puro**, para campos que aceitam só JS (é o caso de vários
- * "scripts do checkout" de gateway, que embrulham o conteúdo em `<script>`).
- * Monta a mesma tag por DOM, mantendo o `async`.
- */
-export function pixelLoaderJs(cfg: PixelScriptConfig): string {
-  const sets = dados(cfg)
-    .map((d) => `s.setAttribute("${d.chave}","${jsStr(d.valor)}");`)
+  const src = `${cfg.apiBase.replace(/\/+$/, "")}/px.js`;
+  const attrs = dados(cfg)
+    .map(([chave, valor]) => `s.setAttribute("${chave}","${jsStr(valor)}");`)
     .join("");
-  return `(function(d,s){s=d.createElement("script");s.async=1;s.src="${jsStr(fonte(cfg))}";${sets}(d.head||d.documentElement).appendChild(s)})(document);`;
+  return `(function(d,s){s=d.createElement("script");s.async=1;s.src="${jsStr(src)}";${attrs}(d.head||d.documentElement).appendChild(s)})(document);`;
 }
