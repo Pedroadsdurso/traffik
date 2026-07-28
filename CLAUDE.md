@@ -1240,10 +1240,21 @@ Resultado real: 0 → **12 campanhas, 12 anúncios, R$ 103,41, 2.756 impressões
 > arquivados. `lib/ads/status.ts` é a fonte única — "Todos os status" exclui
 > ARCHIVED/DELETED, e existe a opção "Arquivados" para vê-los.
 >
-> ⚠️ O filtro estava **duplicado** (servidor em `overview.ts` + cliente em
-> `AdsManagerView.tsx`), e a cópia do cliente refiltrava o que o servidor já
-> tinha mandado: corrigir só um lado não mudava nada na tela. Se for mexer em
-> filtro de status, é em `lib/ads/status.ts` — os dois importam de lá.
+> ⚠️ **O filtro de status é do CLIENTE.** O painel manda só `period` e `account`
+> na querystring — status e busca são aplicados no navegador para trocar de
+> filtro não custar um round-trip. Logo, `filters.status` chega ao servidor
+> SEMPRE como `"todos"`.
+>
+> Enquanto "todos" significava "tudo", filtrar no servidor era inofensivo.
+> Quando "todos" passou a excluir arquivados, o filtro do servidor virou uma
+> peneira que **descartava as arquivadas antes de saírem da API** — e a opção
+> "Arquivados" da tela ficou filtrando uma lista vazia (abas em "0 item(ns)"
+> logo após um sync que reportou "12 campanhas"). O servidor não filtra mais por
+> status; quem decide é `lib/ads/status.ts` no cliente. **Se um dia voltar a
+> filtrar lá, o status PRECISA ir na querystring junto.**
+>
+> ⚠️ A contagem das abas usava `array.length` cru e mostrava "12" com a tabela
+> vazia. Passou a aplicar o mesmo filtro das linhas.
 >
 > ⚠️ `pausado` significava `status !== "ACTIVE"`, que varria arquivados junto.
 > Hoje é `PAUSED` estrito.

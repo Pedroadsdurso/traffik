@@ -1,7 +1,6 @@
 import { getUserTimezone } from "@/lib/userTimezone";
 import { prisma } from "@/lib/prisma";
 import { addDaysToKey, dayStart, keyToDateColumn, todayKey } from "@/lib/timezone";
-import { combinaStatus } from "@/lib/ads/status";
 import { splitPipe } from "@/lib/utm/parse";
 
 export interface AdsFilters {
@@ -312,8 +311,22 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
 
   // Filtros de status + busca (contas sempre completas)
   const search = filters.search.trim().toLowerCase();
+  // ⚠️ O filtro de STATUS é do CLIENTE, não daqui.
+  //
+  // O painel manda só `period` e `account` na querystring — status e busca são
+  // aplicados no navegador para trocar de filtro não custar um round-trip. Ou
+  // seja: `filters.status` chega SEMPRE como o padrão "todos".
+  //
+  // Enquanto "todos" significava "tudo", filtrar aqui era inofensivo. Quando
+  // "todos" passou a excluir arquivados, este filtro virou uma peneira que
+  // descartava as 12 campanhas arquivadas ANTES de saírem do servidor — e a
+  // opção "Arquivados" da tela passou a filtrar uma lista já vazia.
+  //
+  // O servidor manda tudo; quem decide o que aparece é `lib/ads/status.ts` no
+  // cliente. Se um dia o status voltar a ser filtrado aqui, ele PRECISA vir na
+  // querystring junto.
   const byFilters = <T extends { name: string; status: string }>(rows: T[]) =>
-    rows.filter((r) => combinaStatus(r.status, filters.status) && (!search || r.name.toLowerCase().includes(search)));
+    rows.filter((r) => !search || r.name.toLowerCase().includes(search));
 
   return {
     campaigns: byFilters(campaignRows),

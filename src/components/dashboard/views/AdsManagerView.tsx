@@ -82,6 +82,16 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
     return base.sort((a, b) => (ordemGasto === "desc" ? b.spend - a.spend : a.spend - b.spend));
   }, [raw, v.adsSub, v.adsSearch, v.adsStatus, ordemGasto]);
 
+  /**
+   * Contagem da aba respeitando o filtro ativo. Usava `length` do array cru, o
+   * que mostraria "12 campanhas" com a tabela vazia depois que "Todos os
+   * status" passou a esconder arquivadas.
+   */
+  const contar = (rows?: { name: string; status: string }[]) =>
+    (rows ?? []).filter(
+      (r) => combinaStatus(r.status, v.adsStatus) && r.name.toLowerCase().includes(v.adsSearch.toLowerCase()),
+    ).length;
+
   const selecionados: AlvoSelecionado[] = linhas
     .filter((l) => selecao.has(l.id))
     .map((l) => ({
@@ -184,9 +194,9 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
         {ABAS.map((a) => {
           const contagem =
             a.key === "accounts" ? raw?.accounts.length ?? 0
-            : a.key === "campaigns" ? raw?.campaigns.length ?? 0
-            : a.key === "adsets" ? raw?.adSets.length ?? 0
-            : raw?.ads.length ?? 0;
+            : a.key === "campaigns" ? contar(raw?.campaigns)
+            : a.key === "adsets" ? contar(raw?.adSets)
+            : contar(raw?.ads);
           return (
             <button key={a.key} type="button" role="tab" className="ads-aba" aria-selected={v.adsSub === a.key}
               onClick={() => { v.setAdsSub(a.key); setSelecao(new Set()); }}>
