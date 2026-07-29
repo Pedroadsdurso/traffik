@@ -11,25 +11,47 @@ import { CountryMap } from "./ui/CountryMap";
 import { Donut } from "./ui/Donut";
 import { Funnel } from "./ui/Funnel";
 import { InfoTip } from "./ui/InfoTip";
+import { useDensidade } from "./ui/useDensidade";
 import { METRICAS } from "@/lib/explicacoes";
 import { BLOCK_BY_ID } from "./blocks";
 import type { TraffikView } from "./useTraffikState";
 
 /** Envelope comum: todo bloco do grid ocupa 100% da célula e rola por dentro. */
-function Bloco({ children, gap0 = false }: { children: React.ReactNode; gap0?: boolean }) {
+function Bloco({
+  children,
+  gap0 = false,
+  innerRef,
+}: {
+  children: React.ReactNode;
+  gap0?: boolean;
+  /** Para o `useDensidade` medir a caixa real do bloco. */
+  innerRef?: React.Ref<HTMLDivElement>;
+}) {
+  // `overflow:hidden` e não `auto`: barra de rolagem dentro de um card de KPI
+  // é sintoma de conteúdo que não coube. Quem não cabe deve encolher (ver
+  // `useDensidade`), não ganhar scroll. Blocos que legitimamente rolam — feed,
+  // tabelas — pedem `gap0` e cuidam da própria rolagem internamente.
   return (
-    <div className="card" style={sx(`height:100%;overflow:auto;${gap0 ? "gap:0;" : ""}`)}>
+    <div ref={innerRef} className="card"
+      style={sx(`height:100%;min-width:0;min-height:0;overflow:${gap0 ? "auto" : "hidden"};${gap0 ? "gap:0;" : ""}`)}>
       {children}
     </div>
   );
 }
 
 function KpiBloco({ v, metric }: { v: TraffikView; metric: string }) {
+  const { ref, densidade } = useDensidade();
   const k = v.metricCards[metric as keyof typeof v.metricCards];
   if (!k) return null;
   const serie = v.sparklines[metric] ?? [];
+  // Ordem de sacrifício quando o espaço aperta: primeiro o sparkline (é
+  // enfeite), depois o delta (informação secundária), e o NÚMERO nunca sai —
+  // ele é a razão de o bloco existir.
+  const mostrarSparkline = densidade === "md" && serie.length > 1;
+  const mostrarDelta = densidade !== "xs";
+  const tamanhoNumero = densidade === "xs" ? 18 : densidade === "sm" ? 22 : 26;
   return (
-    <Bloco>
+    <Bloco innerRef={ref}>
       {/* Hierarquia: label pequeno em cima, número grande no meio, comparação embaixo. */}
       <div className="card-kicker" style={sx("display:flex;align-items:center;gap:4px")}>
         {k.label}
@@ -38,13 +60,15 @@ function KpiBloco({ v, metric }: { v: TraffikView; metric: string }) {
           <InfoTip conteudo={{ ...METRICAS[metric]!, valores: v.valoresMetrica(metric) }} tamanho={12} />
         )}
       </div>
-      <div style={sx("font-family:var(--font-heading);font-weight:500;font-size:26px;line-height:1.1;font-variant-numeric:tabular-nums;margin-top:2px")}>
+      <div style={sx(`font-family:var(--font-heading);font-weight:500;font-size:${tamanhoNumero}px;line-height:1.1;font-variant-numeric:tabular-nums;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap`)}>
         {k.value}
       </div>
-      <div style={sx("margin-top:auto;display:flex;flex-direction:column;gap:6px")}>
-        {serie.length > 1 && <Sparkline valores={serie} />}
-        <Delta pct={k.delta} invertido={k.invertido} />
-      </div>
+      {(mostrarSparkline || mostrarDelta) && (
+        <div style={sx("margin-top:auto;display:flex;flex-direction:column;gap:6px;min-height:0;overflow:hidden")}>
+          {mostrarSparkline && <Sparkline valores={serie} />}
+          {mostrarDelta && <Delta pct={k.delta} invertido={k.invertido} />}
+        </div>
+      )}
     </Bloco>
   );
 }

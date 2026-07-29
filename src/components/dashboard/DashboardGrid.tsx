@@ -4,7 +4,7 @@ import { Responsive, useContainerWidth, type Layout } from "react-grid-layout";
 
 import type { Viewport } from "@/lib/actions/dashboardLayout";
 import { sx } from "@/lib/sx";
-import { BLOCK_BY_ID, GRID_BREAKPOINTS, GRID_COLS, GRID_ROW_HEIGHT } from "./blocks";
+import { BLOCK_BY_ID, GRID_BREAKPOINTS, GRID_COLS, GRID_ROW_HEIGHT, viewportDoBreakpoint } from "./blocks";
 import { BlockContent } from "./BlockContent";
 import type { DashboardLayoutState } from "./useDashboardLayout";
 import type { TraffikView } from "./useTraffikState";
@@ -34,12 +34,17 @@ export function DashboardGrid({ v, grid }: { v: TraffikView; grid: DashboardLayo
               width={width}
               breakpoints={GRID_BREAKPOINTS}
               cols={GRID_COLS}
-              layouts={{ desktop: grid.layouts.desktop as Layout, mobile: grid.layouts.mobile as Layout }}
+              layouts={{
+                desktop: grid.layouts.desktop as Layout,
+                laptop: grid.layouts.desktop as Layout,
+                tablet: grid.layouts.mobile as Layout,
+                mobile: grid.layouts.mobile as Layout,
+              }}
               rowHeight={GRID_ROW_HEIGHT}
               margin={[16, 16]}
               containerPadding={[0, 0]}
               onLayoutChange={grid.onLayoutChange}
-              onBreakpointChange={(bp) => grid.setViewport(bp as Viewport)}
+              onBreakpointChange={(bp) => grid.setViewport(viewportDoBreakpoint(bp))}
               dragConfig={{ enabled: editing, handle: ".bloco-alca" }}
               resizeConfig={{ enabled: editing, handles: ["se"] }}
               className={editing ? "grid-editando" : undefined}

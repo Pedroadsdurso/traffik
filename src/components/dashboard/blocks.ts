@@ -25,10 +25,29 @@ export interface BlockDef {
   minH: number;
 }
 
-/** Grid de 12 colunas; `rowHeight` de 40px casa com a altura dos cards atuais. */
-export const GRID_COLS = { desktop: 12, mobile: 4 } as const;
+/**
+ * Grid de 12 colunas; `rowHeight` de 40px casa com a altura dos cards atuais.
+ *
+ * ⚠️ **Quatro breakpoints, não dois.** Com apenas `desktop:900 / mobile:0`, tudo
+ * acima de 900px usava 12 colunas — inclusive 1024px e, principalmente, **zoom
+ * alto**: a 150% uma tela de 1920 vira ~1280 CSS px, e 12 colunas espremidas
+ * faziam cada KPI virar uma tira estreita, com o conteúdo cortado e o layout
+ * parecendo embaralhado. Reduzir as colunas junto com a largura é o que faz o
+ * zoom se comportar.
+ *
+ * Os layouts salvos continuam sendo DOIS (`desktop` e `mobile`) — `laptop` e
+ * `tablet` reaproveitam o layout vizinho. Guardar quatro exigiria migration e o
+ * ganho seria pequeno: o que muda entre eles é o número de colunas, e o RGL já
+ * reflui sozinho.
+ */
+export const GRID_COLS = { desktop: 12, laptop: 12, tablet: 6, mobile: 4 } as const;
 export const GRID_ROW_HEIGHT = 40;
-export const GRID_BREAKPOINTS = { desktop: 900, mobile: 0 } as const;
+export const GRID_BREAKPOINTS = { desktop: 1280, laptop: 940, tablet: 640, mobile: 0 } as const;
+
+/** Breakpoint do RGL → viewport que persistimos. */
+export function viewportDoBreakpoint(bp: string): "desktop" | "mobile" {
+  return bp === "desktop" || bp === "laptop" ? "desktop" : "mobile";
+}
 
 /** KPIs — cards pequenos. A ordem aqui é a ordem do layout padrão. */
 const KPI_BLOCKS: BlockDef[] = (

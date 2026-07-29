@@ -26,6 +26,14 @@ function urlFacebook(nivel: Nivel, fbId: string, contaFb: string | null): string
 
 export function AdsManagerView({ v }: { v: TraffikView }) {
   const [selecao, setSelecao] = useState<Set<string>>(new Set());
+  /**
+   * Contas usadas como FILTRO das outras abas. Vazio = todas (consolidado).
+   *
+   * Reaproveita o checkbox que já existe na tabela: na aba Contas ele não tinha
+   * função nenhuma (não há ação em massa para conta), então marcar ali passa a
+   * significar "filtrar por esta conta" em vez de um segundo controle na tela.
+   */
+  const [contasFiltro, setContasFiltro] = useState<Set<string>>(new Set());
   const [fixadas, setFixadas] = useState<Set<string>>(new Set());
   const [ordemGasto, setOrdemGasto] = useState<"desc" | "asc">("desc");
   const [busy, setBusy] = useState(false);
@@ -43,10 +51,12 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
     // corrigir só o servidor não mudava nada na tela.
     const filtra = (nome: string, status: string) =>
       nome.toLowerCase().includes(v.adsSearch.toLowerCase()) && combinaStatus(status, v.adsStatus);
+    // Conjunto vazio = visão consolidada. Só filtra quando há conta marcada.
+    const daConta = (accountId: string) => contasFiltro.size === 0 || contasFiltro.has(accountId);
 
     let base: LinhaTabela[] = [];
     if (v.adsSub === "campaigns") {
-      base = raw.campaigns.filter((c) => filtra(c.name, c.status)).map((c) => ({
+      base = raw.campaigns.filter((c) => filtra(c.name, c.status) && daConta(c.accountId)).map((c) => ({
         id: c.id, fbId: c.fbId, nome: c.name, status: c.status,
         // Orçamento na campanha ⇒ CBO. É o que o modal de orçamento lê.
         sub: c.dailyBudget != null ? "CBO · orçamento na campanha" : "ABO · orçamento nos conjuntos",
@@ -58,7 +68,7 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
         ic: c.ic, cliquesAtribuidos: c.cliquesAtribuidos, vendasIniciadas: c.vendasIniciadas,
       }));
     } else if (v.adsSub === "adsets") {
-      base = raw.adSets.filter((a) => filtra(a.name, a.status)).map((a) => ({
+      base = raw.adSets.filter((a) => filtra(a.name, a.status) && daConta(a.accountId)).map((a) => ({
         id: a.id, fbId: a.fbId, nome: a.name, status: a.status, sub: a.campaignName,
         orcamento: a.dailyBudget, bidCap: a.bidAmount,
         // Conjunto só edita orçamento quando a campanha-mãe é ABO.
@@ -68,7 +78,7 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
         ic: a.ic, cliquesAtribuidos: a.cliquesAtribuidos, vendasIniciadas: a.vendasIniciadas,
       }));
     } else if (v.adsSub === "ads") {
-      base = raw.ads.filter((a) => filtra(a.name, a.status)).map((a) => ({
+      base = raw.ads.filter((a) => filtra(a.name, a.status) && daConta(a.accountId)).map((a) => ({
         id: a.id, fbId: a.fbId, nome: a.name, status: a.status, sub: a.campaignName,
         spend: a.spend, impressions: a.impressions, clicks: a.clicks,
         results: a.results, revenue: a.revenue,
@@ -83,16 +93,19 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
       }));
     }
     return base.sort((a, b) => (ordemGasto === "desc" ? b.spend - a.spend : a.spend - b.spend));
-  }, [raw, v.adsSub, v.adsSearch, v.adsStatus, ordemGasto]);
+  }, [raw, v.adsSub, v.adsSearch, v.adsStatus, ordemGasto, contasFiltro]);
 
   /**
    * Contagem da aba respeitando o filtro ativo. Usava `length` do array cru, o
    * que mostraria "12 campanhas" com a tabela vazia depois que "Todos os
    * status" passou a esconder arquivadas.
    */
-  const contar = (rows?: { name: string; status: string }[]) =>
+  const contar = (rows?: { name: string; status: string; accountId?: string }[]) =>
     (rows ?? []).filter(
-      (r) => combinaStatus(r.status, v.adsStatus) && r.name.toLowerCase().includes(v.adsSearch.toLowerCase()),
+      (r) =>
+        combinaStatus(r.status, v.adsStatus) &&
+        r.name.toLowerCase().includes(v.adsSearch.toLowerCase()) &&
+        (contasFiltro.size === 0 || !r.accountId || contasFiltro.has(r.accountId)),
     ).length;
 
   const selecionados: AlvoSelecionado[] = linhas
@@ -105,6 +118,16 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
     }));
 
   function alternar(id: string) {
+    if (v.adsSub === "accounts") {
+      // Na aba Contas o checkbox É o filtro.
+      setContasFiltro((f) => {
+        const n = new Set(f);
+        if (n.has(id)) n.delete(id);
+        else n.add(id);
+        return n;
+      });
+      return;
+    }
     setSelecao((s) => {
       const n = new Set(s);
       if (n.has(id)) n.delete(id);
@@ -113,6 +136,10 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
     });
   }
   function alternarTodas() {
+    if (v.adsSub === "accounts") {
+      setContasFiltro((f) => (f.size === linhas.length ? new Set() : new Set(linhas.map((l) => l.id))));
+      return;
+    }
     setSelecao((s) => (s.size === linhas.length ? new Set() : new Set(linhas.map((l) => l.id))));
   }
 
@@ -260,9 +287,37 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
         />
       )}
 
+      {/* Indicador do filtro ativo. Sem isto, sair da aba Contas e ver a lista
+          menor pareceria dado faltando, não filtro. */}
+      {contasFiltro.size > 0 && (
+        <div style={sx("display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:8px 11px;border-radius:var(--radius-md);background:color-mix(in srgb, var(--color-accent) 11%, transparent);border:1px solid color-mix(in srgb, var(--color-accent) 32%, transparent)")}>
+          <span style={sx("font-size:12px;font-weight:600")}>
+            Filtrando por {contasFiltro.size} {contasFiltro.size === 1 ? "conta" : "contas"}:
+          </span>
+          {[...contasFiltro].map((id) => {
+            const conta = raw?.accounts.find((a) => a.id === id);
+            return (
+              <span key={id}
+                style={sx("display:inline-flex;align-items:center;gap:5px;font-size:11.5px;padding:2px 4px 2px 9px;border-radius:999px;background:var(--color-surface-2);border:1px solid var(--color-border)")}>
+                {conta?.name ?? id}
+                <button type="button" aria-label={`Remover filtro ${conta?.name ?? id}`}
+                  onClick={() => setContasFiltro((f) => { const n = new Set(f); n.delete(id); return n; })}
+                  style={sx("background:none;border:0;cursor:pointer;color:var(--color-text-muted);padding:0 4px;font-size:13px;line-height:1")}>
+                  ✕
+                </button>
+              </span>
+            );
+          })}
+          <button className="btn btn-ghost" type="button" onClick={() => setContasFiltro(new Set())}
+            style={sx("margin-left:auto;font-size:11.5px;padding:3px 9px")}>
+            Limpar filtro
+          </button>
+        </div>
+      )}
+
       <AdsTable
         linhas={linhas}
-        selecionadas={selecao}
+        selecionadas={v.adsSub === "accounts" ? contasFiltro : selecao}
         onSelecionar={alternar}
         onSelecionarTodas={alternarTodas}
         onToggleStatus={(id) => {
