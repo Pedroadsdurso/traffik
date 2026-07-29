@@ -1,6 +1,7 @@
 "use server";
 
 import { auth } from "@/auth";
+import { getLastWorkspaceId } from "@/lib/actions/workspaces";
 import { prisma } from "@/lib/prisma";
 import type { RuleCondition } from "@/lib/rules/engine";
 import type { RuleAction, RuleLevel } from "@/generated/prisma/enums";
@@ -68,10 +69,26 @@ function toDTO(r: {
   };
 }
 
-export async function listRules(): Promise<RuleDTO[]> {
+/**
+ * Regras visíveis na Área de Trabalho ativa.
+ *
+ * ⚠️ **Regra GLOBAL (`workspaceId` nulo) aparece em TODA área** — e isso é
+ * proposital: ela realmente age sobre as campanhas desta área também.
+ * Escondê-la faria o usuário achar que ninguém está pausando as campanhas dele
+ * enquanto uma regra global as pausa.
+ *
+ * 🔴 O motor (`rules/engine.ts`) aplica o MESMO escopo antes de agir. As duas
+ * coisas andam juntas: esconder da tela sem escopar o motor deixaria uma regra
+ * mexendo em orçamento real de forma invisível.
+ */
+export async function listRules(workspaceId?: string | null): Promise<RuleDTO[]> {
   const userId = await requireUserId();
+  const ws = workspaceId ?? (await getLastWorkspaceId());
   const rules = await prisma.automationRule.findMany({
-    where: { userId },
+    where: {
+      userId,
+      ...(ws ? { OR: [{ workspaceId: null }, { workspaceId: ws }] } : {}),
+    },
     orderBy: { createdAt: "desc" },
     include: { logs: { orderBy: { ranAt: "desc" }, take: 5 } },
   });
@@ -82,6 +99,8 @@ export interface CreateRuleInput {
   name: string;
   targetProduct?: string | null;
   adAccountIds?: string[];
+  /** Área dona. Ausente/nulo = regra global (vale para todas as áreas). */
+  workspaceId?: string | null;
   level: RuleLevel;
   nameFilter?: string | null;
   action: RuleAction;
@@ -101,6 +120,7 @@ export async function createRule(input: CreateRuleInput): Promise<RuleDTO> {
       name: input.name.trim() || "Regra sem nome",
       targetProduct: input.targetProduct?.trim() || null,
       adAccountIds: input.adAccountIds ?? [],
+      workspaceId: input.workspaceId ?? null,
       level: input.level,
       nameFilter: input.nameFilter?.trim() || null,
       action: input.action,

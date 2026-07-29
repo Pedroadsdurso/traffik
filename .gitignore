@@ -48,3 +48,4 @@ next-env.d.ts
 # Backups do banco: contêm dados pessoais (e-mail de comprador, hash de senha,
 # tokens encriptados). NUNCA versionar.
 /backups
+graphify-out/

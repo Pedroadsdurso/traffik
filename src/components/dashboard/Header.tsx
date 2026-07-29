@@ -33,21 +33,10 @@ export function Header() {
         <h1 style={sx("margin:0")}>{title}</h1>
         <p style={sx("margin:0;opacity:.65;font-size:14px")}>{subtitle}</p>
 
-        {/* Estado da área ativa, ao lado do título. O seletor fica na sidebar;
-            este selo existe para o número na tela nunca ficar sem dono.
-            Não há mais o caso "consolidado": a tela mostra sempre UMA área. */}
-        {v.workspaceAtivaNome ? (
-          <div
-            style={sx(
-              "display:inline-flex;align-items:center;gap:7px;margin-top:8px;padding:5px 10px;border-radius:999px;font-size:12px;" +
-                `background:color-mix(in srgb, ${v.workspaceAtivaCor || "var(--color-accent)"} 15%, transparent);` +
-                `border:1px solid color-mix(in srgb, ${v.workspaceAtivaCor || "var(--color-accent)"} 55%, transparent)`,
-            )}
-          >
-            <span aria-hidden style={sx(`width:8px;height:8px;border-radius:3px;background:${v.workspaceAtivaCor || "var(--color-accent)"}`)} />
-            <span>Área <strong>{v.workspaceAtivaNome}</strong> · dados isolados</span>
-          </div>
-        ) : null}
+        {/* ⛔ NÃO reintroduzir um selo de área aqui. O seletor da sidebar já diz
+            em qual área o usuário está, e ele fica visível em toda tela — o selo
+            repetia essa informação em cima de cada página sem acrescentar nada.
+            Removido a pedido do usuário em 29/07/2026. */}
       </div>
       <div style={sx("display:flex;align-items:center;gap:12px;flex-shrink:0")}>
         <button

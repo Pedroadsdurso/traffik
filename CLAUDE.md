@@ -2046,6 +2046,141 @@ ela vira melhoria menor, não bloqueio.**
 > Se um dia voltar a ideia de onboarding guiado, o lugar dele é o **primeiro
 > acesso** (usuário sem nenhuma área), não a criação da segunda em diante.
 
+## ⛔ ATRIBUIÇÃO POR ÁREA — precedência (Sessão 1 de 5, 29/07/2026)
+
+**A área deixou de ser um conjunto de filtros e passou a ser uma pergunta:
+"de quem é esta linha?"** — que sempre tem exatamente uma resposta.
+
+### Por que o modelo de filtros foi abandonado
+
+As dimensões eram aplicadas em **AND** no `where` do Prisma. Isso tem duas
+falhas que nenhuma escolha de dimensão conserta:
+
+- uma linha podia **não casar com área nenhuma** e sumir do produto inteiro;
+- uma linha podia **casar com duas** e ser contada em dobro.
+
+Medido contra o backup real de produção: com a conta e o webhook numa área
+secundária, **12 de 14 vendas ficavam invisíveis nas duas áreas** — faturamento
+real, respondido com 200, fora de toda tela. É o mesmo `12 de 14` do incidente
+de 29/07, agora reproduzido por teste automatizado.
+
+### A ordem (`src/lib/areas/precedencia.ts`)
+
+| # | Critério | Vale para |
+|---|---|---|
+| 1 | **Conta de anúncio** (`Click.utmCampaign → Campaign → AdAccount`) | venda, clique, evento |
+| 2 | **Desempate por produto** (`Workspace.produtosDesempate`) | venda |
+| 3 | **Webhook** dono | venda |
+| 4 | **Credencial de API** dona | venda |
+| 5 | **Pixel** dono | evento |
+| 6 | **Principal** (catch-all) | tudo |
+
+> ### 🔴 A CONTA DE ANÚNCIO VENCE O WEBHOOK. Não inverta.
+> Venda que chega por um webhook da Área A mas foi atribuída a um clique de
+> conta da Área B **entra na B**.
+>
+> 1. **O custo não é negociável.** O gasto da conta vai para a área dela por FK.
+>    Separar receita de custo quebraria **as duas** áreas ao mesmo tempo: uma com
+>    faturamento sem custo, a outra com custo sem faturamento (ROI em −1,00x).
+> 2. O webhook é explícito sobre o **gateway**, não sobre a venda. Um gateway é
+>    compartilhável; uma campanha não.
+> 3. O erro fica **visível**: a venda aparece na área da campanha e o usuário
+>    corrige. Com o webhook vencendo, nasce um ROAS fantasma que nada denuncia.
+
+> ### ⚠️ O desempate por produto vem ANTES do webhook — e por quê
+> O plano o colocava depois, como desempate de "webhook ambíguo". Trocar
+> `Workspace.webhookIds` (array) por `Webhook.workspaceId` (FK) tornou a
+> ambiguidade **estruturalmente impossível** — uma coluna não comporta dois
+> donos —, então um desempate que só agisse na ambiguidade nunca dispararia.
+>
+> O caso de borda real continua: **gateway com URL única vendendo duas ofertas**.
+> Regra mais específica vence a mais geral, como em qualquer roteamento.
+>
+> ⚠️ **Produto renomeado no gateway** faz o desempate parar de casar, e a venda
+> cai no **dono do webhook** — não na Principal. Mandar para a Principal levaria
+> junto todas as vendas legítimas daquele webhook e esvaziaria uma área que
+> funcionava. Quem impede o erro silencioso é o **aviso** na tela de áreas.
+
+> ### 🔐 `mapa.areaValida()` é o ÚNICO ponto de validação de posse
+> Recebe o `?ws=` cru e devolve sempre uma área que existe, é deste usuário e
+> não está arquivada — caindo na Principal quando não é. **Nunca devolve "sem
+> área"**, que era o `{}` do modelo antigo e significava "não filtra nada".
+> Verificado em runtime: `ws` ausente, vazio e forjado devolvem os mesmos
+> números da Principal.
+
+### Configuração PERTENCE à área (migration `20260729180000`)
+
+`workspaceId` **nullable** em `AdAccount`, `Webhook`, `PixelConfig`,
+`AutomationRule`, `Expense` e `ApiCredential`; mais `Sale.apiCredentialId`,
+`Workspace.produtosDesempate` e `User.onboardingCompletedAt`.
+
+- **Tudo aditivo.** Nenhum `DROP`, `NOT NULL` ou `RENAME` — o build antigo em
+  produção continua funcionando (lição da `20260728120000`).
+- **Todas as FKs `ON DELETE SET NULL`, nunca `Cascade`.** Excluir uma área não
+  pode apagar webhook nem pixel: a URL já está no painel do gateway e o script
+  já está no site do cliente. Eles voltam para a Principal.
+- **O backfill preenche SÓ as áreas secundárias.** A Principal fica **NULL** e
+  segue catch-all. Preenchê-la com uma lista de inclusão foi exatamente o que
+  zerou o dashboard em produção.
+- **`AdAccount.workspaceId` é FK, não array**: "uma conta, uma área" virou
+  garantia **estrutural** em vez de checagem em código.
+
+> ### 🔴 `Expense.workspaceId` NULO = vale para TODAS as áreas
+> Taxa de gateway e imposto são globais por natureza. Migrá-los "para a
+> Principal" faria toda área secundária calcular lucro **sem imposto nenhum** —
+> e o número continuaria parecendo plausível. O backfill mantém NULO.
+
+> ### 🔴 REGRAS: escopar o motor e esconder da tela andam JUNTOS
+> `AutomationRule.workspaceId` nulo = regra global, e ela **aparece em toda
+> área** de propósito (ela realmente age sobre as campanhas de todas). Regra de
+> uma área só aparece nela — e `rules/engine.ts` **intersecta as contas-alvo com
+> as contas da área antes de agir**.
+>
+> Esconder da tela sem escopar o motor seria o pior dos dois mundos: uma regra
+> da Área A pausando campanha da Área B, invisível de B, mexendo em orçamento
+> real. **Se um dia só um dos dois couber, deixe a regra aparecendo em todas as
+> áreas — nunca deixe o motor desescopado.**
+
+### Testes
+
+`npm run test:areas` — **19 asserções, 0 falhas**, contra o backup REAL de
+produção (221 cliques, 24 vendas, 42 eventos). Só leitura, sem conexão de banco:
+`scripts/alias-loader.mjs` resolve o alias `@/` para o Node rodar o código do
+`src/` sem duplicá-lo.
+
+| Cenário | Resultado |
+|---|---|
+| Pós-migração, nada configurado | 221/221 · 14/14 · 42/42, tudo na Principal — **nenhum número muda** |
+| Com área secundária | 221/221 · 14/14 · 42/42 (108 cliques + 2 vendas na secundária) |
+| Modelo ANTIGO, mesma config | **12 de 14 vendas invisíveis** |
+| Precedência conta > webhook | ✓ |
+| Desempate por produto / produto renomeado | ✓ / degrada para o webhook |
+| Área arquivada | devolve as linhas para a Principal |
+
+Mais a verificação ponta a ponta contra o banco de **desenvolvimento**, com uma
+área secundária real: `B (fat 985,00 · gasto 420,00) + Principal (1.994,00 ·
+380,00) = TOTAL (2.979,00 · 800,00)` — **partição exata em faturamento, gasto,
+vendas e cliques**. Área de teste removida por id.
+
+### O que saiu
+
+`filtrosDaArea`, `FiltrosDaArea` e todo o `lib/ads/escopo.ts` (`filtroEfetivo`,
+`escopoExcluindo`, `carregarEscopoContas`). O arquivo continua existindo só com
+o aviso de não reintroduzir. O selo *"Área X · dados isolados"* saiu do Header —
+o seletor da sidebar já mostra a área ativa em toda tela.
+
+### ⚠️ Ainda NÃO feito (Sessões 2 a 5)
+
+- **Sessão 2** — Integrações, Regras e Taxas escopadas na tela; criação já
+  nascendo vinculada à área; aviso na aba UTMs.
+- **Sessão 3** — produto vira DESCOBERTA: remover `Workspace.products` da
+  criação, listar produtos descobertos com vendas e faturamento.
+- **Sessão 4** — assistente de 5 passos + `returnTo` no OAuth + rascunho.
+- **Sessão 5** — onboarding de primeiro acesso + banner de pendências.
+- `Workspace.accountIds`/`webhookIds`/`pixelConfigIds`/`products` **continuam no
+  schema sem uso** — só saem depois que a produção rodar este código (dois
+  deploys).
+
 ## 🎨 Marca e logos
 
 Arquivos em `public/logos/` (webp, vindos do designer):

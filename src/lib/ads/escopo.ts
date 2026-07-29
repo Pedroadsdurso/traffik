@@ -1,98 +1,16 @@
-import { prisma } from "@/lib/prisma";
-import { splitPipe } from "@/lib/utm/parse";
-
 /**
- * Escopo de contas de anúncio — o que decide se uma VENDA pertence a uma conta.
+ * ⛔ **MÓDULO APOSENTADO em 29/07/2026.**
  *
- * ## O bug que isto conserta
+ * O escopo por inclusão/exclusão de contas foi substituído pela ATRIBUIÇÃO POR
+ * PRECEDÊNCIA — `src/lib/areas/precedencia.ts`. O modelo antigo aplicava as
+ * dimensões da área em AND, e por isso uma linha podia não casar com área
+ * nenhuma e sumir do produto inteiro: medido no backup real de produção, **12
+ * de 14 vendas** ficavam invisíveis em todas as telas.
  *
- * O filtro "Conta de anúncio" do Dashboard só alcançava `DailyAdMetric`, ou
- * seja, **só o gasto**. Vendas, cliques e eventos de pixel passavam sem filtro
- * nenhum. Com uma conta selecionada, o ROAS virava
- * *(faturamento de TODAS as contas) ÷ (gasto de UMA)* — inflado, e junto com
- * ele ROI, CPA e Lucro.
+ * Não reintroduza `filtroEfetivo`/`escopoExcluindo`. A pergunta certa não é
+ * "casa com os filtros de A?" e sim "de quem é esta linha?", que sempre tem
+ * exatamente uma resposta — é isso que faz as áreas particionarem o total.
  *
- * ## Por que precisa de atribuição, e não de uma FK
- *
- * A venda chega pelo gateway e **não tem coluna de conta de anúncio** — ela só
- * sabe de qual clique veio. A ligação até a conta é a mesma cadeia que o
- * Gerenciador já usa para atribuir vendas por campanha:
- *
- *   Sale → Click.utmCampaign → `nome|id` → Campaign.fbCampaignId → AdAccount
- *
- * Preferimos o **id** do Facebook; caímos no nome para cliques antigos, gravados
- * antes dos códigos do Bloco 11.
- *
- * ⚠️ **Venda sem UTM não pertence a conta nenhuma.** Ela some quando há filtro
- * de conta — e isso é o comportamento correto: afirmar que ela é daquela conta
- * seria inventar atribuição. É a mesma regra do Gerenciador.
+ * O arquivo continua existindo só para este aviso ficar onde alguém procuraria.
  */
-export interface EscopoContas {
-  /** `true` quando este `utm_campaign` pertence a alguma das contas. */
-  combina(utmCampaign: string | null | undefined): boolean;
-}
-
-/** Escopo que aceita tudo — usado quando não há filtro de conta. */
-export const ESCOPO_TUDO: EscopoContas = { combina: () => true };
-
-/**
- * Escopo por EXCLUSÃO: aceita tudo, menos o que pertence às contas informadas.
- *
- * É o escopo da área **principal**, que é catch-all. A diferença em relação ao
- * escopo por inclusão não é cosmética:
- *
- * - **Inclusão** descarta o que não casa — inclusive `utm_campaign` NULO, que é
- *   todo o tráfego direto/orgânico, e venda sem clique associado.
- * - **Exclusão** só descarta o que casa com outra área. O não atribuível
- *   **fica**, porque ele não pertence a área nenhuma e precisa aparecer em
- *   algum lugar.
- *
- * ## Por que isto existe
- *
- * A principal nascia com todas as contas na lista de INCLUSÃO. Em produção isso
- * zerou o dashboard: 89 de 221 cliques (utm nulo) e 12 de 14 vendas (sem
- * clique) sumiram da tela, porque nenhum deles casa com campanha nenhuma. O
- * padrão antes das áreas era "todas as contas" = sem filtro, e era isso que
- * precisava ser preservado.
- */
-export function escopoExcluindo(excluidas: EscopoContas): EscopoContas {
-  return { combina: (utmCampaign) => !excluidas.combina(utmCampaign) };
-}
-
-export async function carregarEscopoContas(
-  userId: string,
-  accountIds: string[],
-): Promise<EscopoContas> {
-  const campanhas = await prisma.campaign.findMany({
-    where: { adAccountId: { in: accountIds }, adAccount: { userId } },
-    select: { fbCampaignId: true, name: true },
-  });
-
-  const porId = new Set(campanhas.map((c) => c.fbCampaignId));
-  const porNome = new Set(campanhas.map((c) => c.name.toLowerCase()));
-
-  return {
-    combina(utmCampaign) {
-      if (!utmCampaign) return false; // sem UTM não há como atribuir
-      const { id, name } = splitPipe(utmCampaign);
-      if (id) return porId.has(id);
-      return name ? porNome.has(name.toLowerCase()) : false;
-    },
-  };
-}
-
-/**
- * Resolve o filtro efetivo de um campo.
- *
- * A área de trabalho define a lista BASE e o filtro da tela escolhe dentro
- * dela — por isso é interseção, e não substituição: selecionar na tela uma
- * conta que não é da área não pode fazer dados de fora aparecerem.
- */
-export function filtroEfetivo(base: string[] | undefined, daTela: string, curinga: string): string[] | null {
-  const temBase = base && base.length > 0;
-  const telaEspecifica = daTela !== curinga;
-  if (!temBase && !telaEspecifica) return null; // sem filtro
-  if (!temBase) return [daTela];
-  if (!telaEspecifica) return base!;
-  return base!.includes(daTela) ? [daTela] : []; // fora da área: nada
-}
+export {};

@@ -1,5 +1,6 @@
 import { getUserTimezone } from "@/lib/userTimezone";
 import { setEntityStatus, updateDailyBudget } from "@/lib/facebook/manage";
+import { carregarMapaDeAreas } from "@/lib/areas/atribuicao";
 import { prisma } from "@/lib/prisma";
 import { addDaysToKey, dayKeyInTz, dayStart, keyToDateColumn, todayKey } from "@/lib/timezone";
 import type { RuleLevel } from "@/generated/prisma/enums";
@@ -92,6 +93,16 @@ interface RuleRow {
   userId: string;
   targetProduct: string | null;
   adAccountIds: string[];
+  /**
+   * Área dona da regra. NULO = regra GLOBAL, age sobre todas as contas.
+   *
+   * 🔴 **O escopo do MOTOR e a ocultação na TELA andam juntos, sempre.** Uma
+   * regra que sumisse da Área B mas continuasse pausando as campanhas dela
+   * mexeria em orçamento real de forma invisível — o pior dos dois mundos.
+   * Se um dia só um dos dois couber, a escolha é deixar a regra APARECENDO em
+   * todas as áreas, nunca deixar o motor desescopado.
+   */
+  workspaceId: string | null;
   level: RuleLevel;
   nameFilter: string | null;
   action: "ATIVAR" | "PAUSAR" | "AJUSTAR_ORCAMENTO";
@@ -111,7 +122,21 @@ export interface RuleRunResult {
 
 /** Carrega as entidades no nível da regra, com métricas e vendas atribuídas. */
 async function loadEntities(rule: RuleRow, start: Date, startKey: string) {
-  const accountFilter = rule.adAccountIds.length ? { id: { in: rule.adAccountIds } } : {};
+  // ── Escopo da área ────────────────────────────────────────────────────────
+  //
+  // Contas-alvo = as escolhidas na regra ∩ as contas da área dona dela. Regra
+  // sem conta escolhida ("todas") passa a significar "todas as contas DESTA
+  // área", não todas as contas do usuário.
+  //
+  // ⚠️ A interseção pode dar VAZIO — regra que mira uma conta que saiu da área.
+  // Aí ela não age sobre nada, que é o comportamento seguro: agir sobre a conta
+  // de outra área seria exatamente o que a área existe para impedir.
+  const mapa = await carregarMapaDeAreas(rule.userId);
+  const contasDaArea = rule.workspaceId ? mapa.contasDaArea(rule.workspaceId) : null;
+  const alvo = rule.adAccountIds.length ? rule.adAccountIds : contasDaArea;
+  const contasEfetivas =
+    alvo && contasDaArea ? alvo.filter((id) => contasDaArea.includes(id)) : alvo;
+  const accountFilter = contasEfetivas ? { id: { in: contasEfetivas } } : {};
   const nameContains = rule.nameFilter?.trim();
 
   // Vendas aprovadas no período para atribuição (utm_campaign / utm_content).

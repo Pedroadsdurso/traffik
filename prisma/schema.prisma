@@ -138,6 +138,10 @@ model User {
   /// gravados em UTC; este campo é o que define onde o dia começa e termina
   /// para este usuário. Ver `src/lib/timezone.ts`.
   timezone      String   @default("America/Sao_Paulo")
+  /// Quando o usuário concluiu (ou pulou) o assistente de primeiro acesso.
+  /// Nulo = nunca viu o onboarding. É o que impede o assistente de reaparecer
+  /// a cada login — a marcação fica no banco, não no navegador.
+  onboardingCompletedAt DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -206,11 +210,35 @@ model Workspace {
   /// Ids de `PixelConfig`, casando com `PixelEvent.pixelConfigId`.
   pixelConfigIds String[] @default([])
 
+  /// ⚖️ **Desempate por produto — só vale quando o webhook é AMBÍGUO.**
+  ///
+  /// Não é filtro e não entra na precedência normal. Existe para um caso de
+  /// borda único: o gateway que só permite UMA URL de webhook global, com duas
+  /// ofertas que precisam ficar em áreas diferentes. Aí o webhook deixa de
+  /// discriminar (está em duas áreas) e é este campo que decide.
+  ///
+  /// ⚠️ Os nomes vêm da lista de produtos **já descobertos** — a UI nunca
+  /// oferece texto livre. Se o produto for renomeado no gateway o desempate
+  /// simplesmente para de casar e a venda cai na Principal **com aviso na
+  /// tela**, que é a degradação segura. É por isso que ele pode ser texto:
+  /// falhar aqui não produz número errado, produz um aviso.
+  produtosDesempate String[] @default([])
+
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   layouts        DashboardLayout[]
   usuariosNaArea User[]            @relation("UltimaArea")
+
+  /// Configuração que PERTENCE à área. Todas com `onDelete: SetNull`:
+  /// excluir uma área não pode apagar webhook nem pixel — mataria integração
+  /// instalada e viva. Elas voltam a ser da Principal (catch-all).
+  adAccounts     AdAccount[]
+  webhooks       Webhook[]
+  pixelConfigs   PixelConfig[]
+  automationRules AutomationRule[]
+  expenses       Expense[]
+  apiCredentials ApiCredential[]
 
   @@index([userId])
 }
@@ -264,6 +292,15 @@ model AdAccount {
   user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   adProfileId String?
   adProfile   AdProfile? @relation(fields: [adProfileId], references: [id], onDelete: SetNull)
+  /// Área dona desta conta. **Uma conta pertence a no máximo UMA área** — e
+  /// agora isso é estrutural (uma coluna só não comporta dois donos), não uma
+  /// checagem em código como era com `Workspace.accountIds`.
+  ///
+  /// NULO = sem dono: aparece na Principal, que é catch-all. É o estado de
+  /// toda conta existente após a migração e de toda conta nova descoberta na
+  /// BM — atribuir sozinho violaria a regra de uma área só, em silêncio.
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   campaigns    Campaign[]
   adSets       AdSet[]
@@ -271,6 +308,7 @@ model AdAccount {
   pixelConfigs PixelConfig[]
 
   @@unique([userId, fbAccountId])
+  @@index([workspaceId])
   @@index([userId])
   @@index([adProfileId])
 }
@@ -451,6 +489,12 @@ model Sale {
   click     Click?   @relation(fields: [clickId], references: [id], onDelete: SetNull)
   webhookId String?
   webhook   Webhook? @relation(fields: [webhookId], references: [id], onDelete: SetNull)
+  /// Credencial que ingeriu esta venda, quando ela veio pela chave de API em
+  /// vez de um webhook. Sem esta coluna, `ApiCredential.workspaceId` não teria
+  /// como alcançar a venda: ela nasce com `webhookId` NULO e ficaria presa na
+  /// Principal para sempre.
+  apiCredentialId String?
+  apiCredential   ApiCredential? @relation(fields: [apiCredentialId], references: [id], onDelete: SetNull)
 
   notifications Notification[]
 
@@ -482,9 +526,20 @@ model Webhook {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   sales  Sale[]
+  /// Área dona deste webhook. NULO = sem dono, aparece na Principal.
+  ///
+  /// ⚠️ `SetNull`, nunca `Cascade`: excluir uma área **não pode** apagar o
+  /// webhook — a URL já está colada no painel do gateway e continuaria
+  /// recebendo venda que não teria mais onde cair. Ele volta para a Principal.
+  ///
+  /// ⚠️ O `token` (o que vai na URL) **não muda** ao trocar de área. Nenhum
+  /// identificador já emitido muda de significado — regra permanente.
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([token])
+  @@index([workspaceId])
 }
 
 /// Chave de API própria da Traffik: autentica o envio de eventos de venda
@@ -507,9 +562,17 @@ model ApiCredential {
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sales Sale[]
+  /// Área dona da chave. Venda ingerida por API nasce com `webhookId` NULO e,
+  /// sem isto, nunca poderia pertencer a área secundária sem clique atribuído —
+  /// cairia sempre na Principal. Com a área na credencial, a ingestão genérica
+  /// tem o mesmo poder de recorte que um webhook.
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([key])
+  @@index([workspaceId])
 }
 
 /// Layout do grid arrastável do Dashboard (Bloco 2). Uma linha por
@@ -604,12 +667,18 @@ model PixelConfig {
   user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   adAccountId String?
   adAccount   AdAccount? @relation(fields: [adAccountId], references: [id], onDelete: SetNull)
+  /// Área dona deste pixel. NULO = sem dono, aparece na Principal.
+  /// `SetNull` pelo mesmo motivo do webhook: o script já está instalado no site
+  /// do cliente e o `PixelConfig.id` embutido nele não pode mudar de sentido.
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   metaPixels MetaPixel[]
   eventRules PixelEventRule[]
 
   @@index([userId])
   @@index([adAccountId])
+  @@index([workspaceId])
 }
 
 /// Um pixel da Meta vinculado a um PixelConfig. Um "Pixel" da Traffik pode
@@ -680,9 +749,20 @@ model AutomationRule {
   userId String
   user   User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   logs   AutomationRuleLog[]
+  /// Área dona desta regra. NULO = regra GLOBAL (vale para todas as áreas) —
+  /// é o estado de toda regra existente após a migração.
+  ///
+  /// 🔴 **Esconder a regra da tela e não escopar o motor seria pior que não
+  /// fazer nada.** Uma regra da Área A que pausasse campanha da Área B ficaria
+  /// invisível de B, mexendo em orçamento real. Por isso `rules/engine.ts`
+  /// intersecta as contas-alvo com as contas da área — as duas coisas andam
+  /// juntas, sempre.
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([active])
+  @@index([workspaceId])
 }
 
 model AutomationRuleLog {
@@ -771,8 +851,19 @@ model Expense {
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 🔴 **NULO = vale para TODAS as áreas**, e é o padrão.
+  ///
+  /// Taxa de gateway e imposto são genuinamente globais. Migrar as despesas
+  /// existentes "para a Principal" faria toda área secundária calcular lucro
+  /// **sem imposto nenhum** — e o número continuaria parecendo plausível, que é
+  /// exatamente a falha silenciosa que este projeto já pagou caro duas vezes.
+  /// Por isso o backfill mantém NULO e o formulário nasce com "aplicar a todas
+  /// as áreas" marcado.
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   @@index([userId, type])
+  @@index([workspaceId])
 }
 
 // ─────────────────── Preferências de UI ───────────────────

@@ -2,7 +2,8 @@
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { filtrosDaArea } from "@/lib/actions/workspaces";
+import { getLastWorkspaceId } from "@/lib/actions/workspaces";
+import { carregarMapaDeAreas } from "@/lib/areas/atribuicao";
 import type { ReportPattern } from "@/generated/prisma/enums";
 
 export interface NotificationSettingsDTO {
@@ -107,54 +108,52 @@ export async function updateNotificationSettings(patch: Partial<NotificationSett
  */
 export async function listNotifications(workspaceId?: string | null): Promise<{ items: NotificationDTO[]; unread: number }> {
   const userId = await requireUserId();
-  const area = await filtrosDaArea(workspaceId);
-  const exW = area.excluirWebhooks?.length ? area.excluirWebhooks : null;
-  const exP = area.excluirProducts?.length ? area.excluirProducts : null;
-  // Catch-all: esconde só o que pertence a outra área. Notificação sem venda
-  // continua aparecendo, como já era.
-  if (exW || exP) {
-    const naoEhDeOutra = {
-      OR: [
-        { saleId: null },
-        {
-          sale: {
-            is: {
-              ...(exP ? { product: { notIn: exP } } : {}),
-              ...(exW ? { OR: [{ webhookId: null }, { webhookId: { notIn: exW } }] } : {}),
-            },
-          },
-        },
-      ],
-    };
-    const [items, unread] = await Promise.all([
-      prisma.notification.findMany({ where: { userId, ...naoEhDeOutra }, orderBy: { timestamp: "desc" }, take: 20 }),
-      prisma.notification.count({ where: { userId, read: false, ...naoEhDeOutra } }),
-    ]);
-    return { items: items.map(paraDTO), unread };
-  }
+  const mapa = await carregarMapaDeAreas(userId);
+/**
+ * Área ativa quando o chamador não informa uma.
+ *
+ * ⚠️ Resolvida AQUI DENTRO, e não no layout, de propósito: o layout busca os 12
+ * conjuntos de dados em `Promise.all`, e esperar a área antes de disparar tudo
+ * acrescentaria um round-trip (~99ms) ao caminho crítico de toda navegação.
+ * Assim os dois hops ficam dentro de um ramo que já roda em paralelo.
+ */
+  const areaAtiva = mapa.areaValida(workspaceId ?? (await getLastWorkspaceId()));
 
-  const daArea =
-    area.webhooks || area.products
-      ? {
-          OR: [
-            { saleId: null },
-            {
-              sale: {
-                is: {
-                  ...(area.webhooks ? { webhookId: { in: area.webhooks } } : {}),
-                  ...(area.products ? { product: { in: area.products } } : {}),
-                },
-              },
-            },
-          ],
-        }
-      : {};
+  // A venda vem junto porque a precedência precisa dela: sem `product`,
+  // `webhookId` e o UTM do clique não dá para dizer de que área a notificação é.
+  const selectSale = {
+    select: { product: true, webhookId: true, apiCredentialId: true, click: { select: { utmCampaign: true } } },
+  } as const;
 
-  const [items, unread] = await Promise.all([
-    prisma.notification.findMany({ where: { userId, ...daArea }, orderBy: { timestamp: "desc" }, take: 20 }),
-    prisma.notification.count({ where: { userId, read: false, ...daArea } }),
+  // ⚠️ Busca ampla e recorta em memória — a atribuição passa pelo
+  // `utm_campaign` no formato `nome|id`, que o Postgres não sabe interpretar.
+  // O teto existe para a consulta não crescer sem limite; a UI mostra 20.
+  const TETO = 300;
+  const [brutas, naoLidas] = await Promise.all([
+    prisma.notification.findMany({
+      where: { userId },
+      orderBy: { timestamp: "desc" },
+      take: TETO,
+      include: { sale: selectSale },
+    }),
+    prisma.notification.findMany({
+      where: { userId, read: false },
+      orderBy: { timestamp: "desc" },
+      take: TETO,
+      select: { id: true, sale: selectSale },
+    }),
   ]);
-  return { items: items.map(paraDTO), unread };
+
+  // ⚠️ **Notificação SEM venda aparece em TODA área.** Relatório diário, alerta
+  // de regra e aviso de sistema não pertencem a operação nenhuma; escondê-los
+  // faria o usuário perder aviso por estar na aba errada.
+  const daArea = (n: { sale: { product: string; webhookId: string | null; apiCredentialId: string | null; click: { utmCampaign: string | null } | null } | null }) =>
+    n.sale === null || mapa.areaDaVenda(n.sale).areaId === areaAtiva;
+
+  return {
+    items: brutas.filter(daArea).slice(0, 20).map(paraDTO),
+    unread: naoLidas.filter(daArea).length,
+  };
 }
 
 function paraDTO(n: {

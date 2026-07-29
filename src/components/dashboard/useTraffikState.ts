@@ -1212,8 +1212,8 @@ export function useTraffikState(
     },
     workspaces: s.workspaces,
     workspaceAtiva: s.workspaceAtiva,
-    workspaceAtivaNome: s.workspaces.find((w) => w.id === s.workspaceAtiva)?.name ?? null,
-    workspaceAtivaCor: s.workspaces.find((w) => w.id === s.workspaceAtiva)?.color ?? null,
+    // `workspaceAtivaNome`/`Cor` existiam só para o selo do Header, removido em
+    // 29/07/2026 — o seletor da sidebar já mostra a área ativa em toda tela.
     workspaceAtivaEhPrincipal: s.workspaces.find((w) => w.id === s.workspaceAtiva)?.isDefault ?? false,
     /**
      * Troca a área ativa. Persiste no servidor (item "lembrar a última área")
@@ -1526,6 +1526,9 @@ export function useTraffikState(
           name: f.name || `${f.metric} ${f.op} ${f.value}`,
           targetProduct: f.product === "todos" ? null : f.product,
           adAccountIds: f.account === "todas" ? [] : [f.account],
+          // A regra nasce vinculada à área ATIVA. Sem isto toda regra nasceria
+          // global e o escopo do motor nunca teria efeito.
+          workspaceId: s.workspaceAtiva,
           level: levelMap[f.level],
           action,
           actionParams,
@@ -1547,7 +1550,7 @@ export function useTraffikState(
         const json = await res.json();
         if (res.ok) {
           // Recarrega as regras para trazer os logs novos.
-          const fresh = await listRules();
+          const fresh = await listRules(s.workspaceAtiva);
           setS((st) => ({ ...st, ruleRunBusy: false, rules: fresh, ruleRunResult: `${json.evaluated} regra(s) avaliada(s), ${json.acted} com ação.` }));
         } else {
           set({ ruleRunBusy: false, ruleRunResult: json.error ?? "Falha ao executar." });

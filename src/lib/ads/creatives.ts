@@ -1,4 +1,5 @@
 import { getUserTimezone } from "@/lib/userTimezone";
+import { carregarMapaDeAreas } from "@/lib/areas/atribuicao";
 import { prisma } from "@/lib/prisma";
 import { addDaysToKey, dayStart, keyToDateColumn, todayKey } from "@/lib/timezone";
 import { splitPipe } from "@/lib/utm/parse";
@@ -36,28 +37,17 @@ export async function computeCreatives(
   opts: {
     period: CreativePeriod;
     sort: CreativeSort;
-    /** Filtros BASE da Área de Trabalho (carregados no servidor pelo `?ws=`). */
-    accounts?: string[];
-    products?: string[];
-    sources?: string[];
-    webhooks?: string[];
-    excluirAccounts?: string[];
-    excluirProducts?: string[];
-    excluirWebhooks?: string[];
+    /** Área de Trabalho ATIVA — só o id. Ver `lib/areas/precedencia.ts`. */
+    workspaceId?: string | null;
   },
 ): Promise<CreativeRow[]> {
   const tz = await getUserTimezone(userId);
   const { start, startKey } = rangeStart(opts.period, tz);
 
   // Sem filtro de tela aqui: a área é a única fonte de recorte da aba Criativos.
-  const contas = opts.accounts?.length ? opts.accounts : null;
-  const produtos = opts.products?.length ? opts.products : null;
-  const fontes = opts.sources?.length ? opts.sources : null;
-  const webhooks = opts.webhooks?.length ? opts.webhooks : null;
-  const exContas = opts.excluirAccounts?.length ? opts.excluirAccounts : null;
-  const exProdutos = opts.excluirProducts?.length ? opts.excluirProducts : null;
-  const exWebhooks = opts.excluirWebhooks?.length ? opts.excluirWebhooks : null;
-  const contaWhere = contas ? { id: { in: contas } } : exContas ? { id: { notIn: exContas } } : {};
+  const mapa = await carregarMapaDeAreas(userId);
+  const areaAtiva = mapa.areaValida(opts.workspaceId);
+  const contaWhere = { id: { in: mapa.contasDaArea(areaAtiva) } };
 
   const [ads, metrics, sales] = await Promise.all([
     prisma.ad.findMany({
@@ -80,15 +70,13 @@ export async function computeCreatives(
         userId,
         status: "APROVADA",
         timestamp: { gte: start },
-        ...(produtos ? { product: { in: produtos } } : {}),
-        ...(webhooks ? { webhookId: { in: webhooks } } : {}),
-        ...(fontes ? { click: { is: { utmSource: { in: fontes } } } } : {}),
-        ...(exProdutos ? { product: { notIn: exProdutos } } : {}),
-        ...(exWebhooks ? { OR: [{ webhookId: null }, { webhookId: { notIn: exWebhooks } }] } : {}),
       },
-      select: { value: true, click: { select: { utmContent: true } } },
+      select: { value: true, product: true, webhookId: true, apiCredentialId: true, click: { select: { utmContent: true, utmCampaign: true } } },
     }),
   ]);
+
+  // Pertinência de área: a venda chega pela atribuição, não por FK de conta.
+  const vendasDaArea = sales.filter((v) => mapa.areaDaVenda(v).areaId === areaAtiva);
 
   const metByAd = new Map<string, { spend: number; impressions: number; clicks: number }>();
   for (const m of metrics) {
@@ -103,7 +91,7 @@ export async function computeCreatives(
   // utm_content (`nome|id`, Bloco 11); caímos no nome para cliques antigos.
   const salesByAdId = new Map<string, { sales: number; revenue: number }>();
   const salesByName = new Map<string, { sales: number; revenue: number }>();
-  for (const s of sales) {
+  for (const s of vendasDaArea) {
     const { name, id } = splitPipe(s.click?.utmContent);
     const bump = (map: Map<string, { sales: number; revenue: number }>, key: string) => {
       const cur = map.get(key) ?? { sales: 0, revenue: 0 };

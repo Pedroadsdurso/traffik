@@ -1,4 +1,4 @@
-import { ESCOPO_TUDO, carregarEscopoContas, escopoExcluindo, filtroEfetivo } from "@/lib/ads/escopo";
+import { carregarMapaDeAreas, whereDespesasDaArea } from "@/lib/areas/atribuicao";
 import { getUserTimezone } from "@/lib/userTimezone";
 import { prisma } from "@/lib/prisma";
 import {
@@ -26,45 +26,17 @@ export interface DashboardFilters {
   from?: string; // ISO, apenas para custom
   to?: string;
   /**
-   * Filtro BASE da Área de Trabalho. Os campos acima são os filtros da TELA e
-   * agem dentro deste — a interseção é feita em `filtroEfetivo`, para que
-   * escolher na tela algo de fora da área não traga dados de fora.
-   */
-  accounts?: string[];
-  products?: string[];
-  sources?: string[];
-  /**
-   * Webhooks da área. Não existe filtro de tela correspondente, então age
-   * direto (sem interseção). É o recorte de venda **mais confiável** desta
-   * lista: `Sale.webhookId` é FK, ao contrário de `products`, que é texto livre
-   * do gateway e para de casar em silêncio quando o produto é renomeado lá.
+   * Área de Trabalho ATIVA. É só o id — o servidor resolve a pertinência de
+   * cada linha em `lib/areas/precedencia.ts`.
    *
-   * ⚠️ Venda sem `webhookId` (ingestão pela chave de API, ou importada) fica de
-   * fora quando este filtro está ligado — não há como afirmar que ela veio
-   * daquele gateway.
+   * ⛔ **Substituiu as listas de inclusão/exclusão** (`accounts`, `products`,
+   * `webhooks`, `excluir*`). Aquele modelo aplicava as dimensões em AND no
+   * `where`, e por isso uma linha podia não casar com área NENHUMA e sumir do
+   * produto inteiro — medido no backup de produção: 12 de 14 vendas. A
+   * pergunta agora é "de quem é esta linha?", que sempre tem exatamente uma
+   * resposta.
    */
-  webhooks?: string[];
-  /**
-   * Pixels da área, casando com `PixelEvent.pixelConfigId`.
-   *
-   * ⚠️ O Initiate Checkout gerado pelo WEBHOOK do gateway
-   * (`webhook/checkoutEvent.ts`) nasce **sem** `pixelConfigId` — ele não passa
-   * por pixel nenhum. Com este filtro ligado ele fica de fora, e o funil conta
-   * só os checkouts que o script daquele(s) pixel(s) viu.
-   */
-  pixelConfigs?: string[];
-  /**
-   * Listas de EXCLUSÃO da área principal (catch-all): mostra tudo menos o que
-   * as outras áreas reivindicaram, **preservando o não atribuível**.
-   *
-   * ⚠️ Não confundir com as listas de inclusão acima. Inclusão descarta o que
-   * não casa — inclusive clique sem `utm_campaign` e venda sem clique, que é
-   * como o dashboard de produção foi zerado. Exclusão só descarta o que casa.
-   */
-  excluirAccounts?: string[];
-  excluirProducts?: string[];
-  excluirWebhooks?: string[];
-  excluirPixelConfigs?: string[];
+  workspaceId?: string | null;
 }
 
 export interface DashboardData {
@@ -245,38 +217,37 @@ async function windowAggregate(
   tz: string,
 ) {
   // Listas efetivas = área de trabalho ∩ filtro da tela. `null` = sem filtro.
-  const contas = filtroEfetivo(filters.accounts, filters.account, "todas");
-  const produtos = filtroEfetivo(filters.products, filters.product, "todos");
-  const fontes = filtroEfetivo(filters.sources, filters.source, "todas");
-  // Webhooks e pixels não têm filtro na barra do topo: a área é a única fonte,
-  // então vão direto ao `where` sem interseção.
-  const webhooks = filters.webhooks?.length ? filters.webhooks : null;
-  const pixelConfigs = filters.pixelConfigs?.length ? filters.pixelConfigs : null;
+  // Filtros da TELA. `null` = sem filtro.
+  const produtos = filters.product !== "todos" ? [filters.product] : null;
+  const fontes = filters.source !== "todas" ? [filters.source] : null;
 
-  // Exclusões da área principal. `notIn` puro descartaria a linha com coluna
-  // NULA (em SQL, `NULL NOT IN (...)` é NULL, não TRUE) — e é justamente a
-  // venda sem webhook e o evento sem pixel que precisam SOBRAR aqui.
-  const exWebhooks = filters.excluirWebhooks?.length ? filters.excluirWebhooks : null;
-  const exPixels = filters.excluirPixelConfigs?.length ? filters.excluirPixelConfigs : null;
-  const exProdutos = filters.excluirProducts?.length ? filters.excluirProducts : null;
-  const exContas = filters.excluirAccounts?.length ? filters.excluirAccounts : null;
-  const foraDoWebhook = exWebhooks ? { OR: [{ webhookId: null }, { webhookId: { notIn: exWebhooks } }] } : {};
-  const foraDoPixel = exPixels ? { OR: [{ pixelConfigId: null }, { pixelConfigId: { notIn: exPixels } }] } : {};
+  // ── Pertinência de área ────────────────────────────────────────────────────
+  //
+  // O mapa é do usuário INTEIRO: decidir de quem é uma linha exige saber o que
+  // todas as áreas reivindicam. Ver `lib/areas/precedencia.ts` para a ordem de
+  // precedência e o porquê de a conta de anúncio vencer o webhook.
+  const mapa = await carregarMapaDeAreas(userId);
+  const areaAtiva = mapa.areaValida(filters.workspaceId);
+
+  // Contas do GASTO: as da área, intersectadas com o filtro da tela. Escolher
+  // na tela uma conta de fora da área não pode trazer dado de fora — por isso
+  // a lista vazia (nenhuma conta) em vez de ignorar a área.
+  const contasDaArea = mapa.contasDaArea(areaAtiva);
+  const contas =
+    filters.account !== "todas"
+      ? contasDaArea.includes(filters.account) ? [filters.account] : []
+      : contasDaArea;
+
+  // Filtro de conta da TELA aplicado a venda/clique/evento: a área já decidiu a
+  // pertinência, isto restringe dentro dela.
+  const contaDaTela = filters.account !== "todas" ? filters.account : null;
+  const naContaDaTela = (utmCampaign: string | null | undefined) =>
+    contaDaTela === null || mapa.contaDoUtm(utmCampaign) === contaDaTela;
+
   // As pontas em chave de dia do fuso do usuário — é assim que `DailyAdMetric`
   // (coluna `@db.Date`, um dia de calendário) tem de ser filtrada.
   const startKey = dayKeyInTz(start, tz);
   const endKey = dayKeyInTz(end, tz);
-  // ⚠️ O escopo de contas é resolvido ANTES das consultas: sem ele, o filtro de
-  // conta só alcançava `DailyAdMetric` — ou seja, só o gasto. Ver `ads/escopo.ts`.
-  const escopo = contas
-    ? await carregarEscopoContas(userId, contas)
-    : exContas
-      ? escopoExcluindo(await carregarEscopoContas(userId, exContas))
-      : ESCOPO_TUDO;
-  // `filtraPorConta` decide se o filtro em memória roda. Com exclusão ele roda
-  // também, mas descartando só o que é DE OUTRA área.
-  const filtraPorConta = Boolean(contas || exContas);
-
   const [sales, clicks, metrics, expenses, pixelEvents, initiateCheckouts] = await Promise.all([
     prisma.sale.findMany({
       where: {
@@ -284,9 +255,6 @@ async function windowAggregate(
         timestamp: { gte: start, lte: end },
         ...(produtos ? { product: { in: produtos } } : {}),
         ...(fontes ? { click: { is: { utmSource: { in: fontes } } } } : {}),
-        ...(webhooks ? { webhookId: { in: webhooks } } : {}),
-        ...(exProdutos ? { product: { notIn: exProdutos } } : {}),
-        ...foraDoWebhook,
       },
       select: {
         id: true,
@@ -298,6 +266,9 @@ async function windowAggregate(
         buyerName: true,
         buyerEmail: true, // identifica comprador único para o ARPU
         country: true, // "Vendas por país" (Bloco 5)
+        // O resolvedor de área precisa destes três para aplicar a precedência.
+        webhookId: true,
+        apiCredentialId: true,
         click: { select: { utmSource: true, utmCampaign: true, country: true } },
       },
       orderBy: { timestamp: "desc" },
@@ -325,7 +296,10 @@ async function windowAggregate(
       select: { date: true, spend: true, impressions: true, clicks: true },
     }),
     prisma.expense.findMany({
-      where: { userId, active: true },
+      // 🔴 `workspaceId` NULO = vale para TODAS as áreas. Taxa de gateway e
+      // imposto são globais; prendê-los a uma área faria toda área secundária
+      // calcular lucro SEM imposto, com número plausível.
+      where: { userId, active: true, ...whereDespesasDaArea(areaAtiva) },
       select: { type: true, calc: true, amount: true, paymentMethod: true },
     }),
     // Feed de atividade: TODOS os eventos do pixel, cada um com seu badge.
@@ -335,10 +309,8 @@ async function windowAggregate(
       where: {
         userId,
         timestamp: { gte: start, lte: end },
-        ...(pixelConfigs ? { pixelConfigId: { in: pixelConfigs } } : {}),
-        ...foraDoPixel,
       },
-      select: { id: true, event: true, url: true, fbclid: true, timestamp: true },
+      select: { id: true, event: true, url: true, fbclid: true, timestamp: true, pixelConfigId: true },
       orderBy: { timestamp: "desc" },
       take: 200,
     }),
@@ -355,38 +327,44 @@ async function windowAggregate(
         userId,
         event: "InitiateCheckout",
         timestamp: { gte: start, lte: end },
-        ...(pixelConfigs ? { pixelConfigId: { in: pixelConfigs } } : {}),
-        ...foraDoPixel,
       },
-      select: { id: true, fbclid: true, eventId: true },
+      select: { id: true, fbclid: true, eventId: true, pixelConfigId: true },
     }),
   ]);
 
-  // ── Aplicação do escopo de CONTA ──────────────────────────────────────────
+  // ── Aplicação da PERTINÊNCIA DE ÁREA ──────────────────────────────────────
   //
-  // Feito em memória, e não no `where`, porque a ligação venda→conta passa pelo
-  // `utm_campaign` no formato `nome|id`, que o Postgres não sabe interpretar.
-  // É a mesma atribuição do Gerenciador (ver `ads/escopo.ts`).
+  // Feito em memória, e não no `where`, por dois motivos: a ligação
+  // venda→conta passa pelo `utm_campaign` no formato `nome|id`, que o Postgres
+  // não sabe interpretar; e a precedência é uma cadeia de regras, não uma
+  // conjunção de colunas.
   //
-  // Antes disto, o filtro de conta alcançava só `DailyAdMetric`: o gasto era de
-  // uma conta e o faturamento de todas, o que inflava ROAS, ROI, CPA e Lucro.
-  const salesEscopo = filtraPorConta ? sales.filter((v) => escopo.combina(v.click?.utmCampaign)) : sales;
-  const clicksEscopo = filtraPorConta ? clicks.filter((c) => escopo.combina(c.utmCampaign)) : clicks;
+  // ⚠️ Toda linha tem dono — quando nenhuma regra casa, o dono é a Principal.
+  // É isso que garante que as áreas PARTICIONEM o total: nada some, nada é
+  // contado duas vezes. O modelo antigo (interseção de listas) não tinha essa
+  // garantia e perdia 12 de 14 vendas no backup real de produção.
+  const salesEscopo = sales.filter(
+    (v) => mapa.areaDaVenda(v).areaId === areaAtiva && naContaDaTela(v.click?.utmCampaign),
+  );
+  const clicksEscopo = clicks.filter(
+    (c) => mapa.areaDoClique(c).areaId === areaAtiva && naContaDaTela(c.utmCampaign),
+  );
 
-  // Evento de pixel não tem UTM: chega à conta pelo `fbclid` do clique casado.
-  // Sem fbclid não há atribuição possível, e o evento fica de fora do escopo.
-  const fbclidsNoEscopo = new Set(clicksEscopo.map((c) => c.fbclid).filter(Boolean) as string[]);
-  //
-  // ⚠️ Na EXCLUSÃO a regra se inverte: evento sem fbclid não pertence a outra
-  // área, então ele FICA. Na inclusão ele sai, porque não dá para afirmar que
-  // é da conta filtrada.
-  const noEscopoPorFbclid = (fbclid: string | null) => {
-    if (contas) return fbclid != null && fbclidsNoEscopo.has(fbclid);
-    if (exContas) return fbclid == null || fbclidsNoEscopo.has(fbclid);
-    return true;
+  // Evento de pixel não guarda UTM, mas guarda `fbclid` — e o clique tem o UTM.
+  // O mapa fbclid→utm_campaign sai dos cliques da JANELA, então um evento cujo
+  // clique é anterior a ela não chega à conta e é decidido pelo pixel.
+  const utmPorFbclid = new Map(
+    clicks.filter((c) => c.fbclid).map((c) => [c.fbclid as string, c.utmCampaign]),
+  );
+  const doArea = (e: { pixelConfigId?: string | null; fbclid: string | null }) => {
+    const utm = e.fbclid ? (utmPorFbclid.get(e.fbclid) ?? null) : null;
+    return (
+      mapa.areaDoEvento({ pixelConfigId: e.pixelConfigId ?? null, utmCampaign: utm }).areaId === areaAtiva
+      && naContaDaTela(utm)
+    );
   };
-  const pixelEventsEscopo = filtraPorConta ? pixelEvents.filter((e) => noEscopoPorFbclid(e.fbclid)) : pixelEvents;
-  const icsEscopo = filtraPorConta ? initiateCheckouts.filter((e) => noEscopoPorFbclid(e.fbclid)) : initiateCheckouts;
+  const pixelEventsEscopo = pixelEvents.filter(doArea);
+  const icsEscopo = initiateCheckouts.filter(doArea);
 
   // Visitantes distintos que iniciaram checkout. A chave é o `fbclid` (o mesmo
   // visitante clicando várias vezes carrega o mesmo), caindo no `eventId` e por

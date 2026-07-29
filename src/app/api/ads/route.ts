@@ -4,7 +4,6 @@ import type { NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { computeAdsOverview, type AdsFilters } from "@/lib/ads/overview";
 import { autoSyncSeNecessario, estadoSync } from "@/lib/facebook/autoSync";
-import { filtrosDaArea } from "@/lib/actions/workspaces";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -12,12 +11,9 @@ export async function GET(req: NextRequest) {
 
   const sp = req.nextUrl.searchParams;
   const period = (["hoje", "7d", "30d"].includes(sp.get("period") ?? "") ? sp.get("period") : "7d") as AdsFilters["period"];
-  // Filtros BASE da Área de Trabalho: a querystring leva só o ID (`?ws=`) e o
-  // servidor carrega as listas validando a posse. Ver o padrão no CLAUDE.md.
-  const area = await filtrosDaArea(sp.get("ws"));
-
   const filters: AdsFilters = {
-    ...area,
+    // Só o ID da área viaja; a posse é validada no servidor. Ver o CLAUDE.md.
+    workspaceId: sp.get("ws"),
     period,
     account: sp.get("account") || "todas",
     status: sp.get("status") || "todos",

@@ -1,4 +1,4 @@
-import { filtroEfetivo } from "@/lib/ads/escopo";
+import { carregarMapaDeAreas } from "@/lib/areas/atribuicao";
 import { getUserTimezone } from "@/lib/userTimezone";
 import { prisma } from "@/lib/prisma";
 import { addDaysToKey, dayStart, keyToDateColumn, todayKey } from "@/lib/timezone";
@@ -12,18 +12,13 @@ export interface AdsFilters {
   /**
    * Filtros BASE da Área de Trabalho, carregados no servidor a partir do `?ws=`.
    * Mesma convenção do Dashboard: lista vazia/ausente = não filtra, e o filtro
-   * da TELA age DENTRO destes (interseção via `filtroEfetivo`).
+   * da TELA age DENTRO dela.
    */
-  accounts?: string[];
-  products?: string[];
-  sources?: string[];
-  webhooks?: string[];
-  pixelConfigs?: string[];
-  /** Exclusões da área principal (catch-all). Ver `lib/ads/escopo.ts`. */
-  excluirAccounts?: string[];
-  excluirProducts?: string[];
-  excluirWebhooks?: string[];
-  excluirPixelConfigs?: string[];
+  /**
+   * Área de Trabalho ATIVA — só o id. A pertinência de cada linha é resolvida
+   * no servidor por `lib/areas/precedencia.ts`. Ver o porquê em `metrics.ts`.
+   */
+  workspaceId?: string | null;
 }
 
 export interface CampaignRow {
@@ -102,30 +97,18 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
   const { start, startKey } = rangeStart(filters.period, tz);
 
   // Área ∩ filtro da tela. `null` = sem filtro.
-  const contas = filtroEfetivo(filters.accounts, filters.account, "todas");
-  const produtos = filters.products?.length ? filters.products : null;
-  const fontes = filters.sources?.length ? filters.sources : null;
-  const webhooks = filters.webhooks?.length ? filters.webhooks : null;
-  const pixelConfigs = filters.pixelConfigs?.length ? filters.pixelConfigs : null;
-  // `contas` já é a interseção: quando a área restringe e a tela escolhe uma
-  // conta de fora dela, `filtroEfetivo` devolve `[]` e nada aparece — que é o
-  // correto, e não "cai no filtro da tela".
-  const exContas = filters.excluirAccounts?.length ? filters.excluirAccounts : null;
-  const exWebhooks = filters.excluirWebhooks?.length ? filters.excluirWebhooks : null;
-  const exPixels = filters.excluirPixelConfigs?.length ? filters.excluirPixelConfigs : null;
-  const exProdutos = filters.excluirProducts?.length ? filters.excluirProducts : null;
-  // `notIn` sozinho descartaria a linha de coluna NULA — e é a venda sem
-  // webhook / o evento sem pixel que precisam SOBRAR no catch-all.
-  const foraDoWebhook = exWebhooks ? { OR: [{ webhookId: null }, { webhookId: { notIn: exWebhooks } }] } : {};
-  const foraDoPixel = exPixels ? { OR: [{ pixelConfigId: null }, { pixelConfigId: { notIn: exPixels } }] } : {};
-  // A LISTAGEM do Gerenciador é sempre por inclusão: uma linha de campanha
-  // pertence a uma conta concreta, então "excluir as contas das outras áreas"
-  // vira "mostrar as demais".
-  const accountWhere = contas
-    ? { id: { in: contas } }
-    : exContas
-      ? { id: { notIn: exContas } }
-      : {};
+  // Pertinência de área — ver `lib/areas/precedencia.ts`.
+  const mapa = await carregarMapaDeAreas(userId);
+  const areaAtiva = mapa.areaValida(filters.workspaceId);
+  const contasDaArea = mapa.contasDaArea(areaAtiva);
+  const contas =
+    filters.account !== "todas"
+      ? contasDaArea.includes(filters.account) ? [filters.account] : []
+      : contasDaArea;
+
+  // A LISTAGEM do Gerenciador é sempre por inclusão: uma campanha pertence a
+  // uma conta concreta, e as contas da área são um conjunto fechado.
+  const accountWhere = { id: { in: contas } };
 
   const [accounts, campaigns, adSets, ads, metrics, sales, cliquesNossos, icEvents] = await Promise.all([
     prisma.adAccount.findMany({
@@ -165,19 +148,14 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
       where: {
         userId,
         timestamp: { gte: start },
-        ...(produtos ? { product: { in: produtos } } : {}),
-        ...(webhooks ? { webhookId: { in: webhooks } } : {}),
-        ...(fontes ? { click: { is: { utmSource: { in: fontes } } } } : {}),
-        ...(exProdutos ? { product: { notIn: exProdutos } } : {}),
-        ...foraDoWebhook,
       },
-      select: { value: true, status: true, click: { select: { utmCampaign: true, utmContent: true } } },
+      select: { value: true, status: true, product: true, webhookId: true, apiCredentialId: true, click: { select: { utmCampaign: true, utmContent: true } } },
     }),
     // Cliques rastreados por NÓS, atribuídos por UTM. Chegam ao banco no
     // instante do clique (via `t.js`), sem depender do Facebook.
     prisma.click.findMany({
-      where: { userId, timestamp: { gte: start }, ...(fontes ? { utmSource: { in: fontes } } : {}) },
-      select: { utmCampaign: true, utmContent: true },
+      where: { userId, timestamp: { gte: start } },
+      select: { utmCampaign: true, utmContent: true, fbclid: true },
     }),
     // Initiate Checkout do período. O evento não carrega campanha, mas carrega
     // o `fbclid` — e é por ele que se chega ao `Click`, que tem os UTMs. É o
@@ -187,17 +165,34 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
         userId,
         event: "InitiateCheckout",
         timestamp: { gte: start },
-        ...(pixelConfigs ? { pixelConfigId: { in: pixelConfigs } } : {}),
-        ...foraDoPixel,
       },
-      select: { id: true, fbclid: true, eventId: true },
+      select: { id: true, fbclid: true, eventId: true, pixelConfigId: true },
     }),
   ]);
+
+  // ── Pertinência de área ────────────────────────────────────────────────────
+  //
+  // As contas/campanhas já vêm recortadas pelo `accountWhere` (são ancoradas em
+  // conta por FK). Venda, clique e IC não são: eles chegam pela atribuição, e é
+  // aqui que a precedência decide de quem são.
+  //
+  // ⚠️ O clique é a ponte do IC até a campanha, então ele NÃO pode ser filtrado
+  // por área antes de montar o mapa fbclid→UTM — filtrar depois, ao contar.
+  const utmPorFbclid = new Map(
+    cliquesNossos.filter((c) => c.fbclid).map((c) => [c.fbclid as string, c.utmCampaign]),
+  );
+  const vendasDaArea = sales.filter((v) => mapa.areaDaVenda(v).areaId === areaAtiva);
+  const icDaArea = icEvents.filter((e) =>
+    mapa.areaDoEvento({
+      pixelConfigId: e.pixelConfigId,
+      utmCampaign: e.fbclid ? (utmPorFbclid.get(e.fbclid) ?? null) : null,
+    }).areaId === areaAtiva,
+  );
 
   // Um IC = um VISITANTE distinto, não um evento: o `px.js` dispara a cada
   // clique no link de checkout, e quem clica duas vezes gerava dois eventos.
   const icPorFbclid = new Map<string, Set<string>>();
-  for (const e of icEvents) {
+  for (const e of icDaArea) {
     if (!e.fbclid) continue; // sem fbclid não há como ligar a uma campanha
     const visitante = e.fbclid;
     const set = icPorFbclid.get(visitante) ?? new Set<string>();
@@ -250,7 +245,7 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
   const iniciadasByContentId = new Map<string, number>();
   const iniciadasByContentName = new Map<string, number>();
 
-  for (const s of sales) {
+  for (const s of vendasDaArea) {
     const camp = splitPipe(s.click?.utmCampaign);
     const cont = splitPipe(s.click?.utmContent);
     const aprovada = s.status === "APROVADA";
@@ -276,7 +271,9 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
   const cliquesByCampaignName = new Map<string, number>();
   const cliquesByContentId = new Map<string, number>();
   const cliquesByContentName = new Map<string, number>();
-  for (const c of cliquesNossos) {
+  // O clique tem UTM próprio: a área dele é decidida pela mesma regra da venda.
+  const cliquesDaArea = cliquesNossos.filter((c) => mapa.areaDoClique(c).areaId === areaAtiva);
+  for (const c of cliquesDaArea) {
     const camp = splitPipe(c.utmCampaign);
     const cont = splitPipe(c.utmContent);
     const inc = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
