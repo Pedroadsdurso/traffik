@@ -156,6 +156,49 @@ model User {
   webhookLogs          WebhookLog[]
   dashboardLayouts     DashboardLayout[]
   pixelEvents          PixelEvent[]
+  workspaces           Workspace[]
+
+  /// Última Área de Trabalho aberta, para a ferramenta voltar onde parou.
+  /// Nulo = "Todas as áreas". `SetNull` porque excluir a área não pode
+  /// derrubar o usuário.
+  lastWorkspaceId String?
+  lastWorkspace   Workspace? @relation("UltimaArea", fields: [lastWorkspaceId], references: [id], onDelete: SetNull)
+}
+
+/// Área de Trabalho: um CONJUNTO DE FILTROS salvo com um nome.
+///
+/// ⚠️ **Não é multi-tenant.** Os dados continuam todos do usuário, na mesma
+/// tabela, sem isolamento — a área só decide o que a tela mostra. Foi uma
+/// decisão explícita: a alternativa (projectId em 18 tabelas) exigia migração
+/// irreversível e regeneração de scripts, e não resolvia nada a mais para o
+/// caso de uso, que é "duas ofertas que não quero ver misturadas".
+///
+/// Excluir uma área NÃO apaga dado nenhum.
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  /// Cor do marcador na UI (hex). Opcional.
+  color     String?
+  archived  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Filtros da área. Listas VAZIAS significam "não filtra por este campo" —
+  /// diferente de uma lista com itens, que restringe.
+  accountIds String[] @default([])
+  /// Nomes de produto. São texto livre vindo do gateway: se o produto for
+  /// renomeado lá, o casamento silenciosamente para. A tela de gerenciar
+  /// mostra quantas vendas cada um casou justamente para isso ficar visível.
+  products   String[] @default([])
+  sources    String[] @default([])
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  layouts        DashboardLayout[]
+  usuariosNaArea User[]            @relation("UltimaArea")
+
+  @@index([userId])
 }
 
 // ─────────────────── Facebook: perfis, contas, estrutura ───────────────────
@@ -469,9 +512,16 @@ model DashboardLayout {
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Layout por Área de Trabalho. **Nulo = layout de "Todas as áreas"** — é o
+  /// que os layouts existentes viram, sem backfill nem perda.
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, viewport])
+  // Postgres trata NULL como distinto em UNIQUE, então a linha de "Todas as
+  // áreas" (workspaceId nulo) convive com as das áreas sem conflito.
+  @@unique([userId, workspaceId, viewport])
   @@index([userId])
+  @@index([workspaceId])
 }
 
 /// Evento recebido do script de pixel próprio (Bloco 5). Antes os eventos só

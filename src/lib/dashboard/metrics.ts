@@ -1,3 +1,4 @@
+import { ESCOPO_TUDO, carregarEscopoContas, filtroEfetivo } from "@/lib/ads/escopo";
 import { getUserTimezone } from "@/lib/userTimezone";
 import { prisma } from "@/lib/prisma";
 import {
@@ -24,6 +25,14 @@ export interface DashboardFilters {
   source: string; // "todas" ou utm_source
   from?: string; // ISO, apenas para custom
   to?: string;
+  /**
+   * Filtro BASE da Área de Trabalho. Os campos acima são os filtros da TELA e
+   * agem dentro deste — a interseção é feita em `filtroEfetivo`, para que
+   * escolher na tela algo de fora da área não traga dados de fora.
+   */
+  accounts?: string[];
+  products?: string[];
+  sources?: string[];
 }
 
 export interface DashboardData {
@@ -203,21 +212,25 @@ async function windowAggregate(
   end: Date,
   tz: string,
 ) {
-  const accountId = filters.account !== "todas" ? filters.account : null;
+  // Listas efetivas = área de trabalho ∩ filtro da tela. `null` = sem filtro.
+  const contas = filtroEfetivo(filters.accounts, filters.account, "todas");
+  const produtos = filtroEfetivo(filters.products, filters.product, "todos");
+  const fontes = filtroEfetivo(filters.sources, filters.source, "todas");
   // As pontas em chave de dia do fuso do usuário — é assim que `DailyAdMetric`
   // (coluna `@db.Date`, um dia de calendário) tem de ser filtrada.
   const startKey = dayKeyInTz(start, tz);
   const endKey = dayKeyInTz(end, tz);
-  const sourceFilter = filters.source !== "todas" ? filters.source : null;
-  const productFilter = filters.product !== "todos" ? filters.product : null;
+  // ⚠️ O escopo de contas é resolvido ANTES das consultas: sem ele, o filtro de
+  // conta só alcançava `DailyAdMetric` — ou seja, só o gasto. Ver `ads/escopo.ts`.
+  const escopo = contas ? await carregarEscopoContas(userId, contas) : ESCOPO_TUDO;
 
   const [sales, clicks, metrics, expenses, pixelEvents, initiateCheckouts] = await Promise.all([
     prisma.sale.findMany({
       where: {
         userId,
         timestamp: { gte: start, lte: end },
-        ...(productFilter ? { product: productFilter } : {}),
-        ...(sourceFilter ? { click: { is: { utmSource: sourceFilter } } } : {}),
+        ...(produtos ? { product: { in: produtos } } : {}),
+        ...(fontes ? { click: { is: { utmSource: { in: fontes } } } } : {}),
       },
       select: {
         id: true,
@@ -237,9 +250,9 @@ async function windowAggregate(
       where: {
         userId,
         timestamp: { gte: start, lte: end },
-        ...(sourceFilter ? { utmSource: sourceFilter } : {}),
+        ...(fontes ? { utmSource: { in: fontes } } : {}),
       },
-      select: { id: true, utmSource: true, utmCampaign: true, timestamp: true },
+      select: { id: true, utmSource: true, utmCampaign: true, fbclid: true, timestamp: true },
       orderBy: { timestamp: "desc" },
     }),
     prisma.dailyAdMetric.findMany({
@@ -250,7 +263,7 @@ async function windowAggregate(
         date: { gte: keyToDateColumn(startKey), lte: keyToDateColumn(endKey) },
         ad: {
           adAccount: { userId },
-          ...(accountId ? { adAccountId: accountId } : {}),
+          ...(contas ? { adAccountId: { in: contas } } : {}),
         },
       },
       select: { date: true, spend: true, impressions: true, clicks: true },
@@ -264,7 +277,7 @@ async function windowAggregate(
     // AddToCart eram gravados mas nunca apareciam na tela.
     prisma.pixelEvent.findMany({
       where: { userId, timestamp: { gte: start, lte: end } },
-      select: { id: true, event: true, url: true, timestamp: true },
+      select: { id: true, event: true, url: true, fbclid: true, timestamp: true },
       orderBy: { timestamp: "desc" },
       take: 200,
     }),
@@ -282,17 +295,36 @@ async function windowAggregate(
     }),
   ]);
 
+  // ── Aplicação do escopo de CONTA ──────────────────────────────────────────
+  //
+  // Feito em memória, e não no `where`, porque a ligação venda→conta passa pelo
+  // `utm_campaign` no formato `nome|id`, que o Postgres não sabe interpretar.
+  // É a mesma atribuição do Gerenciador (ver `ads/escopo.ts`).
+  //
+  // Antes disto, o filtro de conta alcançava só `DailyAdMetric`: o gasto era de
+  // uma conta e o faturamento de todas, o que inflava ROAS, ROI, CPA e Lucro.
+  const salesEscopo = contas ? sales.filter((v) => escopo.combina(v.click?.utmCampaign)) : sales;
+  const clicksEscopo = contas ? clicks.filter((c) => escopo.combina(c.utmCampaign)) : clicks;
+
+  // Evento de pixel não tem UTM: chega à conta pelo `fbclid` do clique casado.
+  // Sem fbclid não há atribuição possível, e o evento fica de fora do escopo.
+  const fbclidsNoEscopo = new Set(clicksEscopo.map((c) => c.fbclid).filter(Boolean) as string[]);
+  const noEscopoPorFbclid = (fbclid: string | null) =>
+    !contas || (fbclid != null && fbclidsNoEscopo.has(fbclid));
+  const pixelEventsEscopo = contas ? pixelEvents.filter((e) => noEscopoPorFbclid(e.fbclid)) : pixelEvents;
+  const icsEscopo = contas ? initiateCheckouts.filter((e) => noEscopoPorFbclid(e.fbclid)) : initiateCheckouts;
+
   // Visitantes distintos que iniciaram checkout. A chave é o `fbclid` (o mesmo
   // visitante clicando várias vezes carrega o mesmo), caindo no `eventId` e por
   // fim no id da linha quando não há como identificar — sem fbclid não dá para
   // afirmar que dois eventos são a mesma pessoa, e contar a mais é melhor do
   // que fundir visitantes diferentes num só.
   const checkoutsDistintos = new Set(
-    initiateCheckouts.map((e) => e.fbclid || e.eventId || `row:${e.id}`),
+    icsEscopo.map((e) => e.fbclid || e.eventId || `row:${e.id}`),
   ).size;
 
   return {
-    sales, clicks, metrics, expenses, pixelEvents,
+    sales: salesEscopo, clicks: clicksEscopo, metrics, expenses, pixelEvents: pixelEventsEscopo,
     initiateCheckouts: checkoutsDistintos,
     janela: { start, end, startKey, endKey, tz },
   };
