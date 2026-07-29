@@ -12,6 +12,7 @@ import type { PixelConfigDTO } from "@/lib/actions/pixels";
 import type { ApiCredentialDTO } from "@/lib/actions/apiCredentials";
 import type { RuleDTO } from "@/lib/actions/rules";
 import type { WebhookRowDTO } from "@/lib/actions/webhooks";
+import type { WorkspaceDTO } from "@/lib/actions/workspaces";
 import { sx } from "@/lib/sx";
 import { EditDashboardDrawer } from "./EditDashboardDrawer";
 import { Header } from "./Header";
@@ -33,6 +34,8 @@ export function DashboardShell({
   initialNotifications,
   initialExpenses,
   timezone,
+  workspaces,
+  lastWorkspaceId,
   children,
 }: {
   user?: SidebarUser;
@@ -49,6 +52,9 @@ export function DashboardShell({
   initialExpenses?: ExpenseDTO[];
   /** Fuso de referência do usuário — ver `src/lib/timezone.ts`. */
   timezone?: string;
+  workspaces?: WorkspaceDTO[];
+  /** Área lembrada do último acesso. `null` = "Todas as áreas". */
+  lastWorkspaceId?: string | null;
   children: ReactNode;
 }) {
   // A `key` pelo pathname remonta o nó a cada rota, disparando a animação de
@@ -68,6 +74,8 @@ export function DashboardShell({
     initialNotifications,
     initialExpenses,
     timezone,
+    workspaces,
+    lastWorkspaceId,
   });
 
   return (

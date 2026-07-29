@@ -48,6 +48,7 @@ import type { CreativeRow } from "@/lib/ads/creatives";
 import type { AdsOverview } from "@/lib/ads/overview";
 import type { DashboardData } from "@/lib/dashboard/metrics";
 import { brl, brl0, buildPoints, elapsed, multFmt, pct, roasFmt } from "@/lib/format";
+import { setLastWorkspaceId, type WorkspaceDTO } from "@/lib/actions/workspaces";
 import { DEFAULT_TIMEZONE } from "@/lib/timezone";
 import type { MetricKey, TabKey } from "./types";
 
@@ -97,6 +98,9 @@ interface State {
   syncLastAt: string | null;
   syncRodando: boolean;
   /** Sincronização manual (botão "Atualizar") em andamento. */
+  /** Áreas de Trabalho e a ativa. `null` = "Todas as áreas". */
+  workspaces: WorkspaceDTO[];
+  workspaceAtiva: string | null;
   syncManualBusy: boolean;
   /** Texto do resultado da última sincronização manual. */
   syncManualMsg: string | null;
@@ -216,6 +220,8 @@ function initialState(
     editDashOpen: false,
     syncLastAt: null,
     syncRodando: false,
+    workspaces: [],
+    workspaceAtiva: null,
     syncManualBusy: false,
     syncManualMsg: null,
     // O filtro sempre abre em HOJE. Era "7d", então sair e voltar à ferramenta
@@ -387,6 +393,8 @@ export function useTraffikState(
     initialExpenses?: ExpenseDTO[];
     initialApiCredentials?: ApiCredentialDTO[];
     timezone?: string;
+    workspaces?: WorkspaceDTO[];
+    lastWorkspaceId?: string | null;
   } = {},
 ) {
   const brandName = opts.brandName || "Traffik";
@@ -398,7 +406,28 @@ export function useTraffikState(
   // lados. Ver `src/lib/timezone.ts`.
   const timezone = opts.timezone || DEFAULT_TIMEZONE;
 
+  // As áreas vêm do servidor no primeiro render. `useEffect` em vez de estado
+  // inicial porque o layout é remontado a cada navegação e o hook não: semear
+  // no `useState` congelaria a lista da primeira página aberta.
+  const areasServidor = opts.workspaces;
+  const ultimaArea = opts.lastWorkspaceId ?? null;
+
   const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks, opts.dashboardPrefs, opts.initialProfiles, opts.initialPixels, opts.initialRules, opts.initialNotifSettings, opts.initialNotifications, opts.initialExpenses, opts.initialApiCredentials));
+
+  // Semeia as áreas vindas do servidor. Só quando MUDAM de verdade: o layout
+  // remonta a cada navegação e reescrever o estado igual derrubaria a área
+  // ativa que o usuário acabou de escolher.
+  useEffect(() => {
+    if (!areasServidor) return;
+    setS((st) => {
+      const igual = JSON.stringify(st.workspaces) === JSON.stringify(areasServidor);
+      const proxima = st.workspaceAtiva ?? ultimaArea;
+      // Área arquivada ou excluída não pode continuar ativa — cai para "Todas".
+      const valida = proxima && areasServidor.some((a) => a.id === proxima && !a.archived) ? proxima : null;
+      if (igual && st.workspaceAtiva === valida) return st;
+      return { ...st, workspaces: areasServidor, workspaceAtiva: valida };
+    });
+  }, [areasServidor, ultimaArea]);
 
   function set(patch: Partial<State>) {
     setS((st) => ({ ...st, ...patch }));
@@ -419,6 +448,9 @@ export function useTraffikState(
         source: s.dashSource,
       });
       // `from`/`to` só fazem sentido no período personalizado.
+      // A área ativa vai como ID: o servidor carrega os filtros dela. Mandar
+      // as listas pela URL deixaria o cliente forjar o escopo.
+      if (s.workspaceAtiva) qs.set("ws", s.workspaceAtiva);
       if (s.dashPeriod === "custom" && s.dashFrom) {
         qs.set("from", s.dashFrom);
         qs.set("to", s.dashTo ?? s.dashFrom);
@@ -436,7 +468,7 @@ export function useTraffikState(
     if (!liveUpdates) return () => { active = false; controller.abort(); };
     const stop = startPolling(load, DASH_POLL_MS);
     return () => { active = false; controller.abort(); stop(); };
-  }, [s.dashPeriod, s.dashFrom, s.dashTo, s.dashAccount, s.dashProduct, s.dashSource, s.refreshKey, liveUpdates]);
+  }, [s.dashPeriod, s.dashFrom, s.dashTo, s.dashAccount, s.dashProduct, s.dashSource, s.workspaceAtiva, s.refreshKey, liveUpdates]);
 
   // Gerenciador de anúncios: busca sob demanda (período/conta) — status e busca
   // são filtrados no cliente para não refazer a cada tecla.
@@ -445,6 +477,7 @@ export function useTraffikState(
     const controller = new AbortController();
     async function carregar() {
       const qs = new URLSearchParams({ period: s.adsPeriod, account: s.adsAccount });
+      if (s.workspaceAtiva) qs.set("ws", s.workspaceAtiva);
       try {
         const res = await fetch(`/api/ads?${qs.toString()}`, { signal: controller.signal });
         if (!res.ok) return;
@@ -470,7 +503,7 @@ export function useTraffikState(
     // (ver `startPolling`), então não custa nada com o painel em segundo plano.
     const stop = startPolling(() => { void carregar(); }, ADS_POLL_MS);
     return () => { active = false; controller.abort(); stop(); };
-  }, [s.adsPeriod, s.adsAccount, s.adsRefreshKey]);
+  }, [s.adsPeriod, s.adsAccount, s.workspaceAtiva, s.adsRefreshKey]);
 
   // Ranking de criativos.
   useEffect(() => {
@@ -1147,6 +1180,25 @@ export function useTraffikState(
           setS((st) => ({ ...st, syncManualBusy: false, syncManualMsg: "Falha de rede ao sincronizar." }));
         }
       })();
+    },
+    workspaces: s.workspaces,
+    workspaceAtiva: s.workspaceAtiva,
+    workspaceAtivaNome: s.workspaces.find((w) => w.id === s.workspaceAtiva)?.name ?? null,
+    /**
+     * Troca a área ativa. Persiste no servidor (item "lembrar a última área")
+     * mas NÃO espera a resposta: a troca de contexto tem que ser imediata, e
+     * uma falha ao gravar a preferência não pode travar a tela.
+     */
+    trocarWorkspace: (id: string | null) => {
+      setS((st) => ({
+        ...st,
+        workspaceAtiva: id,
+        // Força o refetch de dashboard, gerenciador e criativos.
+        refreshKey: st.refreshKey + 1,
+        adsRefreshKey: st.adsRefreshKey + 1,
+        dashLoading: true,
+      }));
+      void setLastWorkspaceId(id).catch(() => {});
     },
     syncManualBusy: s.syncManualBusy,
     syncManualMsg: s.syncManualMsg,

@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { computeDashboard, type DashPeriod, type DashboardFilters } from "@/lib/dashboard/metrics";
 import { autoSyncSeNecessario, estadoSync } from "@/lib/facebook/autoSync";
+import { filtrosDaArea } from "@/lib/actions/workspaces";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -14,7 +15,11 @@ export async function GET(req: NextRequest) {
     ? sp.get("period")
     : "7d") as DashPeriod;
 
+  // Filtros BASE da Área de Trabalho, carregados no servidor a partir do id.
+  const area = await filtrosDaArea(sp.get("ws"));
+
   const filters: DashboardFilters = {
+    ...area,
     period,
     account: sp.get("account") || "todas",
     product: sp.get("product") || "todos",

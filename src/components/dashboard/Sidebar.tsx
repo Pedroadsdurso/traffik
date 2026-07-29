@@ -10,6 +10,7 @@ import { logoutAction } from "@/lib/actions/session";
 import { sx } from "@/lib/sx";
 import { NavIcon } from "./Icon";
 import { useTraffik } from "./TraffikContext";
+import { WorkspaceSelect } from "./ui/WorkspaceSelect";
 
 export type SidebarUser = { name?: string | null; email?: string | null };
 
@@ -70,6 +71,11 @@ export function Sidebar({ user }: { user?: SidebarUser }) {
         priority
         style={{ width: "100%", maxWidth: 184, height: "auto", objectFit: "contain" }}
       />
+
+      {/* Seletor de Área de Trabalho — sempre visível, logo abaixo da marca.
+          É o controle que muda o contexto de TODA a ferramenta, então precisa
+          estar acima da navegação, não perdido dentro de uma página. */}
+      <WorkspaceSelect areas={v.workspaces} ativa={v.workspaceAtiva} onTrocar={v.trocarWorkspace} />
 
       <div style={sx("display:flex;flex-direction:column;gap:2px;margin-top:var(--space-2)")}>
         {NAV.map((grp) => (

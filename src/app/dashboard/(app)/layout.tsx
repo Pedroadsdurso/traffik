@@ -11,13 +11,14 @@ import { listPixels } from "@/lib/actions/pixels";
 import { getMyTimezone } from "@/lib/actions/profile";
 import { listRules } from "@/lib/actions/rules";
 import { listWebhooks } from "@/lib/actions/webhooks";
+import { getLastWorkspaceId, listWorkspaces } from "@/lib/actions/workspaces";
 import { getAppUrl } from "@/lib/appUrl";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const session = await auth();
   // Tudo em paralelo: o layout é o caminho crítico de todo carregamento de
   // página, então nenhuma dessas leituras pode virar uma cadeia sequencial.
-  const [webhooks, apiCredentials, prefs, profiles, pixels, rules, notifSettings, notifications, expenses, timezone] =
+  const [webhooks, apiCredentials, prefs, profiles, pixels, rules, notifSettings, notifications, expenses, timezone, workspaces, lastWorkspaceId] =
     await Promise.all([
       listWebhooks(),
       listApiCredentials(),
@@ -29,6 +30,8 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       listNotifications(),
       listExpenses(),
       getMyTimezone(),
+      listWorkspaces(),
+      getLastWorkspaceId(),
     ]);
 
   return (
@@ -46,6 +49,8 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       initialNotifications={notifications.items}
       initialExpenses={expenses}
       timezone={timezone}
+      workspaces={workspaces}
+      lastWorkspaceId={lastWorkspaceId}
     >
       {children}
     </DashboardShell>

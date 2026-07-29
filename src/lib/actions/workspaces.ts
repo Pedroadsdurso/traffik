@@ -145,3 +145,27 @@ export async function checarProdutosDaArea(id: string, dias = 30): Promise<{ pro
   const mapa = new Map(grupos.map((g) => [g.product, g._count._all]));
   return w.products.map((p) => ({ produto: p, vendas: mapa.get(p) ?? 0 }));
 }
+
+/**
+ * Filtros base de uma área, para o servidor aplicar.
+ *
+ * Recebe o **id** e carrega os filtros aqui — o cliente nunca manda as listas.
+ * Se mandasse, bastaria forjar a querystring para montar um escopo arbitrário;
+ * e a validação de posse (`userId` no `where`) é o que impede ler área alheia.
+ */
+export async function filtrosDaArea(
+  workspaceId: string | null | undefined,
+): Promise<{ accounts?: string[]; products?: string[]; sources?: string[] }> {
+  if (!workspaceId) return {};
+  const userId = await uid();
+  const w = await prisma.workspace.findFirst({
+    where: { id: workspaceId, userId },
+    select: { accountIds: true, products: true, sources: true },
+  });
+  if (!w) return {}; // área inexistente ou de outro usuário: sem filtro
+  return {
+    ...(w.accountIds.length ? { accounts: w.accountIds } : {}),
+    ...(w.products.length ? { products: w.products } : {}),
+    ...(w.sources.length ? { sources: w.sources } : {}),
+  };
+}
