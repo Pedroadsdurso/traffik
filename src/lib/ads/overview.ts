@@ -19,6 +19,11 @@ export interface AdsFilters {
   sources?: string[];
   webhooks?: string[];
   pixelConfigs?: string[];
+  /** Exclusões da área principal (catch-all). Ver `lib/ads/escopo.ts`. */
+  excluirAccounts?: string[];
+  excluirProducts?: string[];
+  excluirWebhooks?: string[];
+  excluirPixelConfigs?: string[];
 }
 
 export interface CampaignRow {
@@ -105,7 +110,22 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
   // `contas` já é a interseção: quando a área restringe e a tela escolhe uma
   // conta de fora dela, `filtroEfetivo` devolve `[]` e nada aparece — que é o
   // correto, e não "cai no filtro da tela".
-  const accountWhere = contas ? { id: { in: contas } } : {};
+  const exContas = filters.excluirAccounts?.length ? filters.excluirAccounts : null;
+  const exWebhooks = filters.excluirWebhooks?.length ? filters.excluirWebhooks : null;
+  const exPixels = filters.excluirPixelConfigs?.length ? filters.excluirPixelConfigs : null;
+  const exProdutos = filters.excluirProducts?.length ? filters.excluirProducts : null;
+  // `notIn` sozinho descartaria a linha de coluna NULA — e é a venda sem
+  // webhook / o evento sem pixel que precisam SOBRAR no catch-all.
+  const foraDoWebhook = exWebhooks ? { OR: [{ webhookId: null }, { webhookId: { notIn: exWebhooks } }] } : {};
+  const foraDoPixel = exPixels ? { OR: [{ pixelConfigId: null }, { pixelConfigId: { notIn: exPixels } }] } : {};
+  // A LISTAGEM do Gerenciador é sempre por inclusão: uma linha de campanha
+  // pertence a uma conta concreta, então "excluir as contas das outras áreas"
+  // vira "mostrar as demais".
+  const accountWhere = contas
+    ? { id: { in: contas } }
+    : exContas
+      ? { id: { notIn: exContas } }
+      : {};
 
   const [accounts, campaigns, adSets, ads, metrics, sales, cliquesNossos, icEvents] = await Promise.all([
     prisma.adAccount.findMany({
@@ -148,6 +168,8 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
         ...(produtos ? { product: { in: produtos } } : {}),
         ...(webhooks ? { webhookId: { in: webhooks } } : {}),
         ...(fontes ? { click: { is: { utmSource: { in: fontes } } } } : {}),
+        ...(exProdutos ? { product: { notIn: exProdutos } } : {}),
+        ...foraDoWebhook,
       },
       select: { value: true, status: true, click: { select: { utmCampaign: true, utmContent: true } } },
     }),
@@ -166,6 +188,7 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
         event: "InitiateCheckout",
         timestamp: { gte: start },
         ...(pixelConfigs ? { pixelConfigId: { in: pixelConfigs } } : {}),
+        ...foraDoPixel,
       },
       select: { id: true, fbclid: true, eventId: true },
     }),

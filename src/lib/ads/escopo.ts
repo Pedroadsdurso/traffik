@@ -35,6 +35,30 @@ export interface EscopoContas {
 /** Escopo que aceita tudo — usado quando não há filtro de conta. */
 export const ESCOPO_TUDO: EscopoContas = { combina: () => true };
 
+/**
+ * Escopo por EXCLUSÃO: aceita tudo, menos o que pertence às contas informadas.
+ *
+ * É o escopo da área **principal**, que é catch-all. A diferença em relação ao
+ * escopo por inclusão não é cosmética:
+ *
+ * - **Inclusão** descarta o que não casa — inclusive `utm_campaign` NULO, que é
+ *   todo o tráfego direto/orgânico, e venda sem clique associado.
+ * - **Exclusão** só descarta o que casa com outra área. O não atribuível
+ *   **fica**, porque ele não pertence a área nenhuma e precisa aparecer em
+ *   algum lugar.
+ *
+ * ## Por que isto existe
+ *
+ * A principal nascia com todas as contas na lista de INCLUSÃO. Em produção isso
+ * zerou o dashboard: 89 de 221 cliques (utm nulo) e 12 de 14 vendas (sem
+ * clique) sumiram da tela, porque nenhum deles casa com campanha nenhuma. O
+ * padrão antes das áreas era "todas as contas" = sem filtro, e era isso que
+ * precisava ser preservado.
+ */
+export function escopoExcluindo(excluidas: EscopoContas): EscopoContas {
+  return { combina: (utmCampaign) => !excluidas.combina(utmCampaign) };
+}
+
 export async function carregarEscopoContas(
   userId: string,
   accountIds: string[],

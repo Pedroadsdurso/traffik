@@ -41,6 +41,9 @@ export async function computeCreatives(
     products?: string[];
     sources?: string[];
     webhooks?: string[];
+    excluirAccounts?: string[];
+    excluirProducts?: string[];
+    excluirWebhooks?: string[];
   },
 ): Promise<CreativeRow[]> {
   const tz = await getUserTimezone(userId);
@@ -51,7 +54,10 @@ export async function computeCreatives(
   const produtos = opts.products?.length ? opts.products : null;
   const fontes = opts.sources?.length ? opts.sources : null;
   const webhooks = opts.webhooks?.length ? opts.webhooks : null;
-  const contaWhere = contas ? { id: { in: contas } } : {};
+  const exContas = opts.excluirAccounts?.length ? opts.excluirAccounts : null;
+  const exProdutos = opts.excluirProducts?.length ? opts.excluirProducts : null;
+  const exWebhooks = opts.excluirWebhooks?.length ? opts.excluirWebhooks : null;
+  const contaWhere = contas ? { id: { in: contas } } : exContas ? { id: { notIn: exContas } } : {};
 
   const [ads, metrics, sales] = await Promise.all([
     prisma.ad.findMany({
@@ -77,6 +83,8 @@ export async function computeCreatives(
         ...(produtos ? { product: { in: produtos } } : {}),
         ...(webhooks ? { webhookId: { in: webhooks } } : {}),
         ...(fontes ? { click: { is: { utmSource: { in: fontes } } } } : {}),
+        ...(exProdutos ? { product: { notIn: exProdutos } } : {}),
+        ...(exWebhooks ? { OR: [{ webhookId: null }, { webhookId: { notIn: exWebhooks } }] } : {}),
       },
       select: { value: true, click: { select: { utmContent: true } } },
     }),

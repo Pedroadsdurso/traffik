@@ -108,6 +108,31 @@ export async function updateNotificationSettings(patch: Partial<NotificationSett
 export async function listNotifications(workspaceId?: string | null): Promise<{ items: NotificationDTO[]; unread: number }> {
   const userId = await requireUserId();
   const area = await filtrosDaArea(workspaceId);
+  const exW = area.excluirWebhooks?.length ? area.excluirWebhooks : null;
+  const exP = area.excluirProducts?.length ? area.excluirProducts : null;
+  // Catch-all: esconde só o que pertence a outra área. Notificação sem venda
+  // continua aparecendo, como já era.
+  if (exW || exP) {
+    const naoEhDeOutra = {
+      OR: [
+        { saleId: null },
+        {
+          sale: {
+            is: {
+              ...(exP ? { product: { notIn: exP } } : {}),
+              ...(exW ? { OR: [{ webhookId: null }, { webhookId: { notIn: exW } }] } : {}),
+            },
+          },
+        },
+      ],
+    };
+    const [items, unread] = await Promise.all([
+      prisma.notification.findMany({ where: { userId, ...naoEhDeOutra }, orderBy: { timestamp: "desc" }, take: 20 }),
+      prisma.notification.count({ where: { userId, read: false, ...naoEhDeOutra } }),
+    ]);
+    return { items: items.map(paraDTO), unread };
+  }
+
   const daArea =
     area.webhooks || area.products
       ? {
@@ -129,16 +154,15 @@ export async function listNotifications(workspaceId?: string | null): Promise<{ 
     prisma.notification.findMany({ where: { userId, ...daArea }, orderBy: { timestamp: "desc" }, take: 20 }),
     prisma.notification.count({ where: { userId, read: false, ...daArea } }),
   ]);
+  return { items: items.map(paraDTO), unread };
+}
+
+function paraDTO(n: {
+  id: string; type: NotificationDTO["type"]; title: string; content: string; read: boolean; timestamp: Date;
+}): NotificationDTO {
   return {
-    items: items.map((n) => ({
-      id: n.id,
-      type: n.type,
-      title: n.title,
-      content: n.content,
-      read: n.read,
-      timestamp: n.timestamp.toISOString(),
-    })),
-    unread,
+    id: n.id, type: n.type, title: n.title, content: n.content,
+    read: n.read, timestamp: n.timestamp.toISOString(),
   };
 }
 

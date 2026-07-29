@@ -1593,6 +1593,59 @@ sem secret → 401** (antes, aceitava sem checar nada).
 > `/api/track/click` e `/api/pixel/event` são públicos **por desenho** — rodam no
 > site do cliente — e validam a posse do recurso pelo id.
 
+## 🔴 REGRESSÃO EM PRODUÇÃO: dashboard zerado pela área Principal (29/07/2026)
+
+**Sintoma:** depois do deploy, produção mostrou R$ 0,00 em tudo e "Nenhum evento
+no período", mesmo com 69 cliques e 3 vendas nas últimas 48h.
+
+**Causa: a área Principal nascia com todas as contas de anúncio numa lista de
+INCLUSÃO.** Isso liga `carregarEscopoContas`, que descarta tudo que não casa com
+uma campanha daquelas contas. Medido no backup de produção:
+
+| | No banco | Sobreviviam ao filtro |
+|---|---|---|
+| Cliques | 221 | **132** (89 com `utm_campaign` NULO — direto/orgânico) |
+| Vendas | 14 | **2** (12 sem clique associado) |
+
+Antes das Áreas de Trabalho, o padrão era "todas as contas" = **sem filtro
+nenhum**. Ao pré-preencher a Principal, troquei "sem filtro" por "inclusão de
+tudo" — que **não é a mesma coisa**, porque inclusão descarta o não atribuível.
+
+> ### ⛔ A PRINCIPAL FILTRA POR EXCLUSÃO. Nunca por inclusão.
+> `filtrosDaArea` devolve, para a área `isDefault`, listas `excluir*` montadas a
+> partir do que as **outras** áreas reivindicam — e **ignora as listas gravadas
+> nela**. Escopo derivado não fica desatualizado quando uma área nova aparece.
+>
+> - **Inclusão** (área secundária): mostra só o que casa. Clique sem UTM e venda
+>   sem clique **saem**, porque não dá para afirmar que são daquela conta.
+> - **Exclusão** (principal, catch-all): mostra tudo menos o que casa com outra
+>   área. O não atribuível **fica** — ele não pertence a ninguém e precisa
+>   aparecer em algum lugar.
+>
+> ⚠️ **`notIn` sozinho não serve.** Em SQL, `NULL NOT IN (...)` é NULL, não TRUE:
+> a venda sem `webhookId` e o evento sem `pixelConfigId` seriam descartados
+> justamente no catch-all. Por isso o padrão é
+> `OR: [{ campo: null }, { campo: { notIn } }]`.
+>
+> ⚠️ No escopo por fbclid a regra **se inverte**: na inclusão, evento sem fbclid
+> sai; na exclusão, ele fica.
+
+**Teste de regressão sobre os dados REAIS do backup:**
+
+| Cenário | Cliques | Vendas |
+|---|---|---|
+| Total no banco | 221 | 14 |
+| Antes (principal por inclusão) | 132 | **2** |
+| Depois (principal catch-all) | **221** | **14** |
+| Depois, com uma área secundária | B + Principal = **221** | **14** |
+
+Nada se perde e nada é contado duas vezes: as áreas particionam o total.
+
+> **Lição:** ao introduzir um filtro onde antes não havia nenhum, "incluir tudo"
+> **não** é equivalente a "não filtrar". A diferença aparece exatamente nas
+> linhas que não casam com critério nenhum — que costumam ser as mais
+> silenciosas e as mais importantes.
+
 ## ✅ Estado ao fim da sessão de 29/07/2026 — e o que NÃO foi verificado
 
 ### Entregue e verificado

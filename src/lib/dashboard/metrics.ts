@@ -1,4 +1,4 @@
-import { ESCOPO_TUDO, carregarEscopoContas, filtroEfetivo } from "@/lib/ads/escopo";
+import { ESCOPO_TUDO, carregarEscopoContas, escopoExcluindo, filtroEfetivo } from "@/lib/ads/escopo";
 import { getUserTimezone } from "@/lib/userTimezone";
 import { prisma } from "@/lib/prisma";
 import {
@@ -53,6 +53,18 @@ export interface DashboardFilters {
    * só os checkouts que o script daquele(s) pixel(s) viu.
    */
   pixelConfigs?: string[];
+  /**
+   * Listas de EXCLUSÃO da área principal (catch-all): mostra tudo menos o que
+   * as outras áreas reivindicaram, **preservando o não atribuível**.
+   *
+   * ⚠️ Não confundir com as listas de inclusão acima. Inclusão descarta o que
+   * não casa — inclusive clique sem `utm_campaign` e venda sem clique, que é
+   * como o dashboard de produção foi zerado. Exclusão só descarta o que casa.
+   */
+  excluirAccounts?: string[];
+  excluirProducts?: string[];
+  excluirWebhooks?: string[];
+  excluirPixelConfigs?: string[];
 }
 
 export interface DashboardData {
@@ -240,13 +252,30 @@ async function windowAggregate(
   // então vão direto ao `where` sem interseção.
   const webhooks = filters.webhooks?.length ? filters.webhooks : null;
   const pixelConfigs = filters.pixelConfigs?.length ? filters.pixelConfigs : null;
+
+  // Exclusões da área principal. `notIn` puro descartaria a linha com coluna
+  // NULA (em SQL, `NULL NOT IN (...)` é NULL, não TRUE) — e é justamente a
+  // venda sem webhook e o evento sem pixel que precisam SOBRAR aqui.
+  const exWebhooks = filters.excluirWebhooks?.length ? filters.excluirWebhooks : null;
+  const exPixels = filters.excluirPixelConfigs?.length ? filters.excluirPixelConfigs : null;
+  const exProdutos = filters.excluirProducts?.length ? filters.excluirProducts : null;
+  const exContas = filters.excluirAccounts?.length ? filters.excluirAccounts : null;
+  const foraDoWebhook = exWebhooks ? { OR: [{ webhookId: null }, { webhookId: { notIn: exWebhooks } }] } : {};
+  const foraDoPixel = exPixels ? { OR: [{ pixelConfigId: null }, { pixelConfigId: { notIn: exPixels } }] } : {};
   // As pontas em chave de dia do fuso do usuário — é assim que `DailyAdMetric`
   // (coluna `@db.Date`, um dia de calendário) tem de ser filtrada.
   const startKey = dayKeyInTz(start, tz);
   const endKey = dayKeyInTz(end, tz);
   // ⚠️ O escopo de contas é resolvido ANTES das consultas: sem ele, o filtro de
   // conta só alcançava `DailyAdMetric` — ou seja, só o gasto. Ver `ads/escopo.ts`.
-  const escopo = contas ? await carregarEscopoContas(userId, contas) : ESCOPO_TUDO;
+  const escopo = contas
+    ? await carregarEscopoContas(userId, contas)
+    : exContas
+      ? escopoExcluindo(await carregarEscopoContas(userId, exContas))
+      : ESCOPO_TUDO;
+  // `filtraPorConta` decide se o filtro em memória roda. Com exclusão ele roda
+  // também, mas descartando só o que é DE OUTRA área.
+  const filtraPorConta = Boolean(contas || exContas);
 
   const [sales, clicks, metrics, expenses, pixelEvents, initiateCheckouts] = await Promise.all([
     prisma.sale.findMany({
@@ -256,6 +285,8 @@ async function windowAggregate(
         ...(produtos ? { product: { in: produtos } } : {}),
         ...(fontes ? { click: { is: { utmSource: { in: fontes } } } } : {}),
         ...(webhooks ? { webhookId: { in: webhooks } } : {}),
+        ...(exProdutos ? { product: { notIn: exProdutos } } : {}),
+        ...foraDoWebhook,
       },
       select: {
         id: true,
@@ -305,6 +336,7 @@ async function windowAggregate(
         userId,
         timestamp: { gte: start, lte: end },
         ...(pixelConfigs ? { pixelConfigId: { in: pixelConfigs } } : {}),
+        ...foraDoPixel,
       },
       select: { id: true, event: true, url: true, fbclid: true, timestamp: true },
       orderBy: { timestamp: "desc" },
@@ -324,6 +356,7 @@ async function windowAggregate(
         event: "InitiateCheckout",
         timestamp: { gte: start, lte: end },
         ...(pixelConfigs ? { pixelConfigId: { in: pixelConfigs } } : {}),
+        ...foraDoPixel,
       },
       select: { id: true, fbclid: true, eventId: true },
     }),
@@ -337,16 +370,23 @@ async function windowAggregate(
   //
   // Antes disto, o filtro de conta alcançava só `DailyAdMetric`: o gasto era de
   // uma conta e o faturamento de todas, o que inflava ROAS, ROI, CPA e Lucro.
-  const salesEscopo = contas ? sales.filter((v) => escopo.combina(v.click?.utmCampaign)) : sales;
-  const clicksEscopo = contas ? clicks.filter((c) => escopo.combina(c.utmCampaign)) : clicks;
+  const salesEscopo = filtraPorConta ? sales.filter((v) => escopo.combina(v.click?.utmCampaign)) : sales;
+  const clicksEscopo = filtraPorConta ? clicks.filter((c) => escopo.combina(c.utmCampaign)) : clicks;
 
   // Evento de pixel não tem UTM: chega à conta pelo `fbclid` do clique casado.
   // Sem fbclid não há atribuição possível, e o evento fica de fora do escopo.
   const fbclidsNoEscopo = new Set(clicksEscopo.map((c) => c.fbclid).filter(Boolean) as string[]);
-  const noEscopoPorFbclid = (fbclid: string | null) =>
-    !contas || (fbclid != null && fbclidsNoEscopo.has(fbclid));
-  const pixelEventsEscopo = contas ? pixelEvents.filter((e) => noEscopoPorFbclid(e.fbclid)) : pixelEvents;
-  const icsEscopo = contas ? initiateCheckouts.filter((e) => noEscopoPorFbclid(e.fbclid)) : initiateCheckouts;
+  //
+  // ⚠️ Na EXCLUSÃO a regra se inverte: evento sem fbclid não pertence a outra
+  // área, então ele FICA. Na inclusão ele sai, porque não dá para afirmar que
+  // é da conta filtrada.
+  const noEscopoPorFbclid = (fbclid: string | null) => {
+    if (contas) return fbclid != null && fbclidsNoEscopo.has(fbclid);
+    if (exContas) return fbclid == null || fbclidsNoEscopo.has(fbclid);
+    return true;
+  };
+  const pixelEventsEscopo = filtraPorConta ? pixelEvents.filter((e) => noEscopoPorFbclid(e.fbclid)) : pixelEvents;
+  const icsEscopo = filtraPorConta ? initiateCheckouts.filter((e) => noEscopoPorFbclid(e.fbclid)) : initiateCheckouts;
 
   // Visitantes distintos que iniciaram checkout. A chave é o `fbclid` (o mesmo
   // visitante clicando várias vezes carrega o mesmo), caindo no `eventId` e por

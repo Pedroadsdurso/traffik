@@ -53,17 +53,15 @@ const dto = (w: WorkspaceDTO): WorkspaceDTO => ({ ...w });
 /**
  * Garante que o usuário tenha uma área PRINCIPAL. Idempotente.
  *
- * A principal representa "a operação padrão": nasce **já configurada com tudo
- * o que a conta tem hoje** (contas de anúncio, webhooks e pixels). Deixá-la
- * vazia seria o mesmo que "Todas as áreas", e aí criar a primeira secundária
- * faria a principal continuar somando os dados dela — que é exatamente o que
- * o isolamento existe para evitar.
+ * A principal é o **catch-all**: mostra tudo o que nenhuma outra área
+ * reivindicou, inclusive o que não é atribuível a conta nenhuma (clique sem
+ * `utm_campaign`, venda sem clique). Por isso ela nasce **sem listas**: o
+ * escopo dela é DERIVADO das outras áreas em `filtrosDaArea`, e assim nunca
+ * fica desatualizado quando uma área nova aparece.
  *
- * ⚠️ **`products` e `sources` ficam vazios de propósito.** São texto livre; uma
- * lista explícita congelaria o passado e um produto novo do gateway ficaria de
- * fora da principal **em silêncio**. Vazio = "todos", que é o comportamento
- * certo para a operação padrão. Contas/webhooks/pixels são conjuntos finitos e
- * gerenciados, então listá-los é seguro.
+ * ⚠️ Ela já nasceu com todas as contas numa lista de INCLUSÃO, e isso **zerou o
+ * dashboard em produção** — inclusão descarta o não atribuível. Não voltar
+ * atrás nisto.
  */
 export async function garantirAreaPrincipal(userIdParam?: string): Promise<WorkspaceDTO> {
   const userId = userIdParam ?? (await uid());
@@ -82,12 +80,6 @@ export async function garantirAreaPrincipal(userIdParam?: string): Promise<Works
     await prisma.workspace.update({ where: { id: maisAntiga.id }, data: { isDefault: true, archived: false } });
     return dto(await prisma.workspace.findUniqueOrThrow({ where: { id: maisAntiga.id }, select: SELECT }));
   }
-
-  const [contas, hooks, pixels] = await Promise.all([
-    prisma.adAccount.findMany({ where: { userId }, select: { id: true } }),
-    prisma.webhook.findMany({ where: { userId }, select: { id: true } }),
-    prisma.pixelConfig.findMany({ where: { userId }, select: { id: true } }),
-  ]);
 
   // ⚠️ `createMany({ skipDuplicates: true })` e NÃO `create` dentro de try/catch.
   //
@@ -110,9 +102,9 @@ export async function garantirAreaPrincipal(userIdParam?: string): Promise<Works
         color: "#8b5cf6",
         description: "Operação padrão. Esta área não pode ser excluída.",
         isDefault: true,
-        accountIds: contas.map((c) => c.id),
-        webhookIds: hooks.map((h) => h.id),
-        pixelConfigIds: pixels.map((p) => p.id),
+        // Listas VAZIAS: o escopo da principal é derivado das outras áreas em
+        // `filtrosDaArea` (catch-all por exclusão), não gravado aqui. Preenchê-la
+        // com todas as contas foi o que zerou o dashboard em produção.
       },
     ],
     skipDuplicates: true,
@@ -403,6 +395,27 @@ export async function checarProdutosDaArea(id: string, dias = 30): Promise<{ pro
   return r[id] ?? [];
 }
 
+/**
+ * Filtros que uma área impõe às consultas.
+ *
+ * Duas famílias, mutuamente exclusivas:
+ * - **inclusão** (`accounts`, `products`, …) — área secundária: mostra SÓ isto.
+ * - **exclusão** (`excluirAccounts`, …) — área principal (catch-all): mostra
+ *   tudo MENOS o que as outras áreas reivindicaram, e preserva o que não é
+ *   atribuível a área nenhuma.
+ */
+export interface FiltrosDaArea {
+  accounts?: string[];
+  products?: string[];
+  sources?: string[];
+  webhooks?: string[];
+  pixelConfigs?: string[];
+  excluirAccounts?: string[];
+  excluirProducts?: string[];
+  excluirWebhooks?: string[];
+  excluirPixelConfigs?: string[];
+}
+
 /** Tudo o que a tela de gerenciar precisa para montar os seletores. */
 export interface OpcoesAreas {
   accounts: { id: string; name: string; fbAccountId: string; profileName: string }[];
@@ -447,13 +460,7 @@ export async function carregarOpcoesAreas(): Promise<OpcoesAreas> {
  * Se mandasse, bastaria forjar a querystring para montar um escopo arbitrário;
  * e a validação de posse (`userId` no `where`) é o que impede ler área alheia.
  */
-export async function filtrosDaArea(workspaceId: string | null | undefined): Promise<{
-  accounts?: string[];
-  products?: string[];
-  sources?: string[];
-  webhooks?: string[];
-  pixelConfigs?: string[];
-}> {
+export async function filtrosDaArea(workspaceId: string | null | undefined): Promise<FiltrosDaArea> {
   const userId = await uid();
 
   // ⛔ **NÃO existe mais o caso "sem área".** Antes, `ws` ausente ou inválido
@@ -469,9 +476,43 @@ export async function filtrosDaArea(workspaceId: string | null | undefined): Pro
     (workspaceId
       ? await prisma.workspace.findFirst({
           where: { id: workspaceId, userId },
-          select: { accountIds: true, products: true, sources: true, webhookIds: true, pixelConfigIds: true },
+          select: { isDefault: true, accountIds: true, products: true, sources: true, webhookIds: true, pixelConfigIds: true },
         })
       : null) ?? (await garantirAreaPrincipal(userId));
+
+  // ── Área PRINCIPAL: catch-all, filtra por EXCLUSÃO ──────────────────────
+  //
+  // A principal é "a operação padrão", e o que ela precisa mostrar é **tudo o
+  // que nenhuma outra área reivindicou** — incluindo o que não é atribuível a
+  // conta nenhuma: clique sem `utm_campaign` (direto/orgânico) e venda que o
+  // gateway mandou sem clique associado.
+  //
+  // ⚠️ Ela nasceu com as contas numa lista de INCLUSÃO, e isso **zerou o
+  // dashboard em produção**: 89 de 221 cliques e 12 de 14 vendas sumiram, por
+  // não casarem com campanha nenhuma. Inclusão descarta o não atribuível;
+  // exclusão o preserva. Com uma área só, nada é excluído e o comportamento é
+  // idêntico ao de antes das Áreas de Trabalho existirem.
+  //
+  // As listas gravadas na principal são IGNORADAS de propósito: o escopo dela é
+  // derivado das outras áreas, então não há como ficar desatualizado quando uma
+  // área nova é criada.
+  if (w.isDefault) {
+    const outras = await prisma.workspace.findMany({
+      where: { userId, isDefault: false, archived: false },
+      select: { accountIds: true, products: true, webhookIds: true, pixelConfigIds: true },
+    });
+    const uniao = (f: (o: (typeof outras)[number]) => string[]) => [...new Set(outras.flatMap(f))];
+    const excluirAccounts = uniao((o) => o.accountIds);
+    const excluirProducts = uniao((o) => o.products);
+    const excluirWebhooks = uniao((o) => o.webhookIds);
+    const excluirPixelConfigs = uniao((o) => o.pixelConfigIds);
+    return {
+      ...(excluirAccounts.length ? { excluirAccounts } : {}),
+      ...(excluirProducts.length ? { excluirProducts } : {}),
+      ...(excluirWebhooks.length ? { excluirWebhooks } : {}),
+      ...(excluirPixelConfigs.length ? { excluirPixelConfigs } : {}),
+    };
+  }
 
   return {
     ...(w.accountIds.length ? { accounts: w.accountIds } : {}),

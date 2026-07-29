@@ -79,14 +79,20 @@ function pendencias(
   const nada =
     !a.accountIds.length && !a.products.length && !a.sources.length && !a.webhookIds.length && !a.pixelConfigIds.length;
 
+  // A PRINCIPAL não tem pendência de configuração: ela é o catch-all e o
+  // escopo dela é derivado das outras áreas, não configurado à mão.
+  if (a.isDefault) {
+    p.push({
+      nivel: "info",
+      texto:
+        totalDeAreas <= 1
+          ? "Área padrão: mostra tudo. Ao criar outras áreas, o que elas levarem sai daqui automaticamente."
+          : "Área padrão: mostra tudo o que as outras áreas não levaram, inclusive tráfego sem UTM e venda sem clique.",
+    });
+    return p;
+  }
+
   if (nada) {
-    // Área principal sozinha vendo tudo é o estado CORRETO, não uma pendência:
-    // quem tem uma operação só não precisa configurar nada. Vira aviso a partir
-    // do momento em que existe uma segunda área para disputar os dados.
-    if (a.isDefault && totalDeAreas <= 1) {
-      p.push({ nivel: "info", texto: "Sem vínculos — enquanto esta for a única área, ela mostra tudo, que é o esperado." });
-      return p;
-    }
     p.push({ nivel: "aviso", texto: "Sem nenhum vínculo — esta área vê TUDO, inclusive o que pertence às outras áreas. Configure ao menos a conta de anúncio e o webhook." });
     return p;
   }
