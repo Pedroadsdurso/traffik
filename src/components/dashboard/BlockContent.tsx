@@ -10,6 +10,8 @@ import { AreaChart } from "./ui/AreaChart";
 import { CountryMap } from "./ui/CountryMap";
 import { Donut } from "./ui/Donut";
 import { Funnel } from "./ui/Funnel";
+import { InfoTip } from "./ui/InfoTip";
+import { METRICAS } from "@/lib/explicacoes";
 import { BLOCK_BY_ID } from "./blocks";
 import type { TraffikView } from "./useTraffikState";
 
@@ -29,7 +31,13 @@ function KpiBloco({ v, metric }: { v: TraffikView; metric: string }) {
   return (
     <Bloco>
       {/* Hierarquia: label pequeno em cima, número grande no meio, comparação embaixo. */}
-      <div className="card-kicker">{k.label}</div>
+      <div className="card-kicker" style={sx("display:flex;align-items:center;gap:4px")}>
+        {k.label}
+        {/* Explicação da métrica, com fórmula e os valores do período. */}
+        {METRICAS[metric] && (
+          <InfoTip conteudo={{ ...METRICAS[metric]!, valores: v.valoresMetrica(metric) }} tamanho={12} />
+        )}
+      </div>
       <div style={sx("font-family:var(--font-heading);font-weight:500;font-size:26px;line-height:1.1;font-variant-numeric:tabular-nums;margin-top:2px")}>
         {k.value}
       </div>

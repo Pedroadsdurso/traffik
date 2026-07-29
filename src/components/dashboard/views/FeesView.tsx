@@ -3,7 +3,9 @@
 import { useState, useTransition } from "react";
 
 import { setMyTimezone } from "@/lib/actions/profile";
+import { CONFIG } from "@/lib/explicacoes";
 import { sx } from "@/lib/sx";
+import { InfoTip } from "../ui/InfoTip";
 import { TIMEZONE_OPTIONS, partsInTz } from "@/lib/timezone";
 import type { TraffikView } from "../useTraffikState";
 
@@ -45,7 +47,10 @@ function CardFusoHorario({ inicial }: { inicial: string }) {
 
   return (
     <div className="card elev-sm">
-      <div className="card-kicker">Fuso horário</div>
+      <div className="card-kicker" style={sx("display:flex;align-items:center;gap:4px")}>
+        Fuso horário
+        <InfoTip conteudo={CONFIG.fusoHorario!} tamanho={12} />
+      </div>
       <div className="card-title">Referência de dia e hora</div>
       <p className="text-muted" style={sx("font-size:12px;margin-top:var(--space-2);line-height:1.5")}>
         Define onde o dia começa e termina em todos os relatórios — dashboard, vendas

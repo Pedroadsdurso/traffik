@@ -4,8 +4,10 @@ import { useRef, useState } from "react";
 
 import { brl } from "@/lib/format";
 import { calcularFunil, type EtapaEntrada } from "@/lib/funnel";
+import { FUNIL } from "@/lib/explicacoes";
 import { sx } from "@/lib/sx";
 import { ChartEmpty, ChartTooltip, GRAD_FUNIL, useEntrada } from "./chartKit";
+import { InfoTip } from "./InfoTip";
 
 export type { EtapaEntrada as EtapaFunil };
 
@@ -88,9 +90,10 @@ export function Funnel({ etapas, ticketMedio = 0 }: { etapas: EtapaEntrada[]; ti
         {/* Rótulos das etapas */}
         <div style={sx(`display:grid;grid-template-columns:repeat(${n},1fr);text-align:center;gap:4px`)}>
           {calc.map((e) => (
-            <div key={e.label} title={e.label}
-              style={sx("font-size:11.5px;font-weight:600;color:color-mix(in srgb, var(--color-text) 82%, transparent);overflow:hidden;text-overflow:ellipsis;white-space:nowrap")}>
-              {e.curto}
+            <div key={e.label}
+              style={sx("font-size:11.5px;font-weight:600;color:color-mix(in srgb, var(--color-text) 82%, transparent);display:flex;align-items:center;justify-content:center;gap:3px;min-width:0")}>
+              <span style={sx("overflow:hidden;text-overflow:ellipsis;white-space:nowrap")}>{e.curto}</span>
+              {e.chaveInfo && FUNIL[e.chaveInfo] && <InfoTip conteudo={FUNIL[e.chaveInfo]!} tamanho={11} />}
             </div>
           ))}
         </div>
@@ -207,6 +210,14 @@ export function Funnel({ etapas, ticketMedio = 0 }: { etapas: EtapaEntrada[]; ti
         )}
       </div>
 
+      {/* Explicação do método de cálculo, ao lado do resumo. */}
+      {!gargalo && (
+        <div style={sx("display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-top:8px;font-size:11px")}>
+          <span className="text-muted">Percentual sobre a maior etapa</span>
+          <InfoTip conteudo={FUNIL.metodo!} tamanho={11} />
+        </div>
+      )}
+
       {/* Resumo do gargalo, em linguagem direta */}
       {gargalo && (
         <div style={sx("display:flex;align-items:center;gap:8px;margin-top:10px;padding:8px 11px;border-radius:var(--radius-md);background:rgba(120,53,15,.22);border:1px solid rgba(245,158,11,.35)")}>
@@ -221,6 +232,9 @@ export function Funnel({ etapas, ticketMedio = 0 }: { etapas: EtapaEntrada[]; ti
               <> · ~{brl(calc[gargalo.indice]!.perdaValor!)} de faturamento estimado na mesa</>
             )}
             .
+          </span>
+          <span style={sx("margin-left:auto;display:flex;align-items:center")}>
+            <InfoTip conteudo={FUNIL.metodo!} tamanho={12} />
           </span>
         </div>
       )}

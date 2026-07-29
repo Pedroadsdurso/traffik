@@ -13,6 +13,8 @@ export interface EtapaEntrada {
   value: number;
   /** De onde sai a contagem — aparece no tooltip. */
   fonte?: string;
+  /** Chave em `lib/explicacoes.ts` para o InfoTip da etapa. */
+  chaveInfo?: string;
 }
 
 export interface EtapaCalculada extends EtapaEntrada {
@@ -88,6 +90,7 @@ export function calcularFunil(entradas: EtapaEntrada[], ticketMedio = 0): Resumo
     curto: p.curto,
     value: p.value,
     fonte: p.fonte,
+    chaveInfo: p.chaveInfo,
     pct: p.pct,
     taxaVsAnterior: p.taxaVsAnterior,
     perdaAbs: p.perdaAbs,

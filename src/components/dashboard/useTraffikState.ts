@@ -1080,14 +1080,32 @@ export function useTraffikState(
     // mesma fonte — e é exatamente isso que explica uma etapa passar de 100%
     // da anterior. Só "vendas aprovadas ⊆ vendas iniciadas" é garantido por
     // construção (mesma tabela, filtro de status).
+    /**
+     * Números que compuseram cada métrica no período, para o tooltip mostrar a
+     * conta feita e não só a fórmula abstrata.
+     */
+    valoresMetrica: (chave: string): [string, string][] | undefined => {
+      const n = (x: number) => x.toLocaleString("pt-BR");
+      switch (chave) {
+        case "roas": return [["Faturamento", brl(revenue)], ["Gasto", brl(spend)]];
+        case "roi": return [["Lucro", brl(k?.profit ?? 0)], ["Custo total", brl(spend + (d?.expenses.total ?? 0))]];
+        case "cpa": return [["Gasto", brl(spend)], ["Vendas", n(sales)]];
+        case "ticket": return [["Faturamento", brl(revenue)], ["Vendas", n(sales)]];
+        case "arpu": return [["Faturamento", brl(revenue)], ["Compradores únicos", n(k?.buyers ?? 0)]];
+        case "margem": return [["Lucro", brl(k?.profit ?? 0)], ["Faturamento", brl(revenue)]];
+        case "lucro": return [["Faturamento", brl(revenue)], ["Gasto", brl(spend)], ["Taxas e despesas", brl(d?.expenses.total ?? 0)]];
+        case "ctr": return [["Cliques", n(k?.clicks ?? 0)]];
+        default: return undefined;
+      }
+    },
     /** Ticket médio cru — o funil usa para estimar o faturamento perdido. */
     ticketMedio: k?.ticket ?? 0,
     funnelStages: [
-      { label: "Cliques no anúncio", curto: "Cliques", value: d?.funnel.cliques ?? 0, fonte: "Meta Ads (métrica diária)" },
-      { label: "Visita na página", curto: "Vis. Página", value: d?.funnel.visitas ?? 0, fonte: "Nosso script — 1 por sessão" },
-      { label: "Initiate Checkout", curto: "ICs", value: d?.funnel.checkouts ?? 0, fonte: "Pixel + webhook — visitantes distintos" },
-      { label: "Vendas iniciadas", curto: "Vendas Inic.", value: d?.funnel.iniciadas ?? 0, fonte: "Gateway — todos os status" },
-      { label: "Vendas aprovadas", curto: "Vendas Apr.", value: d?.funnel.vendas ?? 0, fonte: "Gateway — status APROVADA" },
+      { chaveInfo: "cliques", label: "Cliques no anúncio", curto: "Cliques", value: d?.funnel.cliques ?? 0, fonte: "Meta Ads (métrica diária)" },
+      { chaveInfo: "visitas", label: "Visita na página", curto: "Vis. Página", value: d?.funnel.visitas ?? 0, fonte: "Nosso script — 1 por sessão" },
+      { chaveInfo: "checkouts", label: "Initiate Checkout", curto: "ICs", value: d?.funnel.checkouts ?? 0, fonte: "Pixel + webhook — visitantes distintos" },
+      { chaveInfo: "iniciadas", label: "Vendas iniciadas", curto: "Vendas Inic.", value: d?.funnel.iniciadas ?? 0, fonte: "Gateway — todos os status" },
+      { chaveInfo: "aprovadas", label: "Vendas aprovadas", curto: "Vendas Apr.", value: d?.funnel.vendas ?? 0, fonte: "Gateway — status APROVADA" },
     ],
     sparklines: d?.chart.sparklines ?? {},
     /**

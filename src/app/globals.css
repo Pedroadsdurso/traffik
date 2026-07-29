@@ -722,3 +722,13 @@ a {
 
 /* Ícone de recarregar girando enquanto o Dashboard busca dados. */
 @keyframes girar { to { transform: rotate(360deg); } }
+
+/* Entrada do InfoTip (ui/InfoTip.tsx). Curta de propósito: tooltip que demora
+   a aparecer é o problema que o componente existe para resolver. */
+@keyframes tipEntra {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  @keyframes tipEntra { from { opacity: 0; } to { opacity: 1; } }
+}

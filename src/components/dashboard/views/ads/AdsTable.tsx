@@ -5,6 +5,8 @@ import { useState } from "react";
 import { brl, brl0, pct } from "@/lib/format";
 import { derivar, somar, type LinhaBase } from "@/lib/ads/metrics";
 import { sx } from "@/lib/sx";
+import { InfoTip } from "../../ui/InfoTip";
+import { METRICAS } from "@/lib/explicacoes";
 
 export interface LinhaTabela extends LinhaBase {
   id: string;
@@ -48,22 +50,22 @@ const NOME_FONTE: Record<Fonte, string> = {
 
 /** Colunas de métrica, na ordem pedida no Bloco 6. */
 const COLUNAS: { chave: string; label: string; dica?: string; fonte: Fonte }[] = [
-  { chave: "orcamento", label: "Orçamento", fonte: "meta", dica: "Orçamento diário — editável no nível correto (CBO na campanha, ABO no conjunto)" },
-  { chave: "vendas", label: "Vendas", fonte: "nosso", dica: "Vendas APROVADAS, confirmadas pelo gateway. Aparecem em segundos, sem esperar a Meta" },
-  { chave: "cpa", label: "CPA", fonte: "misto", dica: "Gasto (Meta) ÷ vendas aprovadas (nosso)" },
-  { chave: "faturamento", label: "Faturamento", fonte: "nosso", dica: "Soma das vendas aprovadas, do gateway" },
-  { chave: "lucro", label: "Lucro", fonte: "misto", dica: "Faturamento − gasto (bruto, sem taxas)" },
-  { chave: "roas", label: "ROAS", fonte: "misto", dica: "Faturamento (nosso) ÷ gasto (Meta)" },
-  { chave: "roi", label: "ROI", fonte: "misto", dica: "Lucro ÷ gasto" },
-  { chave: "ic", label: "IC", fonte: "nosso", dica: "Initiate Checkout — visitantes distintos atribuídos por UTM. A Meta nem enxerga: o checkout é do gateway" },
-  { chave: "cpi", label: "CPI", fonte: "misto", dica: "Custo por Initiate Checkout (gasto ÷ IC)" },
-  { chave: "cliquesAtr", label: "Cliq. atr.", fonte: "nosso", dica: "Cliques que chegaram ao site COM UTM, contados por nós. Não é o mesmo que 'Cliques' da Meta — a diferença é quem clicou e não carregou a página" },
-  { chave: "vendasInic", label: "Vend. inic.", fonte: "nosso", dica: "Vendas em qualquer status (pendente, aprovada, reembolsada). 'Vendas' conta só as aprovadas" },
-  { chave: "cpc", label: "CPC", fonte: "meta", dica: "Gasto ÷ cliques da Meta" },
-  { chave: "ctr", label: "CTR", fonte: "meta", dica: "Cliques ÷ impressões, ambos da Meta — usa o clique da Meta de propósito, para bater com o painel deles" },
-  { chave: "cpm", label: "CPM", fonte: "meta", dica: "Gasto por mil impressões" },
+  { chave: "orcamento", label: "Orçamento", fonte: "meta" },
+  { chave: "vendas", label: "Vendas", fonte: "nosso" },
+  { chave: "cpa", label: "CPA", fonte: "misto" },
+  { chave: "faturamento", label: "Faturamento", fonte: "nosso" },
+  { chave: "lucro", label: "Lucro", fonte: "misto" },
+  { chave: "roas", label: "ROAS", fonte: "misto" },
+  { chave: "roi", label: "ROI", fonte: "misto" },
+  { chave: "ic", label: "IC", fonte: "nosso" },
+  { chave: "cpi", label: "CPI", fonte: "misto" },
+  { chave: "cliquesAtr", label: "Cliq. atr.", fonte: "nosso" },
+  { chave: "vendasInic", label: "Vend. inic.", fonte: "nosso" },
+  { chave: "cpc", label: "CPC", fonte: "meta" },
+  { chave: "ctr", label: "CTR", fonte: "meta" },
+  { chave: "cpm", label: "CPM", fonte: "meta" },
   { chave: "impressoes", label: "Impressões", fonte: "meta" },
-  { chave: "cliques", label: "Cliques", fonte: "meta", dica: "Cliques no anúncio reportados pela Meta (métrica de mídia)" },
+  { chave: "cliques", label: "Cliques", fonte: "meta" },
   { chave: "bid", label: "Bid Cap", fonte: "meta" },
 ];
 
@@ -173,6 +175,35 @@ export function AdsTable({
   const totais = somar(linhas);
   const md = derivar(totais);
 
+  /** Números que compuseram a métrica no período, para o tooltip da fórmula. */
+  function valoresDe(chave: string): [string, string][] | undefined {
+    const v = (n: number) => n.toLocaleString("pt-BR");
+    switch (chave) {
+      case "roas":
+        return [["Faturamento", brl(totais.revenue)], ["Gasto", brl(totais.spend)]];
+      case "roi":
+        return [["Lucro", brl(md.lucro)], ["Custo (gasto)", brl(totais.spend)]];
+      case "cpa":
+        return [["Gasto", brl(totais.spend)], ["Vendas aprovadas", v(totais.results)]];
+      case "lucro":
+        return [["Faturamento", brl(totais.revenue)], ["Gasto", brl(totais.spend)]];
+      case "cpi":
+        return [["Gasto", brl(totais.spend)], ["IC", v(totais.ic ?? 0)]];
+      case "cpc":
+        return [["Gasto", brl(totais.spend)], ["Cliques (Meta)", v(totais.clicks)]];
+      case "ctr":
+        return [["Cliques (Meta)", v(totais.clicks)], ["Impressões", v(totais.impressions)]];
+      case "cpm":
+        return [["Gasto", brl(totais.spend)], ["Impressões", v(totais.impressions)]];
+      case "cliquesAtr":
+        return [["Nossos cliques", v(totais.cliquesAtribuidos ?? 0)], ["Cliques da Meta", v(totais.clicks)]];
+      case "vendasInic":
+        return [["Iniciadas", v(totais.vendasIniciadas ?? 0)], ["Aprovadas", v(totais.results)]];
+      default:
+        return undefined;
+    }
+  }
+
   const ordenadas = [...linhas].sort((a, b) => {
     const fa = fixadas.has(a.id) ? 1 : 0;
     const fb = fixadas.has(b.id) ? 1 : 0;
@@ -196,9 +227,9 @@ export function AdsTable({
         <span style={sx(`width:5px;height:5px;border-radius:50%;background:${COR_FONTE.misto}`)} />
         <span className="text-muted">Derivada</span>
       </span>
-      <span className="text-muted" style={sx("opacity:.75")}
-        title="Nossas conversões chegam no instante do evento; a Meta leva minutos a horas para consolidar. Além disso a Meta credita venda em até 7 dias após o clique (e 1 dia após visualização), enquanto nós casamos por UTM/fbclid direto. Por isso os números não coincidem — e o nosso é o que reflete o gateway.">
-        Por que difere da Meta?
+      <span style={sx("display:inline-flex;align-items:center;gap:4px")}>
+        <span className="text-muted" style={sx("opacity:.75")}>Por que difere da Meta?</span>
+        <InfoTip conteudo={METRICAS.divergenciaMeta!} tamanho={12} />
       </span>
     </div>
     <div className="ads-scroll">
@@ -211,17 +242,23 @@ export function AdsTable({
             </th>
             <th className="fixa fixa-2">Status</th>
             <th className="fixa fixa-3">Nome</th>
-            {COLUNAS.map((c) => (
-              <th key={c.chave} title={`${c.dica ? c.dica + " · " : ""}${NOME_FONTE[c.fonte]}`}
-                style={sx("text-align:right;white-space:nowrap")}>
-                <span style={sx("display:inline-flex;align-items:center;gap:5px;justify-content:flex-end")}>
-                  {c.label}
-                  {/* Ponto da fonte: o usuário precisa saber por que o número
-                      pode divergir do Gerenciador da Meta. */}
-                  <span aria-hidden style={sx(`width:5px;height:5px;border-radius:50%;background:${COR_FONTE[c.fonte]};flex-shrink:0;opacity:.9`)} />
-                </span>
-              </th>
-            ))}
+            {COLUNAS.map((c) => {
+              // Os valores do rodapé de totais entram no tooltip da métrica
+              // calculada: a fórmula sozinha não mostra de onde saiu o número.
+              const base = METRICAS[c.chave];
+              const conteudo = base && { ...base, valores: valoresDe(c.chave) };
+              return (
+                <th key={c.chave} style={sx("text-align:right;white-space:nowrap")}>
+                  <span style={sx("display:inline-flex;align-items:center;gap:4px;justify-content:flex-end")}>
+                    {c.label}
+                    {/* Ponto da fonte: o usuário precisa saber por que o número
+                        pode divergir do Gerenciador da Meta. */}
+                    <span aria-hidden style={sx(`width:5px;height:5px;border-radius:50%;background:${COR_FONTE[c.fonte]};flex-shrink:0;opacity:.9`)} />
+                    {conteudo && <InfoTip conteudo={conteudo} tamanho={12} />}
+                  </span>
+                </th>
+              );
+            })}
           </tr>
         </thead>
 
