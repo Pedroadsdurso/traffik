@@ -2123,6 +2123,88 @@ estão no histórico. Ambas precisam ser rotacionadas em Supabase › Settings �
 Database › Reset database password (e a de produção atualizada na Vercel, com
 **Redeploy**). Eu nunca preciso da senha — só do formato da string.
 
+## 🗑️ Exclusão de área COM ESCOLHA (29/07/2026)
+
+Antes, tudo que pertencia à área ia automaticamente para a Principal. Protegia
+integração instalada, mas poluía a Principal com coisas que o usuário não
+reconhecia. Agora o diálogo (`views/areas/ExcluirAreaDialog.tsx`) oferece escolha
+por grupo, e o núcleo vive em **`lib/areas/exclusao.ts`** — sem `"use server"`,
+para ser testável fora de um request (mesma razão de `precedencia.ts`).
+
+### 🔴 O risco que ninguém tinha visto: excluir área AMPLIAVA escopo
+
+Todas as FKs são `onDelete: SetNull`, e para conta/webhook/pixel nulo significa
+"sem dono, aparece na Principal". Mas em **duas** colunas o nulo tem o
+significado **invertido**:
+
+| Coluna | `NULL` significa | Consequência de excluir a área (antes) |
+|---|---|---|
+| `AutomationRule.workspaceId` | **regra GLOBAL** | "pause as campanhas desta operação" virava **"pause as de TODAS as contas"** — e a regra continuava ATIVA, agindo com dinheiro real |
+| `Expense.workspaceId` | **vale para todas as áreas** | a despesa da área excluída passava a inflar o custo de todas as outras |
+
+Por isso o padrão destes dois é **mover para a Principal** (e a regra vai
+**desligada**). Nenhum dos dois amplia escopo sozinho.
+
+> ⚠️ Só desativar a regra **não bastava**: ela ficaria com `workspaceId` nulo, e
+> bastaria alguém religá-la para agir em todas as contas. Move **e** desliga.
+
+### Padrões — sempre a opção mais segura
+
+| Grupo | Padrão | Alternativa |
+|---|---|---|
+| Contas de anúncio | **desvincular** | mover para a Principal |
+| Gateways (webhooks) | **mover** | excluir |
+| Pixels | **mover** | excluir |
+| Automações | **mover + desligar** | mover ligada · excluir |
+| Taxas e custos | **mover** | excluir |
+| Vendas, visitas, eventos | **manter** | apagar (atrás de duas travas) |
+
+> ### ⛔ Conta de anúncio NUNCA tem a linha apagada
+> `Campaign`, `AdSet`, `Ad` e `DailyAdMetric` pendem de `AdAccount` com
+> **`Cascade`**. Apagar a conta destruiria **todo o histórico de gasto** — o
+> número que alimenta ROAS, ROI e CPA de todos os períodos. "Desvincular" é o
+> mais destrutivo que faz sentido, e é seguro exatamente por isso.
+
+> ### 🔴 Apagar dados: download OBRIGATÓRIO e nome digitado
+> O Supabase Free **não tem PITR**; `npm run backup` é o único backup. Então o
+> campo de confirmação só destrava **depois** de o arquivo ser baixado, e o botão
+> só habilita quando o nome digitado bate exatamente. Irreversibilidade tem de
+> ser honesta, não teórica.
+>
+> ⚠️ **O GASTO nunca é apagado**, nem quando o usuário pede. `DailyAdMetric`
+> pende do anúncio, não da área: apagar venda e manter gasto deixaria custo sem
+> faturamento (ROI travado em −1,00x) e mudaria os totais históricos. É o
+> registro do que a Meta cobrou, não um dado nosso. O resumo diz isso em
+> linguagem simples: *"o investimento já feito continua no histórico"*.
+
+> ### ⚠️ A ORDEM da exclusão importa
+> Os dados são apagados **antes** de mexer na configuração. A área de uma venda é
+> calculada pela precedência, e mover um webhook para a Principal **muda a
+> resposta** de "esta venda é de quem?" — com a ordem invertida, o conjunto
+> apagado não seria o que o usuário viu na prévia.
+
+### Avisos em linguagem de consequência, nunca de mecanismo
+
+- **Webhook:** "o endereço configurado no painel do seu gateway vai parar de
+  funcionar… as vendas que já entraram continuam no histórico, mas deixam de
+  aparecer ligadas a esse gateway" — nada de `SetNull`.
+- **Pixel:** "o código instalado na sua página vai parar de registrar eventos…
+  os eventos já registrados continuam" — nada de "órfão".
+- **Conta:** "apenas desvincular; nada muda no Facebook".
+
+**Testado no banco de dev — 15 asserções, 0 falhas** (áreas montadas com um de
+cada grupo e removidas por id): prévia enxerga os 5 grupos e o nº de vendas do
+webhook; padrões preservam tudo; **regra não vira global** (Principal + desligada);
+**custo não vira global**; escolha "excluir" remove; **nome errado recusa sem
+apagar nada** e a área continua lá; gasto intacto.
+
+### Texto da tela ajustado
+
+A promessa *"excluir uma área nunca apaga venda, clique ou evento"* deixou de ser
+garantia absoluta — continua sendo o **padrão**. O card de abertura passou a
+falar do benefício ("Separe suas operações sem misturar os números") em vez do
+mecanismo ("um conjunto de filtros… não separa os dados no banco").
+
 ## ⚙️ Bloco 8 — Regras: fundação de SEGURANÇA (29/07/2026, parcial)
 
 Escopo decidido pelo usuário: **o essencial funcionando, sem import/export.**

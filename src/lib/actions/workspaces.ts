@@ -2,6 +2,7 @@
 
 import { auth } from "@/auth";
 import { carregarMapaDeAreas } from "@/lib/areas/atribuicao";
+import { excluirArea, exportarDados, preverExclusao, type OpcoesExclusao as OpcoesExclusaoTipo } from "@/lib/areas/exclusao";
 import { prisma } from "@/lib/prisma";
 
 export interface WorkspaceDTO {
@@ -32,11 +33,13 @@ export type SalvarAreaResult =
   | { ok: false; conflitos: ContaOcupada[]; motivo?: "principal-nao-arquiva" };
 
 /**
- * Áreas de Trabalho — filtros salvos, **não** isolamento de dados.
+ * Áreas de Trabalho.
  *
- * Excluir uma área nunca apaga venda, clique ou evento: ela só descreve o que a
- * tela mostra. É por isso que a exclusão aqui não pede confirmação por digitação
- * como pediria um projeto de verdade — não há o que perder.
+ * ⚠️ **Excluir uma área NÃO apaga dados por padrão — mas passou a poder.** Desde
+ * 29/07/2026 o diálogo oferece escolha por grupo, e apagar vendas é uma opção
+ * explícita, atrás de download obrigatório e confirmação por digitação. O texto
+ * antigo aqui prometia que não havia o que perder; deixou de ser verdade.
+ * Ver `lib/areas/exclusao.ts`.
  */
 async function uid(): Promise<string> {
   const s = await auth();
@@ -338,18 +341,24 @@ export async function duplicateWorkspace(id: string): Promise<SalvarAreaResult |
  * Remove o agrupamento. **Nenhum dado é apagado** — só a área e o layout de
  * dashboard dela (que é configuração de tela, não dado de negócio).
  */
-export async function deleteWorkspace(id: string): Promise<{ ok: boolean; motivo?: "principal" }> {
+/**
+ * Exclusão de área — casca de autenticação. A lógica inteira (e os motivos das
+ * escolhas) vive em `lib/areas/exclusao.ts`, que é testável fora de um request.
+ */
+export type { OpcoesExclusao, PreviaExclusao, ResultadoExclusao } from "@/lib/areas/exclusao";
+
+export async function preverExclusaoDaArea(id: string) {
+  return preverExclusao(await uid(), id);
+}
+
+export async function exportarDadosDaArea(id: string) {
+  return exportarDados(await uid(), id);
+}
+
+export async function deleteWorkspace(id: string, opcoes: OpcoesExclusaoTipo = {}) {
   const userId = await uid();
-  // ⛔ A principal nunca é excluída. A checagem vive AQUI, e não só no botão
-  // desabilitado da tela: server action é endpoint público, e sem principal o
-  // seletor fica sem fallback e o usuário sem operação padrão.
-  const r = await prisma.workspace.deleteMany({ where: { id, userId, isDefault: false } });
-  if (r.count === 0) {
-    const existe = await prisma.workspace.findFirst({ where: { id, userId }, select: { isDefault: true } });
-    if (existe?.isDefault) return { ok: false, motivo: "principal" };
-    return { ok: false };
-  }
-  return { ok: true };
+  const principal = await garantirAreaPrincipal(userId);
+  return excluirArea(userId, id, opcoes, principal.id);
 }
 
 export interface ProdutoDescoberto {

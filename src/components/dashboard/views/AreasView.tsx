@@ -9,7 +9,6 @@ import {
   type ProdutoDescoberto,
   contasOcupadas,
   createWorkspace,
-  deleteWorkspace,
   duplicateWorkspace,
   listWorkspaces,
   updateWorkspace,
@@ -20,9 +19,9 @@ import {
 import { brl } from "@/lib/format";
 import { getPendenciasDasAreas, type PendenciasDTO } from "@/lib/actions/diagnostics";
 import { sx } from "@/lib/sx";
+import { ExcluirAreaDialog } from "./areas/ExcluirAreaDialog";
 import { Drawer } from "../ui/Drawer";
 import { ListaSelecionavel, type ItemSelecionavel } from "../ui/ListaSelecionavel";
-import { Modal } from "../ui/Modal";
 
 /** Cores do marcador. Poucas e distintas — o ponto tem 8px, gradação não se lê. */
 const CORES = ["#8b5cf6", "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#ec4899", "#06b6d4", "#84cc16"];
@@ -222,13 +221,6 @@ export function AreasView() {
     await aposMutar();
   }
 
-  async function confirmarExclusao() {
-    if (!excluindo) return;
-    await deleteWorkspace(excluindo.id).catch(() => null);
-    setExcluindo(null);
-    await aposMutar();
-  }
-
   const ativas = areas.filter((a) => !a.archived);
   const arquivadas = areas.filter((a) => a.archived);
   const listadas = mostrarArquivadas ? arquivadas : ativas;
@@ -238,11 +230,14 @@ export function AreasView() {
       <div className="card" style={sx("display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-3);flex-wrap:wrap")}>
         <div style={sx("min-width:260px;flex:1")}>
           <div className="card-kicker">Áreas de Trabalho</div>
-          <div className="card-title">Um conjunto de filtros, salvo com um nome</div>
+          <div className="card-title">Separe suas operações sem misturar os números</div>
           <p className="card-body" style={sx("margin:4px 0 0;max-width:70ch")}>
-            Serve para operar duas ofertas sem ver os dados misturados. A área <strong>não separa os dados no
-            banco</strong> — ela decide o que a tela mostra. Por isso excluir uma área nunca apaga venda,
-            clique ou evento.
+            Cada área é uma operação sua — uma oferta, um nicho, um cliente. Ao entrar numa delas, o painel
+            inteiro passa a mostrar só o que é dela: vendas, gasto, campanhas e integrações.
+          </p>
+          <p className="text-muted" style={sx("margin:6px 0 0;max-width:70ch;font-size:12.5px")}>
+            Ao excluir uma área, você escolhe o que fazer com cada coisa configurada nela. Suas vendas e
+            visitas ficam no histórico por padrão.
           </p>
         </div>
         <button className="btn btn-primary" type="button" onClick={() => void abrir(null)} style={sx("white-space:nowrap")}>
@@ -303,26 +298,16 @@ export function AreasView() {
         />
       )}
 
-      <Modal
-        aberta={Boolean(excluindo)}
-        titulo={`Excluir “${excluindo?.name ?? ""}”?`}
-        onClose={() => setExcluindo(null)}
-        rodape={
-          <>
-            <button className="btn btn-ghost" type="button" onClick={() => setExcluindo(null)}>Cancelar</button>
-            <button className="btn btn-primary" type="button" onClick={() => void confirmarExclusao()}>Excluir área</button>
-          </>
-        }
-      >
-        <p className="card-body" style={sx("margin:0;font-size:13px;line-height:1.6")}>
-          <strong>Nenhum dado é apagado.</strong> Vendas, cliques, eventos de pixel, webhooks e contas de
-          anúncio continuam exatamente como estão — a área é só um conjunto de filtros salvo.
-        </p>
-        <p className="card-body" style={sx("margin:0;font-size:13px;line-height:1.6")}>
-          O que se perde é a configuração de filtros e o layout de dashboard desta área. Quem estiver com ela
-          selecionada volta para a área <strong>Principal</strong>.
-        </p>
-      </Modal>
+      {excluindo && (
+        <ExcluirAreaDialog
+          areaId={excluindo.id}
+          onFechar={() => setExcluindo(null)}
+          onExcluida={() => {
+            setExcluindo(null);
+            void aposMutar();
+          }}
+        />
+      )}
     </div>
   );
 }
