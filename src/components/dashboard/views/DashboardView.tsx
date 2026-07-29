@@ -70,7 +70,7 @@ function FiltroPeriodo({ v }: { v: TraffikView }) {
 export function DashboardView({ v }: { v: TraffikView }) {
   // O estado do grid vive aqui porque os controles de edição ficam no container
   // de filtros, acima do grid.
-  const grid = useDashboardLayout();
+  const grid = useDashboardLayout(v.workspaceAtiva);
 
   return (
     <div style={sx("display:flex;flex-direction:column;gap:var(--space-4)")}>

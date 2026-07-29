@@ -2,6 +2,7 @@
 
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { filtrosDaArea } from "@/lib/actions/workspaces";
 import type { ReportPattern } from "@/generated/prisma/enums";
 
 export interface NotificationSettingsDTO {
@@ -95,11 +96,38 @@ export async function updateNotificationSettings(patch: Partial<NotificationSett
   });
 }
 
-export async function listNotifications(): Promise<{ items: NotificationDTO[]; unread: number }> {
+/**
+ * Notificações do usuário, recortadas pela Área de Trabalho ativa.
+ *
+ * ⚠️ **Notificação SEM venda continua aparecendo em toda área.** Relatório
+ * diário, alerta de regra e aviso de sistema não pertencem a operação nenhuma;
+ * escondê-los na área errada faria o usuário perder aviso por estar na aba
+ * errada. Só o que tem `saleId` é recortado — e aí pela mesma regra do
+ * Dashboard: webhook e produto da venda.
+ */
+export async function listNotifications(workspaceId?: string | null): Promise<{ items: NotificationDTO[]; unread: number }> {
   const userId = await requireUserId();
+  const area = await filtrosDaArea(workspaceId);
+  const daArea =
+    area.webhooks || area.products
+      ? {
+          OR: [
+            { saleId: null },
+            {
+              sale: {
+                is: {
+                  ...(area.webhooks ? { webhookId: { in: area.webhooks } } : {}),
+                  ...(area.products ? { product: { in: area.products } } : {}),
+                },
+              },
+            },
+          ],
+        }
+      : {};
+
   const [items, unread] = await Promise.all([
-    prisma.notification.findMany({ where: { userId }, orderBy: { timestamp: "desc" }, take: 20 }),
-    prisma.notification.count({ where: { userId, read: false } }),
+    prisma.notification.findMany({ where: { userId, ...daArea }, orderBy: { timestamp: "desc" }, take: 20 }),
+    prisma.notification.count({ where: { userId, read: false, ...daArea } }),
   ]);
   return {
     items: items.map((n) => ({

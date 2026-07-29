@@ -7,7 +7,12 @@
     "build": "prisma generate && next build",
     "postinstall": "prisma generate",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "seed:dev": "node scripts/seed-dev.mjs",
+    "seed:dev:limpar": "node scripts/seed-dev.mjs --limpar",
+    "backup": "node scripts/backup-db.mjs",
+    "restore": "node scripts/restore-db.mjs",
+    "db:onde": "node scripts/onde-estou.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

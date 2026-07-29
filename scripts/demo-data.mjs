@@ -1,4 +1,8 @@
 import "dotenv/config";
+import { exigirBancoDeDesenvolvimento } from "./guard-db.mjs";
+
+// Gera dados FALSOS. Nunca deve tocar no banco do usuário.
+exigirBancoDeDesenvolvimento({ script: "demo-data" });
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 

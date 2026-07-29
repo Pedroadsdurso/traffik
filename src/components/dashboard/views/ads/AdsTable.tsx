@@ -51,6 +51,11 @@ const NOME_FONTE: Record<Fonte, string> = {
 /** Colunas de métrica, na ordem pedida no Bloco 6. */
 const COLUNAS: { chave: string; label: string; dica?: string; fonte: Fonte }[] = [
   { chave: "orcamento", label: "Orçamento", fonte: "meta" },
+  // A ordem é a da leitura natural: quanto POSSO gastar → quanto GASTEI →
+  // quanto VENDI. Antes a tabela pulava de Orçamento direto para Vendas, e o
+  // gasto — que já alimentava CPM, CPA, ROAS e Lucro — só aparecia dentro de
+  // tooltip de fórmula.
+  { chave: "gasto", label: "Gasto", dica: "Quanto a Meta cobrou no período filtrado. É a base de CPA, ROAS, ROI, CPC, CPM e Lucro.", fonte: "meta" },
   { chave: "vendas", label: "Vendas", fonte: "nosso" },
   { chave: "cpa", label: "CPA", fonte: "misto" },
   { chave: "faturamento", label: "Faturamento", fonte: "nosso" },
@@ -297,6 +302,7 @@ export function AdsTable({
                   </td>
 
                   <td><CelulaOrcamento linha={l} onSalvar={onSalvarOrcamento} /></td>
+                  <td>{brl(l.spend)}</td>
                   <td>{n0(l.results)}</td>
                   <td>{m.cpa != null ? brl(m.cpa) : traco}</td>
                   <td>{brl(l.revenue)}</td>
@@ -325,7 +331,10 @@ export function AdsTable({
               <td className="fixa fixa-1" />
               <td className="fixa fixa-2" />
               <td className="fixa fixa-3" style={sx("font-weight:600")}>Total ({ordenadas.length})</td>
+              {/* Orçamento não soma: são tetos diários de linhas diferentes,
+                  e somá-los produziria um número que não significa nada. */}
               <td>{traco}</td>
+              <td style={sx("font-weight:600")}>{brl(totais.spend)}</td>
               <td>{n0(totais.results)}</td>
               <td>{md.cpa != null ? brl(md.cpa) : traco}</td>
               <td>{brl(totais.revenue)}</td>

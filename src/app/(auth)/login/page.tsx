@@ -9,7 +9,12 @@ import { loginAction } from "../actions";
 export const metadata = { title: "Entrar · Traffik" };
 
 export default async function LoginPage() {
-  if (await auth()) redirect("/dashboard");
+  // Checa o `id`, não só a sessão: um JWT órfão (de outro banco) chega com
+  // `user` mas SEM id. Testar a sessão inteira mandava de volta ao /dashboard,
+  // que por sua vez mandava para cá — ERR_TOO_MANY_REDIRECTS. As duas pontas
+  // precisam usar exatamente o mesmo critério de "está logado".
+  const sessao = await auth();
+  if (sessao?.user?.id) redirect("/dashboard");
 
   return (
     <AuthShell

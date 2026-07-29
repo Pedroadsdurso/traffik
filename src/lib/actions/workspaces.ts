@@ -7,11 +7,28 @@ export interface WorkspaceDTO {
   id: string;
   name: string;
   color: string | null;
+  description: string | null;
+  /** Área principal: não pode ser excluída nem arquivada. Uma por usuário. */
+  isDefault: boolean;
   archived: boolean;
   accountIds: string[];
   products: string[];
   sources: string[];
+  webhookIds: string[];
+  pixelConfigIds: string[];
 }
+
+/** Uma conta de anúncio que já pertence a outra área — e a qual. */
+export interface ContaOcupada {
+  accountId: string;
+  workspaceId: string;
+  workspaceName: string;
+}
+
+/** Resultado de criar/salvar. O erro previsível é conflito de conta. */
+export type SalvarAreaResult =
+  | { ok: true; area: WorkspaceDTO }
+  | { ok: false; conflitos: ContaOcupada[]; motivo?: "principal-nao-arquiva" };
 
 /**
  * Áreas de Trabalho — filtros salvos, **não** isolamento de dados.
@@ -26,62 +43,259 @@ async function uid(): Promise<string> {
   return s.user.id;
 }
 
-const dto = (w: {
-  id: string; name: string; color: string | null; archived: boolean;
-  accountIds: string[]; products: string[]; sources: string[];
-}): WorkspaceDTO => ({ ...w });
+const SELECT = {
+  id: true, name: true, color: true, description: true, isDefault: true, archived: true,
+  accountIds: true, products: true, sources: true, webhookIds: true, pixelConfigIds: true,
+} as const;
+
+const dto = (w: WorkspaceDTO): WorkspaceDTO => ({ ...w });
+
+/**
+ * Garante que o usuário tenha uma área PRINCIPAL. Idempotente.
+ *
+ * A principal representa "a operação padrão": nasce **já configurada com tudo
+ * o que a conta tem hoje** (contas de anúncio, webhooks e pixels). Deixá-la
+ * vazia seria o mesmo que "Todas as áreas", e aí criar a primeira secundária
+ * faria a principal continuar somando os dados dela — que é exatamente o que
+ * o isolamento existe para evitar.
+ *
+ * ⚠️ **`products` e `sources` ficam vazios de propósito.** São texto livre; uma
+ * lista explícita congelaria o passado e um produto novo do gateway ficaria de
+ * fora da principal **em silêncio**. Vazio = "todos", que é o comportamento
+ * certo para a operação padrão. Contas/webhooks/pixels são conjuntos finitos e
+ * gerenciados, então listá-los é seguro.
+ */
+export async function garantirAreaPrincipal(userIdParam?: string): Promise<WorkspaceDTO> {
+  const userId = userIdParam ?? (await uid());
+
+  const existente = await prisma.workspace.findFirst({ where: { userId, isDefault: true }, select: SELECT });
+  if (existente) return dto(existente);
+
+  // Tem áreas, mas nenhuma marcada: promove a mais antiga em vez de criar uma
+  // sexta caixa vazia na tela de alguém que já organizou tudo.
+  const maisAntiga = await prisma.workspace.findFirst({
+    where: { userId },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+  if (maisAntiga) {
+    await prisma.workspace.update({ where: { id: maisAntiga.id }, data: { isDefault: true, archived: false } });
+    return dto(await prisma.workspace.findUniqueOrThrow({ where: { id: maisAntiga.id }, select: SELECT }));
+  }
+
+  const [contas, hooks, pixels] = await Promise.all([
+    prisma.adAccount.findMany({ where: { userId }, select: { id: true } }),
+    prisma.webhook.findMany({ where: { userId }, select: { id: true } }),
+    prisma.pixelConfig.findMany({ where: { userId }, select: { id: true } }),
+  ]);
+
+  // ⚠️ `createMany({ skipDuplicates: true })` e NÃO `create` dentro de try/catch.
+  //
+  // O layout dispara ~12 leituras em `Promise.all`, e várias passam por
+  // `filtrosDaArea` → aqui. Todas correm ao mesmo tempo para o MESMO usuário.
+  // Com `create`, a perdedora estourava no índice parcial único e caía no
+  // `catch` — que então lia a linha da vencedora e **não encontrava nada**,
+  // porque a transação dela ainda não tinha commitado. O erro real era
+  // `findFirstOrThrow` falhando, e o `catch` vazio escondia a causa.
+  //
+  // `ON CONFLICT DO NOTHING` (o que o `skipDuplicates` gera) resolve a corrida
+  // no BANCO: a perdedora **espera** a vencedora commitar e só então segue. Ao
+  // retornar, a linha existe com certeza — inserida por mim ou por quem chegou
+  // primeiro. Sem try/catch, então nenhum erro de verdade fica escondido.
+  await prisma.workspace.createMany({
+    data: [
+      {
+        userId,
+        name: "Principal",
+        color: "#8b5cf6",
+        description: "Operação padrão. Esta área não pode ser excluída.",
+        isDefault: true,
+        accountIds: contas.map((c) => c.id),
+        webhookIds: hooks.map((h) => h.id),
+        pixelConfigIds: pixels.map((p) => p.id),
+      },
+    ],
+    skipDuplicates: true,
+  });
+
+  return dto(await prisma.workspace.findFirstOrThrow({ where: { userId, isDefault: true }, select: SELECT }));
+}
 
 export async function listWorkspaces(): Promise<WorkspaceDTO[]> {
   const userId = await uid();
   const rows = await prisma.workspace.findMany({
     where: { userId },
-    orderBy: [{ archived: "asc" }, { createdAt: "asc" }],
-    select: { id: true, name: true, color: true, archived: true, accountIds: true, products: true, sources: true },
+    orderBy: [{ isDefault: "desc" }, { archived: "asc" }, { createdAt: "asc" }],
+    select: SELECT,
   });
+  // Só escreve quando realmente falta — o caminho normal é uma leitura só.
+  if (!rows.some((r) => r.isDefault)) {
+    await garantirAreaPrincipal(userId);
+    return (await prisma.workspace.findMany({
+      where: { userId },
+      orderBy: [{ isDefault: "desc" }, { archived: "asc" }, { createdAt: "asc" }],
+      select: SELECT,
+    })).map(dto);
+  }
   return rows.map(dto);
 }
 
-/** A área lembrada do último acesso. `null` = "Todas as áreas". */
+/**
+ * A área a abrir. **Nunca `null`**: sem preferência salva, é a PRINCIPAL.
+ *
+ * Área arquivada ou excluída também cai na principal — não existe estado "sem
+ * área" para onde escorregar.
+ */
 export async function getLastWorkspaceId(): Promise<string | null> {
   const userId = await uid();
   const u = await prisma.user.findUnique({ where: { id: userId }, select: { lastWorkspaceId: true } });
-  return u?.lastWorkspaceId ?? null;
+  if (u?.lastWorkspaceId) {
+    const valida = await prisma.workspace.findFirst({
+      where: { id: u.lastWorkspaceId, userId, archived: false },
+      select: { id: true },
+    });
+    if (valida) return valida.id;
+  }
+  return (await garantirAreaPrincipal(userId)).id;
 }
 
+/**
+ * Lembra a área escolhida.
+ *
+ * Aceita `null` só para não quebrar chamada antiga: como não existe mais visão
+ * consolidada, gravar "sem área" não teria significado — a próxima sessão
+ * abriria na principal de qualquer jeito.
+ */
 export async function setLastWorkspaceId(workspaceId: string | null): Promise<void> {
+  if (!workspaceId) return;
   const userId = await uid();
   // Valida a posse antes de gravar: um id de outro usuário viraria uma FK
   // válida apontando para área alheia.
-  if (workspaceId) {
-    const existe = await prisma.workspace.findFirst({ where: { id: workspaceId, userId }, select: { id: true } });
-    if (!existe) return;
-  }
+  const existe = await prisma.workspace.findFirst({ where: { id: workspaceId, userId }, select: { id: true } });
+  if (!existe) return;
   await prisma.user.update({ where: { id: userId }, data: { lastWorkspaceId: workspaceId } });
 }
 
-export async function createWorkspace(input: {
-  name: string; color?: string | null; accountIds?: string[]; products?: string[]; sources?: string[];
-}): Promise<WorkspaceDTO> {
+/**
+ * Quais das contas informadas já pertencem a OUTRA área, e a qual.
+ *
+ * **Uma conta de anúncio pertence a apenas uma área.** A regra existe porque o
+ * gasto daquela conta é a base de ROAS/ROI/CPA: a mesma conta em duas áreas
+ * faria o mesmo investimento ser contado como se fossem duas operações, e nada
+ * na tela denunciaria a sobreposição.
+ *
+ * `exceto` é a área que está sendo editada — sem ele, salvar uma área sem mexer
+ * nas contas acusaria conflito com ela mesma.
+ *
+ * Devolve a lista de conflitos em vez de um booleano: a tela precisa dizer
+ * **qual** área ocupa a conta, senão o bloqueio vira um "não" sem saída.
+ */
+export async function contasOcupadas(
+  accountIds: string[],
+  exceto?: string | null,
+): Promise<ContaOcupada[]> {
+  if (accountIds.length === 0) return [];
   const userId = await uid();
+  const outras = await prisma.workspace.findMany({
+    where: { userId, ...(exceto ? { id: { not: exceto } } : {}) },
+    select: { id: true, name: true, accountIds: true },
+  });
+
+  const dono = new Map<string, { workspaceId: string; workspaceName: string }>();
+  for (const w of outras) {
+    for (const acc of w.accountIds) {
+      // A primeira área que reivindicou a conta é a dona. Se houver duplicata
+      // legada (a validação não existia antes), quem aparece é a mais antiga —
+      // e é ela que a tela vai mostrar como ocupante.
+      if (!dono.has(acc)) dono.set(acc, { workspaceId: w.id, workspaceName: w.name });
+    }
+  }
+
+  return accountIds
+    .map((accountId) => {
+      const d = dono.get(accountId);
+      return d ? { accountId, ...d } : null;
+    })
+    .filter((c): c is ContaOcupada => c !== null);
+}
+
+interface AreaInput {
+  name?: string;
+  color?: string | null;
+  description?: string | null;
+  archived?: boolean;
+  accountIds?: string[];
+  products?: string[];
+  sources?: string[];
+  webhookIds?: string[];
+  pixelConfigIds?: string[];
+  /** Contas que o usuário autorizou explicitamente a SAIR de outra área. */
+  moverContas?: string[];
+}
+
+/**
+ * Tira as contas autorizadas a MUDAR de área das áreas onde estavam.
+ *
+ * O bloqueio continua sendo o padrão — nada troca de área em silêncio. Mas com
+ * a principal nascendo dona de todas as contas, criar a primeira secundária
+ * esbarraria sempre no bloqueio; sem esta saída, o fluxo principal viraria um
+ * beco. Aqui a mudança só acontece para os ids que o usuário marcou "mover".
+ */
+async function liberarContas(userId: string, mover: string[], exceto?: string | null): Promise<void> {
+  if (mover.length === 0) return;
+  const donas = await prisma.workspace.findMany({
+    where: { userId, ...(exceto ? { id: { not: exceto } } : {}), accountIds: { hasSome: mover } },
+    select: { id: true, accountIds: true },
+  });
+  await Promise.all(
+    donas.map((d) =>
+      prisma.workspace.update({
+        where: { id: d.id },
+        data: { accountIds: d.accountIds.filter((a) => !mover.includes(a)) },
+      }),
+    ),
+  );
+}
+
+export async function createWorkspace(input: AreaInput & { name: string }): Promise<SalvarAreaResult> {
+  const userId = await uid();
+  await liberarContas(userId, input.moverContas ?? []);
+  // A validação roda no SERVIDOR mesmo com a tela já bloqueando a seleção: o
+  // bloqueio da tela é conveniência, e uma server action é um endpoint público.
+  const conflitos = await contasOcupadas(input.accountIds ?? []);
+  if (conflitos.length) return { ok: false, conflitos };
+
   const w = await prisma.workspace.create({
     data: {
       userId,
       name: input.name.trim() || "Nova área",
       color: input.color ?? null,
+      description: input.description?.trim() || null,
       accountIds: input.accountIds ?? [],
       products: input.products ?? [],
       sources: input.sources ?? [],
+      webhookIds: input.webhookIds ?? [],
+      pixelConfigIds: input.pixelConfigIds ?? [],
     },
-    select: { id: true, name: true, color: true, archived: true, accountIds: true, products: true, sources: true },
+    select: SELECT,
   });
-  return dto(w);
+  return { ok: true, area: dto(w) };
 }
 
-export async function updateWorkspace(id: string, input: {
-  name?: string; color?: string | null; archived?: boolean;
-  accountIds?: string[]; products?: string[]; sources?: string[];
-}): Promise<WorkspaceDTO | null> {
+export async function updateWorkspace(id: string, input: AreaInput): Promise<SalvarAreaResult | null> {
   const userId = await uid();
+  const alvo = await prisma.workspace.findFirst({ where: { id, userId }, select: { isDefault: true } });
+  if (!alvo) return null;
+  // Arquivar a principal deixaria o seletor sem fallback — ela é o destino de
+  // quem não tem preferência salva.
+  if (alvo.isDefault && input.archived) return { ok: false, conflitos: [], motivo: "principal-nao-arquiva" };
+
+  await liberarContas(userId, input.moverContas ?? [], id);
+  if (input.accountIds) {
+    const conflitos = await contasOcupadas(input.accountIds, id);
+    if (conflitos.length) return { ok: false, conflitos };
+  }
+
   // `updateMany` com userId no where: `update` por id sozinho deixaria editar
   // área de outro usuário se o id vazasse.
   const r = await prisma.workspace.updateMany({
@@ -89,28 +303,41 @@ export async function updateWorkspace(id: string, input: {
     data: {
       ...(input.name !== undefined ? { name: input.name.trim() || "Sem nome" } : {}),
       ...(input.color !== undefined ? { color: input.color } : {}),
+      ...(input.description !== undefined ? { description: input.description?.trim() || null } : {}),
       ...(input.archived !== undefined ? { archived: input.archived } : {}),
       ...(input.accountIds !== undefined ? { accountIds: input.accountIds } : {}),
       ...(input.products !== undefined ? { products: input.products } : {}),
       ...(input.sources !== undefined ? { sources: input.sources } : {}),
+      ...(input.webhookIds !== undefined ? { webhookIds: input.webhookIds } : {}),
+      ...(input.pixelConfigIds !== undefined ? { pixelConfigIds: input.pixelConfigIds } : {}),
     },
   });
   if (r.count === 0) return null;
-  const w = await prisma.workspace.findUniqueOrThrow({
-    where: { id },
-    select: { id: true, name: true, color: true, archived: true, accountIds: true, products: true, sources: true },
-  });
-  return dto(w);
+  const w = await prisma.workspace.findUniqueOrThrow({ where: { id }, select: SELECT });
+  return { ok: true, area: dto(w) };
 }
 
-/** Duplica só a CONFIGURAÇÃO — não há dado para copiar. */
-export async function duplicateWorkspace(id: string): Promise<WorkspaceDTO | null> {
+/**
+ * Duplica só a CONFIGURAÇÃO — não há dado para copiar.
+ *
+ * ⚠️ **A cópia nasce SEM contas de anúncio**, de propósito: uma conta pertence a
+ * uma única área, então copiá-las produziria um conflito garantido no ato da
+ * duplicação. Duplicar serve para reaproveitar produtos/webhooks/pixels e
+ * apontar a cópia para outras contas.
+ */
+export async function duplicateWorkspace(id: string): Promise<SalvarAreaResult | null> {
   const userId = await uid();
-  const o = await prisma.workspace.findFirst({ where: { id, userId } });
+  const o = await prisma.workspace.findFirst({ where: { id, userId }, select: SELECT });
   if (!o) return null;
   return createWorkspace({
-    name: `${o.name} (cópia)`, color: o.color,
-    accountIds: o.accountIds, products: o.products, sources: o.sources,
+    name: `${o.name} (cópia)`,
+    color: o.color,
+    description: o.description,
+    accountIds: [],
+    products: o.products,
+    sources: o.sources,
+    webhookIds: o.webhookIds,
+    pixelConfigIds: o.pixelConfigIds,
   });
 }
 
@@ -118,32 +345,99 @@ export async function duplicateWorkspace(id: string): Promise<WorkspaceDTO | nul
  * Remove o agrupamento. **Nenhum dado é apagado** — só a área e o layout de
  * dashboard dela (que é configuração de tela, não dado de negócio).
  */
-export async function deleteWorkspace(id: string): Promise<{ ok: boolean }> {
+export async function deleteWorkspace(id: string): Promise<{ ok: boolean; motivo?: "principal" }> {
   const userId = await uid();
-  const r = await prisma.workspace.deleteMany({ where: { id, userId } });
-  return { ok: r.count > 0 };
+  // ⛔ A principal nunca é excluída. A checagem vive AQUI, e não só no botão
+  // desabilitado da tela: server action é endpoint público, e sem principal o
+  // seletor fica sem fallback e o usuário sem operação padrão.
+  const r = await prisma.workspace.deleteMany({ where: { id, userId, isDefault: false } });
+  if (r.count === 0) {
+    const existe = await prisma.workspace.findFirst({ where: { id, userId }, select: { isDefault: true } });
+    if (existe?.isDefault) return { ok: false, motivo: "principal" };
+    return { ok: false };
+  }
+  return { ok: true };
 }
 
 /**
- * Quantas vendas cada produto configurado casou no período.
+ * Quantas vendas cada produto configurado casou no período, para VÁRIAS áreas
+ * de uma vez.
  *
  * Existe porque `Sale.product` é texto livre vindo do gateway: renomear o
  * produto lá faz o filtro parar de casar **em silêncio**. Zero vendas aqui é o
  * sinal de que o nome quebrou — melhor ver na tela de gerenciar do que
  * descobrir por um número estranho no dashboard.
+ *
+ * É um `groupBy` só para todas as áreas: a tela lista N áreas de uma vez, e uma
+ * consulta por área custaria N × ~99ms de ida e volta ao Supabase.
  */
-export async function checarProdutosDaArea(id: string, dias = 30): Promise<{ produto: string; vendas: number }[]> {
+export async function checarProdutosDasAreas(
+  ids?: string[],
+  dias = 30,
+): Promise<Record<string, { produto: string; vendas: number }[]>> {
   const userId = await uid();
-  const w = await prisma.workspace.findFirst({ where: { id, userId }, select: { products: true } });
-  if (!w || w.products.length === 0) return [];
+  const areas = await prisma.workspace.findMany({
+    where: { userId, ...(ids?.length ? { id: { in: ids } } : {}) },
+    select: { id: true, products: true },
+  });
+
+  const todos = [...new Set(areas.flatMap((a) => a.products))];
+  if (todos.length === 0) return Object.fromEntries(areas.map((a) => [a.id, []]));
+
   const desde = new Date(Date.now() - dias * 864e5);
   const grupos = await prisma.sale.groupBy({
     by: ["product"],
-    where: { userId, product: { in: w.products }, timestamp: { gte: desde } },
+    where: { userId, product: { in: todos }, timestamp: { gte: desde } },
     _count: { _all: true },
   });
   const mapa = new Map(grupos.map((g) => [g.product, g._count._all]));
-  return w.products.map((p) => ({ produto: p, vendas: mapa.get(p) ?? 0 }));
+
+  return Object.fromEntries(
+    areas.map((a) => [a.id, a.products.map((p) => ({ produto: p, vendas: mapa.get(p) ?? 0 }))]),
+  );
+}
+
+/** Uma área só. Atalho sobre `checarProdutosDasAreas`. */
+export async function checarProdutosDaArea(id: string, dias = 30): Promise<{ produto: string; vendas: number }[]> {
+  const r = await checarProdutosDasAreas([id], dias);
+  return r[id] ?? [];
+}
+
+/** Tudo o que a tela de gerenciar precisa para montar os seletores. */
+export interface OpcoesAreas {
+  accounts: { id: string; name: string; fbAccountId: string; profileName: string }[];
+  products: string[];
+  sources: string[];
+  webhooks: { id: string; name: string; platform: string }[];
+  pixels: { id: string; name: string }[];
+}
+
+export async function carregarOpcoesAreas(): Promise<OpcoesAreas> {
+  const userId = await uid();
+  const [accounts, produtos, fontes, webhooks, pixels] = await Promise.all([
+    prisma.adAccount.findMany({
+      where: { userId },
+      select: { id: true, name: true, fbAccountId: true, adProfile: { select: { name: true } } },
+      orderBy: { name: "asc" },
+    }),
+    prisma.sale.findMany({ where: { userId }, select: { product: true }, distinct: ["product"], take: 100 }),
+    prisma.click.findMany({
+      where: { userId, utmSource: { not: null } },
+      select: { utmSource: true }, distinct: ["utmSource"], take: 100,
+    }),
+    prisma.webhook.findMany({ where: { userId }, select: { id: true, name: true, platform: true }, orderBy: { createdAt: "asc" } }),
+    prisma.pixelConfig.findMany({ where: { userId }, select: { id: true, name: true }, orderBy: { createdAt: "asc" } }),
+  ]);
+
+  return {
+    accounts: accounts.map((a) => ({
+      id: a.id, name: a.name, fbAccountId: a.fbAccountId, profileName: a.adProfile?.name ?? "—",
+    })),
+    products: produtos.map((p) => p.product).filter(Boolean).sort((a, b) => a.localeCompare(b)),
+    sources: fontes.map((s) => s.utmSource!).filter(Boolean).sort((a, b) => a.localeCompare(b)),
+    webhooks,
+    pixels,
+  };
 }
 
 /**
@@ -153,19 +447,37 @@ export async function checarProdutosDaArea(id: string, dias = 30): Promise<{ pro
  * Se mandasse, bastaria forjar a querystring para montar um escopo arbitrário;
  * e a validação de posse (`userId` no `where`) é o que impede ler área alheia.
  */
-export async function filtrosDaArea(
-  workspaceId: string | null | undefined,
-): Promise<{ accounts?: string[]; products?: string[]; sources?: string[] }> {
-  if (!workspaceId) return {};
+export async function filtrosDaArea(workspaceId: string | null | undefined): Promise<{
+  accounts?: string[];
+  products?: string[];
+  sources?: string[];
+  webhooks?: string[];
+  pixelConfigs?: string[];
+}> {
   const userId = await uid();
-  const w = await prisma.workspace.findFirst({
-    where: { id: workspaceId, userId },
-    select: { accountIds: true, products: true, sources: true },
-  });
-  if (!w) return {}; // área inexistente ou de outro usuário: sem filtro
+
+  // ⛔ **NÃO existe mais o caso "sem área".** Antes, `ws` ausente ou inválido
+  // devolvia `{}` — que significava "não filtra nada", ou seja, a visão
+  // consolidada. Era o buraco por onde qualquer rota que esquecesse de mandar
+  // o `?ws=` passava a somar as áreas em silêncio.
+  //
+  // Agora o fallback é a área PRINCIPAL. Uma requisição sem `ws` mostra a
+  // operação padrão, nunca o total. É esta linha que sustenta a garantia de
+  // que nenhuma tela consegue exibir mais de uma área ao mesmo tempo — ela
+  // vale mesmo se o cliente for adulterado, porque quem resolve é o servidor.
+  const w =
+    (workspaceId
+      ? await prisma.workspace.findFirst({
+          where: { id: workspaceId, userId },
+          select: { accountIds: true, products: true, sources: true, webhookIds: true, pixelConfigIds: true },
+        })
+      : null) ?? (await garantirAreaPrincipal(userId));
+
   return {
     ...(w.accountIds.length ? { accounts: w.accountIds } : {}),
     ...(w.products.length ? { products: w.products } : {}),
     ...(w.sources.length ? { sources: w.sources } : {}),
+    ...(w.webhookIds.length ? { webhooks: w.webhookIds } : {}),
+    ...(w.pixelConfigIds.length ? { pixelConfigs: w.pixelConfigIds } : {}),
   };
 }

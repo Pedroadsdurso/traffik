@@ -159,8 +159,8 @@ model User {
   workspaces           Workspace[]
 
   /// Última Área de Trabalho aberta, para a ferramenta voltar onde parou.
-  /// Nulo = "Todas as áreas". `SetNull` porque excluir a área não pode
-  /// derrubar o usuário.
+  /// Nulo = sem preferência: o código cai na área PRINCIPAL, nunca num estado
+  /// "sem área". `SetNull` porque excluir a área não pode derrubar o usuário.
   lastWorkspaceId String?
   lastWorkspace   Workspace? @relation("UltimaArea", fields: [lastWorkspaceId], references: [id], onDelete: SetNull)
 }
@@ -179,6 +179,14 @@ model Workspace {
   name      String
   /// Cor do marcador na UI (hex). Opcional.
   color     String?
+  /// Anotação livre do usuário ("Oferta de emagrecimento — BR"). Só descreve.
+  description String?
+  /// Área PRINCIPAL do usuário: existe sempre, é criada sozinha e **não pode
+  /// ser excluída nem arquivada**. É o padrão quando não há preferência salva.
+  /// Um índice parcial único (`Workspace_userId_default_key`) garante no BANCO
+  /// que exista no máximo uma por usuário — o `WHERE "isDefault"` do índice é
+  /// o que permite N áreas secundárias com `false`.
+  isDefault Boolean  @default(false)
   archived  Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -191,6 +199,12 @@ model Workspace {
   /// mostra quantas vendas cada um casou justamente para isso ficar visível.
   products   String[] @default([])
   sources    String[] @default([])
+  /// Ids de `Webhook`. É o filtro de venda MAIS confiável que existe aqui:
+  /// `Sale.webhookId` é uma FK de verdade, então não quebra em silêncio quando
+  /// o produto é renomeado no gateway — ao contrário de `products`.
+  webhookIds     String[] @default([])
+  /// Ids de `PixelConfig`, casando com `PixelEvent.pixelConfigId`.
+  pixelConfigIds String[] @default([])
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -512,13 +526,16 @@ model DashboardLayout {
 
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  /// Layout por Área de Trabalho. **Nulo = layout de "Todas as áreas"** — é o
-  /// que os layouts existentes viram, sem backfill nem perda.
+  /// Layout por Área de Trabalho.
+  /// ⚠️ NULO é LEGADO: era o layout da extinta visão "Todas as áreas". A
+  /// migration 20260729120000 migrou todos para a área principal. A coluna
+  /// segue nullable só porque o banco é compartilhado com um build antigo em
+  /// produção que ainda insere NULL — o NOT NULL entra num deploy futuro.
   workspaceId String?
   workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  // Postgres trata NULL como distinto em UNIQUE, então a linha de "Todas as
-  // áreas" (workspaceId nulo) convive com as das áreas sem conflito.
+  // Postgres trata NULL como distinto em UNIQUE. Isso era o que deixava a
+  // linha do consolidado conviver com as das áreas; hoje é só uma herança.
   @@unique([userId, workspaceId, viewport])
   @@index([userId])
   @@index([workspaceId])

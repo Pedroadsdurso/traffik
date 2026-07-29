@@ -44,3 +44,7 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# Backups do banco: contêm dados pessoais (e-mail de comprador, hash de senha,
+# tokens encriptados). NUNCA versionar.
+/backups

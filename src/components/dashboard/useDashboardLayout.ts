@@ -31,7 +31,15 @@ function toGridItems(layout: Layout): GridItem[] {
  * "Editar dashboard" e os controles de Salvar/Cancelar/Redefinir passaram a
  * viver no container de filtros, então o estado precisa ficar acima dos dois.
  */
-export function useDashboardLayout() {
+/**
+ * Estado do grid do Dashboard, POR ÁREA DE TRABALHO.
+ *
+ * O `workspaceId` vem do contexto: cada área tem o seu arranjo de blocos, e
+ * trocar de área recarrega o layout dela. Sem passar o id, o servidor cai na
+ * área principal — o que faria toda área secundária editar o layout da
+ * principal sem avisar.
+ */
+export function useDashboardLayout(workspaceId?: string | null) {
   const [layouts, setLayouts] = useState<Layouts>(fallbackLayouts);
   /** Snapshot tirado ao entrar em edição — é para onde o "Cancelar" volta. */
   const [snapshot, setSnapshot] = useState<Layouts | null>(null);
@@ -41,7 +49,7 @@ export function useDashboardLayout() {
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
-    loadDashboardLayouts()
+    loadDashboardLayouts(workspaceId)
       .then((saved) => {
         setLayouts({
           desktop: saved.desktop?.length ? saved.desktop : defaultLayout("desktop"),
@@ -51,7 +59,8 @@ export function useDashboardLayout() {
       .catch(() => {
         /* mantém o padrão que já está na tela */
       });
-  }, []);
+    // Recarrega ao trocar de área: cada uma tem o seu arranjo de blocos.
+  }, [workspaceId]);
 
   const visiveis = useMemo(() => new Set(layouts[viewport].map((l) => l.i)), [layouts, viewport]);
   const disponiveis = useMemo(() => ALL_BLOCKS.filter((b) => !visiveis.has(b.id)), [visiveis]);
@@ -91,7 +100,7 @@ export function useDashboardLayout() {
     setErro(null);
     try {
       // Salva os dois viewports: o usuário pode ter mexido em um e trocado de tela.
-      await Promise.all(VIEWPORTS.map((vp) => saveDashboardLayout(vp, layouts[vp])));
+      await Promise.all(VIEWPORTS.map((vp) => saveDashboardLayout(vp, layouts[vp], workspaceId)));
       setSnapshot(null);
       setEditing(false);
     } catch (e) {
@@ -105,7 +114,7 @@ export function useDashboardLayout() {
     setBusy(true);
     setErro(null);
     try {
-      await Promise.all(VIEWPORTS.map((vp) => resetDashboardLayout(vp)));
+      await Promise.all(VIEWPORTS.map((vp) => resetDashboardLayout(vp, workspaceId)));
       setLayouts(fallbackLayouts());
       // O snapshot antigo não vale mais: "Cancelar" depois disso voltaria ao
       // layout que o usuário acabou de mandar apagar.

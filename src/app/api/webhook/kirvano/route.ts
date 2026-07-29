@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 
+import { secretsMatch } from "@/lib/crypto/secrets";
 import { prisma } from "@/lib/prisma";
 import { clientIpFrom, ingestSale } from "@/lib/webhook/ingestSale";
 import { finishWebhookLog, startWebhookLog } from "@/lib/webhook/logWebhook";
@@ -52,14 +53,33 @@ export async function POST(req: NextRequest) {
   if (!webhook.active) return reject("Webhook inativo.", 403);
   if (payload === null) return reject("JSON inválido.", 400);
 
-  // Validação do token de segurança da Kirvano (quando o usuário definiu um).
-  if (webhook.secret) {
-    const sent =
-      req.headers.get("security-token") ??
-      req.headers.get("x-security-token") ??
-      (typeof payload["token"] === "string" ? (payload["token"] as string) : null) ??
-      (typeof payload["security_token"] === "string" ? (payload["security_token"] as string) : null);
-    if (sent !== webhook.secret) return reject("Token de segurança inválido.", 401);
+  // ── Token de segurança da Kirvano — falha FECHADA ───────────────────────
+  //
+  // Antes era `if (webhook.secret) { ... }`: webhook sem token configurado
+  // aceitava **qualquer payload**. Quem descobrisse a URL (que circula no
+  // painel do gateway, em log de proxy e no histórico do navegador) conseguiria
+  // injetar venda falsa — e venda falsa não é só número errado no dashboard:
+  // ela dispara Purchase na CAPI do Facebook e envenena a otimização da
+  // campanha com dinheiro real em jogo.
+  //
+  // O fluxo de cadastro da Kirvano SEMPRE pede o token, então exigir aqui não
+  // quebra integração nenhuma: é a mesma regra do `cronAuth` — ausência de
+  // configuração nunca vira permissão.
+  if (!webhook.secret) {
+    return reject(
+      "Webhook sem token de segurança configurado. Edite o webhook na aba Integrações › Webhooks e cole o token da Kirvano.",
+      401,
+    );
+  }
+  const sent =
+    req.headers.get("security-token") ??
+    req.headers.get("x-security-token") ??
+    (typeof payload["token"] === "string" ? (payload["token"] as string) : null) ??
+    (typeof payload["security_token"] === "string" ? (payload["security_token"] as string) : null);
+  // Tempo constante: o token viaja em toda requisição do gateway, então dá para
+  // sondá-lo com muitas tentativas se a comparação vazar o prefixo certo.
+  if (!sent || !secretsMatch(sent, webhook.secret)) {
+    return reject("Token de segurança inválido.", 401);
   }
 
   try {

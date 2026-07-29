@@ -687,10 +687,11 @@ para disparo manual e um `concurrency` group para não sobrepor execuções.
 - **Secret** `CRON_SECRET` — mesmo valor da env var na Vercel
 - **Variable** `APP_URL` — `https://342dd-virid.vercel.app` (sem barra no fim)
 
-> ⚠️ **`CRON_SECRET` é obrigatória em produção.** A checagem nas rotas é
-> `if (secret && auth !== ...)`: **sem a env var definida, as rotas de cron ficam
-> públicas** e qualquer um pode disparar `/api/cron/run-rules`, que pausa campanha e
-> altera orçamento de verdade.
+> ⚠️ **`CRON_SECRET` é obrigatória em produção — a rota FALHA FECHADA sem ela.**
+> `src/lib/cronAuth.ts` recusa (401) quando a env var está ausente ou vazia:
+> ausência de configuração nunca vira permissão. Sem o secret o cron para de
+> rodar, o que é um problema **visível**; uma rota que pausa campanha e altera
+> orçamento aberta na internet não seria.
 
 **Limitações do GitHub Actions** (aceitas conscientemente): o agendamento é
 *best-effort* e costuma atrasar 5–20 min em horário de pico; workflows agendados são
@@ -781,6 +782,27 @@ mesmo havendo checkouts e vendas.
 pendentes + 9 eventos de IC): taxa de aprovação saiu **Pix 4/5 = 80%, Cartão 1/3 = 33,3%,
 Boleto 1/1 = 100%**; países BR/PT/AR com os valores certos; funil com os 5 estágios;
 donuts com percentuais somando 100%. Dados de teste removidos depois.
+
+### Coluna GASTO no Gerenciador (29/07/2026)
+
+A tabela pulava de **Orçamento** direto para **Vendas** — o gasto já alimentava
+CPA, CPM, CPC, ROAS, ROI e Lucro, mas só aparecia dentro do tooltip de fórmula.
+Agora é coluna própria, entre as duas, nos 4 níveis (Contas, Campanhas,
+Conjuntos, Anúncios). A ordem é a da leitura natural: **quanto posso gastar →
+quanto gastei → quanto vendi**.
+
+Não precisou de nada no backend: `spend` já estava em `LinhaBase` e em
+`somar()`, que é o mesmo agregador de onde saem o ROAS e o Lucro — então a
+coluna, a linha de Total e as métricas derivadas **não podem divergir por
+construção**. Marcada como fonte **Meta** (ponto azul), igual a CPM e CPC.
+
+> ⚠️ **A linha de Total mostra "—" em Orçamento, e isso é proposital.** Somar
+> tetos diários de campanhas diferentes produz um número que não significa nada.
+> O Total do Gasto, esse sim, é a soma real do período.
+
+**Verificado por SQL de leitura** contra o banco real (`pedrodurso8`, últimos 7
+dias): `CA 1 MARIA` R$ 103,41 + `CA 2 MARIA` R$ 0,00 = **R$ 103,41**, que é o
+valor que a linha Total do Gerenciador tem de exibir no período de 7 dias.
 
 ### Gerenciador ao vivo, orçamento inline e poda (pós-Blocos 6/7)
 
@@ -1398,6 +1420,258 @@ segundos. Só gasto e impressões esperam a Meta.
 > que contar. Só investigue `accounts: 0` quando o modo for `metricas`,
 > `completo` ou `completo-30d`.
 
+## 🐛 Quatro bugs que só apareceram ao trocar de banco (29/07/2026)
+
+Rodar contra um banco **vazio** e com **sessão de outro banco** expôs coisas que
+o ambiente único escondia. Ficam registrados porque todos voltam a morder quem
+trocar a `DATABASE_URL` de novo.
+
+### 1. `garantirAreaPrincipal` estourava FK em corrida
+
+O layout dispara ~12 leituras em `Promise.all` e várias passam por
+`filtrosDaArea` → `garantirAreaPrincipal`. Com `create` dentro de `try/catch`, a
+perdedora batia no índice parcial único, caía no `catch` e lia a linha da
+vencedora — que **ainda não tinha commitado**. O erro real era o
+`findFirstOrThrow` do catch, e o `catch` vazio escondia a causa.
+
+Hoje é **`createMany({ skipDuplicates: true })`**: o `ON CONFLICT DO NOTHING`
+resolve a corrida no banco (a perdedora **espera** o commit da vencedora e
+segue). Sem `try/catch`, então nenhum erro de verdade fica escondido.
+
+> ⚠️ **Não troque de volta para `create` + `catch`.** O padrão certo aqui é o
+> mesmo do upsert monotônico de vendas e da trava do auto-sync: **quem decide o
+> vencedor é o banco.**
+
+### 2. Sessão órfã derrubava o app inteiro com 500
+
+O callback `session` resolvia o id pelo e-mail e, **quando o e-mail não existia
+neste banco**, caía no `token.sub` — um id fantasma do banco anterior. O guard
+deixava passar e a primeira escrita estourava
+`Foreign key constraint violated`, com a tela em 500 e nenhuma pista.
+
+Agora e-mail sem usuário correspondente **remove o id da sessão**, e o guard
+(`session?.user?.id`) manda para o login. Sessão sem usuário real se comporta
+como "não logado" — que é a leitura correta depois de trocar de banco.
+
+### 3. `ERR_TOO_MANY_REDIRECTS` entre `/dashboard` e `/login`
+
+Consequência do #2: o guard passou a exigir `user.id`, mas `login/page.tsx` e
+`signup/page.tsx` ainda faziam `if (await auth())`. A sessão órfã tem `user` sem
+`id` — dashboard mandava para o login, login mandava de volta, em loop.
+
+> ⚠️ **As duas pontas precisam do MESMO critério de "está logado".** Ao mudar o
+> guard, mude também quem redireciona no sentido contrário.
+
+### 4. `<script>` cru no `RootLayout`
+
+O anti-FOUC do tema era uma tag `<script>` escrita como elemento React, e o
+console avisava: *"Scripts inside React components are never executed when
+rendering on the client"* — literal, numa navegação pelo cliente a tag entra via
+`innerHTML` e o navegador não a executa. Virou **`next/script` com
+`strategy="beforeInteractive"`**, que é o que a documentação local do Next manda
+(`node_modules/next/dist/docs/01-app/03-api-reference/02-components/script.md`) e
+que exige estar no layout raiz.
+
+## 🗄️ DOIS BANCOS: dev e produção (29/07/2026)
+
+| | Ref | Região | O que tem | Onde as credenciais vivem |
+|---|---|---|---|---|
+| **PRODUÇÃO** | `dgaoucxkmpdxeenpfqth` | us-east-1 | Dados reais do usuário | **Só** nas Environment Variables da Vercel |
+| **DESENVOLVIMENTO** | `drdfnazladzkxlqpgdzt` | ca-central-1 | Dados falsos do `seed:dev` | No `.env` da máquina |
+
+> ### ⛔ O `.env` LOCAL SEMPRE APONTA PARA DESENVOLVIMENTO
+> Credencial de produção **não pode existir em arquivo local**. Enquanto ela
+> estiver no `.env`, um clique em "Excluir" no localhost apaga dado real — foi
+> exatamente assim que o incidente aconteceu.
+>
+> `DIRECT_URL` fica **só local** (migrations rodam da máquina, nunca na Vercel).
+> `REDIS_URL` não é usada por nada.
+
+### Como saber em qual banco você está — duas respostas, sem abrir o `.env`
+
+1. **Faixa listrada amarela no topo do painel** (`src/lib/dbEnv.ts` →
+   `DashboardShell`), com o rótulo, o ref e "os dados desta tela são falsos".
+2. **`npm run db:onde`** — imprime ref, região, porta e se a escrita de script
+   está liberada. É o comando para rodar ANTES de qualquer script.
+
+> ⚠️ **A faixa aparece quando o banco NÃO é a produção — inclusive quando é
+> desconhecido.** Produção não ganha faixa de propósito: é o estado normal de
+> quem usa a ferramenta, e faixa permanente vira ruído que se aprende a ignorar
+> — inclusive quando ela mudar para dizer outra coisa.
+>
+> ⚠️ `dbEnv.ts` lê `process.env.DATABASE_URL`, que **não existe no navegador**.
+> Chame no layout (server component) e passe como prop: o que vai para o
+> cliente é só o rótulo e o ref, nunca a URL com senha.
+
+### `guard-db.mjs` virou LISTA DE PERMISSÃO
+
+Era lista de **bloqueio** ("estes refs são produção"). O problema apareceu na
+prática ao criar o segundo projeto: os dois refs foram confundidos entre si numa
+mensagem. Com lista de bloqueio, **um ref desconhecido passa direto** e o script
+escreve num banco que ninguém classificou — o cenário exato do incidente.
+
+Hoje só os refs em `DESENVOLVIMENTO` aceitam escrita. O pior caso passou a ser
+um bloqueio indevido, que aparece na hora e se resolve com uma linha. É a mesma
+regra da autenticação das rotas: **a dúvida vira bloqueio, nunca liberação.**
+
+**Testado:** ref de dev → permite; ref de produção → bloqueia; ref desconhecido
+→ bloqueia; `localhost` → permite (não sai da máquina).
+
+### Backup
+
+`npm run backup` → `backups/traffik-<ref>-<data>.jsonl` · `npm run restore <arquivo>`
+
+- **Só DADOS.** O schema vive em `prisma/migrations`. Restaurar é
+  `prisma migrate deploy` **e depois** o restore — nessa ordem.
+- **JSONL com `to_jsonb`/`jsonb_populate_record`**: quem serializa e
+  desserializa é o Postgres. Montar `INSERT` à mão é onde backup caseiro
+  corrompe array, Json e Decimal em silêncio.
+- O restore calcula a **ordem topológica pelas FKs reais do destino**, não por
+  uma lista fixa que envelheceria a cada tabela nova. `_prisma_migrations` fica
+  de fora: quem manda no estado das migrations é o `migrate deploy`.
+- **`/backups` está no `.gitignore`** — o arquivo tem e-mail de comprador, hash
+  de senha e tokens. Nunca versionar.
+
+> **Frequência:** antes de **toda migration destrutiva** (`DROP`, `RENAME`,
+> `NOT NULL`) e antes de qualquer script que escreva em produção — sem exceção.
+> Fora isso, **semanal** enquanto não houver PITR. O banco todo tem ~500 KB;
+> não há motivo para economizar backup.
+>
+> ⚠️ **PITR é add-on pago do plano Pro.** No Free não existe recuperação
+> point-in-time: o `npm run backup` é o único backup que existe.
+>
+> ⚠️ **Não cobre** usuários do Postgres, extensões, RLS nem o schema `auth` do
+> Supabase. Este projeto não usa nada disso (auth é NextAuth na tabela `User`).
+
+### Variáveis obrigatórias na Vercel (Production)
+
+`DATABASE_URL` · `AUTH_SECRET` · `AUTH_URL` · `NEXT_PUBLIC_APP_URL` ·
+`ENCRYPTION_KEY` · `CRON_SECRET` · `FACEBOOK_APP_ID` · `FACEBOOK_APP_SECRET` ·
+`FACEBOOK_REDIRECT_URI`
+
+> ⚠️ `AUTH_SECRET` **não aparece em `grep process.env`** — o NextAuth v5 a lê
+> sozinho do ambiente. É obrigatória do mesmo jeito.
+>
+> ⚠️ A `ENCRYPTION_KEY` da Vercel tem de ser **idêntica** à que encriptou os
+> dados. Chave diferente torna ilegível tudo que já foi gravado, e não há
+> rotação implementada.
+
+## 🔒 Autenticação de webhook e cron: FALHA FECHADA (29/07/2026)
+
+**Regra do projeto: ausência de configuração NUNCA vira permissão.** Toda
+validação de segredo recusa quando o segredo não está configurado.
+
+| Ponto | Antes | Agora |
+|---|---|---|
+| `/api/cron/*` | `if (secret && …)` — **público sem a env var** | `cronAuth.ts` recusa 401 sem `CRON_SECRET` (inclusive vazia/só espaços) |
+| `/api/webhook/kirvano` | `if (webhook.secret) {…}` — webhook sem token aceitava **qualquer payload** | token obrigatório; sem ele, 401 |
+| `/api/webhook/sale/[token]` | **não selecionava `secret`** — validação totalmente ignorada | exige o token quando configurado; KIRVANO sem token → 401 |
+
+> ### 🔴 O bypass que quase passou despercebido
+> As duas rotas de webhook aceitam **o mesmo `Webhook.token`**. Endurecer só a
+> `/api/webhook/kirvano` não teria adiantado nada: bastava trocar
+> `?id=X` por `/api/webhook/sale/X` para cair na rota que nem lia o `secret`.
+> **Ao mexer na autenticação de uma rota, procure as outras que aceitam a mesma
+> credencial** — endurecer uma porta com a outra aberta é teatro.
+
+**Por que venda falsa é grave aqui:** não é só número errado no dashboard. Ela
+dispara `Purchase` na CAPI do Facebook e envenena a otimização da campanha, com
+dinheiro real em jogo.
+
+**Comparação em tempo constante** (`secretsMatch`, de `crypto/secrets.ts`) em
+todos os pontos: `===` em string vaza pelo tempo de resposta quantos caracteres
+iniciais bateram, e esses segredos viajam em toda requisição do gateway.
+
+**Testado com `curl` contra o dev server:** cron sem header → 401, header errado
+→ 401, **prefixo parcial do secret → 401**, header correto → 200; Kirvano sem
+`security-token` → 401, com token errado → 401; **`/api/webhook/sale/<token>`
+sem secret → 401** (antes, aceitava sem checar nada).
+
+> ⚠️ Auditado também: `encryptionKey()` **lança** se `ENCRYPTION_KEY` faltar (não
+> cai para texto puro); `/api/webhook/ingest` recusa chave ausente **e revogada**;
+> a busca da chave é por `keyHash` indexado, não por comparação de string.
+> `/api/track/click` e `/api/pixel/event` são públicos **por desenho** — rodam no
+> site do cliente — e validam a posse do recurso pelo id.
+
+## ✅ Estado ao fim da sessão de 29/07/2026 — e o que NÃO foi verificado
+
+### Entregue e verificado
+
+| | O quê | Como foi verificado |
+|---|---|---|
+| ✅ | Dois bancos separados; `.env` local no dev | `npm run db:onde` · consulta mostrando só dado `[DEV]` |
+| ✅ | Backup da produção (486,6 KB · 594 linhas) | Arquivo lido de volta, 100% parseável |
+| ✅ | Áreas de Trabalho isoladas, sem visão consolidada | `?ws=` ausente/vazio/inválido devolvem a Principal |
+| ✅ | Área Principal automática e protegida | Criada sozinha; sem botão de excluir/arquivar |
+| ✅ | Coluna Gasto no Gerenciador | Ordem das colunas conferida no DOM |
+| ✅ | Autenticação falha FECHADA (cron + webhooks) | `curl`: 401 sem/errado, 200 com o secret |
+| ✅ | 4 bugs de troca de banco | Ver a seção acima |
+
+### ⚠️ NÃO verificado — não trate como pronto
+
+| | Item | Por quê ficou assim |
+|---|---|---|
+| ⚠️ | **Produção na Vercel após o deploy** | Não tenho as credenciais dela localmente (de propósito). Abrir a URL e conferir login + dashboard é passo manual |
+| ⚠️ | **Gasto total = R$ 103,41 (7 dias)** | Previsto por SQL de leitura na produção; não conferido na tela, porque a sessão local é do banco de dev |
+| ⚠️ | **"Mover para cá"** (conta entre áreas) | Compila e tem caminho de servidor, mas o clique nunca foi exercido — exigiria semear conta de anúncio |
+| ⚠️ | **PITR do Supabase** | Nunca foi respondido se o plano tem. Se for Free, **não existe PITR** e `npm run backup` é o único backup |
+| ⚠️ | **Senha do banco de dev** | Passou pelo chat. Trocar em Supabase › Settings › Database › Reset database password |
+| ⚠️ | **`ENCRYPTION_KEY` na Vercel** | Tem de ser byte a byte igual à que encriptou os dados. Chave diferente = tokens ilegíveis, sem rotação implementada |
+
+### Dívidas que continuam abertas
+
+- **Nav morto no `useTraffikState`** (`navAnalise`, `pageTitle`, `activeTab`, `fbTabs`…) e o gerador de link/snippet antigo (`utmUrl`, `snippetText`). Nada é renderizado. Faxina pendente desde o Bloco 1.
+- **Bloco 8 (Regras)** — único bloco do roteiro v2 ainda não feito.
+- **`DashboardLayout.workspaceId` continua nullable.** O NOT NULL só entra depois que a produção estiver rodando este código — ver a lição da `20260728120000`.
+- **Colunas do Gerenciador que a Meta tem e nós não** — lista levantada e aguardando escolha: Alcance, Frequência, Objetivo, Estratégia de lance, Início/Término (todas já no banco), mais Cliques no link e Entrega detalhada (exigem sync novo).
+
+## 🔴🔴 INCIDENTE (29/07/2026): teste em localhost escreveu no banco REAL
+
+**O que aconteceu:** durante a verificação das Áreas de Trabalho, scripts de
+teste rodaram `UPDATE`/`DELETE` no Supabase — que é o **mesmo banco da
+produção**. Dois erros distintos, e o segundo é o grave:
+
+1. `DELETE FROM "Workspace" WHERE "userId" = <teste@traffik.io>` — apagou
+   **todas** as áreas daquele usuário, não só as que o teste criou.
+2. `UPDATE "Workspace" SET ... WHERE "name" = 'Area A'` — **sem `userId` no
+   `WHERE`**. Um `WHERE` por nome atravessa usuários: qualquer área de qualquer
+   conta com aquele nome teria a configuração zerada, em silêncio.
+
+É a segunda vez que a mesma causa raiz morde (a primeira foi o `DROP COLUMN` da
+`20260728120000`, que derrubou o dashboard em produção). **A causa não é
+descuido pontual — é não existir separação de ambiente.**
+
+### Regras permanentes de teste enquanto houver UM banco só
+
+| | Regra |
+|---|---|
+| 1 | **Nada de escrita em tabela de dado de negócio** para testar: `Workspace`, `Sale`, `Click`, `PixelEvent`, `AdAccount`, `Webhook`, `PixelConfig`, `Campaign`… Verificação vira **leitura** (`SELECT`) + asserção sobre o que já existe |
+| 2 | Todo `UPDATE`/`DELETE` de manutenção leva **`userId` no `WHERE`**, sempre — nunca `WHERE name = '...'` |
+| 3 | Script que escreve **importa `scripts/guard-db.mjs`** e chama `exigirBancoDeDesenvolvimento()` na primeira linha |
+| 4 | Limpeza apaga **por id coletado na criação**, nunca por `LIKE`/nome |
+| 5 | Migration pode rodar (é aditiva e necessária), mas **`DROP`/`RENAME` de coluna exige dois deploys** — ver o incidente da `20260728120000` |
+| 6 | Quando o teste **exigir** escrita de dado de negócio, a resposta é **não testar assim**: descrever o que ficou sem verificação em vez de escrever no banco do usuário |
+
+> ⚠️ **`guard-db.mjs` protege SCRIPTS, não o app.** `npm run dev` continua
+> usando a `DATABASE_URL` do `.env` — se ela apontar para produção, clicar
+> "Excluir" no navegador apaga de verdade. A separação de ambiente é o que
+> resolve isso; a trava só evita o tiro pela linha de comando.
+
+### Ferramentas criadas
+
+- **`scripts/guard-db.mjs`** — `exigirBancoDeDesenvolvimento()`. Compara a
+  `DATABASE_URL` com a lista de refs de produção e aborta. Só passa com
+  `ALLOW_PROD_WRITES=EU_QUERO_MESMO_ESCREVER_EM_PRODUCAO`, escrito por extenso
+  no comando, a cada execução — **de propósito não existe `--force` curto nem
+  arquivo que desligue de forma permanente**, porque atalho curto vira hábito.
+- **`scripts/seed-dev.mjs`** (`npm run seed:dev` / `seed:dev:limpar`) — popula um
+  banco de desenvolvimento com dados **sintéticos**: 1 usuário
+  `dev@exemplo.dev`, 2 contas de anúncio, 2 webhooks, 2 pixels, 8 vendas, 8
+  eventos de pixel. **Nunca copia dado real** — copiar dump da produção
+  espalharia e-mail de comprador e token válido por máquina de desenvolvimento.
+  `--limpar` apaga o usuário e o cascade leva o resto.
+- `scripts/demo-data.mjs` passou a chamar a trava.
+
 ## 🗂️ Áreas de Trabalho (28/07/2026) — parcial, retomar aqui
 
 Área de Trabalho = **um conjunto de filtros salvo com um nome**, aplicado em
@@ -1452,30 +1726,272 @@ toda a ferramenta. Serve para operar duas ofertas sem ver os dados misturados.
    > significado.** É o que garante que script e webhook instalados nunca param
    > de reportar. Quem separa as áreas nos UTMs é o `utm_campaign` no formato
    > `nome|id`, que vem da campanha na Meta — não do script.
-5. **Uma conta de anúncio pertence a apenas UMA área.** ⚠️ **A validação ainda
-   NÃO existe**: `accountIds` é array simples e nada impede duplicação hoje.
+5. **Uma conta de anúncio pertence a apenas UMA área.** ✅ **Validado desde
+   28/07/2026** por `contasOcupadas()`, na tela e no servidor. `accountIds`
+   continua sendo array simples — quem garante a regra é a checagem, não o
+   schema, então **duplicata legada gravada antes disto ainda pode existir**: a
+   tela mostra a área mais antiga como dona e o save seguinte recusa.
 6. **Passo 5 do futuro assistente:** a parte do **pixel vincula de verdade**; a
    parte dos **UTMs é apenas informativa** (o script é o mesmo para todas).
+   *(Assistente cancelado — ver o fim desta seção.)*
 
 ### Pendente, na ordem acordada
 
 | | O quê |
 |---|---|
-| **(a)** | Colunas `Workspace.description`, `webhookIds`, `pixelConfigIds` + filtro em `metrics.ts` + validação de conta única |
-| **(b)** | **Tela `/dashboard/areas`** — o link do seletor hoje dá **404**. As server actions já existem e estão testadas: `createWorkspace`, `updateWorkspace`, `duplicateWorkspace`, `deleteWorkspace`, `checarProdutosDaArea` |
+| ~~**(a)**~~ | ✅ Colunas `description`/`webhookIds`/`pixelConfigIds` + filtro em `metrics.ts` + validação de conta única |
+| ~~**(b)**~~ | ✅ **Tela `/dashboard/areas`** — o 404 do seletor acabou |
 | **(c)** | Aplicar `?ws=` em `/api/ads`, Criativos e Atividade Recente |
 | **(d)** | `useDashboardLayout` passar o `workspaceId` (as actions já aceitam) |
-| **(e)** | `returnTo` no callback do OAuth — hoje o destino é fixo em `/dashboard/integracoes/anuncios?fb=connected`, e sem isso o assistente perde o estado ao conectar um perfil |
-| **(f)** | Assistente de 6 passos — **avaliar se ainda é necessário** depois que (b) existir. Pode ser que criar área numa tela só já resolva |
+| **(e)** | `returnTo` no callback do OAuth — hoje o destino é fixo em `/dashboard/integracoes/anuncios?fb=connected` |
+| ~~**(f)**~~ | ❌ **Assistente de 6 passos CANCELADO** — ver abaixo |
 
-> ⚠️ **Comece por (b).** Ela destrava o 404, é o destino do "Pular por agora" do
-> assistente e o lugar onde as pendências de cada área aparecem — (f) é
-> conveniência sobre uma tela que ainda não existe.
-
-**Testado:** Área A 400÷200 = 2,00x, Área B 120÷100 = 1,20x, nenhuma vê a
-outra, consolidado soma os gastos, área de outro usuário não aplica filtro,
+**Testado (1ª rodada):** Área A 400÷200 = 2,00x, Área B 120÷100 = 1,20x, nenhuma
+vê a outra, consolidado soma os gastos, área de outro usuário não aplica filtro,
 layout de "Todas" convive com o da área, e **excluir área não apaga venda**.
 21 asserções nas duas rodadas.
+
+### (a) e (b) — entregues em 28/07/2026
+
+**Migration `20260728210000_workspace_extras`** — `description`, `webhookIds`,
+`pixelConfigIds`. Tudo **aditivo e com default**, então nenhuma área existente
+precisou de backfill e o build antigo que ainda roda em produção sobre o mesmo
+Supabase continua funcionando (é exatamente o oposto do incidente da
+`20260728120000`, que dropou coluna ainda selecionada em prod).
+
+**As duas dimensões novas não têm filtro na barra do topo**, então não passam
+por `filtroEfetivo` — vão direto ao `where` de `metrics.ts`:
+
+| Dimensão | Coluna | Nota |
+|---|---|---|
+| `webhookIds` | `Sale.webhookId` | **O recorte de venda mais confiável.** É FK, não texto livre: não quebra em silêncio quando o produto é renomeado no gateway |
+| `pixelConfigIds` | `PixelEvent.pixelConfigId` | Recorta o funil (IC/Lead/AddToCart) e o feed de Atividade |
+
+> ⚠️ **Venda sem `webhookId` fica de fora** quando o filtro de webhook está
+> ligado — é o caso da ingestão pela chave de API. E o **Initiate Checkout
+> gerado pelo webhook do gateway** (`webhook/checkoutEvent.ts`) nasce **sem**
+> `pixelConfigId`, então some quando há filtro de pixel. Nos dois casos não há
+> como afirmar a origem, e inventá-la seria pior que excluir.
+>
+> ⚠️ **Cliques não são recortados por webhook nem por pixel** — um `Click` não
+> tem nenhum dos dois. A etapa "Visita na página" do funil ignora essas duas
+> dimensões.
+
+**Validação "uma conta pertence a uma única área": `contasOcupadas(ids, exceto?)`**
+devolve *quais* contas estão ocupadas e *por qual área* — não um booleano, porque
+a tela precisa nomear a área ocupante, senão o bloqueio vira um "não" sem saída.
+Roda **no servidor dentro de `create`/`updateWorkspace`** mesmo com a tela já
+bloqueando a seleção: server action é endpoint público, e o bloqueio da tela é
+conveniência.
+
+> ⚠️ **Duplicar NÃO copia as contas de anúncio.** Copiar produziria um conflito
+> garantido no ato da duplicação. A cópia nasce com produtos/webhooks/pixels e
+> sem contas — e o card explica isso na pendência.
+
+**Tela `/dashboard/areas`** (`views/AreasView.tsx`, autocontida, mesmo padrão de
+`UtmsView`/`PixelView`). Cards com nome, cor, descrição, os vínculos das 5
+dimensões e **as pendências ditas em consequência**, não em jargão — "Sem conta
+de anúncio — o gasto exibido é o de todas as contas, então ROAS e ROI ficam
+distorcidos" em vez de "accountIds vazio". Produto com **0 vendas em 30 dias**
+(via `checarProdutosDasAreas`) ganha chip âmbar com ⚠.
+
+- **`checarProdutosDaArea` virou atalho sobre `checarProdutosDasAreas`**, que faz
+  **um `groupBy` para todas as áreas**. Uma consulta por área custaria N × ~99ms
+  de ida e volta ao Supabase numa tela que lista N áreas de uma vez.
+- **`ui/ListaSelecionavel.tsx`** — seleção múltipla com busca. Item bloqueado
+  **aparece desabilitado, não some**: uma conta que sumiu da lista sem
+  explicação manda o usuário procurar o que não existe.
+  > ⚠️ Um id **selecionado que não está mais nas opções** (produto renomeado no
+  > gateway, webhook excluído) é renderizado como órfão marcável. Sem isso ele
+  > seguiria filtrando de verdade sem aparecer na tela nem poder ser desmarcado.
+- O card mostra id truncado + "(removido)" para webhook/pixel que não existe
+  mais, pela mesma razão.
+- **Excluir** abre modal dizendo em letras que **nenhum dado é apagado** e o que
+  de fato se perde (configuração + layout da área).
+
+**Testado ponta a ponta** (dev server + Supabase + navegador, usuário
+`teste@traffik.io` com 2 contas / 2 webhooks / 2 pixels / 3 vendas semeados):
+
+| Caso | Resultado |
+|---|---|
+| Área A (conta+webhook+produto+pixel A) | rev 200 · gasto 100 · **ROAS 2,00x** · 2 vendas · 2 IC |
+| Área B (conta+webhook+produto+pixel B) | rev 500 · gasto 300 · **1,67x** · 1 venda · 1 IC |
+| Área B tinha "Curso" nos produtos | não entrou: a venda do Curso não é do webhook B — **prova a interseção** |
+| Só `webhookIds=[B]` | rev **500**, gasto 400 (sem filtro de conta), IC 3 (sem filtro de pixel) |
+| Só `pixelConfigIds=[B]` | IC **1** e 1 checkout no feed; rev/vendas intactos |
+| `?ws=` com id inexistente | sem filtro nenhum (não vaza dado de outra área) |
+| Conta já vinculada | checkbox desabilitado com *"Já vinculada à área “Area A”"* |
+| Save forçando conflito | recusado no servidor: *"Conta de anúncio já vinculada a outra área (Area B)"* |
+| Duplicar | cópia sem contas, com produtos/webhooks/pixels |
+| Excluir Área B | vendas **13 → 13**, faturamento **2051,70 → 2051,70** |
+| Arquivar | sai do seletor da sidebar, fica na aba "Arquivadas (1)" |
+| Selecionar a área na sidebar | Dashboard mostrou R$ 200,00 / R$ 100,00 / 2,00x / 2 vendas |
+
+`tsc --noEmit` e `next build` limpos; dados de teste removidos.
+
+### ⛔ A visão "Todas as áreas" foi REMOVIDA (29/07/2026)
+
+**Não existe mais visão consolidada em lugar nenhum do produto.** As áreas são
+isoladas e as métricas são sempre de UMA operação. O usuário está sempre dentro
+de uma área — não há estado "sem área".
+
+> ### 🔐 A garantia mora no SERVIDOR, numa linha só
+> `filtrosDaArea()` antes devolvia `{}` quando o `ws` faltava ou era inválido —
+> e `{}` significa "não filtra nada", ou seja, o consolidado. **Era o buraco por
+> onde qualquer rota que esquecesse o `?ws=` somava as áreas em silêncio.**
+>
+> Hoje o fallback é a **área principal**. Requisição sem `ws`, com `ws` vazio ou
+> com id de outro usuário mostra a operação padrão — nunca o total. Vale mesmo
+> com o cliente adulterado, porque quem resolve é o servidor.
+>
+> ⚠️ **Toda rota nova que sirva métrica PRECISA chamar `filtrosDaArea`.** É o
+> único ponto que garante o isolamento; uma consulta que vá direto ao Prisma
+> sem passar por ali volta a ver tudo.
+
+**Migration `20260729120000_sem_visao_consolidada`:**
+1. Cria a principal para todo usuário que ainda não tinha (com todas as contas,
+   webhooks e pixels da conta) — inclusive quem nunca abriu o painel.
+2. **Layout salvo em `workspaceId NULL` vira layout da principal.** Antes disso
+   resolve a colisão do `@@unique(userId, workspaceId, viewport)`: NULL não
+   colide no Postgres, então ao preencher o NULL duas linhas viravam a mesma
+   chave. Vence a mais recente.
+3. `User.lastWorkspaceId` nulo passa a apontar para a principal.
+
+> ⚠️ **`DashboardLayout.workspaceId` continua NULLABLE de propósito.** O banco é
+> compartilhado com um build antigo em produção que ainda insere NULL ali;
+> marcar NOT NULL agora quebraria o "Salvar layout" dele — o mesmo erro da
+> `20260728120000`. O NOT NULL entra num segundo deploy.
+
+**O que saiu do código:** `todasEscolhida`, `vendoTodasAsAreas`, `totalDeAreas`,
+a faixa âmbar do Header, a opção Σ do seletor e o ramo `workspaceId ?? null` do
+`dashboardLayout.ts`. `trocarWorkspace` agora recebe `string`, não `string | null`.
+
+**O seletor ficou:** lista das áreas + "Gerenciar áreas" no rodapé. Sem opção
+consolidada e sem contador de "números somados".
+
+> ⚠️ **O isolamento depende de a área estar CONFIGURADA.** Lista vazia continua
+> significando "não filtra": uma área secundária sem conta de anúncio vê o gasto
+> de todas as contas. Não é vazamento do modo consolidado — é configuração
+> incompleta —, e é por isso que o card da área avisa em âmbar. A única área em
+> que "ver tudo" é legítimo é a principal enquanto for a única.
+>
+> ⚠️ **Venda sem `webhookId` (ingestão por chave de API) some de toda área** que
+> filtre por webhook, porque não há como afirmar de qual operação ela é. Mesmo
+> raciocínio do IC sem `pixelConfigId`.
+
+**Verificado:** seletor sem "Todas"/Σ; `/api/dashboard` sem `ws`, com `ws=` e
+com `ws` inválido devolvem os MESMOS números da principal; as 4 rotas de métrica
+passam por `filtrosDaArea`; no banco, os 2 usuários têm principal
+(`pedrodurso8` com 5 contas, 1 webhook, 2 pixels) e **nenhum `DashboardLayout`
+ficou com `workspaceId` nulo**.
+
+### 🏠 Área PRINCIPAL e o padrão de entrada (29/07/2026)
+
+**Migration `20260729060000_workspace_principal`** — `Workspace.isDefault` +
+**índice único PARCIAL** `Workspace_userId_default_key` (`ON ("userId") WHERE
+"isDefault"`).
+
+> ⚠️ Tem de ser **parcial**. Um `UNIQUE(userId, isDefault)` comum proibiria duas
+> áreas secundárias, porque as duas teriam `false`. A garantia mora no banco
+> porque `garantirAreaPrincipal()` roda em todo carregamento de página e várias
+> abas podem chamá-la ao mesmo tempo — mesmo padrão do upsert monotônico de
+> vendas: quem decide o vencedor é o banco, e o perdedor lê o que o vencedor
+> gravou.
+
+**`garantirAreaPrincipal()`** (chamada por `listWorkspaces()`, que o layout já
+executa): se não há principal, **promove a área mais antiga**; se não há área
+nenhuma, cria a "Principal" **já preenchida com todas as contas de anúncio,
+webhooks e pixels da conta**.
+
+> ⚠️ **`products` e `sources` nascem VAZIOS de propósito.** São texto livre: uma
+> lista explícita congelaria o passado e um produto novo do gateway ficaria de
+> fora da principal **em silêncio**. Vazio = "todos", que é o comportamento
+> certo para a operação padrão. Contas/webhooks/pixels são conjuntos finitos e
+> gerenciados, então listá-los é seguro — e é o que torna a principal
+> **isolada** quando surge a segunda área.
+
+**A principal não pode ser excluída nem arquivada.** A checagem vive na server
+action (`deleteWorkspace` filtra `isDefault: false`; `updateWorkspace` recusa
+`archived: true`), não só no botão escondido — server action é endpoint público,
+e sem principal o seletor fica sem fallback.
+
+#### O padrão de entrada deixou de ser "Todas as áreas"
+
+| | Antes | Agora |
+|---|---|---|
+| Sem preferência salva | "Todas as áreas" (soma) | **Principal**, isolada |
+| Área lembrada arquivada/excluída | caía em "Todas" | cai na **Principal** |
+| Usuário escolhe "Todas" | persistia | **não persiste** |
+
+> ⚠️ **"Todas as áreas" NÃO é lembrada entre sessões, de propósito.**
+> `setLastWorkspaceId(null)` é um no-op. Ela é uma consulta pontual ("quanto o
+> negócio inteiro fez?"), não um lugar para morar — persisti-la reabriria a
+> ferramenta na visão somada, que é o comportamento que estamos eliminando. A
+> escolha vale enquanto a aba estiver aberta.
+>
+> ⚠️ O estado `todasEscolhida` no `useTraffikState` existe porque "Todas" é
+> `workspaceAtiva === null`, **indistinguível de "ainda não escolheu"**. Sem a
+> flag, o efeito de semeadura jogaria o usuário de volta para a principal a cada
+> re-render do layout, e seria impossível ficar no consolidado.
+
+#### Consolidado tem tratamento visual próprio
+
+- **Seletor da sidebar**: duas linhas ("ÁREA PRINCIPAL" / nome), fundo tingido
+  com a cor da área e faixa lateral da mesma cor. No consolidado vira **âmbar
+  com Σ** e o rótulo "Visão consolidada".
+- **Header**: selo ao lado do título — `● Área X · dados isolados`, ou, no
+  consolidado, âmbar dizendo *"os números abaixo são a soma de N área(s), não de
+  uma operação só"*.
+- As áreas vêm **primeiro** no dropdown; "Todas as áreas" foi para o rodapé,
+  com a legenda "Números somados de N área(s)".
+
+#### Conta de anúncio: bloqueio COM saída
+
+Com a principal nascendo dona de todas as contas, o bloqueio de conta duplicada
+viraria um beco: criar a primeira secundária esbarraria nele sempre. O item
+bloqueado agora traz **"Mover para cá"**, que registra a conta em
+`moverContas` — e só então o servidor (`liberarContas`) a tira da área anterior.
+**Nada troca de área em silêncio**: sem o clique, o save continua sendo recusado.
+
+#### Onde a área ativa é aplicada
+
+| Tela | Como |
+|---|---|
+| Dashboard + Atividade Recente | `?ws=` → `computeDashboard` |
+| **Gerenciador de Anúncios** | `?ws=` → `computeAdsOverview` (contas, vendas, cliques, IC) |
+| **Criativos** | `?ws=` → `computeCreatives` |
+| **Notificações** | `?ws=` → `listNotifications` |
+| **Regras** | filtro no cliente, pelas contas de anúncio que a regra mira |
+
+> ⚠️ **Notificação SEM venda aparece em TODA área.** Relatório diário, alerta de
+> regra e aviso de sistema não pertencem a operação nenhuma; escondê-los faria o
+> usuário perder aviso por estar na aba errada. Só o que tem `saleId` é
+> recortado, e pela mesma regra do Dashboard (webhook + produto da venda).
+>
+> ⚠️ **Regra sem conta escolhida vale para todas e aparece em toda área.** Ela
+> realmente age sobre as campanhas desta área também — escondê-la faria o
+> usuário achar que ninguém está pausando as campanhas dele enquanto uma regra
+> global as pausa.
+>
+> ⚠️ **Integrações e Taxas continuam globais**, de propósito: são cadastro
+> (webhook, pixel, conta, despesa), não métrica. É lá que se cria o que as áreas
+> depois separam.
+
+### ❌ O assistente de 6 passos foi CANCELADO
+
+Criar área **numa tela só** ficou suficiente: nome, cor, descrição e as 5
+dimensões cabem numa gaveta, e cada campo já explica a consequência de ficar em
+branco. Paginar isso em 6 passos esconderia de quem sabe o que quer exatamente
+os campos que veio preencher, e obrigaria a navegar para trás para corrigir.
+
+O que o assistente prometia e a tela já entrega: as pendências por área (nos
+cards), o aviso de produto que parou de casar, e o bloqueio de conta duplicada
+com o nome da área ocupante. **A pendência (e) — `returnTo` no OAuth — existia
+só para o assistente não perder o estado ao conectar um perfil; sem assistente,
+ela vira melhoria menor, não bloqueio.**
+
+> Se um dia voltar a ideia de onboarding guiado, o lugar dele é o **primeiro
+> acesso** (usuário sem nenhuma área), não a criação da segunda em diante.
 
 ## 🎨 Marca e logos
 

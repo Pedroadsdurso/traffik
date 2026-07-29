@@ -4,8 +4,25 @@ import { auth } from "@/auth";
 import { sanitizeLayout, type GridItem } from "@/components/dashboard/blocks";
 import type { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
+import { garantirAreaPrincipal } from "@/lib/actions/workspaces";
 
 export type Viewport = "desktop" | "mobile";
+
+/**
+ * Resolve para uma área REAL. Nunca devolve `null`.
+ *
+ * O `workspaceId` chega do cliente e pode faltar (primeiro render) ou ser de
+ * outro usuário. Sem esta resolução, um id ausente gravaria de novo o layout
+ * "sem área" que acabamos de eliminar.
+ */
+async function resolverArea(workspaceId?: string | null): Promise<string> {
+  const userId = await requireUserId();
+  if (workspaceId) {
+    const w = await prisma.workspace.findFirst({ where: { id: workspaceId, userId }, select: { id: true } });
+    if (w) return w.id;
+  }
+  return (await garantirAreaPrincipal(userId)).id;
+}
 
 export interface DashboardLayoutsDTO {
   desktop: GridItem[] | null;
@@ -23,12 +40,17 @@ async function requireUserId(): Promise<string> {
  * o cliente cai no `defaultLayout` nesse caso, em vez de mostrar grid vazio.
  */
 /**
- * Layouts de uma Área de Trabalho. `workspaceId` nulo = "Todas as áreas", que é
- * onde os layouts que já existiam continuam morando — sem backfill.
+ * Layouts de uma Área de Trabalho.
+ *
+ * ⛔ Não existe mais layout "de todas as áreas": o usuário está sempre dentro
+ * de uma área, e um `workspaceId` ausente cai na PRINCIPAL. Os layouts que
+ * moravam no `workspaceId` nulo foram migrados para a principal pela
+ * `20260729120000_sem_visao_consolidada`.
  */
 export async function loadDashboardLayouts(workspaceId?: string | null): Promise<DashboardLayoutsDTO> {
   const userId = await requireUserId();
-  const rows = await prisma.dashboardLayout.findMany({ where: { userId, workspaceId: workspaceId ?? null } });
+  const wsId = await resolverArea(workspaceId);
+  const rows = await prisma.dashboardLayout.findMany({ where: { userId, workspaceId: wsId } });
 
   const byViewport = new Map(rows.map((r) => [r.viewport, r.layout]));
   return {
@@ -44,6 +66,7 @@ export async function saveDashboardLayout(
   workspaceId?: string | null,
 ): Promise<{ ok: true }> {
   const userId = await requireUserId();
+  const wsId = await resolverArea(workspaceId);
   // Nunca confia no que vem do cliente: passa pelo mesmo saneamento da leitura.
   // O cast é só para o Json do Prisma — `clean` já é um array de objetos planos.
   const clean = (sanitizeLayout(layout) ?? []) as unknown as Prisma.InputJsonValue;
@@ -52,14 +75,14 @@ export async function saveDashboardLayout(
   // Prisma não aceita `null` numa chave única composta (embora o Postgres
   // aceite). Então é buscar-e-decidir.
   const existente = await prisma.dashboardLayout.findFirst({
-    where: { userId, workspaceId: workspaceId ?? null, viewport },
+    where: { userId, workspaceId: wsId, viewport },
     select: { id: true },
   });
   if (existente) {
     await prisma.dashboardLayout.update({ where: { id: existente.id }, data: { layout: clean } });
   } else {
     await prisma.dashboardLayout.create({
-      data: { userId, workspaceId: workspaceId ?? null, viewport, layout: clean },
+      data: { userId, workspaceId: wsId, viewport, layout: clean },
     });
   }
   return { ok: true };
@@ -68,6 +91,7 @@ export async function saveDashboardLayout(
 /** "Redefinir configurações": apaga o customizado e volta ao layout padrão. */
 export async function resetDashboardLayout(viewport: Viewport, workspaceId?: string | null): Promise<{ ok: true }> {
   const userId = await requireUserId();
-  await prisma.dashboardLayout.deleteMany({ where: { userId, workspaceId: workspaceId ?? null, viewport } });
+  const wsId = await resolverArea(workspaceId);
+  await prisma.dashboardLayout.deleteMany({ where: { userId, workspaceId: wsId, viewport } });
   return { ok: true };
 }

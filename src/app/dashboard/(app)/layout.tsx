@@ -13,6 +13,7 @@ import { listRules } from "@/lib/actions/rules";
 import { listWebhooks } from "@/lib/actions/webhooks";
 import { getLastWorkspaceId, listWorkspaces } from "@/lib/actions/workspaces";
 import { getAppUrl } from "@/lib/appUrl";
+import { bancoAtual } from "@/lib/dbEnv";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const session = await auth();
@@ -39,6 +40,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       user={{ name: session?.user?.name, email: session?.user?.email }}
       trackingId={session?.user?.id}
       appUrl={getAppUrl()}
+      banco={bancoAtual()}
       initialWebhooks={webhooks}
       initialApiCredentials={apiCredentials}
       dashboardPrefs={prefs}

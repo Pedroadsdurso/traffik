@@ -33,6 +33,26 @@ export interface DashboardFilters {
   accounts?: string[];
   products?: string[];
   sources?: string[];
+  /**
+   * Webhooks da área. Não existe filtro de tela correspondente, então age
+   * direto (sem interseção). É o recorte de venda **mais confiável** desta
+   * lista: `Sale.webhookId` é FK, ao contrário de `products`, que é texto livre
+   * do gateway e para de casar em silêncio quando o produto é renomeado lá.
+   *
+   * ⚠️ Venda sem `webhookId` (ingestão pela chave de API, ou importada) fica de
+   * fora quando este filtro está ligado — não há como afirmar que ela veio
+   * daquele gateway.
+   */
+  webhooks?: string[];
+  /**
+   * Pixels da área, casando com `PixelEvent.pixelConfigId`.
+   *
+   * ⚠️ O Initiate Checkout gerado pelo WEBHOOK do gateway
+   * (`webhook/checkoutEvent.ts`) nasce **sem** `pixelConfigId` — ele não passa
+   * por pixel nenhum. Com este filtro ligado ele fica de fora, e o funil conta
+   * só os checkouts que o script daquele(s) pixel(s) viu.
+   */
+  pixelConfigs?: string[];
 }
 
 export interface DashboardData {
@@ -216,6 +236,10 @@ async function windowAggregate(
   const contas = filtroEfetivo(filters.accounts, filters.account, "todas");
   const produtos = filtroEfetivo(filters.products, filters.product, "todos");
   const fontes = filtroEfetivo(filters.sources, filters.source, "todas");
+  // Webhooks e pixels não têm filtro na barra do topo: a área é a única fonte,
+  // então vão direto ao `where` sem interseção.
+  const webhooks = filters.webhooks?.length ? filters.webhooks : null;
+  const pixelConfigs = filters.pixelConfigs?.length ? filters.pixelConfigs : null;
   // As pontas em chave de dia do fuso do usuário — é assim que `DailyAdMetric`
   // (coluna `@db.Date`, um dia de calendário) tem de ser filtrada.
   const startKey = dayKeyInTz(start, tz);
@@ -231,6 +255,7 @@ async function windowAggregate(
         timestamp: { gte: start, lte: end },
         ...(produtos ? { product: { in: produtos } } : {}),
         ...(fontes ? { click: { is: { utmSource: { in: fontes } } } } : {}),
+        ...(webhooks ? { webhookId: { in: webhooks } } : {}),
       },
       select: {
         id: true,
@@ -276,7 +301,11 @@ async function windowAggregate(
     // Antes esta consulta filtrava `event: "InitiateCheckout"`, então Lead e
     // AddToCart eram gravados mas nunca apareciam na tela.
     prisma.pixelEvent.findMany({
-      where: { userId, timestamp: { gte: start, lte: end } },
+      where: {
+        userId,
+        timestamp: { gte: start, lte: end },
+        ...(pixelConfigs ? { pixelConfigId: { in: pixelConfigs } } : {}),
+      },
       select: { id: true, event: true, url: true, fbclid: true, timestamp: true },
       orderBy: { timestamp: "desc" },
       take: 200,
@@ -290,7 +319,12 @@ async function windowAggregate(
     // 31 eventos para 25 visitantes. Esse era o inflador que fazia uma etapa
     // ultrapassar a anterior.
     prisma.pixelEvent.findMany({
-      where: { userId, event: "InitiateCheckout", timestamp: { gte: start, lte: end } },
+      where: {
+        userId,
+        event: "InitiateCheckout",
+        timestamp: { gte: start, lte: end },
+        ...(pixelConfigs ? { pixelConfigId: { in: pixelConfigs } } : {}),
+      },
       select: { id: true, fbclid: true, eventId: true },
     }),
   ]);

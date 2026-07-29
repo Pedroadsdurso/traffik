@@ -33,14 +33,29 @@ function num(v: unknown): number {
 
 export async function computeCreatives(
   userId: string,
-  opts: { period: CreativePeriod; sort: CreativeSort },
+  opts: {
+    period: CreativePeriod;
+    sort: CreativeSort;
+    /** Filtros BASE da Área de Trabalho (carregados no servidor pelo `?ws=`). */
+    accounts?: string[];
+    products?: string[];
+    sources?: string[];
+    webhooks?: string[];
+  },
 ): Promise<CreativeRow[]> {
   const tz = await getUserTimezone(userId);
   const { start, startKey } = rangeStart(opts.period, tz);
 
+  // Sem filtro de tela aqui: a área é a única fonte de recorte da aba Criativos.
+  const contas = opts.accounts?.length ? opts.accounts : null;
+  const produtos = opts.products?.length ? opts.products : null;
+  const fontes = opts.sources?.length ? opts.sources : null;
+  const webhooks = opts.webhooks?.length ? opts.webhooks : null;
+  const contaWhere = contas ? { id: { in: contas } } : {};
+
   const [ads, metrics, sales] = await Promise.all([
     prisma.ad.findMany({
-      where: { adAccount: { userId }, creative: { isNot: null } },
+      where: { adAccount: { userId, ...contaWhere }, creative: { isNot: null } },
       select: {
         id: true,
         fbAdId: true,
@@ -50,12 +65,19 @@ export async function computeCreatives(
       },
     }),
     prisma.dailyAdMetric.findMany({
-      where: { date: { gte: keyToDateColumn(startKey) }, ad: { adAccount: { userId } } },
+      where: { date: { gte: keyToDateColumn(startKey) }, ad: { adAccount: { userId, ...contaWhere } } },
       select: { adId: true, spend: true, impressions: true, clicks: true },
     }),
     // Vendas aprovadas no período; atribuídas ao anúncio por utm_content → nome.
     prisma.sale.findMany({
-      where: { userId, status: "APROVADA", timestamp: { gte: start } },
+      where: {
+        userId,
+        status: "APROVADA",
+        timestamp: { gte: start },
+        ...(produtos ? { product: { in: produtos } } : {}),
+        ...(webhooks ? { webhookId: { in: webhooks } } : {}),
+        ...(fontes ? { click: { is: { utmSource: { in: fontes } } } } : {}),
+      },
       select: { value: true, click: { select: { utmContent: true } } },
     }),
   ]);

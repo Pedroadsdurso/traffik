@@ -98,7 +98,13 @@ interface State {
   syncLastAt: string | null;
   syncRodando: boolean;
   /** Sincronização manual (botão "Atualizar") em andamento. */
-  /** Áreas de Trabalho e a ativa. `null` = "Todas as áreas". */
+  /**
+   * Áreas de Trabalho e a ativa.
+   *
+   * `workspaceAtiva` é `null` APENAS no instante entre a montagem do hook e a
+   * chegada das áreas do servidor — não é mais um modo. Não existe visão
+   * consolidada: o usuário está sempre dentro de uma área.
+   */
   workspaces: WorkspaceDTO[];
   workspaceAtiva: string | null;
   syncManualBusy: boolean;
@@ -421,9 +427,14 @@ export function useTraffikState(
     if (!areasServidor) return;
     setS((st) => {
       const igual = JSON.stringify(st.workspaces) === JSON.stringify(areasServidor);
+      const principal = areasServidor.find((a) => a.isDefault) ?? null;
       const proxima = st.workspaceAtiva ?? ultimaArea;
-      // Área arquivada ou excluída não pode continuar ativa — cai para "Todas".
-      const valida = proxima && areasServidor.some((a) => a.id === proxima && !a.archived) ? proxima : null;
+      // ⛔ Não existe mais estado "sem área". Se a área ativa foi arquivada ou
+      // excluída, o fallback é a PRINCIPAL — nunca `null`, que era o
+      // consolidado. `null` aqui só sobrevive no instante anterior ao primeiro
+      // carregamento das áreas, e nenhuma requisição sai nesse intervalo.
+      const valida =
+        proxima && areasServidor.some((a) => a.id === proxima && !a.archived) ? proxima : principal?.id ?? null;
       if (igual && st.workspaceAtiva === valida) return st;
       return { ...st, workspaces: areasServidor, workspaceAtiva: valida };
     });
@@ -511,6 +522,7 @@ export function useTraffikState(
     const controller = new AbortController();
     (async () => {
       const qs = new URLSearchParams({ period: s.creativesPeriod, sort: s.creativesSort });
+      if (s.workspaceAtiva) qs.set("ws", s.workspaceAtiva);
       try {
         const res = await fetch(`/api/creatives?${qs.toString()}`, { signal: controller.signal });
         if (!res.ok) return;
@@ -521,7 +533,7 @@ export function useTraffikState(
       }
     })();
     return () => { active = false; controller.abort(); };
-  }, [s.creativesPeriod, s.creativesSort, s.adsRefreshKey]);
+  }, [s.creativesPeriod, s.creativesSort, s.workspaceAtiva, s.adsRefreshKey]);
 
   // Perfis e contas de anúncio: repescagem a cada 30s.
   //
@@ -555,7 +567,8 @@ export function useTraffikState(
     const controller = new AbortController();
     async function load() {
       try {
-        const res = await fetch("/api/notifications", { signal: controller.signal });
+        const url = s.workspaceAtiva ? `/api/notifications?ws=${encodeURIComponent(s.workspaceAtiva)}` : "/api/notifications";
+        const res = await fetch(url, { signal: controller.signal });
         if (!res.ok) return;
         const data = (await res.json()) as { items: NotificationDTO[]; unread: number };
         if (active) setS((st) => ({ ...st, notifications: data.items, notifUnread: data.unread }));
@@ -567,7 +580,7 @@ export function useTraffikState(
     if (!liveUpdates) return () => { active = false; controller.abort(); };
     const stop = startPolling(load, DASH_POLL_MS);
     return () => { active = false; controller.abort(); stop(); };
-  }, [liveUpdates]);
+  }, [liveUpdates, s.workspaceAtiva]);
 
   const persistPrefs = useCallback((order: MetricKey[], visible: Record<MetricKey, boolean>) => {
     saveDashboardPrefs({ order, visible }).catch(() => {});
@@ -986,7 +999,23 @@ export function useTraffikState(
 
   const LEVEL_LABEL: Record<RuleLevel, string> = { CAMPAIGN: "Campanha", ADSET: "Conjunto", AD: "Anúncio" };
   const RULE_STATUS_LABEL: Record<string, string> = { SUCESSO: "Executou", SEM_ACAO: "Sem ação", ERRO: "Erro" };
-  const rules = s.rules.map((r) => ({
+  // Regras da ÁREA ATIVA. Uma regra é configuração, não métrica: o recorte é
+  // pelas contas de anúncio que ela mira.
+  //
+  // ⚠️ Regra **sem conta escolhida vale para todas** — então aparece em toda
+  // área, e isso é correto: ela realmente age sobre as campanhas desta área
+  // também. Escondê-la faria o usuário achar que ninguém está pausando as
+  // campanhas dele, enquanto uma regra global as pausa.
+  const contasDaArea = s.workspaceAtiva
+    ? s.workspaces.find((w) => w.id === s.workspaceAtiva)?.accountIds ?? []
+    : [];
+  const rules = s.rules
+    .filter((r) =>
+      contasDaArea.length === 0 || r.adAccountIds.length === 0
+        ? true
+        : r.adAccountIds.some((id) => contasDaArea.includes(id)),
+    )
+    .map((r) => ({
     id: r.id,
     name: r.name,
     summary: r.summary,
@@ -1184,12 +1213,14 @@ export function useTraffikState(
     workspaces: s.workspaces,
     workspaceAtiva: s.workspaceAtiva,
     workspaceAtivaNome: s.workspaces.find((w) => w.id === s.workspaceAtiva)?.name ?? null,
+    workspaceAtivaCor: s.workspaces.find((w) => w.id === s.workspaceAtiva)?.color ?? null,
+    workspaceAtivaEhPrincipal: s.workspaces.find((w) => w.id === s.workspaceAtiva)?.isDefault ?? false,
     /**
      * Troca a área ativa. Persiste no servidor (item "lembrar a última área")
      * mas NÃO espera a resposta: a troca de contexto tem que ser imediata, e
      * uma falha ao gravar a preferência não pode travar a tela.
      */
-    trocarWorkspace: (id: string | null) => {
+    trocarWorkspace: (id: string) => {
       setS((st) => ({
         ...st,
         workspaceAtiva: id,

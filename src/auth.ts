@@ -103,7 +103,19 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           session.user.id = id;
           return session;
         }
+        // ⚠️ E-mail no token, mas NENHUM usuário com ele neste banco: a sessão
+        // é órfã (o caso clássico é ter trocado a `DATABASE_URL`).
+        //
+        // Antes caía no `token.sub` — um id FANTASMA, que existia no banco
+        // anterior e não existe aqui. Resultado: o guard deixava passar e a
+        // primeira escrita estourava `Foreign key constraint violated`, com a
+        // tela inteira em 500 e nenhuma pista do motivo. Sessão sem usuário
+        // real tem de se comportar como "não logado": o guard manda para o
+        // login e o relogin resolve.
+        delete (session.user as { id?: string }).id;
+        return session;
       }
+      // Sem e-mail no token (formato antigo): o `sub` é tudo o que há.
       if (token.sub) session.user.id = token.sub;
       return session;
     },

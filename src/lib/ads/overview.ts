@@ -1,3 +1,4 @@
+import { filtroEfetivo } from "@/lib/ads/escopo";
 import { getUserTimezone } from "@/lib/userTimezone";
 import { prisma } from "@/lib/prisma";
 import { addDaysToKey, dayStart, keyToDateColumn, todayKey } from "@/lib/timezone";
@@ -8,6 +9,16 @@ export interface AdsFilters {
   account: string; // "todas" ou AdAccount.id
   status: string; // "todos" | "ativo" | "pausado"
   search: string;
+  /**
+   * Filtros BASE da Área de Trabalho, carregados no servidor a partir do `?ws=`.
+   * Mesma convenção do Dashboard: lista vazia/ausente = não filtra, e o filtro
+   * da TELA age DENTRO destes (interseção via `filtroEfetivo`).
+   */
+  accounts?: string[];
+  products?: string[];
+  sources?: string[];
+  webhooks?: string[];
+  pixelConfigs?: string[];
 }
 
 export interface CampaignRow {
@@ -84,7 +95,17 @@ function num(v: unknown): number {
 export async function computeAdsOverview(userId: string, filters: AdsFilters): Promise<AdsOverview> {
   const tz = await getUserTimezone(userId);
   const { start, startKey } = rangeStart(filters.period, tz);
-  const accountWhere = filters.account !== "todas" ? { id: filters.account } : {};
+
+  // Área ∩ filtro da tela. `null` = sem filtro.
+  const contas = filtroEfetivo(filters.accounts, filters.account, "todas");
+  const produtos = filters.products?.length ? filters.products : null;
+  const fontes = filters.sources?.length ? filters.sources : null;
+  const webhooks = filters.webhooks?.length ? filters.webhooks : null;
+  const pixelConfigs = filters.pixelConfigs?.length ? filters.pixelConfigs : null;
+  // `contas` já é a interseção: quando a área restringe e a tela escolhe uma
+  // conta de fora dela, `filtroEfetivo` devolve `[]` e nada aparece — que é o
+  // correto, e não "cai no filtro da tela".
+  const accountWhere = contas ? { id: { in: contas } } : {};
 
   const [accounts, campaigns, adSets, ads, metrics, sales, cliquesNossos, icEvents] = await Promise.all([
     prisma.adAccount.findMany({
@@ -121,20 +142,31 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
     // `results`/`revenue`; o total vira `vendasIniciadas`. Uma consulta só —
     // buscar duas vezes com filtros diferentes custaria outro round-trip.
     prisma.sale.findMany({
-      where: { userId, timestamp: { gte: start } },
+      where: {
+        userId,
+        timestamp: { gte: start },
+        ...(produtos ? { product: { in: produtos } } : {}),
+        ...(webhooks ? { webhookId: { in: webhooks } } : {}),
+        ...(fontes ? { click: { is: { utmSource: { in: fontes } } } } : {}),
+      },
       select: { value: true, status: true, click: { select: { utmCampaign: true, utmContent: true } } },
     }),
     // Cliques rastreados por NÓS, atribuídos por UTM. Chegam ao banco no
     // instante do clique (via `t.js`), sem depender do Facebook.
     prisma.click.findMany({
-      where: { userId, timestamp: { gte: start } },
+      where: { userId, timestamp: { gte: start }, ...(fontes ? { utmSource: { in: fontes } } : {}) },
       select: { utmCampaign: true, utmContent: true },
     }),
     // Initiate Checkout do período. O evento não carrega campanha, mas carrega
     // o `fbclid` — e é por ele que se chega ao `Click`, que tem os UTMs. É o
     // mesmo caminho de atribuição das vendas, só que via fbclid em vez da FK.
     prisma.pixelEvent.findMany({
-      where: { userId, event: "InitiateCheckout", timestamp: { gte: start } },
+      where: {
+        userId,
+        event: "InitiateCheckout",
+        timestamp: { gte: start },
+        ...(pixelConfigs ? { pixelConfigId: { in: pixelConfigs } } : {}),
+      },
       select: { id: true, fbclid: true, eventId: true },
     }),
   ]);

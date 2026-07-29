@@ -1,5 +1,7 @@
 import type { NextRequest } from "next/server";
 
+import { secretsMatch } from "@/lib/crypto/secrets";
+
 /**
  * Autenticação das rotas `/api/cron/*`.
  *
@@ -18,9 +20,19 @@ import type { NextRequest } from "next/server";
  * internet não é.
  */
 export function cronAutorizado(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET;
+  const secret = process.env.CRON_SECRET?.trim();
+  // Sem secret configurado, NINGUÉM entra. Um secret vazio ou só com espaços
+  // conta como ausente — `CRON_SECRET=""` no painel é o jeito mais fácil de
+  // reabrir a porta sem perceber.
   if (!secret) return false;
-  return req.headers.get("authorization") === `Bearer ${secret}`;
+
+  const enviado = req.headers.get("authorization");
+  if (!enviado) return false;
+
+  // Comparação em tempo constante: `===` em string vaza, pelo tempo de
+  // resposta, quantos caracteres iniciais bateram. Com uma rota que pausa
+  // campanha e mexe em orçamento, não vale economizar isso.
+  return secretsMatch(enviado, `Bearer ${secret}`);
 }
 
 export function naoAutorizado(): Response {

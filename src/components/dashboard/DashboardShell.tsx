@@ -24,6 +24,7 @@ export function DashboardShell({
   user,
   trackingId,
   appUrl,
+  banco,
   initialWebhooks,
   initialApiCredentials,
   dashboardPrefs,
@@ -41,6 +42,8 @@ export function DashboardShell({
   user?: SidebarUser;
   trackingId?: string;
   appUrl?: string;
+  /** Qual banco o servidor está usando — ver `lib/dbEnv.ts`. */
+  banco?: { ref: string | null; rotulo: string; producao: boolean; avisar: boolean };
   initialWebhooks?: WebhookRowDTO[];
   initialApiCredentials?: ApiCredentialDTO[];
   dashboardPrefs?: DashboardPrefsDTO | null;
@@ -53,7 +56,7 @@ export function DashboardShell({
   /** Fuso de referência do usuário — ver `src/lib/timezone.ts`. */
   timezone?: string;
   workspaces?: WorkspaceDTO[];
-  /** Área lembrada do último acesso. `null` = "Todas as áreas". */
+  /** Área lembrada do último acesso. Sem preferência, vem a PRINCIPAL. */
   lastWorkspaceId?: string | null;
   children: ReactNode;
 }) {
@@ -80,7 +83,28 @@ export function DashboardShell({
 
   return (
     <TraffikProvider value={v}>
-      <div style={sx("min-height:100vh;display:flex;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)")}>
+      {/* Faixa de ambiente. Aparece quando o banco NÃO é a produção — inclusive
+          quando é desconhecido. Nasceu de um teste em localhost que apagou
+          configuração real: naquele dia nada na tela dizia em qual banco a
+          pessoa estava. */}
+      {banco?.avisar && (
+        <div
+          role="status"
+          style={sx(
+            "position:fixed;top:0;left:0;right:0;z-index:200;display:flex;align-items:center;justify-content:center;gap:10px;" +
+              "padding:5px 12px;font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;" +
+              "background:repeating-linear-gradient(45deg,#f59e0b,#f59e0b 12px,#b45309 12px,#b45309 24px);color:#1c1300",
+          )}
+        >
+          <span>⚠ {banco.rotulo}</span>
+          {banco.ref && <span style={sx("opacity:.75;font-weight:600;letter-spacing:.04em")}>{banco.ref}</span>}
+          <span style={sx("opacity:.75;font-weight:600;letter-spacing:.04em;text-transform:none")}>
+            os dados desta tela são falsos
+          </span>
+        </div>
+      )}
+
+      <div style={sx(`min-height:100vh;display:flex;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);${banco?.avisar ? "padding-top:26px" : ""}`)}>
         <Sidebar user={user} />
         <div style={sx("flex:1;min-width:0;padding:var(--space-8);display:flex;flex-direction:column;gap:var(--space-6);overflow:auto")}>
           <Header />
