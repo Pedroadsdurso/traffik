@@ -2123,6 +2123,84 @@ estão no histórico. Ambas precisam ser rotacionadas em Supabase › Settings �
 Database › Reset database password (e a de produção atualizada na Vercel, com
 **Redeploy**). Eu nunca preciso da senha — só do formato da string.
 
+## 🎯 Sessão 4 — banner de pendências e FONTE ÚNICA (29/07/2026)
+
+O assistente de 5 passos foi **descartado**: com o modal simplificado da Sessão 3
+e a configuração acontecendo dentro da área, 4 dos 5 passos ficaram redundantes
+e o `returnTo` do OAuth já havia sido entregue na Sessão 2. Sobrou um item de
+valor real — o **banner de pendências** —, e o onboarding de primeiro acesso foi
+cortado (`garantirAreaPrincipal` já impede estado quebrado, então era orientação,
+não correção).
+
+### 🎯 `getPendenciasDaArea` é a fonte ÚNICA
+
+Três telas fazem a mesma pergunta — "o que falta configurar aqui?":
+
+| Tela | Antes | Agora |
+|---|---|---|
+| Banner do Dashboard | não existia | `getPendenciasDaArea` |
+| Cards de `/dashboard/areas` | função local lendo `Workspace.accountIds` | idem |
+| Integrações › Testes | `getInstallChecklist` | idem (é a base) |
+
+> ### 🐛 A divergência já estava PRODUZINDO card errado
+> A função local da tela de Áreas lia `a.accountIds` / `a.webhookIds` — os arrays
+> que a Sessão 1 substituiu por FK. Um webhook criado **dentro** da área grava a
+> FK e não o array, então o card dizia **"Sem webhook"** para uma área com
+> webhook vinculado. Duas fontes para a mesma pergunta divergem sempre; agora há
+> uma, e as telas só a apresentam de formas diferentes.
+
+> ⚠️ **A Principal nunca mostra banner.** Ela é o catch-all e é o estado normal
+> de quem tem uma operação só — aviso permanente vira ruído que se aprende a
+> ignorar, inclusive quando muda de texto. Quem decide isso é o **servidor**
+> (`faltando: []` para a principal), não o componente.
+
+A dispensa fica em `localStorage`, **por id de área**: dispensar em B não esconde
+o aviso de C. Não vai para o banco de propósito — é preferência de tela.
+
+### 🐛 A aba UTMs se contradizia por um deploy
+
+A Sessão 2 pôs um aviso dizendo *"este script é o mesmo em todas as áreas"*; a
+Sessão 3 reverteu a decisão e adicionou o aviso oposto no bloco de Scripts —
+**sem remover o primeiro**. A tela afirmava as duas coisas ao mesmo tempo.
+O da Sessão 2 saiu.
+
+> ⚠️ Se o script voltar a ser global, o aviso volta ao topo da view **e sai do
+> `ScriptsBlock`** — nunca os dois.
+
+### 🐛 O teste de regressão passou a dar FALSO VERDE
+
+`teste-atribuicao-areas.mjs` escolhia o backup com `.sort().pop()` sobre os
+nomes. No dia em que apareceu um backup de **dev**, o ref `drdf…` passou a
+ordenar depois de `dgao…` e o teste rodou contra 8 registros sintéticos,
+reportando *"0 de 8 vendas perdidas"* — como se o bug que ele existe para
+detectar nunca tivesse existido.
+
+Agora ele filtra os refs de dev **perguntando ao `guard-db.mjs`** (fonte única
+do que é dev), ordena pela data no nome, **imprime o projeto no cabeçalho** e
+**aborta** se não houver backup de produção.
+
+> ⚠️ **Teste que escolhe o próprio dado sozinho precisa dizer qual escolheu.**
+> Silencioso, ele troca de significado quando a pasta muda — e falso verde é
+> pior que vermelho.
+
+### 🐛 `npm run backup` fez backup do banco ERRADO
+
+`backup-db.mjs` resolve `DIRECT_URL || DATABASE_URL`. Exportar só
+`DATABASE_URL=<produção>` no shell deixava o `DIRECT_URL` do `.env` (dev)
+vencendo — e o backup saiu do banco falso, com a saída imprimindo o ref certo
+que ninguém leu. Hoje a divergência **aborta** e sugere `--url`.
+
+```powershell
+npm run backup -- --url '<connection string de producao>'
+```
+
+**Verificação:** `npm run test:areas` → **26 asserções, 0 falhas** contra o
+backup real. `tsc --noEmit` e `next build` limpos.
+
+> ⚠️ **Não verificado visualmente:** o banner não foi conferido em navegador —
+> a produção só tem a área Principal, que por desenho não mostra banner. Ele
+> aparece ao criar a primeira área secundária.
+
 ## 🧭 Sessão 3 — criar área ficou vazio, produto virou descoberta, script por área (29/07/2026)
 
 ### 1. Criar área NÃO pede vínculo nenhum

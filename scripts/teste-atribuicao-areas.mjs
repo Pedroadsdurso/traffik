@@ -18,14 +18,53 @@
 import fs from "node:fs";
 import path from "node:path";
 
+import { ehBancoDeDesenvolvimento } from "./guard-db.mjs";
+
 import { construirMapa } from "@/lib/areas/precedencia";
 
-const arquivo =
-  process.argv[2] ??
-  path
-    .join("backups", fs.readdirSync("backups").filter((f) => f.endsWith(".jsonl")).sort().pop());
+/**
+ * Escolhe o backup mais recente **de PRODUÇÃO**.
+ *
+ * ⚠️ Antes era `.sort().pop()` sobre os nomes, e isso quebrou em silêncio no dia
+ * em que apareceu um backup de dev: o ref `drdf…` ordena depois de `dgao…`,
+ * então o teste passou a rodar contra 8 registros sintéticos e reportou
+ * "0 de 8 vendas perdidas" — como se o bug antigo nunca tivesse existido.
+ * **Um teste que troca de dado sozinho não prova nada; pior, dá falso verde.**
+ *
+ * Quem sabe o que é banco de dev é o `guard-db.mjs`, então a pergunta vai a ele
+ * em vez de duplicar a lista de refs aqui.
+ */
+const metaDe = (f) => {
+  try {
+    return JSON.parse(fs.readFileSync(path.join("backups", f), "utf8").split("\n", 1)[0] ?? "{}");
+  } catch {
+    return {};
+  }
+};
+const dataDoNome = (f) => f.match(/(\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2})/)?.[1] ?? "";
+
+let arquivo = process.argv[2];
+if (!arquivo) {
+  const candidatos = fs
+    .readdirSync("backups")
+    .filter((f) => f.endsWith(".jsonl"))
+    .map((f) => ({ f, projeto: metaDe(f).projeto ?? "" }))
+    .filter(({ projeto }) => projeto && !ehBancoDeDesenvolvimento(`postgres.${projeto}@x`))
+    .sort((a, b) => dataDoNome(a.f).localeCompare(dataDoNome(b.f)));
+  const escolhido = candidatos.pop();
+  if (!escolhido) {
+    console.error(
+      "\n\x1b[31m✗ Nenhum backup de PRODUÇÃO em backups/.\x1b[0m\n" +
+        "  Este teste só prova algo contra dado real.\n" +
+        "  Passe o arquivo: npm run test:areas -- <caminho.jsonl>\n",
+    );
+    process.exit(1);
+  }
+  arquivo = path.join("backups", escolhido.f);
+}
 
 const linhas = fs.readFileSync(arquivo, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+const projetoDoBackup = linhas.find((o) => o.__meta)?.projeto ?? "?";
 const tabela = (t) => linhas.filter((o) => o.t === t).map((o) => o.r);
 
 const users = tabela("User");

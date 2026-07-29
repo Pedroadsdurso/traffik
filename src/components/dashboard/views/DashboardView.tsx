@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { sx } from "@/lib/sx";
 import { DashboardGrid } from "../DashboardGrid";
+import { BannerPendencias } from "../ui/BannerPendencias";
 import { DateRangePicker, formatarIntervalo } from "../ui/DateRangePicker";
 import { Select } from "../ui/Select";
 import { useDashboardLayout } from "../useDashboardLayout";
@@ -74,6 +75,10 @@ export function DashboardView({ v }: { v: TraffikView }) {
 
   return (
     <div style={sx("display:flex;flex-direction:column;gap:var(--space-4)")}>
+      {/* Acima dos filtros de propósito: quem cai numa área recém-criada precisa
+          ver o que falta ANTES de tentar ler números que ainda não são só dela. */}
+      <BannerPendencias workspaceId={v.workspaceAtiva} />
+
       <div className="tk-filtros">
         <div style={sx("display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:flex-end")}>
           <FiltroPeriodo v={v} />

@@ -181,6 +181,71 @@ export interface ChecklistItemDTO {
 }
 
 /**
+ * 🎯 FONTE ÚNICA das pendências de uma Área de Trabalho.
+ *
+ * Três telas fazem a MESMA pergunta — "o que falta configurar aqui?" — e antes
+ * cada uma respondia por conta própria:
+ *
+ * | Tela | Consumia |
+ * |---|---|
+ * | Banner do Dashboard | (não existia) |
+ * | Cards de `/dashboard/areas` | uma função local, olhando as listas do `Workspace` |
+ * | Checklist de Integrações › Testes | `getInstallChecklist` |
+ *
+ * Duas fontes divergindo é questão de tempo: a da tela de Áreas olhava
+ * `Workspace.accountIds`, que a Sessão 1 substituiu por FK — ela continuaria
+ * dizendo "sem conta de anúncio" para uma área já configurada.
+ *
+ * Agora `getInstallChecklist` é a fonte, e as três telas só a apresentam de
+ * formas diferentes.
+ */
+export interface PendenciasDTO {
+  areaId: string;
+  ehPrincipal: boolean;
+  /** Itens que faltam, em ordem de impacto. Vazio = área configurada. */
+  faltando: ChecklistItemDTO[];
+  /** Todos os itens, para quem quer mostrar os concluídos também. */
+  itens: ChecklistItemDTO[];
+  total: number;
+  ok: number;
+}
+
+/**
+ * Pendências de VÁRIAS áreas de uma vez — para a tela que lista todas.
+ *
+ * `Promise.all` em vez de sequencial: cada área custa 5 consultas, e em série
+ * seriam N × 5 × ~99ms de ida e volta ao Supabase numa tela que abre com todas
+ * as áreas na frente.
+ */
+export async function getPendenciasDasAreas(ids: string[]): Promise<Record<string, PendenciasDTO>> {
+  const r = await Promise.all(ids.map((id) => getPendenciasDaArea(id)));
+  return Object.fromEntries(r.map((p) => [p.areaId, p]));
+}
+
+/**
+ * As pendências da área ativa, prontas para o banner e para os cards.
+ *
+ * ⚠️ **A Principal não gera banner.** Ela é o catch-all e é o estado normal de
+ * quem só tem uma operação: um aviso permanente ali viraria ruído que se
+ * aprende a ignorar — inclusive quando passar a dizer outra coisa. É a mesma
+ * regra da faixa de banco de desenvolvimento.
+ */
+export async function getPendenciasDaArea(workspaceId?: string | null): Promise<PendenciasDTO> {
+  const userId = await requireUserId();
+  const escopo = await escopoDeConfig(userId, workspaceId ?? (await getLastWorkspaceId()));
+  const itens = await getInstallChecklist(escopo.areaId);
+  const faltando = itens.filter((i) => !i.ok);
+  return {
+    areaId: escopo.areaId,
+    ehPrincipal: escopo.ehPrincipal,
+    faltando: escopo.ehPrincipal ? [] : faltando,
+    itens,
+    total: itens.length,
+    ok: itens.length - faltando.length,
+  };
+}
+
+/**
  * Checklist de instalação **da Área de Trabalho ativa**.
  *
  * ⚠️ É diagnóstico de CONFIGURAÇÃO, e configuração agora pertence à área — um

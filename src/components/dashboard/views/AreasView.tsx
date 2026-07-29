@@ -18,6 +18,7 @@ import {
   type WorkspaceDTO,
 } from "@/lib/actions/workspaces";
 import { brl } from "@/lib/format";
+import { getPendenciasDasAreas, type PendenciasDTO } from "@/lib/actions/diagnostics";
 import { sx } from "@/lib/sx";
 import { Drawer } from "../ui/Drawer";
 import { ListaSelecionavel, type ItemSelecionavel } from "../ui/ListaSelecionavel";
@@ -71,48 +72,45 @@ interface Pendencia {
  * sem nenhum vínculo vê TUDO — e passa a mostrar dados que pertencem às outras
  * áreas. É o único jeito de o isolamento falhar, e por isso é o primeiro aviso.
  */
+/**
+ * Pendências do card.
+ *
+ * ⚠️ **A fonte é `getPendenciasDaArea` (servidor), não as listas do
+ * `Workspace`.** Esta função lia `a.accountIds`/`a.webhookIds` — os arrays que
+ * a Sessão 1 substituiu por FK. O resultado era um card dizendo "Sem webhook"
+ * para uma área com webhook vinculado, porque criar dentro da área grava a FK e
+ * não o array. Duas fontes para a mesma pergunta divergem sempre; agora existe
+ * uma, e esta função só a apresenta.
+ */
 function pendencias(
   a: WorkspaceDTO,
-  checks: ProdutoDescoberto[] | undefined,
+  pend: PendenciasDTO | undefined,
   totalDeAreas: number,
 ): Pendencia[] {
-  const p: Pendencia[] = [];
-  const nada =
-    !a.accountIds.length && !a.webhookIds.length && !a.pixelConfigIds.length;
-
-  // A PRINCIPAL não tem pendência de configuração: ela é o catch-all e o
-  // escopo dela é derivado das outras áreas, não configurado à mão.
+  // A PRINCIPAL não tem pendência de configuração: é o catch-all, e o escopo
+  // dela é derivado das outras áreas em vez de configurado à mão.
   if (a.isDefault) {
-    p.push({
-      nivel: "info",
-      texto:
-        totalDeAreas <= 1
-          ? "Área padrão: mostra tudo. Ao criar outras áreas, o que elas levarem sai daqui automaticamente."
-          : "Área padrão: mostra tudo o que as outras áreas não levaram, inclusive tráfego sem UTM e venda sem clique.",
-    });
-    return p;
+    return [
+      {
+        nivel: "info",
+        texto:
+          totalDeAreas <= 1
+            ? "Área padrão: mostra tudo. Ao criar outras áreas, o que elas levarem sai daqui automaticamente."
+            : "Área padrão: mostra tudo o que as outras áreas não levaram, inclusive tráfego sem UTM e venda sem clique.",
+      },
+    ];
   }
 
-  if (nada) {
-    p.push({ nivel: "aviso", texto: "Sem nenhum vínculo — esta área vê TUDO, inclusive o que pertence às outras áreas. Configure ao menos a conta de anúncio e o webhook." });
-    return p;
+  if (!pend) return [];
+  if (pend.faltando.length === 0) {
+    return [{ nivel: "info", texto: `Configurada — ${pend.ok} de ${pend.total} itens prontos.` }];
   }
-
-  if (!a.accountIds.length) {
-    // Sem filtro de conta o gasto NÃO zera: ele passa a ser o de todas as
-    // contas, o que infla ROAS/ROI/CPA da área sem nada na tela denunciar.
-    p.push({ nivel: "aviso", texto: "Sem conta de anúncio — o gasto exibido é o de todas as contas, então ROAS e ROI ficam distorcidos." });
-  }
-  if (!a.webhookIds.length) {
-    p.push({
-      nivel: "info",
-      texto: a.accountIds.length
-        ? "Sem webhook — as vendas chegam por atribuição de clique. Cadastre o gateway em Integrações › Webhooks, de dentro desta área."
-        : "Sem conta nem webhook — nenhuma venda é atribuída a esta área.",
-    });
-  }
-  return p;
+  return pend.faltando.map((i) => ({
+    nivel: "aviso" as const,
+    texto: `${i.label} — ${i.detail}`,
+  }));
 }
+
 
 // ──────────────────────────── Tela ────────────────────────────
 
@@ -122,6 +120,8 @@ export function AreasView() {
   const [areas, setAreas] = useState<WorkspaceDTO[]>([]);
   const [opcoes, setOpcoes] = useState<OpcoesAreas | null>(null);
   const [checks, setChecks] = useState<ChecksPorArea>({});
+  /** Pendências por área — fonte única, vinda do servidor. */
+  const [pends, setPends] = useState<Record<string, PendenciasDTO>>({});
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -134,9 +134,12 @@ export function AreasView() {
   const recarregar = useCallback(async () => {
     try {
       const [as, op, ck] = await Promise.all([listWorkspaces(), carregarOpcoesAreas(), produtosDescobertos()]);
+      // As pendências vêm depois porque dependem da lista de áreas.
+      const pd = await getPendenciasDasAreas(as.map((a) => a.id)).catch(() => ({}));
       setAreas(as);
       setOpcoes(op);
       setChecks(ck);
+      setPends(pd as Record<string, PendenciasDTO>);
       setErro(null);
     } catch {
       setErro("Não foi possível carregar as áreas.");
@@ -276,6 +279,7 @@ export function AreasView() {
               area={a}
               opcoes={opcoes}
               checks={checks[a.id]}
+              pend={pends[a.id]}
               totalDeAreas={areas.length}
               onEditar={() => void abrir(a)}
               onDuplicar={() => void duplicar(a.id)}
@@ -345,11 +349,12 @@ function Chips({ titulo, itens, vazio }: { titulo: string; itens: string[]; vazi
 }
 
 function AreaCard({
-  area, opcoes, checks, totalDeAreas, onEditar, onDuplicar, onArquivar, onExcluir,
+  area, opcoes, checks, pend: pendDto, totalDeAreas, onEditar, onDuplicar, onArquivar, onExcluir,
 }: {
   area: WorkspaceDTO;
   opcoes: OpcoesAreas | null;
   checks: ProdutoDescoberto[] | undefined;
+  pend: PendenciasDTO | undefined;
   totalDeAreas: number;
   onEditar: () => void;
   onDuplicar: () => void;
@@ -366,7 +371,7 @@ function AreaCard({
   const webhooks = area.webhookIds.map((id) => nome(id, opcoes?.webhooks));
   const pixels = area.pixelConfigIds.map((id) => nome(id, opcoes?.pixels));
   const semVenda = new Set((checks ?? []).filter((c) => c.vendas === 0).map((c) => c.produto));
-  const pend = pendencias(area, checks, totalDeAreas);
+  const pend = pendencias(area, pendDto, totalDeAreas);
 
   return (
     <div className="card" style={sx("display:flex;flex-direction:column;gap:var(--space-3)")}>
