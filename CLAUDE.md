@@ -2046,6 +2046,83 @@ ela vira melhoria menor, não bloqueio.**
 > Se um dia voltar a ideia de onboarding guiado, o lugar dele é o **primeiro
 > acesso** (usuário sem nenhuma área), não a criação da segunda em diante.
 
+## 🔴 INCIDENTE (29/07/2026): produção fora do ar por 40 min — DOIS projetos na Vercel
+
+Durante o deploy da Sessão 1, a produção parou de logar. Três causas empilhadas,
+e a terceira é a que ninguém teria adivinhado.
+
+### 1. `?pgbouncer=true` — o painel do Supabase entrega a string ERRADA para este projeto
+
+O botão **Copy** do Supabase dá `...?pgbouncer=true`. Este app usa **Prisma 7 com
+`@prisma/adapter-pg`**, que não reconhece esse parâmetro. O par correto é
+`?sslmode=require&uselibpqcompat=true`.
+
+> ⚠️ **Não copie a connection string do painel sem editar.** O conselho genérico
+> ("use o botão Copy, não monte à mão") está errado aqui.
+
+### 2. `Invalid URL` ≠ `P1000` — são diagnósticos diferentes
+
+| Erro no log | Significa |
+|---|---|
+| `P1000 Authentication failed` | usuário ou senha (ou senha sem URL-encoding) |
+| `Can't reach database server` | host ou porta |
+| **`Invalid URL`** | **a string não é parseável** — quase sempre **aspas coladas no valor** |
+
+O `Invalid URL` veio de aspas: no `.env` escreve-se `DATABASE_URL="postgresql://..."`,
+mas no campo da Vercel **as aspas não vão**. Valor começando em `"` não é URL.
+
+Senha com caractere especial precisa de URL-encoding (`#`→`%23`, `@`→`%40`); a
+saída mais barata é **senha só alfanumérica**, que elimina a classe inteira.
+
+### ⛔ 3. EXISTIAM DOIS PROJETOS NA VERCEL apontando para o MESMO Supabase
+
+`342dd-virid` (produção, a documentada) e `342dd-virif` — mesmo código, mesmo
+banco. A correção da variável foi feita no **`virif`**, e o usuário testava o
+**`virid`**: consertou um e olhou o outro, por quase meia hora.
+
+**Como foi descoberto:** sondando as duas URLs no mesmo endpoint que toca o banco.
+
+```
+POST /api/webhook/kirvano?id=invalido
+  342dd-virid → 500   (banco inacessível)
+  342dd-virif → 404   (banco OK — token não existe, resposta correta)
+```
+
+> ### 🔎 A sonda de saúde do banco, sem precisar de login
+> `POST /api/webhook/kirvano?id=<token-invalido>` é **público** e a **primeira
+> coisa que ele faz é tocar o banco**. Resposta esperada: **404**
+> `{"error":"Webhook não encontrado."}`. Se vier **500**, o banco está
+> inacessível — não é preciso sessão nem painel para saber.
+>
+> `/login` responder 200 **não prova nada**: página anônima não consulta o banco.
+> Foi o que sustentou a impressão de "o app está no ar, só o login sumiu".
+
+**Dois projetos no mesmo banco é perigoso** — webhook chegando em dois lugares,
+duas sincronizações contra a Graph API. O `virif` foi removido. **Antes de
+depurar produção, confirme que existe UM projeto só.**
+
+### Ordem obrigatória em deploy com migration ADITIVA
+
+**Migration primeiro, deploy depois.** O código novo faz `SELECT` das colunas
+novas — `listNotifications()` roda no `Promise.all` do layout, ou seja, em todo
+carregamento de página. Deployar antes derrubaria o dashboard inteiro, que é o
+espelho do incidente da `20260728120000`. A ordem inversa é segura: o build
+antigo não conhece as colunas novas e as ignora.
+
+> ⚠️ **Variável de ambiente na Vercel só vale em build novo.** Salvar não
+> reinicia nada — é preciso **Redeploy**. E ela precisa estar marcada para o
+> environment **Production**.
+>
+> ⚠️ Logo após um deploy há uma janela de transição em que rotas podem devolver
+> 500. Confirme com 2–3 sondas espaçadas antes de concluir que houve regressão.
+
+### 🔑 Credenciais que passaram pelo chat — TROCAR
+
+As senhas do banco de **dev** e de **produção** foram digitadas na conversa e
+estão no histórico. Ambas precisam ser rotacionadas em Supabase › Settings ›
+Database › Reset database password (e a de produção atualizada na Vercel, com
+**Redeploy**). Eu nunca preciso da senha — só do formato da string.
+
 ## ⛔ ATRIBUIÇÃO POR ÁREA — precedência (Sessão 1 de 5, 29/07/2026)
 
 **A área deixou de ser um conjunto de filtros e passou a ser uma pergunta:
