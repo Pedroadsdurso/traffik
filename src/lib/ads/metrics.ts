@@ -14,6 +14,10 @@ export interface LinhaBase {
   revenue: number;
   /** Initiate Checkout atribuídos. Opcional: nem toda chamada tem o dado. */
   ic?: number;
+  /** Cliques rastreados por NÓS (UTM) — não é o clique de mídia da Meta. */
+  cliquesAtribuidos?: number;
+  /** Vendas em qualquer status. `results` conta só as aprovadas. */
+  vendasIniciadas?: number;
 }
 
 export interface MetricasDerivadas {
@@ -70,7 +74,9 @@ export function somar(linhas: LinhaBase[]): LinhaBase {
       results: a.results + r.results,
       revenue: a.revenue + r.revenue,
       ic: (a.ic ?? 0) + (r.ic ?? 0),
+      cliquesAtribuidos: (a.cliquesAtribuidos ?? 0) + (r.cliquesAtribuidos ?? 0),
+      vendasIniciadas: (a.vendasIniciadas ?? 0) + (r.vendasIniciadas ?? 0),
     }),
-    { spend: 0, impressions: 0, clicks: 0, results: 0, revenue: 0, ic: 0 },
+    { spend: 0, impressions: 0, clicks: 0, results: 0, revenue: 0, ic: 0, cliquesAtribuidos: 0, vendasIniciadas: 0 },
   );
 }

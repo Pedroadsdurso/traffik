@@ -55,6 +55,7 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
         orcamentoEditavel: c.dailyBudget != null,
         spend: c.spend, impressions: c.impressions,
         clicks: c.clicks, results: c.results, revenue: c.revenue,
+        ic: c.ic, cliquesAtribuidos: c.cliquesAtribuidos, vendasIniciadas: c.vendasIniciadas,
       }));
     } else if (v.adsSub === "adsets") {
       base = raw.adSets.filter((a) => filtra(a.name, a.status)).map((a) => ({
@@ -64,12 +65,14 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
         orcamentoEditavel: raw.campaigns.find((c) => c.id === a.campaignId)?.dailyBudget == null,
         spend: a.spend,
         impressions: a.impressions, clicks: a.clicks, results: a.results, revenue: a.revenue,
+        ic: a.ic, cliquesAtribuidos: a.cliquesAtribuidos, vendasIniciadas: a.vendasIniciadas,
       }));
     } else if (v.adsSub === "ads") {
       base = raw.ads.filter((a) => filtra(a.name, a.status)).map((a) => ({
         id: a.id, fbId: a.fbId, nome: a.name, status: a.status, sub: a.campaignName,
         spend: a.spend, impressions: a.impressions, clicks: a.clicks,
         results: a.results, revenue: a.revenue,
+        ic: a.ic, cliquesAtribuidos: a.cliquesAtribuidos, vendasIniciadas: a.vendasIniciadas,
       }));
     } else {
       base = raw.accounts.map((ac) => ({

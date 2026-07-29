@@ -23,23 +23,48 @@ export interface LinhaTabela extends LinhaBase {
   orcamentoEditavel?: boolean;
 }
 
+/**
+ * De onde vem cada métrica.
+ *
+ * `meta` — só o Facebook sabe (ele é quem cobra e quem entrega).
+ * `nosso` — do nosso rastreamento, via UTM: chega no INSTANTE do evento, sem
+ *           esperar a consolidação da Meta, e cruza com o gateway (por isso
+ *           sabemos o que foi aprovado, coisa que a Meta não sabe).
+ * `misto`  — derivada: custo da Meta ÷ conversão nossa.
+ *
+ * ⚠️ **Não existe dupla contagem por construção.** Pedimos ao `/insights`
+ * apenas `spend,impressions,clicks,ctr,cpc,cpm,reach,frequency` — nenhum evento
+ * de conversão. `DailyAdMetric` não tem coluna para guardá-los. Quando a Meta
+ * enfim reporta as conversões dela, o dado simplesmente não entra aqui.
+ */
+type Fonte = "meta" | "nosso" | "misto";
+
+const COR_FONTE: Record<Fonte, string> = { meta: "#60a5fa", nosso: "#a78bfa", misto: "#94a3b8" };
+const NOME_FONTE: Record<Fonte, string> = {
+  meta: "Fonte: Meta Ads",
+  nosso: "Fonte: nosso rastreamento (tempo real)",
+  misto: "Custo da Meta ÷ conversão nossa",
+};
+
 /** Colunas de métrica, na ordem pedida no Bloco 6. */
-const COLUNAS: { chave: string; label: string; dica?: string }[] = [
-  { chave: "orcamento", label: "Orçamento", dica: "Orçamento diário — editável no nível correto (CBO na campanha, ABO no conjunto)" },
-  { chave: "vendas", label: "Vendas" },
-  { chave: "cpa", label: "CPA", dica: "Gasto ÷ vendas" },
-  { chave: "faturamento", label: "Faturamento" },
-  { chave: "lucro", label: "Lucro", dica: "Faturamento − gasto (bruto, sem taxas)" },
-  { chave: "roas", label: "ROAS", dica: "Faturamento ÷ gasto" },
-  { chave: "roi", label: "ROI", dica: "Lucro ÷ gasto" },
-  { chave: "ic", label: "IC", dica: "Initiate Checkout — visitantes distintos atribuídos por UTM" },
-  { chave: "cpi", label: "CPI", dica: "Custo por Initiate Checkout (gasto ÷ IC)" },
-  { chave: "cpc", label: "CPC", dica: "Gasto ÷ cliques" },
-  { chave: "ctr", label: "CTR", dica: "Cliques ÷ impressões" },
-  { chave: "cpm", label: "CPM", dica: "Gasto por mil impressões" },
-  { chave: "impressoes", label: "Impressões" },
-  { chave: "cliques", label: "Cliques" },
-  { chave: "bid", label: "Bid Cap" },
+const COLUNAS: { chave: string; label: string; dica?: string; fonte: Fonte }[] = [
+  { chave: "orcamento", label: "Orçamento", fonte: "meta", dica: "Orçamento diário — editável no nível correto (CBO na campanha, ABO no conjunto)" },
+  { chave: "vendas", label: "Vendas", fonte: "nosso", dica: "Vendas APROVADAS, confirmadas pelo gateway. Aparecem em segundos, sem esperar a Meta" },
+  { chave: "cpa", label: "CPA", fonte: "misto", dica: "Gasto (Meta) ÷ vendas aprovadas (nosso)" },
+  { chave: "faturamento", label: "Faturamento", fonte: "nosso", dica: "Soma das vendas aprovadas, do gateway" },
+  { chave: "lucro", label: "Lucro", fonte: "misto", dica: "Faturamento − gasto (bruto, sem taxas)" },
+  { chave: "roas", label: "ROAS", fonte: "misto", dica: "Faturamento (nosso) ÷ gasto (Meta)" },
+  { chave: "roi", label: "ROI", fonte: "misto", dica: "Lucro ÷ gasto" },
+  { chave: "ic", label: "IC", fonte: "nosso", dica: "Initiate Checkout — visitantes distintos atribuídos por UTM. A Meta nem enxerga: o checkout é do gateway" },
+  { chave: "cpi", label: "CPI", fonte: "misto", dica: "Custo por Initiate Checkout (gasto ÷ IC)" },
+  { chave: "cliquesAtr", label: "Cliq. atr.", fonte: "nosso", dica: "Cliques que chegaram ao site COM UTM, contados por nós. Não é o mesmo que 'Cliques' da Meta — a diferença é quem clicou e não carregou a página" },
+  { chave: "vendasInic", label: "Vend. inic.", fonte: "nosso", dica: "Vendas em qualquer status (pendente, aprovada, reembolsada). 'Vendas' conta só as aprovadas" },
+  { chave: "cpc", label: "CPC", fonte: "meta", dica: "Gasto ÷ cliques da Meta" },
+  { chave: "ctr", label: "CTR", fonte: "meta", dica: "Cliques ÷ impressões, ambos da Meta — usa o clique da Meta de propósito, para bater com o painel deles" },
+  { chave: "cpm", label: "CPM", fonte: "meta", dica: "Gasto por mil impressões" },
+  { chave: "impressoes", label: "Impressões", fonte: "meta" },
+  { chave: "cliques", label: "Cliques", fonte: "meta", dica: "Cliques no anúncio reportados pela Meta (métrica de mídia)" },
+  { chave: "bid", label: "Bid Cap", fonte: "meta" },
 ];
 
 const traco = <span style={sx("opacity:.35")}>—</span>;
@@ -155,6 +180,27 @@ export function AdsTable({
   });
 
   return (
+    <>
+    {/* Legenda das fontes. Sem ela, o usuário compara com o Gerenciador da Meta,
+        vê números diferentes e conclui que um dos dois está errado. */}
+    <div style={sx("display:flex;gap:var(--space-3);align-items:center;flex-wrap:wrap;font-size:11px;padding:0 2px 7px")}>
+      <span style={sx("display:inline-flex;align-items:center;gap:5px")}>
+        <span style={sx(`width:5px;height:5px;border-radius:50%;background:${COR_FONTE.meta}`)} />
+        <span className="text-muted">Meta Ads</span>
+      </span>
+      <span style={sx("display:inline-flex;align-items:center;gap:5px")}>
+        <span style={sx(`width:5px;height:5px;border-radius:50%;background:${COR_FONTE.nosso}`)} />
+        <span className="text-muted">Nosso rastreamento · tempo real</span>
+      </span>
+      <span style={sx("display:inline-flex;align-items:center;gap:5px")}>
+        <span style={sx(`width:5px;height:5px;border-radius:50%;background:${COR_FONTE.misto}`)} />
+        <span className="text-muted">Derivada</span>
+      </span>
+      <span className="text-muted" style={sx("opacity:.75")}
+        title="Nossas conversões chegam no instante do evento; a Meta leva minutos a horas para consolidar. Além disso a Meta credita venda em até 7 dias após o clique (e 1 dia após visualização), enquanto nós casamos por UTM/fbclid direto. Por isso os números não coincidem — e o nosso é o que reflete o gateway.">
+        Por que difere da Meta?
+      </span>
+    </div>
     <div className="ads-scroll">
       <table className="ads-table">
         <thead>
@@ -166,8 +212,14 @@ export function AdsTable({
             <th className="fixa fixa-2">Status</th>
             <th className="fixa fixa-3">Nome</th>
             {COLUNAS.map((c) => (
-              <th key={c.chave} title={c.dica} style={sx("text-align:right;white-space:nowrap")}>
-                {c.label}
+              <th key={c.chave} title={`${c.dica ? c.dica + " · " : ""}${NOME_FONTE[c.fonte]}`}
+                style={sx("text-align:right;white-space:nowrap")}>
+                <span style={sx("display:inline-flex;align-items:center;gap:5px;justify-content:flex-end")}>
+                  {c.label}
+                  {/* Ponto da fonte: o usuário precisa saber por que o número
+                      pode divergir do Gerenciador da Meta. */}
+                  <span aria-hidden style={sx(`width:5px;height:5px;border-radius:50%;background:${COR_FONTE[c.fonte]};flex-shrink:0;opacity:.9`)} />
+                </span>
               </th>
             ))}
           </tr>
@@ -216,6 +268,8 @@ export function AdsTable({
                   <td>{m.roi != null ? `${m.roi.toFixed(2).replace(".", ",")}x` : traco}</td>
                   <td>{(l.ic ?? 0) > 0 ? n0(l.ic ?? 0) : traco}</td>
                   <td>{m.cpi != null ? brl(m.cpi) : traco}</td>
+                  <td>{(l.cliquesAtribuidos ?? 0) > 0 ? n0(l.cliquesAtribuidos ?? 0) : traco}</td>
+                  <td>{(l.vendasIniciadas ?? 0) > 0 ? n0(l.vendasIniciadas ?? 0) : traco}</td>
                   <td>{m.cpc != null ? brl(m.cpc) : traco}</td>
                   <td>{m.ctr != null ? pct(m.ctr) : traco}</td>
                   <td>{m.cpm != null ? brl(m.cpm) : traco}</td>
@@ -243,6 +297,8 @@ export function AdsTable({
               <td>{md.roi != null ? `${md.roi.toFixed(2).replace(".", ",")}x` : traco}</td>
               <td>{(totais.ic ?? 0) > 0 ? n0(totais.ic ?? 0) : traco}</td>
               <td>{md.cpi != null ? brl(md.cpi) : traco}</td>
+              <td>{(totais.cliquesAtribuidos ?? 0) > 0 ? n0(totais.cliquesAtribuidos ?? 0) : traco}</td>
+              <td>{(totais.vendasIniciadas ?? 0) > 0 ? n0(totais.vendasIniciadas ?? 0) : traco}</td>
               <td>{md.cpc != null ? brl(md.cpc) : traco}</td>
               <td>{md.ctr != null ? pct(md.ctr) : traco}</td>
               <td>{md.cpm != null ? brl0(md.cpm) : traco}</td>
@@ -254,5 +310,6 @@ export function AdsTable({
         )}
       </table>
     </div>
+    </>
   );
 }

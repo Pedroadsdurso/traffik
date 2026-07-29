@@ -1328,6 +1328,45 @@ O botão também **recarrega o painel só DEPOIS** de sincronizar. Antes ele ape
 recarregava a tela, relendo o mesmo dado do banco — daí a impressão de que não
 fazia nada.
 
+### Fonte de verdade por métrica (Gerenciador)
+
+> ### ✅ Dupla contagem é IMPOSSÍVEL por construção — não é disciplina, é estrutura
+> Pedimos ao `/insights` **apenas** `spend,impressions,clicks,ctr,cpc,cpm,reach,frequency`.
+> **Nenhum evento de conversão** — nada de `actions`, `conversions` ou
+> `purchase_roas` — e `DailyAdMetric` não tem coluna para guardá-los. Quando a
+> Meta enfim consolida as conversões dela, o dado **não entra no nosso banco**.
+> Não existe caminho no código onde uma venda da Meta e uma venda nossa se somem.
+
+| Métrica | Fonte | Por quê |
+|---|---|---|
+| Gasto, Impressões, CPM, Alcance, **Cliques** | **Meta** | Só o Facebook sabe quanto cobrou e quanto entregou |
+| CPC, CTR | **Meta** | Denominador precisa bater com o painel da Meta |
+| **Cliq. atr.** | **Nosso** | Chegou ao site com UTM. Coluna SEPARADA — nunca somada aos cliques da Meta |
+| IC | **Nosso** | A Meta nem enxerga: o checkout é do gateway |
+| **Vend. inic.** | **Nosso** | Vendas em qualquer status |
+| Vendas, Faturamento | **Nosso** | Cruzamos com o gateway — sabemos o que foi APROVADO |
+| CPA, ROAS, ROI, Lucro, CPI | **Derivada** | Custo da Meta ÷ conversão nossa |
+
+**As conversões já eram tempo real** e isso não precisou ser construído: venda
+(webhook → `Sale`), IC (`px.js` → `PixelEvent`) e clique (`t.js` → `Click`)
+entram no nosso banco no instante do evento, e `computeAdsOverview` lê essas
+tabelas **direto**, sem tocar na Graph API. Com o polling de 8s, aparecem em
+segundos. Só gasto e impressões esperam a Meta.
+
+> ⚠️ **Cliques da Meta ≠ cliques nossos, e as duas colunas coexistem.** O da
+> Meta é métrica de mídia e é o denominador de CTR/CPC — trocá-lo faria o CTR
+> divergir do painel deles sem motivo. A diferença entre as duas colunas é
+> informação útil: clique da Meta sem clique nosso = quem clicou e não carregou
+> a página (ou está sem o script de UTM).
+>
+> **Por que nosso número difere do Gerenciador da Meta:** (1) atraso de
+> consolidação deles; (2) janela de atribuição — a Meta credita venda em até 7
+> dias após clique e 1 após visualização, nós casamos por UTM/`fbclid` direto;
+> (3) a Meta deduplica por pessoa entre dispositivos, nós por sessão. A UI traz
+> ponto colorido por coluna (azul Meta / roxo nosso / cinza derivada) e legenda
+> com essa explicação — sem isso o usuário compara, vê divergência e conclui que
+> um dos dois está errado.
+
 ### Glossário dos contadores
 
 | Campo | Significa |
