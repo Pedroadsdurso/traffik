@@ -170,6 +170,19 @@ export function FeesView({ v }: { v: TraffikView }) {
               <input className="input" style={sx("width:120px")} placeholder="Valor R$" value={v.newDespesaValue} onChange={v.onNewDespesaValue} inputMode="decimal" />
               <button className="btn btn-secondary" type="button" onClick={v.addDespesa}>Adicionar</button>
             </div>
+            {/* Só a despesa recorrente oferece a escolha. Taxa de gateway e
+                imposto são globais por natureza — uma caixa neles convidaria a
+                prender a uma área justamente o que, se prendido, sumiria da
+                conta de lucro das outras em silêncio. */}
+            <label style={sx("display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;cursor:pointer")}>
+              <input type="checkbox" checked={v.despesaSoNestaArea} onChange={v.toggleDespesaSoNestaArea} />
+              <span className="text-muted">
+                Só nesta Área de Trabalho{" "}
+                {v.despesaSoNestaArea
+                  ? "— não entra no lucro das outras áreas."
+                  : "(desmarcado: vale para todas as áreas)"}
+              </span>
+            </label>
           </div>
         </div>
       </div>

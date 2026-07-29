@@ -2,6 +2,8 @@
 
 import { auth } from "@/auth";
 import { encryptSecret } from "@/lib/crypto/secrets";
+import { getLastWorkspaceId } from "@/lib/actions/workspaces";
+import { escopoDeConfig } from "@/lib/areas/escopoConfig";
 import { prisma } from "@/lib/prisma";
 import type { PixelEventType, PurchaseSendMode, PurchaseValueMode } from "@/generated/prisma/enums";
 
@@ -41,6 +43,8 @@ export interface PixelConfigDTO {
 /** Input do formulário do popup (Bloco 12). */
 export interface PixelFormInput {
   name: string;
+  /** Área dona. Omitido = a área ativa. Só é lido na criação. */
+  workspaceId?: string | null;
   metaPixels: { pixelId: string; accessToken?: string; nickname?: string }[];
   lead: boolean;
   addToCart: boolean;
@@ -109,10 +113,16 @@ function toDTO(px: {
 
 const INCLUDE = { metaPixels: true, eventRules: true } as const;
 
-export async function listPixels(): Promise<PixelConfigDTO[]> {
+/**
+ * Pixels da Área de Trabalho ativa. Na Principal inclui os de `workspaceId`
+ * NULO (catch-all) — senão todo pixel existente sumiria da tela enquanto o
+ * script dele continuaria disparando no site do cliente.
+ */
+export async function listPixels(workspaceId?: string | null): Promise<PixelConfigDTO[]> {
   const userId = await requireUserId();
+  const escopo = await escopoDeConfig(userId, workspaceId ?? (await getLastWorkspaceId()));
   const pixels = await prisma.pixelConfig.findMany({
-    where: { userId },
+    where: { userId, ...escopo.where },
     orderBy: { createdAt: "asc" },
     include: INCLUDE,
   });
@@ -168,6 +178,9 @@ function cleanMetaPixels(list: PixelFormInput["metaPixels"]) {
 
 export async function createPixel(input: PixelFormInput): Promise<PixelConfigDTO> {
   const userId = await requireUserId();
+  // Nasce vinculado à área ativa. O `PixelConfig.id` embutido no script NÃO
+  // muda por isso — nenhum identificador já emitido muda de significado.
+  const escopo = await escopoDeConfig(userId, input.workspaceId ?? (await getLastWorkspaceId()));
   const name = input.name?.trim() || "Meta Pixel";
   const metaPixels = cleanMetaPixels(input.metaPixels);
   if (metaPixels.length === 0) throw new Error("Adicione ao menos um pixel da Meta.");
@@ -177,6 +190,7 @@ export async function createPixel(input: PixelFormInput): Promise<PixelConfigDTO
       userId,
       name,
       provider: "META",
+      workspaceId: escopo.areaId || null,
       metaPixels: { create: metaPixels },
       eventRules: { create: rulesFromForm(input) },
     },

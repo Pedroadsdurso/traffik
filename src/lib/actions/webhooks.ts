@@ -2,6 +2,8 @@
 
 import { auth } from "@/auth";
 import { getAppUrl } from "@/lib/appUrl";
+import { getLastWorkspaceId } from "@/lib/actions/workspaces";
+import { escopoDeConfig } from "@/lib/areas/escopoConfig";
 import { prisma } from "@/lib/prisma";
 import type { WebhookPlatform } from "@/generated/prisma/enums";
 
@@ -53,10 +55,22 @@ async function requireUserId(): Promise<string> {
   return session.user.id;
 }
 
-export async function listWebhooks(): Promise<WebhookRowDTO[]> {
+/**
+ * Webhooks da Área de Trabalho ativa.
+ *
+ * ⚠️ Na Principal a lista inclui os de `workspaceId` NULO — é catch-all. Sem
+ * isso, todo webhook existente (que a migration deixou NULO de propósito)
+ * sumiria da tela enquanto continuaria recebendo venda no servidor.
+ *
+ * A área é resolvida AQUI DENTRO quando não vem por parâmetro: o layout busca
+ * 12 conjuntos de dados em `Promise.all`, e esperar a área antes de disparar
+ * tudo somaria um round-trip ao caminho crítico de toda navegação.
+ */
+export async function listWebhooks(workspaceId?: string | null): Promise<WebhookRowDTO[]> {
   const userId = await requireUserId();
+  const escopo = await escopoDeConfig(userId, workspaceId ?? (await getLastWorkspaceId()));
   const rows = await prisma.webhook.findMany({
-    where: { userId },
+    where: { userId, ...escopo.where },
     orderBy: { createdAt: "asc" },
   });
   return rows.map(toDTO);
@@ -67,8 +81,13 @@ export async function createWebhook(input: {
   name?: string;
   /** Token de segurança do gateway (obrigatório na Kirvano). */
   secret?: string;
+  /** Área dona. Omitido = a área ativa. */
+  workspaceId?: string | null;
 }): Promise<WebhookRowDTO> {
   const userId = await requireUserId();
+  // Nasce vinculado à área em que foi criado — é o que faz "a área é a
+  // ferramenta inteira" valer também para o que se cadastra dentro dela.
+  const escopo = await escopoDeConfig(userId, input.workspaceId ?? (await getLastWorkspaceId()));
   const platform = (PLATFORMS.includes(input.platform as WebhookPlatform)
     ? input.platform
     : "CUSTOM") as WebhookPlatform;
@@ -78,7 +97,7 @@ export async function createWebhook(input: {
   const secret = input.secret?.trim() || null;
 
   const created = await prisma.webhook.create({
-    data: { userId, platform, name, secret },
+    data: { userId, platform, name, secret, workspaceId: escopo.areaId || null },
   });
   return toDTO(created);
 }

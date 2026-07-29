@@ -179,9 +179,34 @@ export function UtmsView() {
   }, []);
 
   return (
-    <div style={sx("display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:var(--space-4);align-items:start")}>
-      <CodigosBlock codes={codes} />
-      <ScriptsBlock codes={codes} />
+    <div style={sx("display:grid;gap:var(--space-4);align-items:start")}>
+      {/* ⚠️ Única aba de Integrações que NÃO é por Área de Trabalho.
+          O script de UTM embute o `userId` e é único por CONTA, por desenho —
+          torná-lo por área quebraria todos os scripts já instalados, o que é
+          uma regra permanente do projeto: nenhum identificador já emitido muda
+          de significado. O aviso é redigido pela CONSEQUÊNCIA, não pela
+          arquitetura: quem lê precisa saber o que separa as áreas, não por que
+          o script é assim. */}
+      <div
+        className="card"
+        style={sx("display:flex;gap:10px;align-items:flex-start;border-left:3px solid var(--color-accent)")}
+      >
+        <span aria-hidden style={sx("font-size:16px;line-height:1.2")}>ℹ️</span>
+        <div style={sx("font-size:13px;line-height:1.55")}>
+          <strong>Este script é o mesmo em todas as Áreas de Trabalho.</strong>{" "}
+          Instale uma vez no site e pronto — não precisa trocar ao criar uma área nova.
+          <div className="text-muted" style={sx("margin-top:4px")}>
+            Quem separa as áreas nos UTMs é o <code>utm_campaign</code> (formato{" "}
+            <code>nome|id</code>), que vem da campanha na Meta: cada campanha pertence a
+            uma conta de anúncio, e cada conta de anúncio a uma única área.
+          </div>
+        </div>
+      </div>
+
+      <div style={sx("display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:var(--space-4);align-items:start")}>
+        <CodigosBlock codes={codes} />
+        <ScriptsBlock codes={codes} />
+      </div>
     </div>
   );
 }

@@ -1,6 +1,8 @@
 "use server";
 
 import { auth } from "@/auth";
+import { getLastWorkspaceId } from "@/lib/actions/workspaces";
+import { escopoDeConfig } from "@/lib/areas/escopoConfig";
 import { prisma } from "@/lib/prisma";
 
 export interface AdAccountDTO {
@@ -26,14 +28,30 @@ async function requireUserId(): Promise<string> {
   return session.user.id;
 }
 
-export async function listAdProfiles(): Promise<AdProfileDTO[]> {
+/**
+ * Perfis do Facebook, com **apenas as contas da Área de Trabalho ativa**.
+ *
+ * ⚠️ Perfil que não tem nenhuma conta nesta área **não aparece** — dentro de
+ * uma área, um perfil sem conta dela é ruído. A vitrine continua com o tile
+ * "+ Adicionar perfil", e a conta existente é trazida para cá pela tela de
+ * Áreas ("Mover para cá").
+ *
+ * ⚠️ Na Principal entram também as contas de `workspaceId` NULO — catch-all.
+ * É o estado de toda conta após a migração e de toda conta nova descoberta na
+ * BM: elas precisam aparecer em algum lugar, e vincular sozinho violaria a
+ * regra de "uma conta, uma área".
+ */
+export async function listAdProfiles(workspaceId?: string | null): Promise<AdProfileDTO[]> {
   const userId = await requireUserId();
+  const escopo = await escopoDeConfig(userId, workspaceId ?? (await getLastWorkspaceId()));
   const profiles = await prisma.adProfile.findMany({
     where: { userId },
     orderBy: { connectedAt: "asc" },
-    include: { adAccounts: { orderBy: { name: "asc" } } },
+    include: { adAccounts: { where: escopo.where, orderBy: { name: "asc" } } },
   });
-  return profiles.map((p) => ({
+  return profiles
+    .filter((p) => p.adAccounts.length > 0)
+    .map((p) => ({
     id: p.id,
     name: p.name,
     email: p.email,

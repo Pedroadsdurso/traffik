@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { useCallback, useEffect, useState } from "react";
 import { saveDashboardPrefs, type DashboardPrefsDTO } from "@/lib/actions/dashboardPrefs";
 import {
@@ -145,6 +147,8 @@ interface State {
   expenses: ExpenseDTO[];
   newDespesaName: string;
   newDespesaValue: string;
+  /** Despesa recorrente restrita à área ativa. Padrão `false` = vale para todas. */
+  despesaSoNestaArea: boolean;
   newGatewayMethod: string;
   newGatewayPct: string;
   newTaxName: string;
@@ -268,6 +272,7 @@ function initialState(
     expenses: initialExpenses,
     newDespesaName: "",
     newDespesaValue: "",
+    despesaSoNestaArea: false,
     newGatewayMethod: "PIX",
     newGatewayPct: "",
     newTaxName: "",
@@ -418,6 +423,7 @@ export function useTraffikState(
   const areasServidor = opts.workspaces;
   const ultimaArea = opts.lastWorkspaceId ?? null;
 
+  const router = useRouter();
   const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks, opts.dashboardPrefs, opts.initialProfiles, opts.initialPixels, opts.initialRules, opts.initialNotifSettings, opts.initialNotifications, opts.initialExpenses, opts.initialApiCredentials));
 
   // Semeia as áreas vindas do servidor. Só quando MUDAM de verdade: o layout
@@ -1221,15 +1227,34 @@ export function useTraffikState(
      * uma falha ao gravar a preferência não pode travar a tela.
      */
     trocarWorkspace: (id: string) => {
+      // 1) Imediato: a troca de contexto não pode esperar rede nenhuma.
       setS((st) => ({
         ...st,
         workspaceAtiva: id,
-        // Força o refetch de dashboard, gerenciador e criativos.
+        // Força o refetch de dashboard, gerenciador e criativos (rotas /api/*).
         refreshKey: st.refreshKey + 1,
         adsRefreshKey: st.adsRefreshKey + 1,
         dashLoading: true,
       }));
-      void setLastWorkspaceId(id).catch(() => {});
+
+      // 2) Depois: as listas de CONFIGURAÇÃO (webhooks, pixels, perfis,
+      //    despesas, regras, notificações) vêm do layout no SERVIDOR, que as
+      //    resolve pela área lembrada. Sem recarregá-lo, Integrações e Taxas
+      //    continuariam mostrando a área ANTERIOR — dado de outra operação na
+      //    tela, que é exatamente o que as áreas existem para impedir.
+      //
+      //    ⚠️ O `router.refresh()` tem de vir DEPOIS do `setLastWorkspaceId`
+      //    resolver: ele relê o servidor, e o servidor lê a área persistida.
+      //    Disparar os dois em paralelo recarregaria com a área velha.
+      void (async () => {
+        try {
+          await setLastWorkspaceId(id);
+        } catch {
+          // Falhar ao lembrar a preferência não pode travar a troca; o refresh
+          // ainda vale, e a área volta ao normal no próximo carregamento.
+        }
+        router.refresh();
+      })();
     },
     syncManualBusy: s.syncManualBusy,
     syncManualMsg: s.syncManualMsg,
@@ -1327,7 +1352,10 @@ export function useTraffikState(
       }
     },
 
-    connectHref: "/api/auth/facebook",
+    // Leva a área ativa: as contas descobertas nascem vinculadas a ela e o
+    // callback devolve o usuário para a MESMA área. Sem isto o passo termina e
+    // a vitrine da área continua vazia.
+    connectHref: s.workspaceAtiva ? `/api/auth/facebook?ws=${encodeURIComponent(s.workspaceAtiva)}` : "/api/auth/facebook",
     adProfiles,
     syncBusy: s.syncBusy,
     syncResult: s.syncResult,
@@ -1490,10 +1518,24 @@ export function useTraffikState(
     newDespesaValue: s.newDespesaValue,
     onNewDespesaName: (e: React.ChangeEvent<HTMLInputElement>) => set({ newDespesaName: e.target.value }),
     onNewDespesaValue: (e: React.ChangeEvent<HTMLInputElement>) => set({ newDespesaValue: e.target.value }),
+    despesaSoNestaArea: s.despesaSoNestaArea,
+    toggleDespesaSoNestaArea: () => setS((st) => ({ ...st, despesaSoNestaArea: !st.despesaSoNestaArea })),
     addDespesa: async () => {
       const amount = parseFloat(s.newDespesaValue) || 0;
       if (!s.newDespesaName.trim() || !amount) return;
-      const created = await createExpense({ name: s.newDespesaName.trim(), type: "DESPESA_RECORRENTE", calc: "FIXO", amount, recurrence: "MENSAL" });
+      const created = await createExpense({
+        name: s.newDespesaName.trim(),
+        type: "DESPESA_RECORRENTE",
+        calc: "FIXO",
+        amount,
+        recurrence: "MENSAL",
+        // Padrão: vale para todas as áreas. Só a despesa recorrente oferece a
+        // escolha — taxa de gateway e imposto são globais por natureza, e uma
+        // caixa neles convidaria a prender por engano justamente o que, se
+        // prendido, some da conta de lucro das outras áreas em silêncio.
+        todasAsAreas: !s.despesaSoNestaArea,
+        workspaceId: s.workspaceAtiva,
+      });
       setS((st) => ({ ...st, expenses: [...st.expenses, created], newDespesaName: "", newDespesaValue: "" }));
     },
     finance: {

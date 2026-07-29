@@ -14,7 +14,13 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
   const appUrl = getAppUrl();
-  const dash = (status: string) => NextResponse.redirect(`${appUrl}/dashboard/integracoes/anuncios?fb=${status}`);
+  let areaDestino: string | null = null;
+  // Volta para a MESMA área de onde o usuário saiu. Sem isto ele cairia na
+  // área lembrada, que pode não ser a que ele estava configurando.
+  const dash = (status: string) =>
+    NextResponse.redirect(
+      `${appUrl}/dashboard/integracoes/anuncios?fb=${status}${areaDestino ? `&ws=${encodeURIComponent(areaDestino)}` : ""}`,
+    );
 
   const session = await auth();
   if (!session?.user?.id) return NextResponse.redirect(`${appUrl}/login`);
@@ -27,7 +33,19 @@ export async function GET(req: NextRequest) {
 
   const store = await cookies();
   const stored = store.get("fb_oauth_state")?.value;
+  const wsCookie = store.get("fb_oauth_ws")?.value ?? null;
   store.delete("fb_oauth_state");
+  store.delete("fb_oauth_ws");
+
+  // Valida a POSSE da área antes de vincular qualquer conta a ela: o cookie é
+  // httpOnly, mas a área ainda tem de ser deste usuário e não estar arquivada.
+  if (wsCookie) {
+    const area = await prisma.workspace.findFirst({
+      where: { id: wsCookie, userId, archived: false },
+      select: { id: true },
+    });
+    areaDestino = area?.id ?? null;
+  }
 
   if (oauthError) return dash("denied");
   if (!code || !state || !stored || state !== stored) return dash("state_error");
@@ -53,6 +71,18 @@ export async function GET(req: NextRequest) {
       },
     });
 
+    // Contas que JÁ existem não mudam de área aqui — reconectar um perfil não
+    // pode arrastar em silêncio uma conta que já pertence a outra área. Só as
+    // criadas agora nascem na área de onde o usuário clicou.
+    const jaExistiam = new Set(
+      (
+        await prisma.adAccount.findMany({
+          where: { userId, fbAccountId: { in: accounts.map((a) => a.account_id) } },
+          select: { fbAccountId: true },
+        })
+      ).map((a) => a.fbAccountId),
+    );
+
     for (const a of accounts) {
       await prisma.adAccount.upsert({
         where: { userId_fbAccountId: { userId, fbAccountId: a.account_id } },
@@ -72,6 +102,7 @@ export async function GET(req: NextRequest) {
           status: mapAccountStatus(a.account_status),
           adProfileId: profile.id,
           trackingEnabled: true,
+          workspaceId: jaExistiam.has(a.account_id) ? null : areaDestino,
         },
       });
     }

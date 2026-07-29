@@ -1,6 +1,8 @@
 "use server";
 
 import { auth } from "@/auth";
+import { getLastWorkspaceId } from "@/lib/actions/workspaces";
+import { escopoDeConfig } from "@/lib/areas/escopoConfig";
 import { prisma } from "@/lib/prisma";
 import { parseTrackingCodes } from "@/lib/utm/parse";
 import type { WebhookLogStatus } from "@/generated/prisma/enums";
@@ -178,16 +180,29 @@ export interface ChecklistItemDTO {
   href: string | null;
 }
 
-export async function getInstallChecklist(): Promise<ChecklistItemDTO[]> {
+/**
+ * Checklist de instalação **da Área de Trabalho ativa**.
+ *
+ * ⚠️ É diagnóstico de CONFIGURAÇÃO, e configuração agora pertence à área — um
+ * checklist global diria "tudo certo" para uma área recém-criada que ainda não
+ * tem webhook nem pixel nenhum, que é justamente quando ele precisa avisar.
+ *
+ * ⚠️ **Cliques não são recortados por área**: um `Click` não tem dono
+ * declarado (a área dele sai da atribuição por campanha). O item "script de
+ * UTM" continua sendo do nível da conta — e é coerente, porque o script de UTM
+ * também é, por desenho.
+ */
+export async function getInstallChecklist(workspaceId?: string | null): Promise<ChecklistItemDTO[]> {
   const userId = await requireUserId();
+  const escopo = await escopoDeConfig(userId, workspaceId ?? (await getLastWorkspaceId()));
 
-  const [profiles, trackedAccounts, webhooks, clicks, pixels] = await Promise.all([
-    prisma.adProfile.count({ where: { userId } }),
-    prisma.adAccount.count({ where: { userId, trackingEnabled: true } }),
-    prisma.webhook.count({ where: { userId, active: true } }),
+  const [contasComPerfil, trackedAccounts, webhooks, clicks, pixels] = await Promise.all([
+    prisma.adAccount.count({ where: { userId, adProfileId: { not: null }, ...escopo.where } }),
+    prisma.adAccount.count({ where: { userId, trackingEnabled: true, ...escopo.where } }),
+    prisma.webhook.count({ where: { userId, active: true, ...escopo.where } }),
     prisma.click.count({ where: { userId } }),
     prisma.pixelConfig.findMany({
-      where: { userId, enabled: true },
+      where: { userId, enabled: true, ...escopo.where },
       select: { id: true, metaPixels: { select: { accessToken: true } } },
     }),
   ]);
@@ -197,9 +212,12 @@ export async function getInstallChecklist(): Promise<ChecklistItemDTO[]> {
   return [
     {
       key: "facebook",
-      label: "Conta do Facebook conectada",
-      ok: profiles > 0,
-      detail: profiles > 0 ? `${profiles} perfil(is) conectado(s).` : "Nenhum perfil do Facebook conectado.",
+      label: "Conta de anúncio nesta área",
+      ok: contasComPerfil > 0,
+      detail:
+        contasComPerfil > 0
+          ? `${contasComPerfil} conta(s) de anúncio vinculada(s) a esta área.`
+          : "Nenhuma conta de anúncio nesta área — sem ela, o gasto exibido não é o desta operação.",
       href: "/dashboard/integracoes/anuncios",
     },
     {
@@ -226,7 +244,9 @@ export async function getInstallChecklist(): Promise<ChecklistItemDTO[]> {
       detail:
         clicks > 0
           ? `${clicks} clique(s) já recebido(s) — o script está reportando.`
-          : "Nenhum clique recebido ainda. Baixe o script na aba UTMs e instale no <head> do site.",
+          : "Nenhum clique recebido ainda. Copie o script na aba UTMs e instale no <head> do site.",
+      // ⚠️ Único item que NÃO é por área: o script de UTM é único por conta,
+      // por desenho, e um `Click` não tem dono declarado.
       href: "/dashboard/integracoes/utms",
     },
     {

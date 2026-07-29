@@ -2123,6 +2123,77 @@ estão no histórico. Ambas precisam ser rotacionadas em Supabase › Settings �
 Database › Reset database password (e a de produção atualizada na Vercel, com
 **Redeploy**). Eu nunca preciso da senha — só do formato da string.
 
+## 🗂️ Sessão 2 — telas de configuração escopadas por área (29/07/2026)
+
+`src/lib/areas/escopoConfig.ts` — **separado da precedência de propósito**, são
+perguntas diferentes: "de quem é esta VENDA?" exige a cadeia de precedência
+(a venda chega por atribuição); "de quem é este WEBHOOK?" é uma FK e pronto.
+Por isso aqui é uma consulta leve, não o mapa de 6 consultas.
+
+| Tela | Escopo |
+|---|---|
+| Integrações › **Anúncios** | contas da área; perfil sem conta na área não aparece |
+| Integrações › **Webhooks** | os da área; criar nasce vinculado |
+| Integrações › **Pixel** | os da área; criar nasce vinculado |
+| Integrações › **Testes** | checklist da área |
+| **Regras** | feito na Sessão 1 (tela + motor juntos) |
+| **Taxas e Despesas** | globais + as da área |
+| Integrações › **UTMs** | ⚠️ **global, de propósito** |
+
+> ### ⚠️ A Principal é catch-all TAMBÉM na configuração
+> `workspaceId` NULO = "sem dono". Se a Principal filtrasse por
+> `workspaceId = principal.id`, todo webhook e pixel existente (que a migration
+> deixou NULO de propósito) ficaria **invisível na tela enquanto continuaria
+> funcionando no servidor** — o pior tipo de bug. Mesma lógica do dashboard.
+>
+> ⚠️ **Despesa é a exceção**: NULO = "vale para todas as áreas", não "sem dono".
+> A lista SEMPRE inclui as nulas, inclusive numa área secundária.
+
+> ### 🔄 Trocar de área precisa de `router.refresh()`
+> `trocarWorkspace` só invalidava dashboard/gerenciador/criativos (rotas
+> `/api/*`). As listas de configuração vêm do **layout no servidor**, então
+> Integrações e Taxas continuariam mostrando a área ANTERIOR.
+>
+> A troca acontece em dois tempos: estado local imediato (contexto não espera
+> rede) e, **depois de o `setLastWorkspaceId` resolver**, `router.refresh()`.
+> ⚠️ Os dois em paralelo recarregariam o servidor com a área velha.
+
+> ### 🔐 OAuth do Facebook carrega a área em COOKIE, não no `state`
+> `/api/auth/facebook?ws=<id>` grava `fb_oauth_ws` httpOnly. O `state` volta do
+> Facebook e é atacável — e já tem a função de anti-CSRF. O callback ainda
+> **valida a posse** da área pelo `userId` antes de vincular qualquer conta.
+>
+> ⚠️ **Só as contas CRIADAS agora nascem na área.** Reconectar um perfil não
+> pode arrastar em silêncio uma conta que já pertence a outra área — as
+> existentes ficam onde estão.
+
+> ### ⚠️ UTMs continua GLOBAL — e o aviso é redigido pela consequência
+> O script embute o `userId` e é único por conta, por desenho: torná-lo por área
+> quebraria todo script já instalado (regra permanente — nenhum identificador
+> emitido muda de significado). A aba avisa *"este script é o mesmo em todas as
+> áreas; quem separa é o `utm_campaign` (`nome|id`), que vem da campanha na
+> Meta"* — o que a pessoa precisa saber, não por que a arquitetura é assim.
+
+**Só a despesa RECORRENTE oferece "só nesta área".** Taxa de gateway e imposto
+não têm a caixa: são globais por natureza, e oferecer a escolha convidaria a
+prender justamente o que, se prendido, some da conta de lucro das outras áreas
+em silêncio. Padrão de tudo: global.
+
+**Testado contra o banco de dev — 10 asserções, 0 falhas** (área secundária real
+criada e removida por id): webhook e pixel da B só aparecem na B; a Principal
+traz os de `workspaceId` NULO; imposto global aparece nas duas áreas; despesa da
+B só na B; `ws` forjado, ausente e de área arquivada caem na Principal. Mais as
+19 da Sessão 1, que seguem passando.
+
+### ⚠️ Não feito na Sessão 2
+
+- **Mover webhook/pixel entre áreas pela tela** — só contas de anúncio têm
+  "Mover para cá" (na tela de Áreas). Para os demais, a FK existe e é editável
+  no banco, mas não há UI.
+- **`listTrackedProducts`** (produtos do seletor de Purchase do pixel) continua
+  global — vira descoberta por área na Sessão 3.
+- **Logs de webhook** (aba Testes) continuam globais.
+
 ## ⛔ ATRIBUIÇÃO POR ÁREA — precedência (Sessão 1 de 5, 29/07/2026)
 
 **A área deixou de ser um conjunto de filtros e passou a ser uma pergunta:
