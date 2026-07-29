@@ -43,6 +43,26 @@ import pg from "pg";
 const argUrl = process.argv.indexOf("--url");
 const url = argUrl >= 0 ? process.argv[argUrl + 1] : process.env.DIRECT_URL || process.env.DATABASE_URL;
 
+// ⚠️ `DIRECT_URL` VENCE `DATABASE_URL`, e isso já causou um backup errado:
+// exportar só `DATABASE_URL=<producao>` no shell deixava o `DIRECT_URL` do
+// `.env` (dev) no comando, e o backup saía do banco falso — com a saída
+// dizendo o ref certo, que ninguém leu. Agora a divergência grita.
+const refDe = (u) => (typeof u === "string" ? (u.match(/postgres\.([a-z0-9]+)/)?.[1] ?? null) : null);
+if (argUrl < 0 && process.env.DIRECT_URL && process.env.DATABASE_URL) {
+  const a = refDe(process.env.DIRECT_URL);
+  const b = refDe(process.env.DATABASE_URL);
+  if (a && b && a !== b) {
+    console.error(`
+[41m[30m  ATENÇÃO  [0m DIRECT_URL e DATABASE_URL apontam para bancos DIFERENTES.`);
+    console.error(`  DIRECT_URL  → ${a}   [1m(é este que será usado)[0m`);
+    console.error(`  DATABASE_URL → ${b}   (ignorado)`);
+    console.error(`
+  Para escolher sem ambiguidade, use:  npm run backup -- --url "<connection string>"
+`);
+    process.exit(1);
+  }
+}
+
 if (!url) {
   console.error("✗ Sem DIRECT_URL/DATABASE_URL e sem --url. Abortando.");
   process.exit(1);
