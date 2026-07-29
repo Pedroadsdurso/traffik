@@ -741,6 +741,22 @@ model AutomationRule {
   id            String    @id @default(cuid())
   name          String
   targetProduct String?
+  /// Produtos alvo (vários). `targetProduct` fica como legado de "um produto".
+  /// Vazio = todos os produtos.
+  targetProducts String[] @default([])
+  /// 🔴 TETO DE ORÇAMENTO — obrigatório para AUMENTAR orçamento.
+  ///
+  /// Sem ele, uma regra de "+20%" multiplica o orçamento a cada execução, com
+  /// dinheiro real: 100 → 120 → 144 → 173… O motor **recusa aumentar quando
+  /// este campo é nulo** (ausência de configuração nunca vira permissão — mesma
+  /// regra da autenticação de cron e webhook) e **trava no teto** quando o novo
+  /// valor passaria dele.
+  maxBudget     Decimal?  @db.Decimal(14, 2)
+  /// Janela de horário em que a regra pode rodar, na HORA LOCAL do usuário
+  /// (0–23). Nulos = qualquer hora. `start > end` atravessa a meia-noite
+  /// (ex.: 22 → 6). Lida com `hourInTz`, nunca com `getHours()`.
+  windowStartHour Int?
+  windowEndHour   Int?
   /// IDs de AdAccount alvo; vazio = todas as contas do usuário.
   adAccountIds  String[]  @default([])
   level         RuleLevel @default(CAMPAIGN)

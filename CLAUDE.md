@@ -2123,6 +2123,84 @@ estão no histórico. Ambas precisam ser rotacionadas em Supabase › Settings �
 Database › Reset database password (e a de produção atualizada na Vercel, com
 **Redeploy**). Eu nunca preciso da senha — só do formato da string.
 
+## ⚙️ Bloco 8 — Regras: fundação de SEGURANÇA (29/07/2026, parcial)
+
+Escopo decidido pelo usuário: **o essencial funcionando, sem import/export.**
+
+> ### ⛔ IMPORT/EXPORT DE REGRAS FICOU FORA, de propósito
+> O roteiro v2 pedia, mas não havia **nenhuma regra cadastrada** — exportar não
+> tinha o que exportar. Pode ser retomado depois: o formato natural é o próprio
+> `RuleDTO` em JSON, e a validação crítica na importação é **conta de anúncio
+> que não existe nesta conta** (ids são por usuário e não viajam entre contas).
+
+### 🔴 O motor podia escalar orçamento SEM LIMITE
+
+`AJUSTAR_ORCAMENTO` com `{tipo:"percentual", valor:20}` multiplicava o orçamento
+a cada execução — 100 → 120 → 144 → 173… — com dinheiro real, e **nada no código
+impedia**. Migration `20260729230000` acrescenta `maxBudget`, e o motor agora:
+
+| Situação | Comportamento |
+|---|---|
+| Aumento **sem** `maxBudget` | **RECUSA** e registra no log |
+| `dailyBudget >= maxBudget` | **pula**, sem chamar a Meta |
+| Novo valor passaria do teto | **trava no teto** |
+
+**Fail-closed**, igual à autenticação de cron e webhook: ausência de
+configuração nunca vira permissão. Recusar aparece no log; aumentar sem limite
+só aparece na fatura.
+
+### 🐛 `>=` e `<=` eram tratados como `=` — falha silenciosa
+
+`conditionsMet` cobria só `>` e `<`; o `return` final assumia igualdade. Uma
+regra gravada com "maior ou igual" virava "exatamente igual" e **praticamente
+nunca disparava**, sem erro em lugar nenhum. Os quatro operadores agora existem
+no tipo e no avaliador, e **operador desconhecido não dispara** — numa regra que
+pausa campanha, errar para o lado de não agir é o único lado seguro.
+
+### 🐛 O log mostrava `null` nas métricas mais usadas
+
+O `details.avaliado` que eu escrevi lia `e.metrics[metrica]` direto, mas `cpa`,
+`roas` e `ctr` são **derivadas** e não existem como chave em `EntityMetrics`.
+Agora passa por `metricValue`. Verificado: `{"gasto":380}` em vez de `{"cpa":null}`.
+
+### Janela de execução
+
+`windowStartHour`/`windowEndHour` na **hora local do usuário** (`hourInTz`, nunca
+`getHours()` — na Vercel o processo é UTC e "8h–18h" viraria 5h–15h em Brasília).
+`start > end` atravessa a meia-noite.
+
+### Log auditável
+
+`AutomationRuleLog.details` passou a ser `{ condicoes, avaliado, aplicado }`:
+a expressão avaliada, cada entidade com os **valores reais** das métricas e se
+bateu, e o resultado por entidade — incluindo recusas. `listRules` traz 20 logs
+(era 5). É o que permite responder "por que a regra não disparou?".
+
+### Testado no banco de DEV (regras criadas e removidas por id)
+
+**16 asserções, 0 falhas.** Condição impossível → `SEM_ACAO` sem pausar nada;
+`>=` casa de verdade (2 entidades); log com valor derivado; fora da janela não
+avalia; **aumento sem teto recusado antes de chamar a Meta**; **já no teto pula**;
+orçamento intacto no banco; limite diário 0 bloqueia; `runUserRules` avalia e
+grava log.
+
+> ⚠️ **Nenhuma ação de escrita foi exercida contra a Graph API real.** As duas
+> guardas do teto agem ANTES da chamada, então foram provadas de verdade; o
+> `clamp` no teto e o `updateDailyBudget` em si continuam sem execução real.
+> **A primeira execução real precisa ser observada** — comece por campanha
+> pausada e de baixo risco.
+
+### ⚠️ Falta do Bloco 8 (próxima rodada)
+
+- **Modal de criação completo**: construtor de múltiplas condições com "+",
+  seleção múltipla de produtos/contas, as 5 ações (incluindo "definir orçamento"
+  com % sobre o gasto), campos condicionais por ação, confirmação ao criar regra
+  que pausa ou altera orçamento.
+- **Lista em cards** com toggle, editar, duplicar, excluir e gaveta de log.
+- O formulário atual é uma linha inline com **uma** condição, um produto e uma
+  conta — funciona, mas não expõe `maxBudget` nem a janela, então uma regra de
+  aumento criada por ele **será recusada pelo motor** (fail-closed).
+
 ## 🎯 Sessão 4 — banner de pendências e FONTE ÚNICA (29/07/2026)
 
 O assistente de 5 passos foi **descartado**: com o modal simplificado da Sessão 3

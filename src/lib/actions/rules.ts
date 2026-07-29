@@ -12,12 +12,25 @@ export interface RuleLogDTO {
   status: string;
   message: string | null;
   affected: number;
+  /**
+   * O que a execução realmente fez — é o que torna a automação auditável.
+   *
+   * `condicoes` é a expressão avaliada; `avaliado` traz cada entidade com os
+   * VALORES das métricas no momento (e se bateu); `aplicado` traz o resultado
+   * por entidade, incluindo recusas (ex.: "aumento sem teto configurado").
+   */
+  details: {
+    condicoes?: string;
+    avaliado?: { nome: string; bateu: boolean; valores: Record<string, number | null> }[];
+    aplicado?: { name: string; action: string; ok: boolean; error?: string }[];
+  } | null;
 }
 
 export interface RuleDTO {
   id: string;
   name: string;
   targetProduct: string | null;
+  targetProducts: string[];
   adAccountIds: string[];
   level: RuleLevel;
   nameFilter: string | null;
@@ -29,6 +42,10 @@ export interface RuleDTO {
   dailyRunLimit: number;
   active: boolean;
   lastRunAt: string | null;
+  /** 🔴 Teto de orçamento. `null` = o motor recusa aumentar. */
+  maxBudget: number | null;
+  windowStartHour: number | null;
+  windowEndHour: number | null;
   summary: string;
   logs: RuleLogDTO[];
 }
@@ -52,10 +69,11 @@ async function requireUserId(): Promise<string> {
 }
 
 function toDTO(r: {
-  id: string; name: string; targetProduct: string | null; adAccountIds: string[]; level: RuleLevel;
+  id: string; name: string; targetProduct: string | null; targetProducts?: string[]; adAccountIds: string[]; level: RuleLevel;
   nameFilter: string | null; action: RuleAction; actionParams: unknown; conditions: unknown;
   calcPeriod: string; frequencyMin: number; dailyRunLimit: number; active: boolean; lastRunAt: Date | null;
-  logs?: { id: string; ranAt: Date; status: string; message: string | null; affected: number }[];
+  maxBudget?: unknown; windowStartHour?: number | null; windowEndHour?: number | null;
+  logs?: { id: string; ranAt: Date; status: string; message: string | null; affected: number; details?: unknown }[];
 }): RuleDTO {
   const conditions = (Array.isArray(r.conditions) ? r.conditions : []) as RuleCondition[];
   const actionParams = (r.actionParams ?? null) as RuleDTO["actionParams"];
@@ -64,8 +82,17 @@ function toDTO(r: {
     nameFilter: r.nameFilter, action: r.action, actionParams, conditions,
     calcPeriod: r.calcPeriod, frequencyMin: r.frequencyMin, dailyRunLimit: r.dailyRunLimit,
     active: r.active, lastRunAt: r.lastRunAt?.toISOString() ?? null,
+    targetProducts: r.targetProducts ?? [],
+    maxBudget: r.maxBudget == null ? null : Number(r.maxBudget),
+    windowStartHour: r.windowStartHour ?? null,
+    windowEndHour: r.windowEndHour ?? null,
     summary: buildSummary(conditions, r.action, actionParams),
-    logs: (r.logs ?? []).map((l) => ({ id: l.id, ranAt: l.ranAt.toISOString(), status: l.status, message: l.message, affected: l.affected })),
+    // `details` vai para a UI: é o que permite auditar QUAL condição foi
+    // avaliada, com QUAIS valores, e o que aconteceu com cada entidade.
+    logs: (r.logs ?? []).map((l) => ({
+      id: l.id, ranAt: l.ranAt.toISOString(), status: l.status, message: l.message,
+      affected: l.affected, details: (l.details ?? null) as RuleDTO["logs"][number]["details"],
+    })),
   };
 }
 
@@ -90,7 +117,7 @@ export async function listRules(workspaceId?: string | null): Promise<RuleDTO[]>
       ...(ws ? { OR: [{ workspaceId: null }, { workspaceId: ws }] } : {}),
     },
     orderBy: { createdAt: "desc" },
-    include: { logs: { orderBy: { ranAt: "desc" }, take: 5 } },
+    include: { logs: { orderBy: { ranAt: "desc" }, take: 20 } },
   });
   return rules.map(toDTO);
 }
@@ -99,6 +126,15 @@ export interface CreateRuleInput {
   name: string;
   targetProduct?: string | null;
   adAccountIds?: string[];
+  targetProducts?: string[];
+  /**
+   * 🔴 Teto de orçamento. **Obrigatório para ações que AUMENTAM orçamento** —
+   * o motor recusa o aumento quando é nulo, em vez de aumentar sem limite.
+   */
+  maxBudget?: number | null;
+  /** Janela de execução na hora local do usuário (0–23). Nulos = sempre. */
+  windowStartHour?: number | null;
+  windowEndHour?: number | null;
   /** Área dona. Ausente/nulo = regra global (vale para todas as áreas). */
   workspaceId?: string | null;
   level: RuleLevel;
@@ -120,6 +156,10 @@ export async function createRule(input: CreateRuleInput): Promise<RuleDTO> {
       name: input.name.trim() || "Regra sem nome",
       targetProduct: input.targetProduct?.trim() || null,
       adAccountIds: input.adAccountIds ?? [],
+      targetProducts: input.targetProducts ?? [],
+      maxBudget: input.maxBudget ?? null,
+      windowStartHour: input.windowStartHour ?? null,
+      windowEndHour: input.windowEndHour ?? null,
       workspaceId: input.workspaceId ?? null,
       level: input.level,
       nameFilter: input.nameFilter?.trim() || null,

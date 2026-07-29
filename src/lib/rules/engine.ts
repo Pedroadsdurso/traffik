@@ -2,12 +2,18 @@ import { getUserTimezone } from "@/lib/userTimezone";
 import { setEntityStatus, updateDailyBudget } from "@/lib/facebook/manage";
 import { carregarMapaDeAreas } from "@/lib/areas/atribuicao";
 import { prisma } from "@/lib/prisma";
-import { addDaysToKey, dayKeyInTz, dayStart, keyToDateColumn, todayKey } from "@/lib/timezone";
+import { addDaysToKey, dayKeyInTz, dayStart, hourInTz, keyToDateColumn, todayKey } from "@/lib/timezone";
 import type { RuleLevel } from "@/generated/prisma/enums";
 
 export interface RuleCondition {
   metrica: "cpa" | "roas" | "ctr" | "gasto" | "vendas";
-  operador: ">" | "<" | "=";
+  /**
+   * ⚠️ `>=` e `<=` foram ADICIONADOS — antes o tipo só admitia `>`, `<` e `=`,
+   * e o avaliador transformava qualquer outro em igualdade. Uma regra gravada
+   * com "maior ou igual" (que a UI vai oferecer) virava "exatamente igual" e
+   * praticamente nunca disparava.
+   */
+  operador: ">" | "<" | ">=" | "<=" | "=";
   valor: number;
 }
 
@@ -78,13 +84,28 @@ function metricValue(m: EntityMetrics, key: RuleCondition["metrica"]): number {
   }
 }
 
+/**
+ * Todas as condições em E (nenhuma condição = não dispara).
+ *
+ * ⚠️ **`>=` e `<=` eram tratados como `=`.** O `switch` só cobria `>` e `<` e
+ * o `return` final assumia igualdade, então uma regra configurada com "maior ou
+ * igual" virava "exatamente igual" e praticamente nunca disparava — falha
+ * silenciosa, sem erro em lugar nenhum. Operador desconhecido agora **não
+ * dispara**, em vez de virar igualdade por acidente: numa regra que pausa
+ * campanha, errar para o lado de não agir é o único lado seguro.
+ */
 function conditionsMet(conds: RuleCondition[], m: EntityMetrics): boolean {
   if (!conds.length) return false;
   return conds.every((c) => {
     const actual = metricValue(m, c.metrica);
-    if (c.operador === ">") return actual > c.valor;
-    if (c.operador === "<") return actual < c.valor;
-    return Math.abs(actual - c.valor) < 1e-9;
+    switch (c.operador) {
+      case ">": return actual > c.valor;
+      case "<": return actual < c.valor;
+      case ">=": return actual >= c.valor;
+      case "<=": return actual <= c.valor;
+      case "=": return Math.abs(actual - c.valor) < 1e-9;
+      default: return false;
+    }
   });
 }
 
@@ -111,6 +132,10 @@ interface RuleRow {
   calcPeriod: string;
   frequencyMin: number;
   dailyRunLimit: number;
+  /** 🔴 Teto de orçamento. NULO = o motor RECUSA aumentar. Ver o schema. */
+  maxBudget: unknown;
+  windowStartHour: number | null;
+  windowEndHour: number | null;
 }
 
 export interface RuleRunResult {
@@ -274,6 +299,28 @@ export async function evaluateRule(rule: RuleRow): Promise<RuleRunResult> {
 
   // Limite diário de execuções — "diário" também no fuso do usuário, senão a
   // cota reiniciava às 21h de Brasília e a regra ganhava execuções extras.
+  // Janela de horário, na hora LOCAL do usuário. `start > end` atravessa a
+  // meia-noite (22 → 6). Fora da janela a regra não é avaliada: uma regra que
+  // só deve mexer em campanha durante o dia não pode agir às 3h porque o cron
+  // acordou.
+  if (rule.windowStartHour != null && rule.windowEndHour != null) {
+    // ⚠️ `hourInTz`, nunca `getHours()`: na Vercel o processo roda em UTC, e a
+    // janela "8h–18h" viraria 5h–15h em Brasília.
+    const h = hourInTz(new Date(), tz);
+    const dentro =
+      rule.windowStartHour <= rule.windowEndHour
+        ? h >= rule.windowStartHour && h < rule.windowEndHour
+        : h >= rule.windowStartHour || h < rule.windowEndHour;
+    if (!dentro) {
+      return {
+        status: "SEM_ACAO",
+        affected: 0,
+        message: `Fora da janela de execução (${rule.windowStartHour}h–${rule.windowEndHour}h; agora ${h}h).`,
+        details: null,
+      };
+    }
+  }
+
   const startOfDay = dayStart(todayKey(tz), tz);
   const runsToday = await prisma.automationRuleLog.count({
     where: { ruleId: rule.id, ranAt: { gte: startOfDay }, status: "SUCESSO" },
@@ -290,8 +337,31 @@ export async function evaluateRule(rule: RuleRow): Promise<RuleRunResult> {
   }
 
   const matched = entities.filter((e) => conditionsMet(conds, e.metrics));
+
+  /**
+   * O que foi AVALIADO, com os valores reais — sem isto o log diz "nenhuma
+   * entidade satisfez" e não há como auditar por quê. Guarda no máximo 20
+   * entidades para o Json do log não crescer sem limite.
+   */
+  const avaliado = entities.slice(0, 20).map((e) => ({
+    nome: e.name,
+    bateu: conditionsMet(conds, e.metrics),
+    valores: Object.fromEntries(
+      // ⚠️ Via `metricValue`, não pelo mapa cru: `cpa`, `roas` e `ctr` são
+      // DERIVADAS e não existem como chave em `EntityMetrics` — lendo direto,
+      // o log mostrava `null` justamente nas métricas mais usadas.
+      conds.map((c) => [c.metrica, metricValue(e.metrics, c.metrica)]),
+    ),
+  }));
+  const condicoesTexto = conds.map((c) => `${c.metrica} ${c.operador} ${c.valor}`).join(" E ");
+
   if (matched.length === 0) {
-    return { status: "SEM_ACAO", affected: 0, message: `Nenhuma entidade satisfez as condições (${entities.length} avaliadas).`, details: null };
+    return {
+      status: "SEM_ACAO",
+      affected: 0,
+      message: `Nenhuma entidade satisfez as condições (${entities.length} avaliadas).`,
+      details: { condicoes: condicoesTexto, avaliado },
+    };
   }
 
   const params = (rule.actionParams ?? {}) as { tipo?: string; valor?: number };
@@ -317,7 +387,39 @@ export async function evaluateRule(rule: RuleRow): Promise<RuleRunResult> {
         // AJUSTAR_ORCAMENTO
         if (e.dailyBudget == null) { applied.push({ name: e.name, action: "AJUSTAR_ORCAMENTO", ok: false, error: "sem orçamento diário (CBO?)" }); continue; }
         const factor = params.tipo === "percentual" ? 1 + (params.valor ?? 0) / 100 : 1;
-        const novo = params.tipo === "valor" ? (params.valor ?? e.dailyBudget) : e.dailyBudget * factor;
+        let novo = params.tipo === "valor" ? (params.valor ?? e.dailyBudget) : e.dailyBudget * factor;
+
+        // ── 🔴 TETO DE ORÇAMENTO ────────────────────────────────────────────
+        //
+        // O aumento é a única ação desta ferramenta que **gasta mais dinheiro
+        // do usuário a cada execução**. Uma regra "+20%" sem teto multiplica o
+        // orçamento indefinidamente: 100 → 120 → 144 → 173…
+        //
+        // FAIL-CLOSED: sem teto configurado, a regra NÃO aumenta. É a mesma
+        // regra da autenticação de cron e webhook — ausência de configuração
+        // nunca vira permissão. Recusar é visível (aparece no log); aumentar
+        // sem limite não é, até a fatura chegar.
+        const aumenta = novo > e.dailyBudget;
+        const teto = rule.maxBudget == null ? null : Number(rule.maxBudget);
+        if (aumenta && teto == null) {
+          applied.push({
+            name: e.name, action: "AJUSTAR_ORCAMENTO", ok: false,
+            error: "recusado: aumento sem teto de orçamento configurado",
+          });
+          continue;
+        }
+        if (teto != null) {
+          if (e.dailyBudget >= teto) {
+            applied.push({
+              name: e.name, action: "AJUSTAR_ORCAMENTO", ok: true,
+              error: `já no teto (R$ ${teto.toFixed(2)})`,
+            });
+            continue;
+          }
+          // Trava no teto em vez de recusar: subir até o limite é o que o
+          // usuário pediu, e parar exatamente nele é o comportamento seguro.
+          if (novo > teto) novo = teto;
+        }
         await updateDailyBudget(e.fbId, novo, e.token);
         if (type === "campaign") await prisma.campaign.update({ where: { id: e.id }, data: { dailyBudget: novo } });
         else if (type === "adset") await prisma.adSet.update({ where: { id: e.id }, data: { dailyBudget: novo } });
@@ -333,7 +435,7 @@ export async function evaluateRule(rule: RuleRow): Promise<RuleRunResult> {
     status: affected > 0 ? "SUCESSO" : "ERRO",
     affected,
     message: `${affected} de ${matched.length} entidade(s) afetada(s).`,
-    details: applied,
+    details: { condicoes: condicoesTexto, avaliado, aplicado: applied },
   };
 }
 
@@ -346,7 +448,7 @@ export async function runUserRules(userId: string): Promise<{ evaluated: number;
   for (const rule of rules) {
     if (rule.lastRunAt && now - rule.lastRunAt.getTime() < rule.frequencyMin * 60_000) continue;
     evaluated++;
-    const result = await evaluateRule(rule as RuleRow);
+    const result = await evaluateRule(rule as unknown as RuleRow);
     await prisma.$transaction([
       prisma.automationRuleLog.create({
         data: { ruleId: rule.id, status: result.status, message: result.message, affected: result.affected, details: result.details as object },
