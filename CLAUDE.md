@@ -1398,6 +1398,85 @@ segundos. Só gasto e impressões esperam a Meta.
 > que contar. Só investigue `accounts: 0` quando o modo for `metricas`,
 > `completo` ou `completo-30d`.
 
+## 🗂️ Áreas de Trabalho (28/07/2026) — parcial, retomar aqui
+
+Área de Trabalho = **um conjunto de filtros salvo com um nome**, aplicado em
+toda a ferramenta. Serve para operar duas ofertas sem ver os dados misturados.
+
+> ### ⛔ NÃO é multi-tenant, e isso foi decisão explícita
+> Um plano anterior previa `projectId` em 18 tabelas com isolamento no banco.
+> Foi **cancelado pelo usuário** depois da análise: exigia migração
+> irreversível, regeneração de scripts e webhooks, e não resolvia nada a mais
+> para o caso de uso real. Os dados continuam todos do usuário, na mesma
+> tabela, sem isolamento — a área só decide **o que a tela mostra**.
+>
+> Se a ideia de "projetos com isolamento" voltar, releia isto antes: o custo já
+> foi levantado e a conclusão foi que não compensa.
+
+### O que está ENTREGUE e testado (itens 1, 3 e 6)
+
+- **Seletor na sidebar** (`ui/WorkspaceSelect.tsx`), sempre visível abaixo da
+  marca. "Todas as áreas" é a primeira opção e o padrão; busca aparece a partir
+  de 6 áreas; rodapé com atalho "Gerenciar áreas".
+- **Filtro aplicado no Dashboard**, com refetch ao trocar de área.
+- **Última área lembrada** em `User.lastWorkspaceId`, persistida sem bloquear a
+  troca (a mudança de contexto tem que ser imediata).
+- **Correção crítica junto:** o filtro "Conta de anúncio" só alcançava
+  `DailyAdMetric` — ou seja, **só o gasto**. Vendas, cliques e ICs passavam sem
+  filtro, então o ROAS era *(faturamento de TODAS) ÷ (gasto de UMA)*. Novo
+  `lib/ads/escopo.ts` liga venda→conta pela cadeia de atribuição do Gerenciador.
+  Medido: `CA 1 MARIA` saiu de ROAS 0,24x para **0,19x** (era 1,3× inflado).
+
+> ### 🔐 PADRÃO A MANTER: a área viaja como ID, nunca como filtros
+> A querystring leva `?ws=<id>` e **jamais** as listas de conta/produto/fonte.
+> O servidor carrega os filtros em `filtrosDaArea()`, validando posse pelo
+> `userId`. Mandar as listas pela URL deixaria o cliente **forjar o escopo** —
+> qualquer rota nova que aceite área tem de seguir isto.
+
+> ⚠️ **Caso de borda tratado:** área arquivada ou excluída não continua ativa —
+> cai para "Todas as áreas". Sem isso a tela filtraria por algo inexistente.
+
+### Decisões desta sessão (não reabrir sem motivo novo)
+
+1. **`Workspace.webhookIds` APROVADO** como 4ª dimensão de filtro.
+   `Sale.webhookId` já existe. É **mais confiável que o filtro por produto**,
+   que depende de texto livre e quebra em silêncio se o nome mudar no gateway.
+2. **`Workspace.pixelConfigIds`** também entra, mesma mecânica
+   (`PixelEvent.pixelConfigId` já existe).
+3. **O script do PIXEL já é único por pixel** — `pixelScript()` embute o
+   `PixelConfig.id` e `/api/pixel/event` resolve por ele. **Nada a mudar**, o
+   requisito de "um script por pixel" já está atendido.
+4. **O script de UTM é único POR CONTA, por desenho** — embute o `userId`.
+   **NÃO deve virar por área.**
+   > 🔒 **Regra permanente: nenhum identificador já emitido muda de
+   > significado.** É o que garante que script e webhook instalados nunca param
+   > de reportar. Quem separa as áreas nos UTMs é o `utm_campaign` no formato
+   > `nome|id`, que vem da campanha na Meta — não do script.
+5. **Uma conta de anúncio pertence a apenas UMA área.** ⚠️ **A validação ainda
+   NÃO existe**: `accountIds` é array simples e nada impede duplicação hoje.
+6. **Passo 5 do futuro assistente:** a parte do **pixel vincula de verdade**; a
+   parte dos **UTMs é apenas informativa** (o script é o mesmo para todas).
+
+### Pendente, na ordem acordada
+
+| | O quê |
+|---|---|
+| **(a)** | Colunas `Workspace.description`, `webhookIds`, `pixelConfigIds` + filtro em `metrics.ts` + validação de conta única |
+| **(b)** | **Tela `/dashboard/areas`** — o link do seletor hoje dá **404**. As server actions já existem e estão testadas: `createWorkspace`, `updateWorkspace`, `duplicateWorkspace`, `deleteWorkspace`, `checarProdutosDaArea` |
+| **(c)** | Aplicar `?ws=` em `/api/ads`, Criativos e Atividade Recente |
+| **(d)** | `useDashboardLayout` passar o `workspaceId` (as actions já aceitam) |
+| **(e)** | `returnTo` no callback do OAuth — hoje o destino é fixo em `/dashboard/integracoes/anuncios?fb=connected`, e sem isso o assistente perde o estado ao conectar um perfil |
+| **(f)** | Assistente de 6 passos — **avaliar se ainda é necessário** depois que (b) existir. Pode ser que criar área numa tela só já resolva |
+
+> ⚠️ **Comece por (b).** Ela destrava o 404, é o destino do "Pular por agora" do
+> assistente e o lugar onde as pendências de cada área aparecem — (f) é
+> conveniência sobre uma tela que ainda não existe.
+
+**Testado:** Área A 400÷200 = 2,00x, Área B 120÷100 = 1,20x, nenhuma vê a
+outra, consolidado soma os gastos, área de outro usuário não aplica filtro,
+layout de "Todas" convive com o da área, e **excluir área não apaga venda**.
+21 asserções nas duas rodadas.
+
 ## 🎨 Marca e logos
 
 Arquivos em `public/logos/` (webp, vindos do designer):
