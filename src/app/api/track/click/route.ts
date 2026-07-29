@@ -52,9 +52,25 @@ export async function POST(req: NextRequest) {
   });
   if (!user) return json({ error: "Conta não encontrada." }, 404);
 
+  // Área declarada pelo script instalado na página. **A posse é validada aqui**
+  // — o `ws` chega do navegador do visitante e não é confiável. Área que não é
+  // deste usuário, ou arquivada, é descartada em silêncio (o clique continua
+  // sendo gravado; ele só cai na regra normal de atribuição).
+  //
+  // ⚠️ Script antigo não manda `ws` → fica NULO → comportamento idêntico ao de
+  // antes. É o que torna a mudança aditiva.
+  const wsBruto = str(body.ws ?? body.workspace, 191);
+  const ws = wsBruto
+    ? await prisma.workspace.findFirst({
+        where: { id: wsBruto, userId: user.id, archived: false },
+        select: { id: true },
+      })
+    : null;
+
   const click = await prisma.click.create({
     data: {
       userId: user.id,
+      workspaceId: ws?.id ?? null,
       utmSource: str(body.utm_source, 191),
       utmMedium: str(body.utm_medium, 191),
       utmCampaign: str(body.utm_campaign, 191),

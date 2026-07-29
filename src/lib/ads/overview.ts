@@ -149,13 +149,13 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
         userId,
         timestamp: { gte: start },
       },
-      select: { value: true, status: true, product: true, webhookId: true, apiCredentialId: true, click: { select: { utmCampaign: true, utmContent: true } } },
+      select: { value: true, status: true, product: true, webhookId: true, apiCredentialId: true, click: { select: { utmCampaign: true, utmContent: true, workspaceId: true } } },
     }),
     // Cliques rastreados por NÓS, atribuídos por UTM. Chegam ao banco no
     // instante do clique (via `t.js`), sem depender do Facebook.
     prisma.click.findMany({
       where: { userId, timestamp: { gte: start } },
-      select: { utmCampaign: true, utmContent: true, fbclid: true },
+      select: { utmCampaign: true, utmContent: true, fbclid: true, workspaceId: true },
     }),
     // Initiate Checkout do período. O evento não carrega campanha, mas carrega
     // o `fbclid` — e é por ele que se chega ao `Click`, que tem os UTMs. É o
@@ -178,16 +178,20 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
   //
   // ⚠️ O clique é a ponte do IC até a campanha, então ele NÃO pode ser filtrado
   // por área antes de montar o mapa fbclid→UTM — filtrar depois, ao contar.
-  const utmPorFbclid = new Map(
-    cliquesNossos.filter((c) => c.fbclid).map((c) => [c.fbclid as string, c.utmCampaign]),
+  const cliquePorFbclid = new Map(
+    cliquesNossos.filter((c) => c.fbclid).map((c) => [c.fbclid as string, c]),
   );
   const vendasDaArea = sales.filter((v) => mapa.areaDaVenda(v).areaId === areaAtiva);
-  const icDaArea = icEvents.filter((e) =>
-    mapa.areaDoEvento({
-      pixelConfigId: e.pixelConfigId,
-      utmCampaign: e.fbclid ? (utmPorFbclid.get(e.fbclid) ?? null) : null,
-    }).areaId === areaAtiva,
-  );
+  const icDaArea = icEvents.filter((e) => {
+    const cl = e.fbclid ? cliquePorFbclid.get(e.fbclid) : undefined;
+    return (
+      mapa.areaDoEvento({
+        pixelConfigId: e.pixelConfigId,
+        utmCampaign: cl?.utmCampaign ?? null,
+        clickWorkspaceId: cl?.workspaceId ?? null,
+      }).areaId === areaAtiva
+    );
+  });
 
   // Um IC = um VISITANTE distinto, não um evento: o `px.js` dispara a cada
   // clique no link de checkout, e quem clica duas vezes gerava dois eventos.

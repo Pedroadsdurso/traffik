@@ -3,6 +3,8 @@
 import { randomBytes } from "node:crypto";
 
 import { auth } from "@/auth";
+import { getLastWorkspaceId } from "@/lib/actions/workspaces";
+import { escopoDeConfig } from "@/lib/areas/escopoConfig";
 import { prisma } from "@/lib/prisma";
 
 export interface UtmCodesDTO {
@@ -10,6 +12,17 @@ export interface UtmCodesDTO {
   accountId: string;
   /** Separador único usado no `xcod` da Hotmart. */
   separator: string;
+  /** Área de Trabalho ativa — embutida no script para o clique nascer nela. */
+  workspaceId: string;
+  workspaceName: string;
+  ehPrincipal: boolean;
+  /**
+   * Cliques desta área que chegaram COM o parâmetro de área (script novo).
+   * Zero numa área secundária = o script dela ainda não foi instalado.
+   */
+  cliquesComArea: number;
+  /** Cliques do usuário sem parâmetro de área (script antigo, ou orgânico). */
+  cliquesSemArea: number;
   hotmart: string;
   cartpanda: string;
   outros: string;
@@ -36,9 +49,15 @@ async function ensureSeparator(userId: string): Promise<string> {
   return separator;
 }
 
-export async function getUtmCodes(): Promise<UtmCodesDTO> {
+export async function getUtmCodes(workspaceId?: string | null): Promise<UtmCodesDTO> {
   const userId = await requireUserId();
   const separator = await ensureSeparator(userId);
+  const escopo = await escopoDeConfig(userId, workspaceId ?? (await getLastWorkspaceId()));
+  const [area, cliquesComArea, cliquesSemArea] = await Promise.all([
+    prisma.workspace.findFirst({ where: { id: escopo.areaId }, select: { name: true } }),
+    prisma.click.count({ where: { userId, workspaceId: escopo.areaId } }),
+    prisma.click.count({ where: { userId, workspaceId: null } }),
+  ]);
 
   const xcod =
     `&xcod=FB${separator}{{campaign.name}}|{{campaign.id}}` +
@@ -49,6 +68,11 @@ export async function getUtmCodes(): Promise<UtmCodesDTO> {
   return {
     accountId: userId,
     separator,
+    workspaceId: escopo.areaId,
+    workspaceName: area?.name ?? "Principal",
+    ehPrincipal: escopo.ehPrincipal,
+    cliquesComArea,
+    cliquesSemArea,
     hotmart: BASE + xcod,
     cartpanda: `${BASE}&cid=${userId}`,
     outros: BASE,

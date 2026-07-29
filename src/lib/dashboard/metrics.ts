@@ -269,7 +269,7 @@ async function windowAggregate(
         // O resolvedor de área precisa destes três para aplicar a precedência.
         webhookId: true,
         apiCredentialId: true,
-        click: { select: { utmSource: true, utmCampaign: true, country: true } },
+        click: { select: { utmSource: true, utmCampaign: true, country: true, workspaceId: true } },
       },
       orderBy: { timestamp: "desc" },
     }),
@@ -279,7 +279,7 @@ async function windowAggregate(
         timestamp: { gte: start, lte: end },
         ...(fontes ? { utmSource: { in: fontes } } : {}),
       },
-      select: { id: true, utmSource: true, utmCampaign: true, fbclid: true, timestamp: true },
+      select: { id: true, utmSource: true, utmCampaign: true, fbclid: true, timestamp: true, workspaceId: true },
       orderBy: { timestamp: "desc" },
     }),
     prisma.dailyAdMetric.findMany({
@@ -353,13 +353,20 @@ async function windowAggregate(
   // Evento de pixel não guarda UTM, mas guarda `fbclid` — e o clique tem o UTM.
   // O mapa fbclid→utm_campaign sai dos cliques da JANELA, então um evento cujo
   // clique é anterior a ela não chega à conta e é decidido pelo pixel.
-  const utmPorFbclid = new Map(
-    clicks.filter((c) => c.fbclid).map((c) => [c.fbclid as string, c.utmCampaign]),
+  // O evento herda do clique casado por `fbclid` tanto o UTM quanto a área
+  // declarada pelo script — as duas coisas que a precedência consulta.
+  const doFbclid = new Map(
+    clicks.filter((c) => c.fbclid).map((c) => [c.fbclid as string, c]),
   );
   const doArea = (e: { pixelConfigId?: string | null; fbclid: string | null }) => {
-    const utm = e.fbclid ? (utmPorFbclid.get(e.fbclid) ?? null) : null;
+    const cl = e.fbclid ? doFbclid.get(e.fbclid) : undefined;
+    const utm = cl?.utmCampaign ?? null;
     return (
-      mapa.areaDoEvento({ pixelConfigId: e.pixelConfigId ?? null, utmCampaign: utm }).areaId === areaAtiva
+      mapa.areaDoEvento({
+        pixelConfigId: e.pixelConfigId ?? null,
+        utmCampaign: utm,
+        clickWorkspaceId: cl?.workspaceId ?? null,
+      }).areaId === areaAtiva
       && naContaDaTela(utm)
     );
   };

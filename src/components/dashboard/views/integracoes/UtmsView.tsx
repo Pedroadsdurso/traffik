@@ -112,7 +112,13 @@ function CodigosBlock({ codes }: { codes: UtmCodesDTO | null }) {
 function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
   const [backUrl, setBackUrl] = useState("");
 
-  const snippet = codes ? utmScript(codes.accountId, getPublicAppUrl()) : "";
+  // O script leva a ÁREA ATIVA. Instalado na página de vendas daquela operação,
+  // ele faz o tráfego não atribuível (orgânico/direto) cair nela em vez de na
+  // Principal. Tráfego pago já era separado pela campanha.
+  const snippet = codes ? utmScript(codes.accountId, getPublicAppUrl(), codes.workspaceId) : "";
+  // Área secundária sem nenhum clique carimbado = o script dela ainda não foi
+  // instalado. Na Principal isso é normal (ela é o catch-all do legado).
+  const faltaInstalar = !!codes && !codes.ehPrincipal && codes.cliquesComArea === 0;
 
   function baixarBack() {
     download("traffik-back-redirect.js", backRedirectScript(backUrl));
@@ -122,8 +128,34 @@ function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
     <div className="card" style={sx("display:flex;flex-direction:column;gap:var(--space-4)")}>
       <div>
         <div className="card-kicker">Scripts</div>
-        <div className="card-title">Instale na sua página de vendas</div>
+        <div className="card-title">
+          Instale na página de vendas de <strong>{codes?.workspaceName ?? "—"}</strong>
+        </div>
+        <p className="card-body" style={sx("margin:6px 0 0")}>
+          Este script é <strong>desta Área de Trabalho</strong>. Instale-o na página de vendas
+          desta operação — cada área tem o seu, para o rastreamento não se misturar.
+        </p>
       </div>
+
+      {faltaInstalar && (
+        <div
+          style={sx(
+            "display:flex;gap:10px;align-items:flex-start;padding:var(--space-3);border-radius:var(--radius-md);" +
+              "background:color-mix(in srgb, #f59e0b 12%, transparent);border:1px solid color-mix(in srgb, #f59e0b 45%, transparent)",
+          )}
+        >
+          <span aria-hidden style={sx("font-size:15px;line-height:1.2")}>⚠️</span>
+          <div style={sx("font-size:13px;line-height:1.55")}>
+            <strong>Esta área ainda está no script antigo.</strong> Nenhum clique chegou
+            carimbado com ela até agora.
+            <div className="text-muted" style={sx("margin-top:4px")}>
+              O script antigo continua funcionando — o tráfego sem campanha atribuível dele
+              cai na área Principal. Copie o script abaixo e substitua o que está instalado na
+              página de vendas desta operação.
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={sx("display:flex;flex-direction:column;gap:var(--space-2)")}>
         <div style={sx("font-size:14px;font-weight:600")}>Script de UTMs</div>

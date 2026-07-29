@@ -122,7 +122,7 @@ export async function listNotifications(workspaceId?: string | null): Promise<{ 
   // A venda vem junto porque a precedência precisa dela: sem `product`,
   // `webhookId` e o UTM do clique não dá para dizer de que área a notificação é.
   const selectSale = {
-    select: { product: true, webhookId: true, apiCredentialId: true, click: { select: { utmCampaign: true } } },
+    select: { product: true, webhookId: true, apiCredentialId: true, click: { select: { utmCampaign: true, workspaceId: true } } },
   } as const;
 
   // ⚠️ Busca ampla e recorta em memória — a atribuição passa pelo
@@ -147,7 +147,7 @@ export async function listNotifications(workspaceId?: string | null): Promise<{ 
   // ⚠️ **Notificação SEM venda aparece em TODA área.** Relatório diário, alerta
   // de regra e aviso de sistema não pertencem a operação nenhuma; escondê-los
   // faria o usuário perder aviso por estar na aba errada.
-  const daArea = (n: { sale: { product: string; webhookId: string | null; apiCredentialId: string | null; click: { utmCampaign: string | null } | null } | null }) =>
+  const daArea = (n: { sale: { product: string; webhookId: string | null; apiCredentialId: string | null; click: { utmCampaign: string | null; workspaceId: string | null } | null } | null }) =>
     n.sale === null || mapa.areaDaVenda(n.sale).areaId === areaAtiva;
 
   return {

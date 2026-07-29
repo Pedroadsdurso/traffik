@@ -27,11 +27,12 @@ import { splitPipe } from "@/lib/utm/parse";
  * | # | Critério | Vale para |
  * |---|---|---|
  * | 1 | **Conta de anúncio**, via `Click.utmCampaign → Campaign → AdAccount` | venda, clique, evento |
- * | 2 | **Desempate por produto** (`Workspace.produtosDesempate`) | venda |
- * | 3 | **Webhook** dono (`Webhook.workspaceId`) | venda |
- * | 4 | **Credencial de API** dona | venda |
- * | 5 | **Pixel** dono (`PixelConfig.workspaceId`) | evento |
- * | 6 | **Principal** (catch-all) | tudo |
+ * | 2 | **Área do script de UTM** (`Click.workspaceId`) | venda, clique, evento |
+ * | 3 | **Desempate por produto** (`Workspace.produtosDesempate`) | venda |
+ * | 4 | **Webhook** dono (`Webhook.workspaceId`) | venda |
+ * | 5 | **Credencial de API** dona | venda |
+ * | 6 | **Pixel** dono (`PixelConfig.workspaceId`) | evento |
+ * | 7 | **Principal** (catch-all) | tudo |
  *
  * **Por que a conta vence o webhook**, e não o contrário:
  *
@@ -48,6 +49,21 @@ import { splitPipe } from "@/lib/utm/parse";
  * 3. O erro fica **visível**. Com a conta vencendo, a venda aparece na área da
  *    campanha e o usuário corrige a configuração. Com o webhook vencendo,
  *    nasce um ROAS fantasma que nada na tela denuncia.
+ *
+ * ## ⚠️ Por que o script de UTM NÃO vence a conta de anúncio
+ *
+ * O script instalado na página declara a área (`ws` no payload do clique). Se
+ * ele vencesse a conta, um anúncio da conta da Área A levando tráfego para a
+ * página da Área B faria o clique contar em B **enquanto o gasto fica em A** —
+ * A com gasto sem visita, B com visita sem gasto. **As duas erradas**, que é o
+ * mesmo motivo pelo qual a conta vence o webhook.
+ *
+ * Com a conta vencendo, o script atua exatamente onde havia um buraco: o
+ * tráfego **não atribuível** (orgânico, direto, outros canais), que antes caía
+ * todo na Principal independentemente da página visitada.
+ *
+ * ⚠️ **Alcance real:** para tráfego PAGO o script não muda nada — esse já era
+ * separado pela campanha. O ganho é no não atribuível.
  *
  * ## ⚠️ Por que o desempate por produto vem ANTES do webhook
  *
@@ -74,7 +90,7 @@ import { splitPipe } from "@/lib/utm/parse";
 export interface Resolucao {
   areaId: string;
   /** Qual regra decidiu. Alimenta o diagnóstico da tela, não a métrica. */
-  motivo: "conta" | "produto" | "webhook" | "credencial" | "pixel" | "principal";
+  motivo: "conta" | "script" | "produto" | "webhook" | "credencial" | "pixel" | "principal";
 }
 
 interface AreaCfg {
@@ -91,7 +107,7 @@ export interface MapaDeAreas {
   /** Resolve a área dona de uma venda. */
   areaDaVenda(v: VendaParaAtribuir): Resolucao;
   /** Resolve a área dona de um clique. Só a conta de anúncio decide. */
-  areaDoClique(c: { utmCampaign: string | null }): Resolucao;
+  areaDoClique(c: { utmCampaign: string | null; workspaceId?: string | null }): Resolucao;
   /** Resolve a área dona de um evento de pixel. */
   areaDoEvento(e: EventoParaAtribuir): Resolucao;
   /**
@@ -126,13 +142,16 @@ export interface VendaParaAtribuir {
   product: string;
   webhookId: string | null;
   apiCredentialId?: string | null;
-  click: { utmCampaign: string | null } | null;
+  /** `workspaceId` = a área que o script da página declarou (pode ser nula). */
+  click: { utmCampaign: string | null; workspaceId?: string | null } | null;
 }
 
 export interface EventoParaAtribuir {
   pixelConfigId: string | null;
   /** O evento não guarda campanha, mas guarda `fbclid` — e o clique tem o UTM. */
   utmCampaign?: string | null;
+  /** Área declarada pelo script, herdada do clique casado por `fbclid`. */
+  clickWorkspaceId?: string | null;
 }
 
 /** As linhas cruas de que a precedência precisa. Ver `construirMapa`. */
@@ -216,7 +235,12 @@ export function construirMapa(d: DadosDoMapa): MapaDeAreas {
       // 1. Conta de anúncio — segue o dinheiro que pagou pelo clique.
       const c = porConta(v.click?.utmCampaign);
       if (c) return { areaId: c, motivo: "conta" };
-      // 2. Desempate por produto — regra mais específica que o gateway.
+      // 2. Área do script na página onde o comprador entrou. Vem antes do
+      //    webhook porque é evidência DAQUELA compra; o webhook é uma regra do
+      //    gateway inteiro. Mais específico vence.
+      const s = valida(v.click?.workspaceId);
+      if (s) return { areaId: s, motivo: "script" };
+      // 3. Desempate por produto — regra mais específica que o gateway.
       const p = areaPorProduto.get(v.product.trim().toLowerCase());
       if (p && ativas.has(p)) return { areaId: p, motivo: "produto" };
       // 3. Webhook dono.
@@ -231,7 +255,10 @@ export function construirMapa(d: DadosDoMapa): MapaDeAreas {
 
     areaDoClique(c) {
       const a = porConta(c.utmCampaign);
-      return a ? { areaId: a, motivo: "conta" } : { areaId: principalId, motivo: "principal" };
+      if (a) return { areaId: a, motivo: "conta" };
+      const s = valida(c.workspaceId);
+      if (s) return { areaId: s, motivo: "script" };
+      return { areaId: principalId, motivo: "principal" };
     },
 
     areaDoEvento(e) {
@@ -239,6 +266,8 @@ export function construirMapa(d: DadosDoMapa): MapaDeAreas {
       // mesma área do gasto que o produziu.
       const c = porConta(e.utmCampaign);
       if (c) return { areaId: c, motivo: "conta" };
+      const s = valida(e.clickWorkspaceId);
+      if (s) return { areaId: s, motivo: "script" };
       const p = e.pixelConfigId ? valida(donoDoPixel.get(e.pixelConfigId)) : null;
       if (p) return { areaId: p, motivo: "pixel" };
       return { areaId: principalId, motivo: "principal" };

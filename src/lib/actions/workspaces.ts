@@ -1,6 +1,7 @@
 "use server";
 
 import { auth } from "@/auth";
+import { carregarMapaDeAreas } from "@/lib/areas/atribuicao";
 import { prisma } from "@/lib/prisma";
 
 export interface WorkspaceDTO {
@@ -351,48 +352,67 @@ export async function deleteWorkspace(id: string): Promise<{ ok: boolean; motivo
   return { ok: true };
 }
 
-/**
- * Quantas vendas cada produto configurado casou no período, para VÁRIAS áreas
- * de uma vez.
- *
- * Existe porque `Sale.product` é texto livre vindo do gateway: renomear o
- * produto lá faz o filtro parar de casar **em silêncio**. Zero vendas aqui é o
- * sinal de que o nome quebrou — melhor ver na tela de gerenciar do que
- * descobrir por um número estranho no dashboard.
- *
- * É um `groupBy` só para todas as áreas: a tela lista N áreas de uma vez, e uma
- * consulta por área custaria N × ~99ms de ida e volta ao Supabase.
- */
-export async function checarProdutosDasAreas(
-  ids?: string[],
-  dias = 30,
-): Promise<Record<string, { produto: string; vendas: number }[]>> {
-  const userId = await uid();
-  const areas = await prisma.workspace.findMany({
-    where: { userId, ...(ids?.length ? { id: { in: ids } } : {}) },
-    select: { id: true, products: true },
-  });
-
-  const todos = [...new Set(areas.flatMap((a) => a.products))];
-  if (todos.length === 0) return Object.fromEntries(areas.map((a) => [a.id, []]));
-
-  const desde = new Date(Date.now() - dias * 864e5);
-  const grupos = await prisma.sale.groupBy({
-    by: ["product"],
-    where: { userId, product: { in: todos }, timestamp: { gte: desde } },
-    _count: { _all: true },
-  });
-  const mapa = new Map(grupos.map((g) => [g.product, g._count._all]));
-
-  return Object.fromEntries(
-    areas.map((a) => [a.id, a.products.map((p) => ({ produto: p, vendas: mapa.get(p) ?? 0 }))]),
-  );
+export interface ProdutoDescoberto {
+  produto: string;
+  vendas: number;
+  faturamento: number;
 }
 
-/** Uma área só. Atalho sobre `checarProdutosDasAreas`. */
-export async function checarProdutosDaArea(id: string, dias = 30): Promise<{ produto: string; vendas: number }[]> {
-  const r = await checarProdutosDasAreas([id], dias);
-  return r[id] ?? [];
+/**
+ * Produtos DESCOBERTOS em cada área — informação, não configuração.
+ *
+ * ## Por que produto deixou de ser filtro
+ *
+ * Pedir ao usuário que escolha os produtos da área não funciona: a ferramenta
+ * só conhece um produto **depois** que ele é vendido, então numa oferta nova
+ * não há o que selecionar. E o nome vem como texto livre do gateway — renomear
+ * lá fazia o filtro parar de casar **em silêncio**.
+ *
+ * Agora a venda é atribuída pelos vínculos reais (conta de anúncio, área do
+ * script, webhook, credencial) e o produto vem junto, como consequência. Todo
+ * produto que aparece numa venda daquela área é associado a ela sozinho.
+ *
+ * ⚠️ Produto renomeado no gateway aparece como produto NOVO na lista, sem
+ * quebrar filtro nenhum — o vínculo real nunca foi o texto.
+ */
+export async function produtosDescobertos(dias = 30): Promise<Record<string, ProdutoDescoberto[]>> {
+  const userId = await uid();
+  const mapa = await carregarMapaDeAreas(userId);
+  const desde = new Date(Date.now() - dias * 864e5);
+
+  const vendas = await prisma.sale.findMany({
+    where: { userId, timestamp: { gte: desde } },
+    select: {
+      product: true,
+      value: true,
+      status: true,
+      webhookId: true,
+      apiCredentialId: true,
+      click: { select: { utmCampaign: true, workspaceId: true } },
+    },
+  });
+
+  // Agrupa em memória: a área de cada venda sai da precedência, que o Postgres
+  // não sabe calcular (o `utm_campaign` é `nome|id` e precisa ser interpretado).
+  const porArea = new Map<string, Map<string, ProdutoDescoberto>>();
+  for (const v of vendas) {
+    const areaId = mapa.areaDaVenda(v).areaId;
+    const m = porArea.get(areaId) ?? new Map<string, ProdutoDescoberto>();
+    const atual = m.get(v.product) ?? { produto: v.product, vendas: 0, faturamento: 0 };
+    atual.vendas += 1;
+    // Só venda APROVADA entra no faturamento — mesma regra do dashboard, senão
+    // o número aqui divergiria do KPI e pareceria erro.
+    if (v.status === "APROVADA") atual.faturamento += Number(v.value);
+    m.set(v.product, atual);
+    porArea.set(areaId, m);
+  }
+
+  return Object.fromEntries(
+    mapa.areas.map((a) => [
+      a.id,
+      [...(porArea.get(a.id)?.values() ?? [])].sort((x, y) => y.faturamento - x.faturamento || y.vendas - x.vendas),
+    ]),
+  );
 }
 
 /**
@@ -410,26 +430,26 @@ export async function checarProdutosDaArea(id: string, dias = 30): Promise<{ pro
  */
 
 /** Tudo o que a tela de gerenciar precisa para montar os seletores. */
+/**
+ * Opções dos seletores da tela de áreas.
+ *
+ * ⚠️ **`products` e `sources` saíram**: produto virou descoberta (ver
+ * `produtosDescobertos`) e `sources` nunca teve uso real. A criação de área não
+ * oferece seletor nenhum — a área nasce zerada e é configurada por dentro.
+ */
 export interface OpcoesAreas {
   accounts: { id: string; name: string; fbAccountId: string; profileName: string }[];
-  products: string[];
-  sources: string[];
   webhooks: { id: string; name: string; platform: string }[];
   pixels: { id: string; name: string }[];
 }
 
 export async function carregarOpcoesAreas(): Promise<OpcoesAreas> {
   const userId = await uid();
-  const [accounts, produtos, fontes, webhooks, pixels] = await Promise.all([
+  const [accounts, webhooks, pixels] = await Promise.all([
     prisma.adAccount.findMany({
       where: { userId },
       select: { id: true, name: true, fbAccountId: true, adProfile: { select: { name: true } } },
       orderBy: { name: "asc" },
-    }),
-    prisma.sale.findMany({ where: { userId }, select: { product: true }, distinct: ["product"], take: 100 }),
-    prisma.click.findMany({
-      where: { userId, utmSource: { not: null } },
-      select: { utmSource: true }, distinct: ["utmSource"], take: 100,
     }),
     prisma.webhook.findMany({ where: { userId }, select: { id: true, name: true, platform: true }, orderBy: { createdAt: "asc" } }),
     prisma.pixelConfig.findMany({ where: { userId }, select: { id: true, name: true }, orderBy: { createdAt: "asc" } }),
@@ -439,8 +459,6 @@ export async function carregarOpcoesAreas(): Promise<OpcoesAreas> {
     accounts: accounts.map((a) => ({
       id: a.id, name: a.name, fbAccountId: a.fbAccountId, profileName: a.adProfile?.name ?? "—",
     })),
-    products: produtos.map((p) => p.product).filter(Boolean).sort((a, b) => a.localeCompare(b)),
-    sources: fontes.map((s) => s.utmSource!).filter(Boolean).sort((a, b) => a.localeCompare(b)),
     webhooks,
     pixels,
   };

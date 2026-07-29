@@ -239,6 +239,7 @@ model Workspace {
   automationRules AutomationRule[]
   expenses       Expense[]
   apiCredentials ApiCredential[]
+  clicks         Click[]
 
   @@index([userId])
 }
@@ -453,6 +454,18 @@ model Click {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   sales  Sale[]
+  /// Área DECLARADA pelo script de UTM instalado na página (`ws` no payload).
+  ///
+  /// ⚠️ Ela **não vence a conta de anúncio**. Se o clique tem `utm_campaign`
+  /// atribuível, a área é a da conta que pagou por ele — senão o gasto ficaria
+  /// numa área e a visita em outra, quebrando as duas ao mesmo tempo. Este
+  /// campo resolve o tráfego **não atribuível** (orgânico, direto, outros
+  /// canais), que antes caía todo na Principal independentemente da página.
+  ///
+  /// NULO = script antigo, sem o parâmetro. Comportamento idêntico ao de antes,
+  /// então nenhum clique histórico muda de área.
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
 
   @@index([clickId])
   @@index([utmCampaign])
@@ -460,6 +473,7 @@ model Click {
   @@index([userId, timestamp])
   @@index([fbclid])
   @@index([ip])
+  @@index([workspaceId])
 }
 
 model Sale {

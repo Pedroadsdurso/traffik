@@ -14,11 +14,14 @@ function jsString(v: string): string {
  * por 30 dias, registra o clique no nosso endpoint, propaga os parâmetros para
  * os links de checkout da página e expõe `window.traffik.getData()`.
  */
-export function utmScript(accountId: string, apiBase: string): string {
+export function utmScript(accountId: string, apiBase: string, workspaceId?: string | null): string {
   return `/*! Traffik — captura de UTMs (cole antes de </head>) */
 (function () {
   "use strict";
   var ACCOUNT = "${jsString(accountId)}";
+  // Área de Trabalho desta página. O servidor valida a posse; se vier vazio o
+  // clique cai na regra normal de atribuição, como nos scripts antigos.
+  var WS = "${jsString(workspaceId ?? "")}";
   var API = "${jsString(apiBase.replace(/\/+$/, ""))}";
   var COOKIE = "traffik_track", SESSION = "traffik_session", DAYS = 30;
   var UTM = ["utm_source","utm_medium","utm_campaign","utm_content","utm_term"];
@@ -56,6 +59,7 @@ export function utmScript(accountId: string, apiBase: string): string {
   function send(){
     if(sessionStorage.getItem(SESSION)){decorate();return;}
     var payload=merge(data,{account:ACCOUNT,url:location.href,referrer:document.referrer||null});
+    if(WS)payload.ws=WS;
     var ep=API+"/api/track/click";
     function done(id){if(id){data.click_id=id;writeCookie(COOKIE,JSON.stringify(data),DAYS);window.traffik.data=data;}sessionStorage.setItem(SESSION,"1");decorate();}
     if(typeof fetch==="function"){

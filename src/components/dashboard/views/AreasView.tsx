@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 
 import {
   carregarOpcoesAreas,
-  checarProdutosDasAreas,
+  produtosDescobertos,
+  type ProdutoDescoberto,
   contasOcupadas,
   createWorkspace,
   deleteWorkspace,
@@ -16,6 +17,7 @@ import {
   type OpcoesAreas,
   type WorkspaceDTO,
 } from "@/lib/actions/workspaces";
+import { brl } from "@/lib/format";
 import { sx } from "@/lib/sx";
 import { Drawer } from "../ui/Drawer";
 import { ListaSelecionavel, type ItemSelecionavel } from "../ui/ListaSelecionavel";
@@ -27,7 +29,8 @@ const CORES = ["#8b5cf6", "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#ec4899",
 const AMARELO = "var(--color-warning,#fbbf24)";
 const VERMELHO = "var(--color-danger,#f87171)";
 
-type ChecksPorArea = Record<string, { produto: string; vendas: number }[]>;
+/** Produtos DESCOBERTOS por área — informação, não configuração. */
+type ChecksPorArea = Record<string, ProdutoDescoberto[]>;
 
 interface Rascunho {
   id: string | null; // null = criando
@@ -36,8 +39,6 @@ interface Rascunho {
   color: string | null;
   description: string;
   accountIds: string[];
-  products: string[];
-  sources: string[];
   webhookIds: string[];
   pixelConfigIds: string[];
   /** Contas que o usuário mandou SAIR de outra área para vir para esta. */
@@ -46,12 +47,12 @@ interface Rascunho {
 
 const RASCUNHO_VAZIO: Rascunho = {
   id: null, isDefault: false, name: "", color: CORES[0]!, description: "",
-  accountIds: [], products: [], sources: [], webhookIds: [], pixelConfigIds: [], moverContas: [],
+  accountIds: [], webhookIds: [], pixelConfigIds: [], moverContas: [],
 };
 
 const deArea = (a: WorkspaceDTO): Rascunho => ({
   id: a.id, isDefault: a.isDefault, name: a.name, color: a.color, description: a.description ?? "",
-  accountIds: [...a.accountIds], products: [...a.products], sources: [...a.sources],
+  accountIds: [...a.accountIds],
   webhookIds: [...a.webhookIds], pixelConfigIds: [...a.pixelConfigIds], moverContas: [],
 });
 
@@ -72,12 +73,12 @@ interface Pendencia {
  */
 function pendencias(
   a: WorkspaceDTO,
-  checks: { produto: string; vendas: number }[] | undefined,
+  checks: ProdutoDescoberto[] | undefined,
   totalDeAreas: number,
 ): Pendencia[] {
   const p: Pendencia[] = [];
   const nada =
-    !a.accountIds.length && !a.products.length && !a.sources.length && !a.webhookIds.length && !a.pixelConfigIds.length;
+    !a.accountIds.length && !a.webhookIds.length && !a.pixelConfigIds.length;
 
   // A PRINCIPAL não tem pendência de configuração: ela é o catch-all e o
   // escopo dela é derivado das outras áreas, não configurado à mão.
@@ -102,18 +103,13 @@ function pendencias(
     // contas, o que infla ROAS/ROI/CPA da área sem nada na tela denunciar.
     p.push({ nivel: "aviso", texto: "Sem conta de anúncio — o gasto exibido é o de todas as contas, então ROAS e ROI ficam distorcidos." });
   }
-  if (!a.products.length && !a.webhookIds.length) {
+  if (!a.webhookIds.length) {
     p.push({
       nivel: "info",
       texto: a.accountIds.length
-        ? "Sem produto nem webhook — as vendas são recortadas só pela conta de anúncio, via UTM."
-        : "Sem produto nem webhook — nenhuma venda é recortada.",
+        ? "Sem webhook — as vendas chegam por atribuição de clique. Cadastre o gateway em Integrações › Webhooks, de dentro desta área."
+        : "Sem conta nem webhook — nenhuma venda é atribuída a esta área.",
     });
-  }
-  for (const c of checks ?? []) {
-    if (c.vendas === 0) {
-      p.push({ nivel: "aviso", texto: `O produto “${c.produto}” não casou nenhuma venda nos últimos 30 dias — confira se o nome mudou no gateway.` });
-    }
   }
   return p;
 }
@@ -137,7 +133,7 @@ export function AreasView() {
 
   const recarregar = useCallback(async () => {
     try {
-      const [as, op, ck] = await Promise.all([listWorkspaces(), carregarOpcoesAreas(), checarProdutosDasAreas()]);
+      const [as, op, ck] = await Promise.all([listWorkspaces(), carregarOpcoesAreas(), produtosDescobertos()]);
       setAreas(as);
       setOpcoes(op);
       setChecks(ck);
@@ -186,8 +182,6 @@ export function AreasView() {
         color: rascunho.color,
         description: rascunho.description,
         accountIds: rascunho.accountIds,
-        products: rascunho.products,
-        sources: rascunho.sources,
         webhookIds: rascunho.webhookIds,
         pixelConfigIds: rascunho.pixelConfigIds,
         moverContas: rascunho.moverContas,
@@ -355,7 +349,7 @@ function AreaCard({
 }: {
   area: WorkspaceDTO;
   opcoes: OpcoesAreas | null;
-  checks: { produto: string; vendas: number }[] | undefined;
+  checks: ProdutoDescoberto[] | undefined;
   totalDeAreas: number;
   onEditar: () => void;
   onDuplicar: () => void;
@@ -392,28 +386,36 @@ function AreaCard({
 
       <div style={sx("display:flex;flex-direction:column;gap:10px")}>
         <Chips titulo="Contas de anúncio" itens={contas} vazio="Todas as contas" />
+        {/* Produtos DESCOBERTOS — informativo, nunca configurável. A ferramenta
+            só conhece um produto depois que ele vende; pedir para escolher numa
+            oferta nova era um campo sem opção. Renomear no gateway agora só faz
+            aparecer um produto novo aqui, sem quebrar filtro nenhum. */}
         <div>
-          <div className="text-muted" style={sx("font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px")}>Produtos</div>
-          {area.products.length === 0 ? (
-            <div className="text-muted" style={sx("font-size:12px")}>Todos os produtos</div>
+          <div className="text-muted" style={sx("font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px")}>
+            Produtos detectados · 30 dias
+          </div>
+          {(checks ?? []).length === 0 ? (
+            <div className="text-muted" style={sx("font-size:12px")}>
+              Nenhuma venda ainda — os produtos aparecem sozinhos conforme entrarem.
+            </div>
           ) : (
-            <div style={sx("display:flex;flex-wrap:wrap;gap:4px")}>
-              {area.products.map((p) => {
-                const zerado = semVenda.has(p);
-                return (
-                  <span key={p} className={zerado ? "tag" : "tag tag-neutral"}
-                    title={zerado ? "Nenhuma venda nos últimos 30 dias com este nome de produto." : undefined}
-                    style={sx(`font-size:11px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${zerado ? `border:1px solid ${AMARELO};color:${AMARELO}` : ""}`)}>
-                    {zerado && "⚠ "}{p}
+            <div style={sx("display:flex;flex-direction:column;gap:3px")}>
+              {(checks ?? []).slice(0, 5).map((pr) => (
+                <div key={pr.produto} style={sx("display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:12px")}>
+                  <span style={sx("overflow:hidden;text-overflow:ellipsis;white-space:nowrap")} title={pr.produto}>{pr.produto}</span>
+                  <span className="text-muted" style={sx("flex:none;font-variant-numeric:tabular-nums")}>
+                    {pr.vendas} · {brl(pr.faturamento)}
                   </span>
-                );
-              })}
+                </div>
+              ))}
+              {(checks ?? []).length > 5 && (
+                <div className="text-muted" style={sx("font-size:11px")}>+{(checks ?? []).length - 5} outro(s)</div>
+              )}
             </div>
           )}
         </div>
         <Chips titulo="Webhooks" itens={webhooks} vazio="Todos os webhooks" />
         <Chips titulo="Pixels" itens={pixels} vazio="Todos os pixels" />
-        {area.sources.length > 0 && <Chips titulo="Fontes (utm_source)" itens={area.sources} vazio="" />}
       </div>
 
       {pend.length > 0 && (
@@ -481,6 +483,8 @@ function AreaDrawer({
 }) {
   const patch = (p: Partial<Rascunho>) => setRascunho({ ...rascunho, ...p });
   const ocupadaPor = new Map(ocupadas.map((o) => [o.accountId, o.workspaceName]));
+  /** `id` nulo = área nova. Criar não pede vínculo nenhum. */
+  const criando = rascunho.id === null;
 
   const itensContas: ItemSelecionavel[] = opcoes.accounts.map((a) => {
     const dona = ocupadaPor.get(a.id);
@@ -540,62 +544,58 @@ function AreaDrawer({
           onChange={(e) => patch({ description: e.target.value })} />
       </Campo>
 
-      <div style={sx("height:1px;background:var(--color-divider)")} />
+      {criando ? (
+        // ⛔ CRIAR ÁREA NÃO PEDE VÍNCULO NENHUM. A área nasce ZERADA.
+        //
+        // A tela antiga mandava escolher contas, webhooks, produtos e pixels de
+        // uma lista do que já existia — isso é um seletor de FILTROS, não a
+        // criação de uma operação nova. E era um beco: numa oferta nova não há
+        // o que selecionar, e o texto mandava o usuário para fora ("conecte um
+        // perfil em Integrações"). A configuração acontece DENTRO da área,
+        // pela própria sidebar, exatamente como na Principal.
+        <div
+          style={sx(
+            "display:flex;gap:10px;align-items:flex-start;padding:var(--space-3);border-radius:var(--radius-md);" +
+              "background:var(--color-bg);border:1px solid var(--color-divider)",
+          )}
+        >
+          <span aria-hidden style={sx("font-size:15px;line-height:1.2")}>🧭</span>
+          <div style={sx("font-size:13px;line-height:1.6")}>
+            <strong>A área nasce vazia — e é assim mesmo.</strong>
+            <div className="text-muted" style={sx("margin-top:5px")}>
+              Depois de criar, entre nela pelo seletor da barra lateral e configure pela própria
+              sidebar: conecte o perfil do Facebook em <strong>Integrações › Anúncios</strong>,
+              cadastre o gateway em <strong>Webhooks</strong> e crie o pixel em{" "}
+              <strong>Pixel</strong>. O que você criar lá dentro já nasce vinculado a esta área.
+            </div>
+            <div className="text-muted" style={sx("margin-top:5px")}>
+              Os <strong>produtos são detectados sozinhos</strong> conforme as vendas entram — não
+              há nada para configurar.
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div style={sx("height:1px;background:var(--color-divider)")} />
 
-      <Campo
-        label="Contas de anúncio"
-        dica="Uma conta pertence a apenas uma área — é o que impede o mesmo investimento de ser contado duas vezes. Contas já usadas aparecem bloqueadas, com o nome da área que as ocupa; “Mover para cá” transfere ao salvar."
-      >
-        <ListaSelecionavel
-          itens={itensContas}
-          selecionados={rascunho.accountIds}
-          onChange={(accountIds) => patch({ accountIds })}
-          onDesbloquear={moverParaCa}
-          vazio="Nenhuma conta de anúncio conectada. Conecte um perfil em Integrações › Anúncios."
-        />
-      </Campo>
-
-      <Campo
-        label="Webhooks"
-        dica="O recorte de venda mais confiável: é um vínculo de verdade, e não quebra se o produto for renomeado no gateway."
-      >
-        <ListaSelecionavel
-          itens={opcoes.webhooks.map((w) => ({ id: w.id, label: w.name, detalhe: w.platform }))}
-          selecionados={rascunho.webhookIds}
-          onChange={(webhookIds) => patch({ webhookIds })}
-          vazio="Nenhum webhook cadastrado. Crie um em Integrações › Webhooks."
-        />
-      </Campo>
-
-      <Campo
-        label="Produtos"
-        dica="Texto livre vindo do gateway: se o produto for renomeado lá, o filtro para de casar em silêncio. O card da área mostra quantas vendas cada um casou nos últimos 30 dias."
-      >
-        <ListaSelecionavel
-          itens={opcoes.products.map(simples)}
-          selecionados={rascunho.products}
-          onChange={(products) => patch({ products })}
-          vazio="Nenhuma venda registrada ainda — não há produto para escolher."
-        />
-      </Campo>
-
-      <Campo label="Pixels" dica="Recorta os eventos do funil (Initiate Checkout, Lead, Add to Cart).">
-        <ListaSelecionavel
-          itens={opcoes.pixels.map((p) => ({ id: p.id, label: p.name }))}
-          selecionados={rascunho.pixelConfigIds}
-          onChange={(pixelConfigIds) => patch({ pixelConfigIds })}
-          vazio="Nenhum pixel cadastrado. Crie um em Integrações › Pixel."
-        />
-      </Campo>
-
-      <Campo label="Fontes (utm_source)" dica="Opcional. Recorta cliques e vendas pela origem do tráfego.">
-        <ListaSelecionavel
-          itens={opcoes.sources.map(simples)}
-          selecionados={rascunho.sources}
-          onChange={(sources) => patch({ sources })}
-          vazio="Nenhum utm_source registrado ainda."
-        />
-      </Campo>
+          {/* Na EDIÇÃO sobra só a conta de anúncio, e por um motivo específico:
+              é a única dimensão em que "mover entre áreas" é uma operação real
+              (uma conta pertence a exatamente uma área). Webhook e pixel se
+              vinculam na criação, dentro da área. */}
+          <Campo
+            label="Contas de anúncio"
+            dica="Uma conta pertence a apenas uma área — é o que impede o mesmo investimento de ser contado duas vezes. Contas de outra área aparecem bloqueadas, com o nome da área que as ocupa; “Mover para cá” transfere ao salvar."
+          >
+            <ListaSelecionavel
+              itens={itensContas}
+              selecionados={rascunho.accountIds}
+              onChange={(accountIds) => patch({ accountIds })}
+              onDesbloquear={moverParaCa}
+              vazio="Nenhuma conta de anúncio conectada. Conecte um perfil em Integrações › Anúncios, de dentro desta área."
+            />
+          </Campo>
+        </>
+      )}
 
       {erro && <p style={sx(`margin:0;font-size:12.5px;color:${VERMELHO}`)}>{erro}</p>}
     </Drawer>

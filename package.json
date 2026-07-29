@@ -13,7 +13,8 @@
     "backup": "node scripts/backup-db.mjs",
     "restore": "node scripts/restore-db.mjs",
     "db:onde": "node scripts/onde-estou.mjs",
-    "test:areas": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-atribuicao-areas.mjs"
+    "test:areas": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-atribuicao-areas.mjs",
+    "script:onde": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/onde-reinstalar-script.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

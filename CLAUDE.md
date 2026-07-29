@@ -2123,6 +2123,92 @@ estão no histórico. Ambas precisam ser rotacionadas em Supabase › Settings �
 Database › Reset database password (e a de produção atualizada na Vercel, com
 **Redeploy**). Eu nunca preciso da senha — só do formato da string.
 
+## 🧭 Sessão 3 — criar área ficou vazio, produto virou descoberta, script por área (29/07/2026)
+
+### 1. Criar área NÃO pede vínculo nenhum
+
+O modal pede **nome, cor e descrição**. Nada mais. A área nasce **zerada**.
+
+> ### ⛔ Não devolva os seletores para a criação
+> A tela antiga mandava escolher contas, webhooks, produtos e pixels de uma
+> lista do que já existia — isso é um **seletor de filtros**, não a criação de
+> uma operação. E era um beco: numa oferta nova **não há o que selecionar**, e o
+> texto mandava o usuário para fora ("conecte um perfil em Integrações").
+>
+> A configuração acontece **DENTRO da área**, pela própria sidebar, como na
+> Principal — e desde a Sessão 2 o que se cria lá já nasce vinculado a ela.
+>
+> Na **edição** sobra só a conta de anúncio, porque é a única dimensão em que
+> "mover entre áreas" é operação real (uma conta pertence a exatamente uma área).
+
+### 2. Produto virou DESCOBERTA — nunca configuração
+
+`produtosDescobertos()` agrega as vendas **já atribuídas** por área e devolve
+produto, nº de vendas e faturamento. O card mostra os 5 maiores.
+
+- A ferramenta **só conhece um produto depois que ele vende** — pedir para
+  escolher numa oferta nova era um campo sem opção.
+- O nome é texto livre do gateway: renomear lá fazia o filtro parar de casar
+  **em silêncio**. Agora **aparece como produto novo na lista**, sem quebrar
+  nada — o vínculo real nunca foi o texto.
+- `Workspace.products`/`sources` saíram da UI, do DTO de opções e de todo filtro.
+  Continuam no schema só pela regra dos dois deploys.
+- Só o faturamento de venda **APROVADA** entra, para não divergir do KPI.
+
+### 3. 🔗 Script de UTM POR ÁREA — decisão revertida, e é ADITIVA
+
+Antes o script era global. Agora ele embute `WS` e manda `ws` no payload;
+`/api/track/click` **valida a posse** e grava `Click.workspaceId`
+(migration `20260729210000`, nullable).
+
+> ### ⛔ O script NÃO vence a conta de anúncio
+> Precedência do clique: **conta → área do script → Principal**.
+>
+> Se o script vencesse, um anúncio da conta da Área A levando tráfego para a
+> página da Área B faria o clique contar em B **enquanto o gasto fica em A** —
+> A com gasto sem visita, B com visita sem gasto. **As duas erradas**, mesmo
+> motivo pelo qual a conta vence o webhook.
+>
+> ⚠️ **Alcance real:** para tráfego PAGO o script não muda nada — já era
+> separado pela campanha. O ganho é no tráfego **não atribuível** (orgânico,
+> direto, outros canais), que antes caía todo na Principal independentemente da
+> página visitada.
+
+**Por que é aditivo — os cinco vetores, checados:**
+
+| Vetor | Resultado |
+|---|---|
+| Script antigo → rota nova | não manda `ws` → coluna NULA → `Click` idêntico ✅ |
+| Script novo → rota antiga | a rota lê **só chaves conhecidas**; `ws` é ignorado ✅ |
+| Campo obrigatório novo | nenhum — `account` segue sendo o único ✅ |
+| Identificador mudando de sentido | nenhum — `ACCOUNT` e o `click_id` são os mesmos ✅ |
+| Dado histórico | nenhum clique muda de área (todos NULOS) ✅ |
+
+O vetor 2 dá folga real: **script e rota podem subir em qualquer ordem**. A
+única disciplina é a de sempre: **migration antes do deploy**.
+
+**Na venda**, `Click.workspaceId` entra logo depois da conta e **antes do
+webhook**: é evidência daquela compra específica, e o webhook é regra do
+gateway inteiro.
+
+**Consequências operacionais aceitas:** só vale depois de reinstalar o script;
+uma página = uma área; o `Workspace.id` aparece no HTML do cliente (sem risco
+novo — o endpoint já é público por desenho e a posse é validada no servidor).
+
+**`npm run script:onde`** lista, por área, se o script já foi reinstalado
+(cliques carimbados) e por quais páginas o tráfego dela entrou.
+
+A aba UTMs mostra o script **da área ativa**, com o nome dela no título, e uma
+**faixa âmbar** quando a área secundária ainda não tem clique carimbado.
+
+### Testes
+
+`npm run test:areas` — **26 asserções, 0 falhas** contra o backup real. As 6
+novas cobrem: clique sem campanha + script → área do script; o mesmo clique sem
+script → Principal (comportamento antigo); clique com campanha → a **conta
+vence**; `ws` inválido descartado; e a partição continua exata com metade dos
+cliques carimbados.
+
 ## 🗂️ Sessão 2 — telas de configuração escopadas por área (29/07/2026)
 
 `src/lib/areas/escopoConfig.ts` — **separado da precedência de propósito**, são

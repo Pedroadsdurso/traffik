@@ -71,14 +71,20 @@ const vendaParaAtribuir = (s) => ({
   product: s.product ?? "",
   webhookId: s.webhookId ?? null,
   apiCredentialId: s.apiCredentialId ?? null,
-  click: s.clickId ? { utmCampaign: porClique.get(s.clickId)?.utmCampaign ?? null } : null,
+  click: s.clickId
+    ? {
+        utmCampaign: porClique.get(s.clickId)?.utmCampaign ?? null,
+        workspaceId: porClique.get(s.clickId)?.workspaceId ?? null,
+      }
+    : null,
 });
 
 /** Distribui as linhas do usuário pelas áreas e devolve a contagem por área. */
 function distribuir(mapa, userId) {
   const conta = { cliques: {}, vendas: {}, eventos: {} };
   const inc = (o, k) => { o[k] = (o[k] ?? 0) + 1; };
-  for (const c of clicks.filter((c) => c.userId === userId)) inc(conta.cliques, mapa.areaDoClique({ utmCampaign: c.utmCampaign ?? null }).areaId);
+  for (const c of clicks.filter((c) => c.userId === userId))
+    inc(conta.cliques, mapa.areaDoClique({ utmCampaign: c.utmCampaign ?? null, workspaceId: c.workspaceId ?? null }).areaId);
   for (const s of sales.filter((s) => s.userId === userId)) inc(conta.vendas, mapa.areaDaVenda(vendaParaAtribuir(s)).areaId);
   for (const e of pixelEvents.filter((e) => e.userId === userId)) {
     const cl = e.fbclid ? clicks.find((c) => c.fbclid === e.fbclid && c.userId === userId) : null;
@@ -88,6 +94,7 @@ function distribuir(mapa, userId) {
 }
 
 const soma = (o) => Object.values(o).reduce((a, b) => a + b, 0);
+let mapaBaseGlobal = null;
 
 console.log(`\nBackup: ${path.basename(arquivo)}`);
 console.log(`Usuários: ${users.length} · Áreas: ${workspaces.length} · Contas: ${adAccounts.length}\n`);
@@ -102,6 +109,8 @@ for (const u of users) {
   if (!principal) continue;
 
   console.log(`\x1b[1m${u.email}\x1b[0m — ${nCliques} cliques · ${nVendas} vendas · ${nEventos} eventos · ${contasDoUser.length} contas`);
+
+  mapaBaseGlobal = construirMapa(dadosDoUsuario(u.id));
 
   // ── Cenário 1: estado imediatamente após a migração ────────────────────────
   // Nenhuma configuração tem dono. TUDO tem de cair na principal — é a
@@ -238,6 +247,54 @@ for (const u of users) {
     const mapa = construirMapa(dados);
     const d = distribuir(mapa, u.id);
     t("área arquivada não retém linhas", (d.cliques["arquivada"] ?? 0) === 0 && soma(d.cliques) === nCliques);
+  }
+
+  // ── Cenário 7: ÁREA DECLARADA PELO SCRIPT DE UTM ──────────────────────────
+  // O script instalado na página carimba o clique com a área. Ele NÃO vence a
+  // conta de anúncio — senão o gasto ficaria numa área e a visita em outra.
+  {
+    const wsDoUser2 = workspaces.filter((w) => w.userId === u.id);
+    const areaScript = "area-do-script";
+    const dados = dadosDoUsuario(u.id);
+    dados.areas.push({ id: areaScript, name: "Área do script", isDefault: false, archived: false, produtosDesempate: [] });
+    const mapa = construirMapa(dados);
+
+    // (a) clique SEM campanha atribuível + ws do script → vai para a área do script
+    const semUtm = clicks.find((c) => c.userId === u.id && !c.utmCampaign);
+    if (semUtm) {
+      const r = mapa.areaDoClique({ utmCampaign: null, workspaceId: areaScript });
+      t("clique sem campanha + script da área → área do script", r.areaId === areaScript && r.motivo === "script");
+      const semScript = mapa.areaDoClique({ utmCampaign: null, workspaceId: null });
+      t("o MESMO clique sem o script cai na Principal (comportamento antigo)", semScript.areaId === principal.id);
+    }
+
+    // (b) clique COM campanha de outra área + ws do script → a CONTA vence
+    const comUtm = clicks.find((c) => c.userId === u.id && mapaBaseGlobal.contaDoUtm(c.utmCampaign));
+    if (comUtm && contasDoUser.length > 0) {
+      const conta = mapaBaseGlobal.contaDoUtm(comUtm.utmCampaign);
+      const areaConta = "area-da-conta";
+      const d2 = dadosDoUsuario(u.id, { contaDaArea: { [conta]: areaConta } });
+      d2.areas.push({ id: areaConta, name: "Área da conta", isDefault: false, archived: false, produtosDesempate: [] });
+      d2.areas.push({ id: areaScript, name: "Área do script", isDefault: false, archived: false, produtosDesempate: [] });
+      const m2 = construirMapa(d2);
+      const r = m2.areaDoClique({ utmCampaign: comUtm.utmCampaign, workspaceId: areaScript });
+      t("clique com campanha: a CONTA vence o script (gasto e visita na mesma área)",
+        r.areaId === areaConta && r.motivo === "conta", `→ ${r.motivo}`);
+    }
+
+    // (c) ws de área inexistente/arquivada é descartado
+    const rInvalido = mapa.areaDoClique({ utmCampaign: null, workspaceId: "area-que-nao-existe" });
+    t("ws inválido é descartado e cai na Principal", rInvalido.areaId === principal.id);
+
+    // (d) a partição continua exata com cliques carimbados
+    const metade = clicks.filter((c) => c.userId === u.id).map((c, i) => ({ ...c, workspaceId: i % 2 === 0 ? areaScript : null }));
+    const contagem = {};
+    for (const c of metade) {
+      const k = mapa.areaDoClique({ utmCampaign: c.utmCampaign ?? null, workspaceId: c.workspaceId }).areaId;
+      contagem[k] = (contagem[k] ?? 0) + 1;
+    }
+    t("com metade dos cliques carimbados, a partição continua exata",
+      soma(contagem) === nCliques, `${soma(contagem)}/${nCliques}`);
   }
 
   console.log("");

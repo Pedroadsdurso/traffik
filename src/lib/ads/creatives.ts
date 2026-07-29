@@ -71,7 +71,7 @@ export async function computeCreatives(
         status: "APROVADA",
         timestamp: { gte: start },
       },
-      select: { value: true, product: true, webhookId: true, apiCredentialId: true, click: { select: { utmContent: true, utmCampaign: true } } },
+      select: { value: true, product: true, webhookId: true, apiCredentialId: true, click: { select: { utmContent: true, utmCampaign: true, workspaceId: true } } },
     }),
   ]);
 
