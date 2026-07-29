@@ -386,8 +386,26 @@ export async function evaluateRule(rule: RuleRow): Promise<RuleRunResult> {
       } else {
         // AJUSTAR_ORCAMENTO
         if (e.dailyBudget == null) { applied.push({ name: e.name, action: "AJUSTAR_ORCAMENTO", ok: false, error: "sem orçamento diário (CBO?)" }); continue; }
-        const factor = params.tipo === "percentual" ? 1 + (params.valor ?? 0) / 100 : 1;
-        let novo = params.tipo === "valor" ? (params.valor ?? e.dailyBudget) : e.dailyBudget * factor;
+        // Três modos, e a diferença importa:
+        //   percentual  → fator sobre o orçamento ATUAL (+20% = ×1,2)
+        //   valor       → define um valor absoluto
+        //   pct_gasto   → define uma fração do GASTO do período (ex.: 80% do
+        //                 que foi gasto), útil para acompanhar a entrega em vez
+        //                 de compor sobre o próprio orçamento
+        let novo: number;
+        if (params.tipo === "valor") novo = params.valor ?? e.dailyBudget;
+        else if (params.tipo === "pct_gasto") novo = (e.metrics.spend * (params.valor ?? 0)) / 100;
+        else novo = e.dailyBudget * (1 + (params.valor ?? 0) / 100);
+
+        // Orçamento zero ou negativo seria recusado pela Meta e, pior, é o
+        // resultado natural de `pct_gasto` num dia sem gasto nenhum.
+        if (!Number.isFinite(novo) || novo <= 0) {
+          applied.push({
+            name: e.name, action: "AJUSTAR_ORCAMENTO", ok: false,
+            error: `valor calculado inválido (${novo}) — sem gasto no período?`,
+          });
+          continue;
+        }
 
         // ── 🔴 TETO DE ORÇAMENTO ────────────────────────────────────────────
         //

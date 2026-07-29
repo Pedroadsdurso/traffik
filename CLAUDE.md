@@ -2190,16 +2190,55 @@ grava log.
 > **A primeira execução real precisa ser observada** — comece por campanha
 > pausada e de baixo risco.
 
-### ⚠️ Falta do Bloco 8 (próxima rodada)
+### ✅ Tela refeita (2ª parte do Bloco 8)
 
-- **Modal de criação completo**: construtor de múltiplas condições com "+",
-  seleção múltipla de produtos/contas, as 5 ações (incluindo "definir orçamento"
-  com % sobre o gasto), campos condicionais por ação, confirmação ao criar regra
-  que pausa ou altera orçamento.
-- **Lista em cards** com toggle, editar, duplicar, excluir e gaveta de log.
-- O formulário atual é uma linha inline com **uma** condição, um produto e uma
-  conta — funciona, mas não expõe `maxBudget` nem a janela, então uma regra de
-  aumento criada por ele **será recusada pelo motor** (fail-closed).
+`views/RulesView.tsx` reescrita (autocontida, só recebe a área ativa) +
+`views/rules/RuleDrawer.tsx`.
+
+- **Estado vazio** com "Criar regra" centralizado; depois, cards um por regra
+  com toggle, produtos, contas, frequência, janela, limite diário, teto,
+  resultado da última execução e ações (histórico / editar / duplicar / excluir).
+- **Construtor de condições** com "+", `E` explícito entre elas, e remoção
+  individual. Os **5 operadores** (`>`, `>=`, `<`, `<=`, `=`).
+- **Seleção múltipla** de produtos e contas via `ui/ListaSelecionavel`. Vazio =
+  todos. As contas ofertadas são só as da **área ativa**.
+- **5 ações**, mapeadas para 3 valores do enum + `actionParams` — sem migration
+  de enum. "Definir orçamento" aceita valor absoluto ou **% do gasto**
+  (`tipo: "pct_gasto"`, novo no motor, com guarda para valor ≤ 0).
+- **Teto obrigatório** na ação de aumentar: o botão Salvar fica desabilitado e o
+  campo fica vermelho sem ele — o motor recusaria de qualquer forma, mas
+  bloquear na tela evita criar uma regra que nunca agiria.
+- **Confirmação em dois passos** para pausar ou mexer em orçamento, em vermelho,
+  dizendo que a regra age sozinha pelo cron e que a Meta não desfaz. "Ativar"
+  não pede: religar não gasta além do orçamento já configurado.
+- **Gaveta de histórico** com a condição avaliada, cada entidade e os **valores
+  que a regra viu** (✓/·), mais o resultado por entidade, incluindo recusas.
+
+> ⚠️ **Card avisa quando a regra é inerte.** Regra de aumento sem teto (criada
+> pelo formulário antigo) ganha aviso âmbar: sem ele pareceria ligada e
+> funcionando, e nunca agiria.
+>
+> ⚠️ **Duplicar nasce DESATIVADA**, sempre. Duplicar uma regra que pausa
+> campanha e já sair rodando dobraria a ação sem ninguém pedir.
+>
+> ⚠️ **"Sem limite" grava 9999, não 0.** O motor bloqueia quando
+> `runsToday >= dailyRunLimit`, então `0` significaria "nunca roda".
+
+**Zero `<select>` nativo nas duas telas novas** — usam `ui/Select` (Bloco 3) e o
+novo **`ui/Checkbox`**, para a padronização visual não precisar refazê-las.
+`globals.css` ganhou a variante **`.btn-danger`** (ação destrutiva sempre em
+vermelho).
+
+**Mais 6 asserções** (múltiplas condições): E com duas verdadeiras bate; **uma
+falsa derruba o E**; log mostra as duas métricas (`{"gasto":380,"vendas":0}`);
+**lista de condições vazia não dispara**; `<=` funciona. Total do Bloco 8: **22
+asserções, 0 falhas**.
+
+### ⚠️ Dívida criada: form de regra morto no `useTraffikState`
+
+O `ruleForm` e os ~37 handlers dele (`onRuleName`, `addRule`, `runRules`…)
+ficaram **sem consumidor** — a `RulesView` não recebe mais `v`. Some junto da
+faxina do nav morto (dívida #2).
 
 ## 🎯 Sessão 4 — banner de pendências e FONTE ÚNICA (29/07/2026)
 

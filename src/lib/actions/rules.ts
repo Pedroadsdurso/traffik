@@ -176,6 +176,77 @@ export async function createRule(input: CreateRuleInput): Promise<RuleDTO> {
   return toDTO(created);
 }
 
+/**
+ * Edita uma regra existente.
+ *
+ * ⚠️ `updateMany` com `userId` no `where`: `update` por id sozinho deixaria
+ * editar regra de outro usuário se o id vazasse — e uma regra é código que
+ * pausa campanha e mexe em orçamento real.
+ */
+export async function updateRule(id: string, input: CreateRuleInput): Promise<RuleDTO | null> {
+  const userId = await requireUserId();
+  const r = await prisma.automationRule.updateMany({
+    where: { id, userId },
+    data: {
+      name: input.name.trim() || "Regra sem nome",
+      targetProduct: input.targetProduct?.trim() || null,
+      targetProducts: input.targetProducts ?? [],
+      adAccountIds: input.adAccountIds ?? [],
+      maxBudget: input.maxBudget ?? null,
+      windowStartHour: input.windowStartHour ?? null,
+      windowEndHour: input.windowEndHour ?? null,
+      level: input.level,
+      nameFilter: input.nameFilter?.trim() || null,
+      action: input.action,
+      actionParams: (input.actionParams ?? undefined) as object | undefined,
+      conditions: input.conditions as object,
+      calcPeriod: input.calcPeriod,
+      frequencyMin: input.frequencyMin,
+      dailyRunLimit: input.dailyRunLimit,
+      active: input.active,
+    },
+  });
+  if (r.count === 0) return null;
+  const fresh = await prisma.automationRule.findUniqueOrThrow({
+    where: { id },
+    include: { logs: { orderBy: { ranAt: "desc" }, take: 20 } },
+  });
+  return toDTO(fresh);
+}
+
+/** Duplica a configuração. A cópia nasce INATIVA — ver o comentário na UI. */
+export async function duplicateRule(id: string): Promise<RuleDTO | null> {
+  const userId = await requireUserId();
+  const o = await prisma.automationRule.findFirst({ where: { id, userId } });
+  if (!o) return null;
+  const c = await prisma.automationRule.create({
+    data: {
+      userId,
+      workspaceId: o.workspaceId,
+      name: `${o.name} (cópia)`,
+      targetProduct: o.targetProduct,
+      targetProducts: o.targetProducts,
+      adAccountIds: o.adAccountIds,
+      maxBudget: o.maxBudget,
+      windowStartHour: o.windowStartHour,
+      windowEndHour: o.windowEndHour,
+      level: o.level,
+      nameFilter: o.nameFilter,
+      action: o.action,
+      actionParams: (o.actionParams ?? undefined) as object | undefined,
+      conditions: o.conditions as object,
+      calcPeriod: o.calcPeriod,
+      frequencyMin: o.frequencyMin,
+      dailyRunLimit: o.dailyRunLimit,
+      // ⚠️ A cópia nasce DESATIVADA, sempre. Duplicar uma regra que pausa
+      // campanha e já sair rodando dobraria a ação sem ninguém pedir.
+      active: false,
+    },
+    include: { logs: true },
+  });
+  return toDTO(c);
+}
+
 export async function toggleRule(id: string): Promise<{ id: string; active: boolean }> {
   const userId = await requireUserId();
   const r = await prisma.automationRule.findFirst({ where: { id, userId }, select: { active: true } });

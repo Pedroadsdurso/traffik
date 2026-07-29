@@ -177,6 +177,14 @@ figcaption {
 .btn-secondary:hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
 .btn-secondary:active { background: color-mix(in srgb, var(--color-text) 14%, transparent); }
 .btn-ghost { color: var(--color-accent); padding-inline: var(--space-1); }
+
+/* Variante DESTRUTIVA — pausar campanha, excluir, alterar orçamento.
+   Segue o mesmo desenho das outras (contorno, sem preenchimento) e só troca a
+   cor, para não parecer um componente de outra família. Regra da ferramenta:
+   ação irreversível ou que gasta dinheiro é sempre vermelha. */
+.btn-danger { color: var(--color-danger, #ef4444); border-color: var(--color-danger, #ef4444); }
+.btn-danger:hover { background: color-mix(in srgb, var(--color-danger, #ef4444) 12%, transparent); }
+.btn-danger:active { background: color-mix(in srgb, var(--color-danger, #ef4444) 22%, transparent); }
 .btn-ghost:hover { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
 .btn-ghost:active { background: color-mix(in srgb, var(--color-accent) 18%, transparent); }
 .btn-icon { width: 36px; height: 36px; padding: 0; }
