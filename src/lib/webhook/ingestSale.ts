@@ -1,4 +1,5 @@
 import { after } from "next/server";
+import { extrairIpDoCliente } from "@/lib/geo/clientIp";
 
 import type { Prisma } from "@/generated/prisma/client";
 import type { SaleStatus } from "@/generated/prisma/enums";
@@ -160,9 +161,13 @@ async function upsertMonotonico(
   return sale;
 }
 
-/** Extrai o IP do cliente dos headers de proxy. */
+/**
+ * Extrai o IP do cliente dos headers de proxy.
+ *
+ * ⚠️ Delega para `lib/geo/clientIp.ts`. Esta era a TERCEIRA cópia do mesmo
+ * `x-forwarded-for.split(",")[0]` — que pega o valor que o CLIENTE controla e
+ * quebra atrás de nginx. As três divergiam por acidente, não por decisão.
+ */
 export function clientIpFrom(headers: Headers): string | null {
-  const fwd = headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0]!.trim();
-  return headers.get("x-real-ip");
+  return extrairIpDoCliente({ header: (n) => headers.get(n) });
 }

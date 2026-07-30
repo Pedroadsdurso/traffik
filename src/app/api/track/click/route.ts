@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { ipDaRequisicao } from "@/lib/geo/clientIp";
 
 import { prisma } from "@/lib/prisma";
 
@@ -18,11 +19,6 @@ export function OPTIONS() {
   return new Response(null, { status: 204, headers: CORS_HEADERS });
 }
 
-function clientIp(req: NextRequest): string | null {
-  const fwd = req.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0]!.trim();
-  return req.headers.get("x-real-ip");
-}
 
 function str(v: unknown, max = 2048): string | null {
   if (typeof v !== "string") return null;
@@ -82,7 +78,7 @@ export async function POST(req: NextRequest) {
       url: str(body.url),
       referrer: str(body.referrer),
       country: str(body.country, 8),
-      ip: clientIp(req),
+      ip: ipDaRequisicao(req),
       userAgent: str(req.headers.get("user-agent"), 512),
     },
     select: { clickId: true },

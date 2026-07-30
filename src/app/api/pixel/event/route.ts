@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { ipDaRequisicao } from "@/lib/geo/clientIp";
 
 import { decryptSecretSafe } from "@/lib/crypto/secrets";
 import { sendServerEvent, type CapiEventName } from "@/lib/facebook/capi";
@@ -29,10 +30,6 @@ const EVENT_MAP: Record<string, { capi: CapiEventName; rule: PixelEventType }> =
   InitiateCheckout: { capi: "InitiateCheckout", rule: "INITIATE_CHECKOUT" },
 };
 
-function clientIp(req: NextRequest): string | null {
-  const fwd = req.headers.get("x-forwarded-for");
-  return fwd ? fwd.split(",")[0]!.trim() : req.headers.get("x-real-ip");
-}
 
 /**
  * Recebe um evento do script de pixel próprio (Lead/AddToCart/InitiateCheckout)
@@ -110,7 +107,7 @@ export async function POST(req: NextRequest) {
       currency: typeof body.currency === "string" ? body.currency : undefined,
       fbclid: typeof body.fbclid === "string" ? body.fbclid : undefined,
       eventSourceUrl: typeof body.url === "string" ? body.url : undefined,
-      clientIp: clientIp(req),
+      clientIp: ipDaRequisicao(req),
       clientUserAgent: req.headers.get("user-agent"),
     });
     if (r.ok) sent++;
