@@ -1494,24 +1494,40 @@ export function useTraffikState(
     newGatewayPct: s.newGatewayPct,
     onNewGatewayMethod: (e: React.ChangeEvent<HTMLSelectElement>) => set({ newGatewayMethod: e.target.value }),
     onNewGatewayPct: (e: React.ChangeEvent<HTMLInputElement>) => set({ newGatewayPct: e.target.value }),
-    addGateway: async () => {
-      const amount = parseFloat(s.newGatewayPct) || 0;
+    /**
+     * 🐛 Os `add*` passaram a RECEBER os valores em vez de lê-los do estado
+     * global.
+     *
+     * Os campos do formulário de Taxas moravam no `useTraffikState`, que é
+     * provido por contexto ao dashboard inteiro. Cada tecla re-renderizava a
+     * árvore toda (gráficos incluídos), e com input controlado o teclado corria
+     * mais rápido que o re-render: os caracteres se perdiam e o campo aparecia
+     * vazio depois de digitar uma frase.
+     *
+     * Agora o estado dos campos é LOCAL na `FeesView` — mesmo padrão das views
+     * mais novas (`UtmsView`, `PixelView`, `AreasView`, `RulesView`).
+     *
+     * ⚠️ Campo de formulário não deve morar neste hook. O que vem para cá é
+     * dado do servidor e estado compartilhado entre telas, não digitação.
+     */
+    addGateway: async (metodo: string, pct: string) => {
+      const amount = parseFloat(pct) || 0;
       if (!amount) return;
-      const method = s.newGatewayMethod as ExpenseDTO["paymentMethod"];
+      const method = metodo as ExpenseDTO["paymentMethod"];
       const label = PAYMENT_LABEL[method ?? ""] ?? "Todas";
       const created = await createExpense({ name: `Taxa ${label}`, type: "TAXA_GATEWAY", calc: "PERCENTUAL", amount, paymentMethod: method });
-      setS((st) => ({ ...st, expenses: [...st.expenses, created], newGatewayPct: "" }));
+      setS((st) => ({ ...st, expenses: [...st.expenses, created] }));
     },
     // Novo imposto
     newTaxName: s.newTaxName,
     newTaxPct: s.newTaxPct,
     onNewTaxName: (e: React.ChangeEvent<HTMLInputElement>) => set({ newTaxName: e.target.value }),
     onNewTaxPct: (e: React.ChangeEvent<HTMLInputElement>) => set({ newTaxPct: e.target.value }),
-    addTax: async () => {
-      const amount = parseFloat(s.newTaxPct) || 0;
+    addTax: async (nome: string, pct: string) => {
+      const amount = parseFloat(pct) || 0;
       if (!amount) return;
-      const created = await createExpense({ name: s.newTaxName.trim() || "Imposto", type: "IMPOSTO", calc: "PERCENTUAL", amount });
-      setS((st) => ({ ...st, expenses: [...st.expenses, created], newTaxName: "", newTaxPct: "" }));
+      const created = await createExpense({ name: nome.trim() || "Imposto", type: "IMPOSTO", calc: "PERCENTUAL", amount });
+      setS((st) => ({ ...st, expenses: [...st.expenses, created] }));
     },
     // Nova despesa recorrente
     newDespesaName: s.newDespesaName,
@@ -1520,11 +1536,11 @@ export function useTraffikState(
     onNewDespesaValue: (e: React.ChangeEvent<HTMLInputElement>) => set({ newDespesaValue: e.target.value }),
     despesaSoNestaArea: s.despesaSoNestaArea,
     toggleDespesaSoNestaArea: () => setS((st) => ({ ...st, despesaSoNestaArea: !st.despesaSoNestaArea })),
-    addDespesa: async () => {
-      const amount = parseFloat(s.newDespesaValue) || 0;
-      if (!s.newDespesaName.trim() || !amount) return;
+    addDespesa: async (nome: string, valor: string, soNestaArea: boolean) => {
+      const amount = parseFloat(valor) || 0;
+      if (!nome.trim() || !amount) return;
       const created = await createExpense({
-        name: s.newDespesaName.trim(),
+        name: nome.trim(),
         type: "DESPESA_RECORRENTE",
         calc: "FIXO",
         amount,
@@ -1533,10 +1549,10 @@ export function useTraffikState(
         // escolha — taxa de gateway e imposto são globais por natureza, e uma
         // caixa neles convidaria a prender por engano justamente o que, se
         // prendido, some da conta de lucro das outras áreas em silêncio.
-        todasAsAreas: !s.despesaSoNestaArea,
+        todasAsAreas: !soNestaArea,
         workspaceId: s.workspaceAtiva,
       });
-      setS((st) => ({ ...st, expenses: [...st.expenses, created], newDespesaName: "", newDespesaValue: "" }));
+      setS((st) => ({ ...st, expenses: [...st.expenses, created] }));
     },
     finance: {
       revenue: brl(revenue),

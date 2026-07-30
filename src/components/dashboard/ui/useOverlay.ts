@@ -25,6 +25,28 @@ export function useOverlay(aberta: boolean, onClose: () => void) {
 
   useEffect(() => setMontado(true), []);
 
+  /**
+   * 🐛 `onClose` VIVE NUMA REF, e isso não é estilo — é a correção de um bug.
+   *
+   * O efeito abaixo dependia de `[aberta, onClose]`. Mas `onClose` chega como
+   * arrow inline do pai (`onClose={() => setRascunho(null)}`), que é **recriada a
+   * cada render**. Resultado: digitar uma letra num campo dentro da gaveta
+   * re-renderizava o pai → `onClose` mudava de identidade → o efeito rodava o
+   * **cleanup**, que devolve o foco a quem abriu a gaveta, e em seguida
+   * reagendava foco no PRIMEIRO campo do painel.
+   *
+   * Na prática: o campo perdia o foco a cada tecla, e o texto ia para outro campo
+   * ou para nenhum. Atingia **toda** gaveta e modal da ferramenta, porque todas
+   * passam por aqui — nome e descrição da área, nome da regra, tokens, taxas.
+   *
+   * ⚠️ Não devolva `onClose` para o array de dependências. Se precisar de outra
+   * função do pai aqui, use o mesmo padrão de ref.
+   */
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
   useEffect(() => {
     if (!aberta) return;
     focoAnterior.current = document.activeElement as HTMLElement | null;
@@ -35,7 +57,7 @@ export function useOverlay(aberta: boolean, onClose: () => void) {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.stopPropagation();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== "Tab") return;
@@ -67,7 +89,9 @@ export function useOverlay(aberta: boolean, onClose: () => void) {
       clearTimeout(t);
       focoAnterior.current?.focus?.();
     };
-  }, [aberta, onClose]);
+    // ⚠️ SÓ `aberta`. Ver o comentário do `onCloseRef` acima: incluir `onClose`
+    // aqui faz o cleanup rodar a cada tecla digitada dentro da camada.
+  }, [aberta]);
 
   return { painelRef, podeRenderizar: aberta && montado };
 }

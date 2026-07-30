@@ -17,7 +17,17 @@ export interface PreviaExclusao {
   contas: { id: string; nome: string; identificador: string }[];
   webhooks: { id: string; nome: string; gateway: string; vendasRecebidas: number }[];
   pixels: { id: string; nome: string; eventosRegistrados: number }[];
-  regras: { id: string; nome: string; ativa: boolean }[];
+  regras: {
+    id: string; nome: string; ativa: boolean;
+    /** Quantas vezes já rodou — o que se perde ao excluir. */
+    execucoes: number;
+    /**
+     * 🔴 `true` = a regra não está limitada a contas específicas, então vale
+     * para TODAS as contas da área onde estiver. Movida para a Principal, ela
+     * chega apta a agir sobre todas as campanhas de lá.
+     */
+    semContaEspecifica: boolean;
+  }[];
   despesas: { id: string; nome: string }[];
   dados: { vendas: number; faturamento: number; cliques: number; eventos: number };
 }
@@ -28,8 +38,12 @@ export interface OpcoesExclusao {
   contas?: "mover" | "desvincular";
   webhooks?: "mover" | "excluir";
   pixels?: "mover" | "excluir";
-  /** Padrão move E desativa: regra nula seria GLOBAL e continuaria agindo. */
-  regras?: "mover" | "desativar" | "excluir";
+  /**
+   * 🔴 **Padrão `excluir`.** Uma automação sobrevivente é a única coisa aqui que
+   * VOLTA A AGIR sozinha, com dinheiro real. Ver o comentário de `excluirArea`.
+   */
+  regras?: "mover" | "excluir";
+  /** Padrão `excluir`: custo de uma operação encerrada não deve inflar outra. */
   despesas?: "mover" | "excluir";
   apagarDados?: boolean;
   /** Confirmação por digitação, comparada com o nome da área. */
@@ -75,7 +89,10 @@ export async function preverExclusao(userId: string, id: string): Promise<Previa
     prisma.adAccount.findMany({ where: { userId, workspaceId: id }, select: { id: true, name: true, fbAccountId: true } }),
     prisma.webhook.findMany({ where: { userId, workspaceId: id }, select: { id: true, name: true, platform: true, eventCount: true } }),
     prisma.pixelConfig.findMany({ where: { userId, workspaceId: id }, select: { id: true, name: true } }),
-    prisma.automationRule.findMany({ where: { userId, workspaceId: id }, select: { id: true, name: true, active: true } }),
+    prisma.automationRule.findMany({
+      where: { userId, workspaceId: id },
+      select: { id: true, name: true, active: true, adAccountIds: true, _count: { select: { logs: true } } },
+    }),
     prisma.expense.findMany({ where: { userId, workspaceId: id }, select: { id: true, name: true } }),
     carregarMapaDeAreas(userId),
   ]);
@@ -95,7 +112,11 @@ export async function preverExclusao(userId: string, id: string): Promise<Previa
     contas: contas.map((c) => ({ id: c.id, nome: c.name, identificador: c.fbAccountId })),
     webhooks: webhooks.map((w) => ({ id: w.id, nome: w.name, gateway: w.platform, vendasRecebidas: w.eventCount })),
     pixels: pixels.map((p) => ({ id: p.id, nome: p.name, eventosRegistrados: contagemPixel.get(p.id) ?? 0 })),
-    regras: regras.map((r) => ({ id: r.id, nome: r.name, ativa: r.active })),
+    regras: regras.map((r) => ({
+      id: r.id, nome: r.name, ativa: r.active,
+      execucoes: r._count.logs,
+      semContaEspecifica: r.adAccountIds.length === 0,
+    })),
     despesas: despesas.map((d) => ({ id: d.id, nome: d.name })),
     dados: {
       vendas: vendasDaArea.length,
@@ -151,6 +172,46 @@ export async function exportarDados(userId: string, id: string): Promise<string 
 }
 
 /**
+ * Histórico de execuções das automações desta área, para baixar antes de excluir.
+ *
+ * É o que resolve a perda de auditoria **sem** carregar o risco de manter uma
+ * automação viva: o registro do que ela fez fica no seu computador, e a regra
+ * não sobrevive para ser religada por engano.
+ */
+export async function exportarHistoricoDasRegras(userId: string, id: string): Promise<string | null> {
+  const area = await prisma.workspace.findFirst({ where: { id, userId }, select: { name: true } });
+  if (!area) return null;
+  const regras = await prisma.automationRule.findMany({
+    where: { userId, workspaceId: id },
+    include: { logs: { orderBy: { ranAt: "desc" } } },
+  });
+  return JSON.stringify(
+    {
+      area: area.name,
+      geradoEm: new Date().toISOString(),
+      aviso: "Histórico das automações desta área, gerado antes da exclusão.",
+      automacoes: regras.map((r) => ({
+        nome: r.name,
+        acao: r.action,
+        nivel: r.level,
+        condicoes: r.conditions,
+        contasAlvo: r.adAccountIds,
+        tetoDeOrcamento: r.maxBudget,
+        execucoes: r.logs.map((l) => ({
+          quando: l.ranAt.toISOString(),
+          resultado: l.status,
+          mensagem: l.message,
+          afetadas: l.affected,
+          detalhes: l.details,
+        })),
+      })),
+    },
+    null,
+    2,
+  );
+}
+
+/**
  * Exclui uma área **com escolha por grupo**.
  *
  * ## ⛔ Por que `SetNull` não servia como padrão
@@ -165,8 +226,23 @@ export async function exportarDados(userId: string, id: string): Promise<string 
  * - **`Expense.workspaceId` nulo = vale para TODAS as áreas.** A despesa da
  *   área excluída passava a inflar o custo de todas as outras.
  *
- * Por isso o padrão aqui **move as duas para a Principal** (e desativa a
- * regra): nenhuma das duas amplia escopo sozinha.
+ * ## 🔴 Por que o padrão da AUTOMAÇÃO é EXCLUIR (e não mover)
+ *
+ * Cheguei a escolher "mover e desligar", para preservar o histórico de
+ * execuções. Não se sustenta: o histórico de uma regra que o usuário apagou vale
+ * pouco; uma campanha otimizada e escalando, arrasada por uma regra religada por
+ * engano, custa dinheiro real.
+ *
+ * E há o agravante: **regra sem conta específica vale para TODAS as contas da
+ * área onde está**. Movida para a Principal, ela chega apta a agir sobre todas
+ * as campanhas de lá — desligada, mas a um clique de distância, sem nada na tela
+ * lembrando de onde ela veio.
+ *
+ * A auditoria é preservada de outro jeito: o diálogo oferece **baixar o
+ * histórico** antes de excluir. Resolve a perda sem carregar o risco.
+ *
+ * ⚠️ Quando o usuário escolhe mover, ela vai **desligada** e **nunca com
+ * `workspaceId` nulo** — nulo é global.
  *
  * ⚠️ **O gasto NUNCA é apagado**, nem quando o usuário pede para apagar dados.
  * `DailyAdMetric` pende do anúncio, não da área: apagar venda e manter gasto
@@ -240,14 +316,21 @@ export async function excluirArea(
   if (opcoes.pixels === "excluir") await prisma.pixelConfig.deleteMany({ where: { userId, workspaceId: id } });
   else await prisma.pixelConfig.updateMany({ where: { userId, workspaceId: id }, data: paraPrincipal });
 
-  if (opcoes.regras === "excluir") await prisma.automationRule.deleteMany({ where: { userId, workspaceId: id } });
-  else if (opcoes.regras === "mover") await prisma.automationRule.updateMany({ where: { userId, workspaceId: id }, data: paraPrincipal });
-  // Padrão: move E desativa. Só desativar deixaria a regra nula, e nula é
-  // GLOBAL — bastaria alguém religá-la para ela agir em todas as contas.
-  else await prisma.automationRule.updateMany({ where: { userId, workspaceId: id }, data: { ...paraPrincipal, active: false } });
+  // 🔴 Automação: PADRÃO É EXCLUIR. Quando o usuário escolhe mover, ela vai
+  // DESLIGADA — e nunca com `workspaceId` nulo, que a tornaria global.
+  if (opcoes.regras === "mover") {
+    await prisma.automationRule.updateMany({ where: { userId, workspaceId: id }, data: { ...paraPrincipal, active: false } });
+  } else {
+    await prisma.automationRule.deleteMany({ where: { userId, workspaceId: id } });
+  }
 
-  if (opcoes.despesas === "excluir") await prisma.expense.deleteMany({ where: { userId, workspaceId: id } });
-  else await prisma.expense.updateMany({ where: { userId, workspaceId: id }, data: paraPrincipal });
+  // Custo: padrão excluir. Uma taxa criada para uma operação encerrada não tem
+  // por que continuar reduzindo o lucro de outra.
+  if (opcoes.despesas === "mover") {
+    await prisma.expense.updateMany({ where: { userId, workspaceId: id }, data: paraPrincipal });
+  } else {
+    await prisma.expense.deleteMany({ where: { userId, workspaceId: id } });
+  }
 
   // Credenciais de API não aparecem no diálogo (não são configuração de
   // operação); vão para a Principal para não virarem globais por omissão.

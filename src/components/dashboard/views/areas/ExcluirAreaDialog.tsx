@@ -22,11 +22,23 @@ import { Drawer } from "../../ui/Drawer";
  * automaticamente. Isso protegia integração instalada e viva, mas poluía a
  * Principal com coisas que o usuário não reconhecia mais.
  *
- * ## ⛔ O padrão de cada grupo é sempre a opção mais segura
+ * ## ⛔ O padrão de cada grupo é o de MENOR RISCO — que não é sempre "mover"
  *
- * Mover, não excluir. Manter os dados, não apagar. **Não existe "excluir tudo"
- * num clique** — cada grupo é uma decisão consciente, e a de apagar dados
- * exige baixar o arquivo antes e digitar o nome da área.
+ * Conta, gateway e pixel: **mover**, porque excluir mataria integração
+ * instalada. Vendas e visitas: **manter**.
+ *
+ * **Automação: EXCLUIR.** É a única coisa aqui que volta a AGIR sozinha, com
+ * dinheiro real. Movida para a Principal ela chega desligada, mas a um clique de
+ * distância — e regra sem conta específica vale para TODAS as contas da área onde
+ * está, então religá-la por engano age em tudo que existe na Principal,
+ * inclusive no que está otimizado e escalando. A auditoria é preservada pelo
+ * **download do histórico**, que resolve a perda sem carregar o risco.
+ *
+ * **Taxa: EXCLUIR.** Uma taxa criada para uma operação encerrada continuaria
+ * descontando do lucro da Principal.
+ *
+ * **Não existe "excluir tudo" num clique** — cada grupo é uma decisão
+ * consciente, e apagar dados exige baixar o arquivo e digitar o nome da área.
  *
  * ⚠️ Os avisos falam da **consequência**, nunca do mecanismo: "a URL para de
  * funcionar e as vendas deixam de chegar", não "a FK vira nula".
@@ -105,11 +117,12 @@ export function ExcluirAreaDialog({
   const [contas, setContas] = useState("desvincular");
   const [webhooks, setWebhooks] = useState("mover");
   const [pixels, setPixels] = useState("mover");
-  const [regras, setRegras] = useState("desativar");
-  const [despesas, setDespesas] = useState("mover");
+  const [regras, setRegras] = useState("excluir");
+  const [despesas, setDespesas] = useState("excluir");
 
   const [apagarDados, setApagarDados] = useState(false);
   const [baixou, setBaixou] = useState(false);
+  const [baixouHistorico, setBaixouHistorico] = useState(false);
   const [nomeDigitado, setNomeDigitado] = useState("");
 
   useEffect(() => {
@@ -136,6 +149,19 @@ export function ExcluirAreaDialog({
     a.click();
     URL.revokeObjectURL(url);
     setBaixou(true);
+  };
+
+  const baixarHistorico = async () => {
+    const { exportarHistoricoDasRegrasDaArea } = await import("@/lib/actions/workspaces");
+    const json = await exportarHistoricoDasRegrasDaArea(areaId).catch(() => null);
+    if (!json) return;
+    const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `traffik-automacoes-${(previa?.nome ?? "area").replace(/[^\w-]+/g, "-").toLowerCase()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setBaixouHistorico(true);
   };
 
   const executar = async () => {
@@ -168,7 +194,11 @@ export function ExcluirAreaDialog({
   };
 
   const nomeConfere = previa != null && nomeDigitado.trim() === previa.nome.trim();
-  const podeExcluir = !executando && (!apagarDados || (baixou && nomeConfere));
+  // Excluir automação COM histórico exige baixar o registro antes: é a troca que
+  // resolve a auditoria sem manter a regra viva.
+  const precisaHistorico = previa != null && regras === "excluir" && previa.regras.some((r) => r.execucoes > 0);
+  const podeExcluir =
+    !executando && (!apagarDados || (baixou && nomeConfere)) && (!precisaHistorico || baixouHistorico);
 
   // Resumo em linguagem simples, montado a partir das escolhas.
   const resumo: string[] = [];
@@ -181,12 +211,12 @@ export function ExcluirAreaDialog({
       resumo.push(pixels === "mover" ? "Os pixels continuam enviando eventos, agora na Principal." : "Os pixels são removidos e param de enviar eventos.");
     if (previa.regras.length > 0)
       resumo.push(
-        regras === "excluir" ? "As automações são removidas."
-        : regras === "mover" ? "As automações passam para a Principal e continuam como estão."
-        : "As automações passam para a Principal, desligadas.",
+        regras === "mover"
+          ? "As automações passam para a Principal, desligadas."
+          : "As automações são removidas e param de agir.",
       );
     if (previa.despesas.length > 0)
-      resumo.push(despesas === "mover" ? "Os custos passam para a Principal." : "Os custos são removidos.");
+      resumo.push(despesas === "mover" ? "As taxas passam para a Principal e descontam do lucro de lá." : "As taxas desta operação são removidas.");
     resumo.push(
       apagarDados
         ? `${previa.dados.vendas} vendas e ${previa.dados.cliques} visitas são apagadas para sempre.`
@@ -270,28 +300,71 @@ export function ExcluirAreaDialog({
             ]}
           />
 
-          <Grupo
-            titulo="Automações"
-            itens={previa.regras.map((r) => `${r.nome}${r.ativa ? "" : " (desligada)"}`)}
-            valor={regras}
-            onChange={setRegras}
-            escolhas={[
-              {
-                valor: "desativar",
-                titulo: "Mover para a Principal e desligar",
-                aviso:
-                  "Recomendado. Sem uma área para limitar onde agem, essas automações passariam a valer para todas as suas contas — inclusive pausando campanhas de outras operações.",
-              },
-              {
-                valor: "mover",
-                titulo: "Mover para a Principal e manter ligadas",
-                perigo: true,
-                aviso:
-                  "Elas continuarão agindo sozinhas, agora sobre as campanhas da Principal. Confira o que cada uma faz antes de escolher isto.",
-              },
-              { valor: "excluir", titulo: "Excluir" },
-            ]}
-          />
+          {previa.regras.length > 0 && (
+            <div style={sx("padding:var(--space-3);border:1px solid var(--color-divider);border-radius:var(--radius-md);display:flex;flex-direction:column;gap:8px")}>
+              <div>
+                <div style={sx("font-size:13px;font-weight:600")}>Automações</div>
+                <div className="text-muted" style={sx("font-size:12px;margin-top:2px")}>
+                  {previa.regras
+                    .map((r) => `${r.nome}${r.execucoes > 0 ? ` — ${r.execucoes} ${r.execucoes === 1 ? "execução" : "execuções"}` : " — nunca rodou"}`)
+                    .join(" · ")}
+                </div>
+              </div>
+
+              <div style={sx("display:flex;flex-direction:column")}>
+                <Checkbox
+                  tipo="radio"
+                  checked={regras === "excluir"}
+                  onChange={() => setRegras("excluir")}
+                  label="Excluir junto com a área"
+                  dica="Recomendado."
+                />
+                <Checkbox
+                  tipo="radio"
+                  checked={regras === "mover"}
+                  onChange={() => setRegras("mover")}
+                  label="Mover para a Principal, desligada"
+                />
+              </div>
+
+              {regras === "excluir" && previa.regras.some((r) => r.execucoes > 0) && (
+                <div>
+                  <button className="btn btn-secondary" type="button" onClick={baixarHistorico} style={sx("font-size:12px")}>
+                    {baixouHistorico ? "✓ Histórico baixado" : "Baixar o histórico antes"}
+                  </button>
+                  <div className="text-muted" style={sx("font-size:11.5px;margin-top:5px")}>
+                    Guarda o registro do que cada automação já fez nas suas campanhas.
+                  </div>
+                </div>
+              )}
+
+              {/* 🔴 O aviso mais importante do diálogo. Regra sem conta específica
+                  vale para TODAS as contas da área onde está — movida para a
+                  Principal, ela chega apta a agir sobre tudo que existe lá. */}
+              {regras === "mover" && (
+                <div
+                  style={sx(
+                    "font-size:12px;line-height:1.5;padding:8px 10px;border-radius:var(--radius-sm);" +
+                      `background:color-mix(in srgb, ${VERMELHO} 10%, transparent);border:1px solid color-mix(in srgb, ${VERMELHO} 40%, transparent)`,
+                  )}
+                >
+                  {previa.regras.some((r) => r.semContaEspecifica) ? (
+                    <>
+                      <strong>Atenção:</strong> {previa.regras.filter((r) => r.semContaEspecifica).length === 1 ? "uma destas automações não está limitada" : "algumas destas automações não estão limitadas"}{" "}
+                      a contas específicas. Se você religá-{previa.regras.filter((r) => r.semContaEspecifica).length === 1 ? "la" : "las"} na Principal,{" "}
+                      {previa.regras.filter((r) => r.semContaEspecifica).length === 1 ? "ela vai agir" : "elas vão agir"} em <strong>todas as campanhas de lá</strong> —
+                      inclusive nas que estão otimizadas e escalando.
+                    </>
+                  ) : (
+                    <>
+                      Vão para a Principal desligadas. Confira o que cada uma faz antes de religar:
+                      as campanhas de lá são outras.
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           <Grupo
             titulo="Taxas e custos"
@@ -299,8 +372,12 @@ export function ExcluirAreaDialog({
             valor={despesas}
             onChange={setDespesas}
             escolhas={[
+              {
+                valor: "excluir",
+                titulo: "Excluir junto com a área",
+                aviso: "Recomendado. Uma taxa criada para esta operação continuaria descontando do lucro da Principal.",
+              },
               { valor: "mover", titulo: "Mover para a área Principal" },
-              { valor: "excluir", titulo: "Excluir" },
             ]}
           />
 

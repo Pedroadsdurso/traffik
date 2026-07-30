@@ -2,7 +2,7 @@
 
 import { auth } from "@/auth";
 import { carregarMapaDeAreas } from "@/lib/areas/atribuicao";
-import { excluirArea, exportarDados, preverExclusao, type OpcoesExclusao as OpcoesExclusaoTipo } from "@/lib/areas/exclusao";
+import { excluirArea, exportarDados, exportarHistoricoDasRegras, preverExclusao, type OpcoesExclusao as OpcoesExclusaoTipo } from "@/lib/areas/exclusao";
 import { prisma } from "@/lib/prisma";
 
 export interface WorkspaceDTO {
@@ -353,6 +353,10 @@ export async function preverExclusaoDaArea(id: string) {
 
 export async function exportarDadosDaArea(id: string) {
   return exportarDados(await uid(), id);
+}
+
+export async function exportarHistoricoDasRegrasDaArea(id: string) {
+  return exportarHistoricoDasRegras(await uid(), id);
 }
 
 export async function deleteWorkspace(id: string, opcoes: OpcoesExclusaoTipo = {}) {

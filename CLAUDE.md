@@ -2123,6 +2123,77 @@ estão no histórico. Ambas precisam ser rotacionadas em Supabase › Settings �
 Database › Reset database password (e a de produção atualizada na Vercel, com
 **Redeploy**). Eu nunca preciso da senha — só do formato da string.
 
+## 🐛 Campo perdia o foco a cada tecla — causa raiz em `useOverlay`
+
+**Sintoma:** digitar no nome ou na descrição de uma Área de Trabalho perdia o
+foco a cada caractere; o resto do texto ia para outro campo ou para nenhum.
+
+**Causa:** o efeito de `ui/useOverlay.ts` dependia de `[aberta, onClose]`, e
+`onClose` chega como **arrow inline do pai** (`onClose={() => setRascunho(null)}`),
+recriada a cada render. Cada tecla → pai re-renderiza → `onClose` muda de
+identidade → o efeito roda o **cleanup**, que faz
+`focoAnterior.current?.focus?.()` (devolve o foco a quem abriu), e reagenda foco
+no PRIMEIRO campo do painel.
+
+**Atingia TODA gaveta e modal da ferramenta**, porque todas passam por ali.
+
+**Correção:** `onClose` vive numa ref; as dependências ficaram só `[aberta]`.
+
+> ⚠️ **Não devolva `onClose` (nem nenhuma callback do pai) ao array de
+> dependências deste efeito.** Se precisar de outra função do pai aqui, use o
+> mesmo padrão de ref. Uma callback inline é sempre nova a cada render, e neste
+> efeito "re-executar" significa **mexer no foco do usuário**.
+>
+> ⚠️ `DateRangePicker.tsx` tem o mesmo padrão (`}, [onCancel]`), mas ali o efeito
+> só registra um listener de Esc — re-registrar é desperdício, não bug. Deixado
+> como está de propósito.
+
+**Verificado no navegador** (banco de dev): nome da área **39 caracteres**,
+descrição **58**, nome da regra **54**, valor de condição **6 dígitos**, busca do
+Gerenciador **33** — todos com o texto íntegro e o foco no próprio campo.
+
+### ⚠️ Taxas e Despesas: formulário saiu do estado global (sem defeito provado)
+
+Os campos de "nova taxa/despesa" moravam no `useTraffikState`, provido por
+contexto ao dashboard inteiro — cada tecla re-renderizava a árvore toda. Passaram
+a ter **estado local na `FeesView`**, e os `add*` do hook agora **recebem os
+valores** em vez de lê-los do estado global.
+
+> ⚠️ **Honestidade sobre esta mudança:** ela é a arquitetura certa (campo de
+> formulário não deve morar naquele hook — as views novas já fazem assim), mas
+> **não houve defeito de aplicação comprovado**. 12 mudanças de valor sem pausa
+> nenhuma produziram o valor correto antes e depois. A digitação em nível de
+> sistema falhou ali duas vezes no harness de teste e não em outros campos, sem
+> explicação — possivelmente artefato do teste. **Confirme digitando.**
+
+> **Regra que fica:** campo de formulário mora na view. O `useTraffikState` é
+> para dado do servidor e estado compartilhado entre telas, não para digitação —
+> cada tecla ali re-renderiza o dashboard inteiro, gráficos incluídos.
+
+## ⛔ REGRA PERMANENTE: `NULL` não significa a mesma coisa em toda coluna
+
+**Antes de qualquer operação que anule (ou deixe anular) um `workspaceId`,
+verifique o que NULO significa NAQUELA coluna.** Não é uniforme:
+
+| Coluna | `NULL` significa | Anular é… |
+|---|---|---|
+| `AdAccount.workspaceId` | sem dono → aparece na Principal | seguro |
+| `Webhook.workspaceId` | sem dono → aparece na Principal | seguro |
+| `PixelConfig.workspaceId` | sem dono → aparece na Principal | seguro |
+| `Click.workspaceId` | script antigo, sem área declarada | seguro |
+| **`AutomationRule.workspaceId`** | **regra GLOBAL — age em TODAS as contas** | 🔴 **amplia escopo** |
+| **`Expense.workspaceId`** | **vale para TODAS as áreas** | 🔴 **amplia escopo** |
+| `ApiCredential.workspaceId` | sem dono → Principal | seguro |
+
+Nas duas linhas vermelhas, `onDelete: SetNull` **não é um estado neutro** — é uma
+promoção de escopo. Foi assim que excluir uma área transformava "pause as
+campanhas desta operação" em "pause as de TODAS as contas", com a regra ainda
+ativa e dinheiro real em jogo.
+
+> ⚠️ O mesmo cuidado vale para **coluna nova**: ao criar um `workspaceId`,
+> decida e **documente no schema** se nulo é "sem dono" ou "global". Sem isso, o
+> próximo `SetNull` herda o significado errado por acidente.
+
 ## 🗑️ Exclusão de área COM ESCOLHA (29/07/2026)
 
 Antes, tudo que pertencia à área ia automaticamente para a Principal. Protegia

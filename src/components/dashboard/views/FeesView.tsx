@@ -95,6 +95,25 @@ function RemoveBtn({ onClick }: { onClick: () => void }) {
 }
 
 export function FeesView({ v }: { v: TraffikView }) {
+  /**
+   * 🐛 Os campos do formulário vivem AQUI, não no `useTraffikState`.
+   *
+   * Eles moravam no hook global, provido por contexto ao dashboard inteiro:
+   * cada tecla re-renderizava a árvore toda (gráficos incluídos) e, com input
+   * controlado, o teclado corria mais rápido que o re-render — digitar uma frase
+   * deixava o campo VAZIO.
+   *
+   * ⚠️ Campo de formulário não deve morar naquele hook. Lá vai dado do servidor
+   * e estado compartilhado entre telas, não digitação.
+   */
+  const [gatewayMetodo, setGatewayMetodo] = useState("PIX");
+  const [gatewayPct, setGatewayPct] = useState("");
+  const [taxNome, setTaxNome] = useState("");
+  const [taxPct, setTaxPct] = useState("");
+  const [despesaNome, setDespesaNome] = useState("");
+  const [despesaValor, setDespesaValor] = useState("");
+  const [despesaSoNestaArea, setDespesaSoNestaArea] = useState(false);
+
   return (
     <div style={sx("display:grid;grid-template-columns:1fr 320px;gap:var(--space-4);align-items:start")}>
       <div style={sx("display:flex;flex-direction:column;gap:var(--space-4)")}>
@@ -116,14 +135,14 @@ export function FeesView({ v }: { v: TraffikView }) {
               </div>
             ))}
             <div style={sx("display:flex;gap:var(--space-2);margin-top:var(--space-2)")}>
-              <select className="input" style={sx("width:auto")} value={v.newGatewayMethod} onChange={v.onNewGatewayMethod}>
+              <select className="input" style={sx("width:auto")} value={gatewayMetodo} onChange={(e) => setGatewayMetodo(e.target.value)}>
                 <option value="PIX">Pix</option>
                 <option value="CARTAO">Cartão</option>
                 <option value="BOLETO">Boleto</option>
                 <option value="OUTRO">Todas</option>
               </select>
-              <input className="input" style={sx("width:100px")} placeholder="% taxa" value={v.newGatewayPct} onChange={v.onNewGatewayPct} inputMode="decimal" />
-              <button className="btn btn-secondary" type="button" onClick={v.addGateway}>Adicionar</button>
+              <input className="input" style={sx("width:100px")} placeholder="% taxa" value={gatewayPct} onChange={(e) => setGatewayPct(e.target.value)} inputMode="decimal" />
+              <button className="btn btn-secondary" type="button" onClick={() => void v.addGateway(gatewayMetodo, gatewayPct).then(() => setGatewayPct(""))}>Adicionar</button>
             </div>
           </div>
         </div>
@@ -146,9 +165,9 @@ export function FeesView({ v }: { v: TraffikView }) {
               </div>
             ))}
             <div style={sx("display:flex;gap:var(--space-2);margin-top:var(--space-2)")}>
-              <input className="input" placeholder="Nome (ex.: Simples Nacional)" value={v.newTaxName} onChange={v.onNewTaxName} />
-              <input className="input" style={sx("width:100px")} placeholder="% alíquota" value={v.newTaxPct} onChange={v.onNewTaxPct} inputMode="decimal" />
-              <button className="btn btn-secondary" type="button" onClick={v.addTax}>Adicionar</button>
+              <input className="input" placeholder="Nome (ex.: Simples Nacional)" value={taxNome} onChange={(e) => setTaxNome(e.target.value)} />
+              <input className="input" style={sx("width:100px")} placeholder="% alíquota" value={taxPct} onChange={(e) => setTaxPct(e.target.value)} inputMode="decimal" />
+              <button className="btn btn-secondary" type="button" onClick={() => void v.addTax(taxNome, taxPct).then(() => { setTaxNome(""); setTaxPct(""); })}>Adicionar</button>
             </div>
           </div>
         </div>
@@ -166,16 +185,16 @@ export function FeesView({ v }: { v: TraffikView }) {
               </div>
             ))}
             <div style={sx("display:flex;gap:var(--space-2);margin-top:var(--space-2)")}>
-              <input className="input" placeholder="Nome da despesa" value={v.newDespesaName} onChange={v.onNewDespesaName} />
-              <input className="input" style={sx("width:120px")} placeholder="Valor R$" value={v.newDespesaValue} onChange={v.onNewDespesaValue} inputMode="decimal" />
-              <button className="btn btn-secondary" type="button" onClick={v.addDespesa}>Adicionar</button>
+              <input className="input" placeholder="Nome da despesa" value={despesaNome} onChange={(e) => setDespesaNome(e.target.value)} />
+              <input className="input" style={sx("width:120px")} placeholder="Valor R$" value={despesaValor} onChange={(e) => setDespesaValor(e.target.value)} inputMode="decimal" />
+              <button className="btn btn-secondary" type="button" onClick={() => void v.addDespesa(despesaNome, despesaValor, despesaSoNestaArea).then(() => { setDespesaNome(""); setDespesaValor(""); })}>Adicionar</button>
             </div>
             {/* Só a despesa recorrente oferece a escolha. Taxa de gateway e
                 imposto são globais por natureza — uma caixa neles convidaria a
                 prender a uma área justamente o que, se prendido, sumiria da
                 conta de lucro das outras em silêncio. */}
             <label style={sx("display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;cursor:pointer")}>
-              <input type="checkbox" checked={v.despesaSoNestaArea} onChange={v.toggleDespesaSoNestaArea} />
+              <input type="checkbox" checked={despesaSoNestaArea} onChange={(e) => setDespesaSoNestaArea(e.target.checked)} />
               <span className="text-muted">
                 Só nesta Área de Trabalho{" "}
                 {v.despesaSoNestaArea
