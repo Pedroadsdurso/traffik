@@ -4060,9 +4060,43 @@ nada-resolve devolve `incerto` sem trazer o IP de volta.
   completo. Avaliar depois de `geoCountries` estar populado.
 - **🔴 Nenhuma resposta REAL da Graph API foi observada.** O campo `targeting`
   entrou numa chamada de leitura já existente, mas o formato real não foi visto.
-  **Confirme no primeiro sync que `geoCountries` vem preenchido** — se vier vazio
-  para todos os conjuntos, o desempate fica **inerte em silêncio**, exatamente
-  como a base de países ficou antes do passo 1.
+
+### 🔬 `npm run geo:sonda` — obrigatória ANTES do passo 7
+
+```bash
+npm run geo:sonda -- --url '<connection string de produção>'
+npm run geo:sonda -- --url '<conn>' --cru   # despeja o JSON completo
+```
+
+**Só leitura** (`GET` na Graph API + `SELECT`). Custo: **1 chamada por conta
+rastreada**.
+
+> ### ⛔ Ela chama a GRAPH API, e não é firula
+> Ler o banco responde *"está vazio?"*. Só a resposta crua responde a pergunta
+> que importa: **vazio porque a campanha é mundial, ou vazio porque o campo não
+> veio?** As duas produzem exatamente a mesma linha no banco — e uma delas
+> significa que o desempate está morto.
+>
+> É a lição do passo 1: a base de países ficou pronta, testada e commitada uma
+> sessão inteira **sem ser consultada por ninguém**, e só descobrimos por acaso.
+
+O que ela reporta: conjuntos com segmentação × vazios, média de países,
+`country_groups` não expandidos (com os nomes), quantos usam `cities`/`regions`
+— e **um exemplo real da resposta**, mais um exemplo de segmentação por cidade
+para confirmar que o país sai de `cities[].country`.
+
+**Vereditos:**
+
+| Saída | Significa |
+|---|---|
+| Todos sem `targeting` | 🔴 **o campo não vem. Desempate INERTE. NÃO avance para o passo 7** |
+| Campo vem, nenhuma restrição de país | 🟡 correto — campanha mundial não desempata |
+| N conjuntos com país extraível | ✅ funcionando |
+| Graph OK mas banco vazio | ⚠️ o sync ainda não rodou com o código novo |
+
+> ⚠️ A sonda **duplica** a extração de `paisesDaSegmentacao`. É de propósito: se
+> ela importasse a do `sync.ts`, um bug lá apareceria como "tudo certo" aqui. A
+> cópia é a testemunha independente — se divergirem, a sonda mente.
 
 
 ### 📌 Decisões registradas
@@ -4104,6 +4138,7 @@ npm run geo:backfill     # país do histórico. SIMULA; --aplicar escreve
 npm run test:bots        # 35 asserções, classificação de robô (puro)
 npm run bot:reclassificar # reavalia Click.bot pelo userAgent. SIMULA; --aplicar escreve
 npm run test:desempate   # 27 asserções, país quando o IP contradiz a campanha
+npm run geo:sonda -- --url '<conn>'   # a segmentacao esta chegando? (so leitura)
 npm run test:ip          # 27 asserções, IP atrás de proxy (Vercel, VPS, Cloudflare)
 npm run test:telefone    # 25 asserções, E.164 antes do hash da CAPI
 npm run db:onde          # em qual banco o .env aponta
