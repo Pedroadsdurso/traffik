@@ -746,7 +746,10 @@ export function useTraffikState(
       cor: corFinanceira(lucro, "lucro"),
     },
     gasto: { label: "Gasto total", value: brl(spend), ...trendOf("spend", true) },
-    roas: { label: "ROAS", value: roasFmt(roas), ...trendOf("roas"), cor: corFinanceira(roas, "roi") },
+    // ⚠️ Tipo "roas": o equilíbrio dele é 1x, não 0 — `0,80x` é prejuízo.
+    //    E sem GASTO não existe ROAS (a conta é faturamento ÷ gasto), então
+    //    passa `null` e a cor fica neutra em vez de vermelha num painel zerado.
+    roas: { label: "ROAS", value: roasFmt(roas), ...trendOf("roas"), cor: corFinanceira(spend > 0 ? roas : null, "roas") },
     // Bloco 4: ROI passa a ser multiplicador (era "1331%"), com 2 casas como
     // nos exemplos do roteiro. Sem custo no período não há ROI — mostra "—".
     roi: { label: "ROI", value: roi != null ? multFmt(roi) : "—", ...trendOf("roi"), cor: corFinanceira(roi, "roi") },

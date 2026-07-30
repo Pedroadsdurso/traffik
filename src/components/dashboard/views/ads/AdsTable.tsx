@@ -304,7 +304,7 @@ export function AdsTable({
                   <td>{m.cpa != null ? brl(m.cpa) : traco}</td>
                   <td>{brl(l.revenue)}</td>
                   <td style={sx(`color:${corFinanceira(m.lucro, "lucro")}`)}>{brl(m.lucro)}</td>
-                  <td>{m.roas != null ? `${m.roas.toFixed(2).replace(".", ",")}x` : traco}</td>
+                  <td style={sx(`color:${corFinanceira(m.roas, "roas")}`)}>{m.roas != null ? `${m.roas.toFixed(2).replace(".", ",")}x` : traco}</td>
                   <td style={sx(`color:${corFinanceira(m.roi, "roi")}`)}>{m.roi != null ? `${m.roi.toFixed(2).replace(".", ",")}x` : traco}</td>
                   <td>{(l.ic ?? 0) > 0 ? n0(l.ic ?? 0) : traco}</td>
                   <td>{m.cpi != null ? brl(m.cpi) : traco}</td>
@@ -336,7 +336,7 @@ export function AdsTable({
               <td>{md.cpa != null ? brl(md.cpa) : traco}</td>
               <td>{brl(totais.revenue)}</td>
               <td style={sx(`color:${corFinanceira(md.lucro, "lucro")}`)}>{brl(md.lucro)}</td>
-              <td>{md.roas != null ? `${md.roas.toFixed(2).replace(".", ",")}x` : traco}</td>
+              <td style={sx(`color:${corFinanceira(md.roas, "roas")}`)}>{md.roas != null ? `${md.roas.toFixed(2).replace(".", ",")}x` : traco}</td>
               <td style={sx(`color:${corFinanceira(md.roi, "roi")}`)}>{md.roi != null ? `${md.roi.toFixed(2).replace(".", ",")}x` : traco}</td>
               <td>{(totais.ic ?? 0) > 0 ? n0(totais.ic ?? 0) : traco}</td>
               <td>{md.cpi != null ? brl(md.cpi) : traco}</td>

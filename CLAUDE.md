@@ -3274,7 +3274,16 @@ Taxas ganhou dois cards para cadastrá-los.
 > **Não remova esse campo sem tornar as taxas obrigatórias.**
 
 > ### ⚠️ A cor vem de `corFinanceira`, nunca decidida na view
-> - **Negativo é sempre VERMELHO** — prejuízo tem de saltar aos olhos.
+>
+> **O equilíbrio do ROAS é 1x; o do ROI é 0.** São escalas diferentes e não podem
+> usar o mesmo corte: `ROAS 0,80x` é um número positivo e **é prejuízo** — cada
+> R$ 1 de anúncio devolveu 80 centavos. O mesmo `0,80` no ROI é lucro de 80%.
+>
+> ⚠️ **Sem GASTO não existe ROAS** (a conta é faturamento ÷ gasto). Nesse caso
+> quem chama passa `null` e a cor fica neutra — senão um painel zerado mostraria
+> `0,00x` em vermelho, o mesmo defeito que o ROI tinha.
+>
+> - **Abaixo do equilíbrio é sempre VERMELHO** — prejuízo tem de saltar aos olhos.
 > - **ROI positivo é VERDE**; é uma nota de desempenho.
 > - **Lucro e margem positivos ficam na cor NORMAL, sem `+`.** Pintar todo lucro
 >   de verde tira o contraste de quando algo dá errado, e `+R$ 340` parece erro de
@@ -3334,9 +3343,23 @@ Havia **três** cópias (`/api/track/click`, `/api/pixel/event`,
 | Cloudflare + nginx | **2** — mas o `cf-connecting-ip` já resolve sozinho |
 | Sem proxy nenhum | **0** |
 
-**Não deduza: use `GET /api/diagnostico/ip`** (exige sessão). Ele mostra o que
-cada valor produziria com os headers daquela requisição; a linha cujo IP for o
-seu é a configuração certa.
+**Não deduza: use `GET /api/diagnostico/ip`.** Ele mostra o que cada valor
+produziria com os headers daquela requisição; a linha cujo IP for o seu é a
+configuração certa.
+
+> ### 🔒 A rota é DESLIGADA por padrão — procedimento de uso
+> 1. Defina **`DIAGNOSTICO_IP=1`** no ambiente e faça o redeploy/restart.
+> 2. Abra `/api/diagnostico/ip` **logado**, compare com o seu IP público real e
+>    anote o valor certo de `PROXIES_CONFIAVEIS`.
+> 3. **Remova a variável** e faça o redeploy. A rota volta a responder 404.
+>
+> Sem a variável ela responde **404, não 403** — o 403 confirmaria que a rota
+> existe; o 404 é indistinguível de uma rota que nunca foi escrita.
+>
+> ⚠️ Exigir sessão **não bastava**: a rota ecoa os headers de proxy do ambiente,
+> e uma superfície de diagnóstico não deve ficar de pé em produção só porque tem
+> senha — é infraestrutura exposta o tempo todo para servir a um uso de minutos.
+> Falha FECHADA, como o `cronAuth` e os webhooks.
 
 > ⚠️ A rota **não adivinha sozinha**, de propósito. A heurística óbvia — contar
 > IPs privados no fim da cadeia — funciona na VPS e **falha na Vercel**, onde a

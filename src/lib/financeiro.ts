@@ -176,21 +176,42 @@ export function calcularFinanceiro(opts: {
 /**
  * Cor de uma métrica financeira, pela regra do produto (30/07/2026).
  *
- * - **Negativo é sempre VERMELHO.** Prejuízo tem de saltar aos olhos.
- * - **ROI positivo é VERDE**; ele é uma nota de desempenho, e verde é a leitura
- *   de "está indo bem".
+ * - **Abaixo do ponto de equilíbrio é sempre VERMELHO.** Prejuízo tem de saltar
+ *   aos olhos.
+ * - **ROI e ROAS acima do equilíbrio são VERDES**; são notas de desempenho.
  * - **Lucro e margem positivos ficam na cor NORMAL do texto**, sem `+`. Pintar
  *   todo lucro de verde tira o contraste de quando algo dá errado — e o `+` num
  *   valor em reais parece erro de digitação.
  *
+ * ## ⚠️ O equilíbrio do ROAS é 1x, o do ROI é 0
+ *
+ * São escalas diferentes e **não podem usar o mesmo corte**:
+ *
+ * | | Equilíbrio | Abaixo significa |
+ * |---|---|---|
+ * | ROI (`lucro / custo`) | **0** | prejuízo |
+ * | ROAS (`faturamento / gasto`) | **1** | gastou mais do que faturou |
+ *
+ * `ROAS 0,80x` é positivo como número e **é prejuízo** — cada R$ 1 de anúncio
+ * devolveu 80 centavos. Tratá-lo como "positivo = verde" pintaria de verde uma
+ * campanha que está queimando dinheiro.
+ *
  * ⚠️ Use isto em TODA tela onde essas métricas aparecem (Dashboard, Gerenciador,
  * relatórios). Uma cor decidida na view é uma cor que divergirá.
  */
-export function corFinanceira(valor: number | null, tipo: "roi" | "lucro"): string {
-  // ⚠️ `null` e ZERO são NEUTROS. Zero pintado de verde diria "está indo bem"
-  // para um painel sem movimento nenhum — e é justamente o estado em que o
-  // usuário mais precisa que a tela não afirme nada.
-  if (valor === null || valor === 0) return "var(--color-text)";
-  if (valor < 0) return "var(--color-danger, #f87171)";
-  return tipo === "roi" ? "var(--color-success, #4ade80)" : "var(--color-text)";
+export function corFinanceira(valor: number | null, tipo: "roi" | "lucro" | "roas"): string {
+  const VERMELHO = "var(--color-danger, #f87171)";
+  const VERDE = "var(--color-success, #4ade80)";
+  const NORMAL = "var(--color-text)";
+
+  // ⚠️ `null` é NEUTRO. Quem chama passa `null` quando a métrica é indefinida —
+  // sem gasto não existe ROAS, e sem movimento nenhum não existe ROI. Pintar
+  // esse caso de vermelho é o que fazia um painel zerado gritar prejuízo.
+  if (valor === null) return NORMAL;
+
+  // O equilíbrio de cada escala. Ver a tabela acima.
+  const equilibrio = tipo === "roas" ? 1 : 0;
+  if (valor === equilibrio) return NORMAL;
+  if (valor < equilibrio) return VERMELHO;
+  return tipo === "lucro" ? NORMAL : VERDE;
 }

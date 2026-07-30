@@ -27,8 +27,29 @@ import { ehIpPrivado, extrairIpDoCliente, normalizarIp } from "@/lib/geo/clientI
  * esquerda e ele passa a ser escolhido). **Errar para MENOS grava o IP do
  * próprio proxy** e todo visitante vira o mesmo endereço.
  */
+/**
+ * ## 🔒 DESLIGADA por padrão. Só existe com `DIAGNOSTICO_IP=1`.
+ *
+ * Exigir sessão não bastava. Esta rota **ecoa os headers de proxy** do ambiente,
+ * e uma superfície de diagnóstico não deve ficar de pé em produção só porque tem
+ * senha: é infraestrutura exposta o tempo todo para servir a um uso de minutos.
+ *
+ * Sem a variável, responde **404** — e não 403. O 403 confirmaria que a rota
+ * existe; o 404 é indistinguível de uma rota que nunca foi escrita.
+ *
+ * ⚠️ Falha FECHADA, como o `cronAuth` e os webhooks: ausência de configuração
+ * nunca vira permissão. Ligar é um ato explícito, e **desligar depois faz parte
+ * do procedimento** — ver o CLAUDE.md.
+ */
+function ligada(): boolean {
+  return (process.env.DIAGNOSTICO_IP ?? "").trim() === "1";
+}
+
 export async function GET(req: NextRequest) {
-  // Exige sessão: a resposta expõe os headers de proxy do ambiente.
+  // 404 puro: nem confirma que a rota existe.
+  if (!ligada()) return new Response(null, { status: 404 });
+
+  // E, ligada, ainda exige sessão — a resposta expõe headers do ambiente.
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: "Não autenticado." }, { status: 401 });
 
@@ -61,6 +82,8 @@ export async function GET(req: NextRequest) {
     comoUsar:
       "Descubra seu IP público real (qualquer site de 'meu IP'). Na lista `simulacao`, " +
       "a linha cujo `ipResultante` for o SEU IP indica o valor correto de PROXIES_CONFIAVEIS.",
+    aoTerminar:
+      "Remova a variável DIAGNOSTICO_IP e faça o redeploy. Esta rota volta a responder 404.",
     configuracaoAtual: {
       PROXIES_CONFIAVEIS: original ?? "(não definido — usando o padrão 1)",
       ipQueSeriaGravado: extrairIpDoCliente({ header: h }),

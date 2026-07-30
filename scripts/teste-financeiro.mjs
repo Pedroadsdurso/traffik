@@ -171,6 +171,16 @@ eq("ROI negativo -> vermelho", corFinanceira(-0.87, "roi"), VERM);
 eq("ROI positivo -> VERDE", corFinanceira(1.87, "roi"), VERDE);
 eq("ROI null -> normal (a tela mostra '—')", corFinanceira(null, "roi"), NORMAL);
 
+// ⚠️ O ROAS tem OUTRO ponto de equilíbrio: 1x. "0,80x" é um número positivo
+// e é PREJUÍZO — cada R$ 1 de anúncio devolveu 80 centavos.
+eq("ROAS 0,80x -> VERMELHO (abaixo de 1 é prejuízo)", corFinanceira(0.8, "roas"), VERM);
+eq("ROAS 0,00x -> vermelho (gastou e não faturou)", corFinanceira(0, "roas"), VERM);
+eq("ROAS 1,00x -> normal (empate exato)", corFinanceira(1, "roas"), NORMAL);
+eq("ROAS 2,35x -> VERDE", corFinanceira(2.35, "roas"), VERDE);
+eq("ROAS null (sem gasto) -> normal, não vermelho", corFinanceira(null, "roas"), NORMAL);
+// O mesmo 0,80 no ROI é LUCRO de 80% — a prova de que os cortes são distintos.
+eq("o MESMO 0,80 no ROI é verde", corFinanceira(0.8, "roi"), VERDE);
+
 console.log(
   falhas === 0
     ? `\n\x1b[1m\x1b[32m${ok} asserções passaram, 0 falharam.\x1b[0m\n`
