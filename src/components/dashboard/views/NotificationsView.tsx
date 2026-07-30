@@ -1,4 +1,5 @@
 import { sx } from "@/lib/sx";
+import { Select } from "../ui/Select";
 import type { TraffikView } from "../useTraffikState";
 
 function Row({ label, desc, on, onToggle }: { label: string; desc?: string; on: boolean; onToggle: () => void }) {
@@ -41,11 +42,17 @@ export function NotificationsView({ v }: { v: TraffikView }) {
         <div className="card-title">Resumos programados</div>
         <div className="field" style={sx("max-width:280px;margin-top:var(--space-3)")}>
           <label>Padrão da notificação</label>
-          <select className="input" value={n.reportPattern} onChange={v.onReportPattern}>
-            <option value="STATUS_LUCRO">Status de Lucro</option>
-            <option value="RESUMO_DETALHADO">Resumo Detalhado</option>
-            <option value="NOTIFICACOES_CRIATIVAS">Notificações Criativas</option>
-          </select>
+          <Select
+            label=""
+            minWidth={210}
+            value={n.reportPattern}
+            onChange={v.setReportPattern}
+            options={[
+              { value: "STATUS_LUCRO", label: "Status de Lucro" },
+              { value: "RESUMO_DETALHADO", label: "Resumo Detalhado" },
+              { value: "NOTIFICACOES_CRIATIVAS", label: "Notificações Criativas" },
+            ]}
+          />
         </div>
         <div style={sx("display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-3)")}>
           {v.reports.map((rp) => (

@@ -1300,9 +1300,12 @@ export function useTraffikState(
     syncRodando: s.syncRodando,
     adsLoading: s.adsLoading,
     onAdsSearch: (e: React.ChangeEvent<HTMLInputElement>) => set({ adsSearch: e.target.value }),
-    onAdsStatus: (e: React.ChangeEvent<HTMLSelectElement>) => set({ adsStatus: e.target.value }),
-    onAdsPeriod: (e: React.ChangeEvent<HTMLSelectElement>) => set({ adsPeriod: e.target.value as "hoje" | "7d" | "30d" }),
-    onAdsAccount: (e: React.ChangeEvent<HTMLSelectElement>) => set({ adsAccount: e.target.value }),
+    // Setters por VALOR, não por evento: o `ui/Select` entrega o valor direto.
+    // Os `onAdsX` que recebiam `ChangeEvent` existiam só para o `<select>`
+    // nativo — ver a nota sobre padronização de controles no CLAUDE.md.
+    setAdsStatus: (adsStatus: string) => set({ adsStatus }),
+    setAdsPeriod: (adsPeriod: string) => set({ adsPeriod: adsPeriod as "hoje" | "7d" | "30d" }),
+    setAdsAccount: (adsAccount: string) => set({ adsAccount }),
     adsAccountOptions: (ao?.accounts ?? []).map((a) => ({ id: a.id, name: a.name })),
     filteredCampaigns, filteredAdsets, filteredAds, accounts, creatives,
 
@@ -1310,8 +1313,8 @@ export function useTraffikState(
     creativesPeriod: s.creativesPeriod,
     creativesSort: s.creativesSort,
     creativesLoading: s.creativesLoading,
-    onCreativesPeriod: (e: React.ChangeEvent<HTMLSelectElement>) => set({ creativesPeriod: e.target.value as "hoje" | "7d" | "30d" }),
-    onCreativesSort: (e: React.ChangeEvent<HTMLSelectElement>) => set({ creativesSort: e.target.value as "roas" | "ctr" | "spend" | "sales" }),
+    setCreativesPeriod: (creativesPeriod: string) => set({ creativesPeriod: creativesPeriod as "hoje" | "7d" | "30d" }),
+    setCreativesSort: (creativesSort: string) => set({ creativesSort: creativesSort as "roas" | "ctr" | "spend" | "sales" }),
 
     // Criar campanha
     newCampaignOpen: s.newCampaignOpen,
@@ -1650,7 +1653,7 @@ export function useTraffikState(
     toggleShowProduct: () => setSetting({ showProductName: !ns.showProductName }),
     toggleShowUtm: () => setSetting({ showUtmCampaign: !ns.showUtmCampaign }),
     toggleShowDashboard: () => setSetting({ showDashboardName: !ns.showDashboardName }),
-    onReportPattern: (e: React.ChangeEvent<HTMLSelectElement>) => setSetting({ reportPattern: e.target.value as NotificationSettingsDTO["reportPattern"] }),
+    setReportPattern: (p: string) => setSetting({ reportPattern: p as NotificationSettingsDTO["reportPattern"] }),
     reports,
 
     // Sino de notificações

@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import { combinaStatus } from "@/lib/ads/status";
 import { sx } from "@/lib/sx";
+import { Select } from "../ui/Select";
 import { AdsActionBar, type Acao, type AlvoSelecionado, type Nivel } from "./ads/AdsActionBar";
 import { AdsTable, type LinhaTabela } from "./ads/AdsTable";
 import type { TraffikView } from "../useTraffikState";
@@ -248,23 +249,41 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
       <div style={sx("display:flex;gap:var(--space-2);flex-wrap:wrap;align-items:center")}>
         <input className="input" style={sx("max-width:260px")} placeholder="Buscar por nome…"
           value={v.adsSearch} onChange={v.onAdsSearch} />
-        <select className="input" style={sx("width:auto")} value={v.adsStatus} onChange={v.onAdsStatus}>
-          <option value="todos">Todos os status</option>
-          <option value="ativo">Ativos</option>
-          <option value="pausado">Pausados</option>
-          {/* Arquivadas ficam fora de "Todos": no Facebook, "excluir" arquiva,
-              e elas voltariam a poluir a lista com o que o usuário apagou. */}
-          <option value="arquivado">Arquivados</option>
-        </select>
-        <select className="input" style={sx("width:auto")} value={v.adsPeriod} onChange={v.onAdsPeriod}>
-          <option value="hoje">Hoje</option>
-          <option value="7d">Últimos 7 dias</option>
-          <option value="30d">Últimos 30 dias</option>
-        </select>
-        <select className="input" style={sx("width:auto")} value={v.adsAccount} onChange={v.onAdsAccount}>
-          <option value="todas">Todas as contas</option>
-          {v.adsAccountOptions.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-        </select>
+        {/* Arquivadas ficam fora de "Todos os status": no Facebook, "excluir"
+            arquiva, e elas voltariam a poluir a lista com o que o usuário apagou. */}
+        <Select
+          label=""
+          minWidth={155}
+          value={v.adsStatus}
+          onChange={v.setAdsStatus}
+          options={[
+            { value: "todos", label: "Todos os status" },
+            { value: "ativo", label: "Ativos" },
+            { value: "pausado", label: "Pausados" },
+            { value: "arquivado", label: "Arquivados" },
+          ]}
+        />
+        <Select
+          label=""
+          minWidth={150}
+          value={v.adsPeriod}
+          onChange={v.setAdsPeriod}
+          options={[
+            { value: "hoje", label: "Hoje" },
+            { value: "7d", label: "Últimos 7 dias" },
+            { value: "30d", label: "Últimos 30 dias" },
+          ]}
+        />
+        <Select
+          label=""
+          minWidth={185}
+          value={v.adsAccount}
+          onChange={v.setAdsAccount}
+          options={[
+            { value: "todas", label: "Todas as contas" },
+            ...v.adsAccountOptions.map((a) => ({ value: a.id, label: a.name })),
+          ]}
+        />
       </div>
 
       {/* Painel de controle (Bloco 7) — só nos níveis que aceitam ação */}

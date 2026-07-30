@@ -14,6 +14,7 @@ import {
   type WebhookLogDTO,
 } from "@/lib/actions/diagnostics";
 import { sx } from "@/lib/sx";
+import { Select } from "../../ui/Select";
 
 const STATUS_TAG: Record<string, { label: string; cls: string }> = {
   RECEBIDO: { label: "Recebido", cls: "tag tag-neutral" },
@@ -88,13 +89,16 @@ function PixelTestCard() {
         <div style={sx("display:flex;gap:var(--space-2);margin-top:var(--space-3);flex-wrap:wrap;align-items:flex-end")}>
           <div className="field" style={sx("width:auto;min-width:200px")}>
             <label>Pixel</label>
-            <select className="input" value={pixelId} onChange={(e) => setPixelId(e.target.value)}>
-              {pixels.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} ({plural(p.metaCount, "pixel da Meta", "pixels da Meta")})
-                </option>
-              ))}
-            </select>
+            <Select
+              label=""
+              minWidth={230}
+              value={pixelId}
+              onChange={setPixelId}
+              options={pixels.map((p) => ({
+                value: p.id,
+                label: `${p.name} (${plural(p.metaCount, "pixel da Meta", "pixels da Meta")})`,
+              }))}
+            />
           </div>
           <div className="field" style={sx("width:180px")}>
             <label>test_event_code (opcional)</label>

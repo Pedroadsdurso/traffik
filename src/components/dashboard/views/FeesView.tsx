@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { setMyTimezone } from "@/lib/actions/profile";
 import { CONFIG } from "@/lib/explicacoes";
 import { sx } from "@/lib/sx";
+import { Select } from "../ui/Select";
 import { Checkbox } from "../ui/Checkbox";
 import { InfoTip } from "../ui/InfoTip";
 import { TIMEZONE_OPTIONS, partsInTz } from "@/lib/timezone";
@@ -57,19 +58,19 @@ function CardFusoHorario({ inicial }: { inicial: string }) {
         Define onde o dia começa e termina em todos os relatórios — dashboard, vendas
         por horário, vendas por dia e os filtros de período.
       </p>
-      <select
-        className="input"
-        style={sx("width:100%;margin-top:var(--space-3)")}
-        value={tz}
-        disabled={pendente}
-        onChange={(e) => aplicar(e.target.value)}
-      >
-        {/* Um fuso salvo fora da lista (via API) continua selecionável. */}
-        {!TIMEZONE_OPTIONS.some((o) => o.value === tz) && <option value={tz}>{tz}</option>}
-        {TIMEZONE_OPTIONS.map((o) => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
+      <div style={sx("margin-top:var(--space-3)")}>
+        <Select
+          label=""
+          minWidth={260}
+          value={tz}
+          onChange={aplicar}
+          options={[
+            // Um fuso salvo fora da lista (via API) continua selecionável.
+            ...(TIMEZONE_OPTIONS.some((o) => o.value === tz) ? [] : [{ value: tz, label: tz }]),
+            ...TIMEZONE_OPTIONS,
+          ]}
+        />
+      </div>
       <div style={sx("display:flex;justify-content:space-between;align-items:center;margin-top:var(--space-2);font-size:12px")}>
         <span className="text-muted">Agora neste fuso</span>
         <span style={sx("font-variant-numeric:tabular-nums")}>{dia} · {agora}</span>
@@ -136,12 +137,18 @@ export function FeesView({ v }: { v: TraffikView }) {
               </div>
             ))}
             <div style={sx("display:flex;gap:var(--space-2);margin-top:var(--space-2)")}>
-              <select className="input" style={sx("width:auto")} value={gatewayMetodo} onChange={(e) => setGatewayMetodo(e.target.value)}>
-                <option value="PIX">Pix</option>
-                <option value="CARTAO">Cartão</option>
-                <option value="BOLETO">Boleto</option>
-                <option value="OUTRO">Todas</option>
-              </select>
+              <Select
+                label=""
+                minWidth={120}
+                value={gatewayMetodo}
+                onChange={setGatewayMetodo}
+                options={[
+                  { value: "PIX", label: "Pix" },
+                  { value: "CARTAO", label: "Cartão" },
+                  { value: "BOLETO", label: "Boleto" },
+                  { value: "OUTRO", label: "Todas" },
+                ]}
+              />
               <input className="input" style={sx("width:100px")} placeholder="% taxa" value={gatewayPct} onChange={(e) => setGatewayPct(e.target.value)} inputMode="decimal" />
               <button className="btn btn-secondary" type="button" onClick={() => void v.addGateway(gatewayMetodo, gatewayPct).then(() => setGatewayPct(""))}>Adicionar</button>
             </div>

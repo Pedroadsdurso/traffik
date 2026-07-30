@@ -7,6 +7,7 @@ import { getPublicAppUrl } from "@/lib/appUrl";
 import { backRedirectScript, utmScript } from "@/lib/utm/scripts";
 import { CONFIG } from "@/lib/explicacoes";
 import { sx } from "@/lib/sx";
+import { Drawer } from "../../ui/Drawer";
 import { InfoTip } from "../../ui/InfoTip";
 import { LogoGateway } from "../../ui/LogoGateway";
 import { Modal } from "../../ui/Modal";
@@ -111,8 +112,53 @@ function CodigosBlock({ codes }: { codes: UtmCodesDTO | null }) {
 
 // ─────────────────────────── Bloco 2: Scripts ───────────────────────────
 
+/**
+ * Cartão de um script instalável.
+ *
+ * ⛔ **Nenhum código aparece de cara.** Um bloco de `<pre>` com 3 KB de
+ * JavaScript minificado na tela assusta e polui — quem instala um pixel não
+ * quer ler o pixel. O cartão diz o que o script faz numa linha; o código vive
+ * atrás de "Ver script", numa gaveta com o botão de copiar em destaque e a
+ * instrução de onde colar.
+ */
+function CartaoScript({
+  titulo,
+  descricao,
+  icone,
+  aviso,
+  children,
+}: {
+  titulo: string;
+  descricao: string;
+  icone: string;
+  aviso?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      style={sx(
+        "display:flex;flex-direction:column;gap:10px;padding:var(--space-3);" +
+          "border:1px solid var(--color-divider);border-radius:var(--radius-md)",
+      )}
+    >
+      <div style={sx("display:flex;gap:10px;align-items:flex-start")}>
+        <span aria-hidden style={sx("font-size:19px;line-height:1.1")}>{icone}</span>
+        <div style={sx("min-width:0;flex:1")}>
+          <div style={sx("font-size:14px;font-weight:600")}>{titulo}</div>
+          <div className="text-muted" style={sx("font-size:12.5px;line-height:1.5;margin-top:2px")}>
+            {descricao}
+          </div>
+        </div>
+      </div>
+      {aviso}
+      <div style={sx("display:flex;gap:var(--space-2);flex-wrap:wrap")}>{children}</div>
+    </div>
+  );
+}
+
 function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
   const [backUrl, setBackUrl] = useState("");
+  const [gaveta, setGaveta] = useState<"utm" | "back" | null>(null);
 
   // O script leva a ÁREA ATIVA. Instalado na página de vendas daquela operação,
   // ele faz o tráfego não atribuível (orgânico/direto) cair nela em vez de na
@@ -121,21 +167,15 @@ function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
   // Área secundária sem nenhum clique carimbado = o script dela ainda não foi
   // instalado. Na Principal isso é normal (ela é o catch-all do legado).
   const faltaInstalar = !!codes && !codes.ehPrincipal && codes.cliquesComArea === 0;
-
-  function baixarBack() {
-    download("traffik-back-redirect.js", backRedirectScript(backUrl));
-  }
+  const urlLocal = getPublicAppUrl().includes("localhost");
 
   return (
-    <div className="card" style={sx("display:flex;flex-direction:column;gap:var(--space-4)")}>
+    <div className="card" style={sx("display:flex;flex-direction:column;gap:var(--space-3)")}>
       <div>
         <div className="card-kicker">Scripts</div>
-        <div className="card-title">
-          Instale na página de vendas de <strong>{codes?.workspaceName ?? "—"}</strong>
-        </div>
-        <div style={sx("display:flex;align-items:center;gap:5px;margin-top:6px")}>
-          <span className="card-body">
-            Este script é <strong>desta área</strong>. Instale na página de vendas desta operação.
+        <div style={sx("display:flex;align-items:center;gap:5px")}>
+          <span className="card-title">
+            Instale na página de vendas de <strong>{codes?.workspaceName ?? "—"}</strong>
           </span>
           <InfoTip conteudo={CONFIG.utmPorArea!} tamanho={12} />
         </div>
@@ -150,49 +190,101 @@ function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
         >
           <span aria-hidden style={sx("font-size:15px;line-height:1.2")}>⚠️</span>
           <div style={sx("font-size:13px;line-height:1.55")}>
-            <strong>Esta área ainda está no script antigo.</strong> Nenhum clique chegou
-            carimbado com ela até agora.
+            <strong>Esta área ainda está no script antigo.</strong> Nenhuma visita chegou
+            marcada com ela até agora.
             <div className="text-muted" style={sx("margin-top:4px")}>
-              O script antigo continua funcionando — o tráfego sem campanha atribuível dele
-              cai na área Principal. Copie o script abaixo e substitua o que está instalado na
-              página de vendas desta operação.
+              O script antigo continua funcionando — só que o tráfego dele cai na área
+              Principal. Copie o script novo e substitua o que está na sua página de vendas.
             </div>
           </div>
         </div>
       )}
 
-      <div style={sx("display:flex;flex-direction:column;gap:var(--space-2)")}>
-        <div style={sx("font-size:14px;font-weight:600")}>Script de UTMs</div>
-        <p className="card-body" style={sx("margin:0")}>
-          Captura UTMs + fbclid, salva em cookie de 30 dias, propaga para os links de checkout e envia o
-          clique para a Traffik.
-        </p>
-        <p className="card-body" style={sx("margin:0")}>
-          Cole antes de <code>&lt;/head&gt;</code> do seu site (ou no campo de script do seu
-          gateway/checkout). É o código completo — não depende de nenhum arquivo externo.
-        </p>
-        {getPublicAppUrl().includes("localhost") && (
-          <p className="card-body" style={sx("margin:0;font-size:12px;color:var(--color-warning,#fbbf24)")}>
-            O script aponta para <code>{getPublicAppUrl()}</code>, um endereço local. Defina{" "}
-            <code>NEXT_PUBLIC_APP_URL</code> com o domínio de produção e copie de novo antes de instalar.
-          </p>
-        )}
-        <SnippetBox codigo={snippet} />
-      </div>
-
-      <div style={sx("border-top:1px solid var(--color-border);padding-top:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)")}>
-        <div style={sx("font-size:14px;font-weight:600")}>Script de Back Redirect</div>
-        <p className="card-body" style={sx("margin:0")}>
-          Ao clicar em “voltar”, redireciona o visitante para a URL abaixo preservando os UTMs.
-        </p>
-        <div className="field">
-          <label>URL de destino</label>
-          <input className="input" value={backUrl} onChange={(e) => setBackUrl(e.target.value)} placeholder="https://seusite.com/oferta-especial" />
-        </div>
-        <button className="btn btn-secondary" type="button" onClick={baixarBack} disabled={!backUrl.trim()} style={sx("width:fit-content")}>
-          Baixar traffik-back-redirect.js
+      <CartaoScript
+        icone="🔗"
+        titulo="Rastreamento de visitas"
+        descricao="Identifica de qual anúncio cada visitante veio e leva essa informação até o checkout. É o que faz suas vendas aparecerem ligadas à campanha certa."
+        aviso={
+          urlLocal ? (
+            <div style={sx("font-size:12px;line-height:1.5;color:var(--color-warning,#fbbf24)")}>
+              O endereço configurado é local (<code>{getPublicAppUrl()}</code>). Publique a
+              ferramenta e copie o script de novo antes de instalar.
+            </div>
+          ) : undefined
+        }
+      >
+        <button className="btn btn-primary" type="button" onClick={() => setGaveta("utm")}>
+          Ver script
         </button>
-      </div>
+        <button
+          className="btn btn-secondary"
+          type="button"
+          onClick={() => download("traffik-utm.js", snippet)}
+        >
+          Baixar arquivo
+        </button>
+      </CartaoScript>
+
+      <CartaoScript
+        icone="↩️"
+        titulo="Recuperação de saída"
+        descricao="Quando o visitante clica em “voltar”, leva ele para uma oferta sua em vez de deixar sair — mantendo a origem do anúncio."
+      >
+        <button className="btn btn-primary" type="button" onClick={() => setGaveta("back")}>
+          Configurar
+        </button>
+      </CartaoScript>
+
+      {/* ── Gavetas: é onde o código aparece ─────────────────────────────── */}
+      <Drawer
+        aberta={gaveta === "utm"}
+        titulo="Script de rastreamento"
+        descricao={`Área ${codes?.workspaceName ?? ""}`}
+        largura={620}
+        onClose={() => setGaveta(null)}
+      >
+        <div style={sx("display:flex;gap:10px;align-items:flex-start")}>
+          <span aria-hidden style={sx("font-size:15px")}>📍</span>
+          <div style={sx("font-size:13px;line-height:1.55")}>
+            <strong>Onde colar:</strong> no seu site, no campo de código do cabeçalho — o que
+            costuma se chamar “Header” ou “antes de <code>&lt;/head&gt;</code>”.
+            <div className="text-muted" style={sx("margin-top:4px")}>
+              Vale em todas as páginas do funil, inclusive na de vendas. Instale uma vez por
+              página desta operação.
+            </div>
+          </div>
+        </div>
+        <SnippetBox codigo={snippet} />
+      </Drawer>
+
+      <Drawer
+        aberta={gaveta === "back"}
+        titulo="Recuperação de saída"
+        descricao="Para onde levar quem clica em “voltar”"
+        largura={620}
+        onClose={() => setGaveta(null)}
+        rodape={
+          <button
+            className="btn btn-primary"
+            type="button"
+            disabled={!backUrl.trim()}
+            onClick={() => download("traffik-back-redirect.js", backRedirectScript(backUrl))}
+          >
+            Baixar arquivo
+          </button>
+        }
+      >
+        <div className="field">
+          <label>Para onde levar o visitante</label>
+          <input
+            className="input"
+            value={backUrl}
+            onChange={(e) => setBackUrl(e.target.value)}
+            placeholder="https://seusite.com/oferta-especial"
+          />
+        </div>
+        {backUrl.trim() && <SnippetBox codigo={backRedirectScript(backUrl)} />}
+      </Drawer>
     </div>
   );
 }
