@@ -110,118 +110,140 @@ export interface GridItem {
 }
 
 /**
- * # Layout PADRÃO do produto
+ * # Layout PADRÃO do produto — transcrito do arranjo do usuário (30/07/2026)
  *
  * É o que toda **área de trabalho nova** e toda **conta nova** vê ao abrir o
- * Dashboard pela primeira vez. Definido pelo usuário em 30/07/2026.
+ * Dashboard pela primeira vez.
  *
- * ⚠️ **Esta lista é a fonte da verdade do layout inicial.** Antes entravam só os
- * 8 primeiros KPIs e 6 gráficos, e o resto — país, funil, taxa de aprovação,
- * horário, dia — nascia escondido em "Métricas disponíveis". Quem criava uma
- * área nova via um dashboard pobre e não descobria o resto.
+ * ⚠️ **É uma TABELA EXPLÍCITA, não um algoritmo de fluxo.** A versão anterior
+ * empacotava os blocos em fileiras que somavam 12, e o resultado era correto mas
+ * genérico: pares lado a lado, tudo do mesmo tamanho. O usuário montou o arranjo
+ * dele arrastando e pediu para virar o padrão — então o padrão é a transcrição
+ * dele, coordenada por coordenada. Fluxo automático não reproduz uma composição
+ * feita a olho.
  *
- * ## A ordem tem intenção, não é alfabética
+ * ## A composição: duas colunas de larguras diferentes
  *
- * 1. **Dinheiro primeiro** (faturamento, gasto, lucro em multiplicadores) —
- *    é o que se olha antes de qualquer coisa.
- * 2. **Eficiência** (CPA, CTR, ARPU, ticket) — o "quanto custa e quanto rende".
- * 3. **Saúde da venda** (pendentes, reembolsadas) — o que ameaça o número acima.
- * 4. **A série temporal grande** (faturamento vs. gasto), que é o gráfico que o
- *    usuário mais olha, em largura total.
- * 5. **Funil**, que explica POR QUE o número é esse.
- * 6. **Repartições** (produto, fonte, pagamento, país) em pares.
- * 7. **Ritmo** (horário, dia) e **qualidade** (taxa de aprovação).
- * 8. **Atividade recente** no fim: é para conferir evento a evento, não para
- *    resumir — quem quer resumo já leu tudo acima.
+ * ```
+ *  ┌ 12 KPIs, 6 por fileira (w=2) ─────────────────────────────────────┐
+ *  │ Fat. │ Gasto │ ROAS │ Ticket │ CTR  │ Reemb.                      │
+ *  │ Pend.│ Vendas│ ROI  │ CPA    │ ARPU │ Margem                      │
+ *  ├──────────── ESQUERDA (w=7) ──────────┬──── DIREITA (w=5) ─────────┤
+ *  │ Funil de conversão                   │ Vendas por país            │
+ *  │ Atividade recente                    │ Taxa de aprovação          │
+ *  │ Fat. vs gasto (4) │ Produto (3)      │ Vendas por dia             │
+ *  │ Fonte (3) │ Pagamento (4)            │ Lucro por horário          │
+ *  │                                      │ Vendas por horário         │
+ *  └──────────────────────────────────────┴────────────────────────────┘
+ * ```
+ *
+ * As duas colunas **terminam na mesma linha** (23 unidades cada): é isso que
+ * elimina o rasgo de espaço vazio no pé de uma delas.
+ *
+ * ⚠️ **Ao mexer numa altura, reequilibre a outra coluna.** Esquerda
+ * `7+6+5+5 = 23`; direita `7+4+4+4+4 = 23`. Desbalanceou, sobra buraco — e o
+ * `react-grid-layout` compacta na vertical, então o buraco aparece no fim de uma
+ * coluna em vez de dar erro.
+ *
+ * ⚠️ **`kpi:chargeback` fica FORA** de propósito: são 12 KPIs, não 13. Continua
+ * disponível em "Métricas disponíveis".
  */
-const PADRAO_KPIS: MetricKey[] = [
-  "faturamento",
-  "gasto",
-  "roas",
-  "roi",
-  "cpa",
-  "ctr",
-  "arpu",
-  "ticket",
-  "pendentes",
-  "reembolsadas",
+interface Pos {
+  id: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** KPIs: 6 por fileira, `w=2` num grid de 12. A ordem é a da tela do usuário. */
+const KPIS_PADRAO: MetricKey[] = [
+  // fileira 1
+  "faturamento", "gasto", "roas", "ticket", "ctr", "reembolsadas",
+  // fileira 2
+  "pendentes", "vendas", "roi", "cpa", "arpu", "margem",
 ];
 
-/**
- * Gráficos do layout padrão, com a largura em colunas do grid de 12.
- *
- * ⚠️ As larguras SOMAM 12 por fileira. Se você mudar uma, ajuste a parceira —
- * senão o `react-grid-layout` empurra o bloco para a linha seguinte e abre um
- * buraco no lugar dele.
- */
-const PADRAO_GRAFICOS: [id: string, largura: number][] = [
-  ["chart:receita", 12],
-  ["chart:funil", 12],
-  ["chart:produtos", 6],
-  ["chart:fontes", 6],
-  ["chart:pagamentos", 6],
-  ["chart:paises", 6],
-  ["chart:vendasHora", 6],
-  ["chart:lucroHora", 6],
-  ["chart:vendasDia", 6],
-  ["chart:aprovacao", 6],
-  ["chart:feed", 12],
+const KPI_W = 2;
+const KPI_H = 3;
+// ⚠️ No desktop dão 6 por fileira (12 colunas ÷ w=2), no mobile 2 (4 ÷ 2). Por
+// isso **onde os gráficos começam é calculado dentro da função** e não numa
+// constante: um valor fixo jogaria os gráficos por cima dos KPIs no mobile.
+
+/** Gráficos, com posição e tamanho explícitos (grid de 12 colunas). */
+const GRAFICOS_PADRAO: Pos[] = [
+  // ── Coluna esquerda (w=7) ──
+  { id: "chart:funil", x: 0, y: 0, w: 7, h: 7 },
+  { id: "chart:feed", x: 0, y: 7, w: 7, h: 6 },
+  { id: "chart:receita", x: 0, y: 13, w: 4, h: 5 },
+  { id: "chart:produtos", x: 4, y: 13, w: 3, h: 5 },
+  { id: "chart:fontes", x: 0, y: 18, w: 3, h: 5 },
+  { id: "chart:pagamentos", x: 3, y: 18, w: 4, h: 5 },
+
+  // ── Coluna direita (w=5) ──
+  { id: "chart:paises", x: 7, y: 0, w: 5, h: 7 },
+  { id: "chart:aprovacao", x: 7, y: 7, w: 5, h: 4 },
+  { id: "chart:vendasDia", x: 7, y: 11, w: 5, h: 4 },
+  { id: "chart:lucroHora", x: 7, y: 15, w: 5, h: 4 },
+  { id: "chart:vendasHora", x: 7, y: 19, w: 5, h: 4 },
 ];
 
 export function defaultLayout(viewport: "desktop" | "mobile"): GridItem[] {
   const cols = GRID_COLS[viewport];
   const items: GridItem[] = [];
-  let y = 0;
 
-  // ── Faixa de KPIs ──
-  const kpiW = viewport === "desktop" ? 3 : 2;
-  const porLinha = Math.max(1, Math.floor(cols / kpiW));
-  const kpiH = 3;
+  // ── KPIs ──
+  // No mobile o grid tem 4 colunas, então `w=2` dá 2 por fileira sozinho.
+  const kpiW = Math.min(KPI_W, cols);
+  const porFileira = Math.max(1, Math.floor(cols / kpiW));
 
-  PADRAO_KPIS.forEach((metric, idx) => {
+  KPIS_PADRAO.forEach((metric, idx) => {
     const def = BLOCK_BY_ID.get(`kpi:${metric}`);
     // Um id inválido aqui seria um bloco fantasma no layout de todo mundo.
     if (!def) return;
     items.push({
       i: def.id,
-      x: (idx % porLinha) * kpiW,
-      y: y + Math.floor(idx / porLinha) * kpiH,
+      x: (idx % porFileira) * kpiW,
+      y: Math.floor(idx / porFileira) * KPI_H,
       w: kpiW,
-      h: kpiH,
+      h: KPI_H,
       minW: def.minW,
       minH: def.minH,
     });
   });
-  y += Math.ceil(PADRAO_KPIS.length / porLinha) * kpiH;
+
+  const yGraficos = Math.ceil(KPIS_PADRAO.length / porFileira) * KPI_H;
 
   // ── Gráficos ──
-  // No mobile tudo vira largura total: 4 colunas não comportam dois lado a lado
-  // sem deixar cada gráfico ilegível.
-  let x = 0;
-  let alturaDaFileira = 0;
-  for (const [id, larguraDesktop] of PADRAO_GRAFICOS) {
-    const def = BLOCK_BY_ID.get(id);
+  if (viewport === "mobile") {
+    // 4 colunas não comportam duas colunas de gráfico sem deixar as duas
+    // ilegíveis: no mobile tudo vira largura total, empilhado na ORDEM VISUAL
+    // do desktop (esquerda antes de direita na mesma altura).
+    let y = yGraficos;
+    for (const g of [...GRAFICOS_PADRAO].sort((a, b) => a.y - b.y || a.x - b.x)) {
+      const def = BLOCK_BY_ID.get(g.id);
+      if (!def) continue;
+      const h = Math.max(def.minH, g.h);
+      items.push({ i: g.id, x: 0, y, w: cols, h, minW: def.minW, minH: def.minH });
+      y += h;
+    }
+    return items;
+  }
+
+  for (const g of GRAFICOS_PADRAO) {
+    const def = BLOCK_BY_ID.get(g.id);
     if (!def) continue;
-    const w = viewport === "desktop" ? Math.min(larguraDesktop, cols) : cols;
-
-    // Não cabe na fileira atual: desce pela altura do MAIS ALTO da fileira, não
-    // pela altura deste bloco — senão um bloco baixo faz o próximo invadir a
-    // fileira anterior e o RGL reflui tudo.
-    if (x + w > cols) {
-      y += alturaDaFileira;
-      x = 0;
-      alturaDaFileira = 0;
-    }
-
-    items.push({ i: id, x, y, w, h: def.h, minW: def.minW, minH: def.minH });
-    x += w;
-    alturaDaFileira = Math.max(alturaDaFileira, def.h);
-
-    if (x >= cols) {
-      y += alturaDaFileira;
-      x = 0;
-      alturaDaFileira = 0;
-    }
+    items.push({
+      i: g.id,
+      x: g.x,
+      y: yGraficos + g.y,
+      // Respeita o mínimo do bloco: uma tabela escrita à mão não pode entregar
+      // um bloco menor do que o tamanho em que ele fica ilegível.
+      w: Math.max(def.minW, g.w),
+      h: Math.max(def.minH, g.h),
+      minW: def.minW,
+      minH: def.minH,
+    });
   }
 
   return items;

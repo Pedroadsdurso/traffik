@@ -3059,35 +3059,53 @@ dias do eixo do `AreaChart` couberam inteiros em 2.254px, sem deformar.
 > está certo:** o `Sparkline` não tem texto nenhum, e nos outros o texto é HTML
 > por fora do SVG. Esticar só é problema quando há `<text>` dentro.
 
-## 🧭 Layout PADRÃO do Dashboard (30/07/2026)
+## 🧭 Layout PADRÃO do Dashboard — transcrito do arranjo do usuário (30/07/2026)
 
-Definido pelo usuário: **21 blocos**, e é o que toda **área nova** e **conta
-nova** vê. A lista vive em `PADRAO_KPIS` + `PADRAO_GRAFICOS`, em `blocks.ts`.
+**23 blocos**, e é o que toda **área nova** e **conta nova** vê. Vive em
+`KPIS_PADRAO` + `GRAFICOS_PADRAO`, em `blocks.ts`.
 
-**10 KPIs:** faturamento · gasto · ROAS · ROI · CPA · CTR · ARPU · ticket médio ·
-vendas pendentes · reembolsadas.
-**11 gráficos:** faturamento vs. gasto · funil · produto · fonte · pagamento ·
-país · vendas por horário · lucro por horário · vendas por dia · taxa de
-aprovação · atividade recente.
+> ### ⛔ É uma TABELA EXPLÍCITA de coordenadas. Não volte para o algoritmo.
+> A primeira versão empacotava os blocos em fileiras que somavam 12. Estava
+> correta e ficou **genérica**: pares lado a lado, tudo do mesmo tamanho. O
+> usuário montou o arranjo dele arrastando na tela e pediu para virar o padrão —
+> então o padrão é a transcrição, coordenada por coordenada. **Fluxo automático
+> não reproduz uma composição feita a olho.**
 
-Antes entravam só os 8 primeiros KPIs e 6 gráficos — país, funil, aprovação,
-horário e dia nasciam **escondidos** em "Métricas disponíveis", e quem criava uma
-área nova via um dashboard pobre sem descobrir o resto.
+```
+ ┌ 12 KPIs, 6 por fileira (w=2) ──────────────────────────────────────┐
+ │ Fat. │ Gasto │ ROAS │ Ticket │ CTR  │ Reemb.                       │
+ │ Pend.│ Vendas│ ROI  │ CPA    │ ARPU │ Margem                       │
+ ├──────────── ESQUERDA (w=7) ──────────┬──── DIREITA (w=5) ──────────┤
+ │ Funil de conversão              h=7  │ Vendas por país         h=7 │
+ │ Atividade recente               h=6  │ Taxa de aprovação       h=4 │
+ │ Fat. vs gasto (4) │ Produto (3) h=5  │ Vendas por dia          h=4 │
+ │ Fonte (3) │ Pagamento (4)       h=5  │ Lucro por horário       h=4 │
+ │                                      │ Vendas por horário      h=4 │
+ └──────────────────────────────────────┴─────────────────────────────┘
+```
 
-> ⚠️ **`kpi:vendas`, `kpi:margem` e `kpi:chargeback` NÃO estão no padrão** — não
-> foram pedidos. Continuam disponíveis em "Métricas disponíveis". Se a ausência
-> de "Vendas" e "Margem de lucro" for descuido, é só acrescentar em `PADRAO_KPIS`.
+**Duas colunas de larguras DIFERENTES (7 e 5)**, e é isso que dá o aproveitamento
+de espaço: o funil e o feed pedem largura, os cinco blocos da direita são
+compactos e empilham.
+
+> ⚠️ **As colunas terminam na MESMA linha, e isso é o que elimina o buraco.**
+> Esquerda `7+6+5+5 = 23`; direita `7+4+4+4+4 = 23`. Ao mexer numa altura,
+> reequilibre a outra coluna — o `react-grid-layout` compacta na vertical, então
+> um desequilíbrio não dá erro: aparece como vazio no pé de uma coluna.
 >
-> ⚠️ **As larguras SOMAM 12 por fileira.** Mudou uma, ajuste a parceira — senão o
-> RGL empurra o bloco para a linha seguinte e abre um buraco.
+> ⚠️ **Verificado com um mapa de ocupação**: 0 colisões, 0 células vazias nas 23
+> linhas, e os KPIs terminando exatamente na borda direita do grid.
 >
-> ⚠️ **A descida de fileira usa a altura do bloco MAIS ALTO da fileira**, não a do
-> bloco atual. `paises` tem `h:8` ao lado de `pagamentos` com `h:6`; com a altura
-> do atual, o bloco seguinte invadiria a fileira anterior.
+> ⚠️ **`kpi:chargeback` fica FORA** de propósito — são 12 KPIs, não 13. Continua
+> em "Métricas disponíveis".
+>
+> ⚠️ **No mobile (4 colunas) tudo vira largura total**, empilhado na ordem visual
+> do desktop (`y`, depois `x`) — duas colunas de gráfico em 4 unidades deixariam
+> as duas ilegíveis.
 >
 > ⚠️ **Layout já salvo NÃO é mexido.** Quem tem `DashboardLayout` no banco
-> continua com o arranjo dele — reorganizar o dashboard de alguém sem pedir seria
-> pior que o problema. Para adotar o novo padrão: "Redefinir configurações".
+> continua com o arranjo dele; reorganizar o dashboard de alguém sem pedir seria
+> pior que o problema. Para adotar o padrão: "Redefinir configurações".
 
 ### 🔴 Bug real achado no caminho: "Redefinir" apagava o layout da área ERRADA
 
