@@ -43,8 +43,6 @@ export function AdsActionBar({
   selecionados,
   ordemGasto,
   onOrdenar,
-  onSincronizar,
-  sincronizando,
   ultimaSync,
   onFixar,
   onCopiarId,
@@ -57,8 +55,6 @@ export function AdsActionBar({
   selecionados: AlvoSelecionado[];
   ordemGasto: "desc" | "asc";
   onOrdenar: () => void;
-  onSincronizar: () => void;
-  sincronizando: boolean;
   ultimaSync: string | null;
   onFixar: () => void;
   onCopiarId: () => void;

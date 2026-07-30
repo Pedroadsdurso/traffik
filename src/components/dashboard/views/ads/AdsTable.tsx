@@ -44,11 +44,6 @@ export interface LinhaTabela extends LinhaBase {
 type Fonte = "meta" | "nosso" | "misto";
 
 const COR_FONTE: Record<Fonte, string> = { meta: "#60a5fa", nosso: "#a78bfa", misto: "#94a3b8" };
-const NOME_FONTE: Record<Fonte, string> = {
-  meta: "Fonte: Meta Ads",
-  nosso: "Fonte: nosso rastreamento (tempo real)",
-  misto: "Custo da Meta ÷ conversão nossa",
-};
 
 /** Colunas de métrica, na ordem pedida no Bloco 6. */
 const COLUNAS: { chave: string; label: string; dica?: string; fonte: Fonte }[] = [

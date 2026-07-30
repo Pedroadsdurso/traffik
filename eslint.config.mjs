@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Runtime instalável servido ao site do cliente: ES5 por exigência de
+    // compatibilidade, e GERADO — lintar com as regras do app só produz
+    // ruído em código que não é da aplicação.
+    "public/*.js",
   ]),
 ]);
 

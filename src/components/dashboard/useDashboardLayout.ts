@@ -95,6 +95,23 @@ export function useDashboardLayout(workspaceId?: string | null) {
     setEditing(false);
   }, [snapshot]);
 
+  /**
+   * ### 🔴 `workspaceId` PRECISA estar nas dependências. Não remova.
+   *
+   * `salvar` e `redefinir` mandam o `workspaceId` para o servidor, e um
+   * `useCallback` congela o valor do render em que foi criado. Sem o id nas
+   * dependências, o callback continua carregando a área que estava ativa quando
+   * o Dashboard montou — então **trocar de área e clicar aqui grava (ou apaga) o
+   * layout da área ERRADA**.
+   *
+   * No `redefinir` era certeza: o array era `[]`, então ele nunca era recriado.
+   * No `salvar` era uma corrida — `[layouts]` mascarava o problema porque o
+   * efeito de carregamento troca `layouts` pouco depois da troca de área, mas a
+   * janela entre a troca e a resposta do servidor ficava errada.
+   *
+   * ⚠️ Agrava o caso do `redefinir`: ele é destrutivo, imediato e **o "Cancelar"
+   * não desfaz** — o layout da outra área ia embora de verdade.
+   */
   const salvar = useCallback(async () => {
     setBusy(true);
     setErro(null);
@@ -108,7 +125,7 @@ export function useDashboardLayout(workspaceId?: string | null) {
     } finally {
       setBusy(false);
     }
-  }, [layouts]);
+  }, [layouts, workspaceId]);
 
   const redefinir = useCallback(async () => {
     setBusy(true);
@@ -124,7 +141,7 @@ export function useDashboardLayout(workspaceId?: string | null) {
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [workspaceId]);
 
   const adicionarBloco = useCallback(
     (id: string) => {

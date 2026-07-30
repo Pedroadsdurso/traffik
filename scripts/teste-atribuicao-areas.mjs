@@ -64,7 +64,6 @@ if (!arquivo) {
 }
 
 const linhas = fs.readFileSync(arquivo, "utf8").split("\n").filter(Boolean).map((l) => JSON.parse(l));
-const projetoDoBackup = linhas.find((o) => o.__meta)?.projeto ?? "?";
 const tabela = (t) => linhas.filter((o) => o.t === t).map((o) => o.r);
 
 const users = tabela("User");
@@ -292,7 +291,6 @@ for (const u of users) {
   // O script instalado na página carimba o clique com a área. Ele NÃO vence a
   // conta de anúncio — senão o gasto ficaria numa área e a visita em outra.
   {
-    const wsDoUser2 = workspaces.filter((w) => w.userId === u.id);
     const areaScript = "area-do-script";
     const dados = dadosDoUsuario(u.id);
     dados.areas.push({ id: areaScript, name: "Área do script", isDefault: false, archived: false, produtosDesempate: [] });

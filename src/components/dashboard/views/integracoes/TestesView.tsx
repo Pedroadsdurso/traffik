@@ -139,6 +139,7 @@ function WebhookLogsCard() {
       .finally(() => setBusy(false));
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- `load` busca no servidor e guarda o resultado
   useEffect(load, [load]);
 
   const gateways = [...new Set(logs.map((l) => l.gateway))];
@@ -344,6 +345,7 @@ function ChecklistCard() {
       .finally(() => setBusy(false));
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- `load` busca no servidor e guarda o resultado
   useEffect(load, [load]);
 
   const okCount = items.filter((i) => i.ok).length;

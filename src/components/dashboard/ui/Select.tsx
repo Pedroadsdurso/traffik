@@ -63,6 +63,7 @@ export function Select({
   // Ao abrir: foca a busca (se houver) e destaca a opção atual.
   useEffect(() => {
     if (!open) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reage a ABRIR, que é evento externo ao componente
     setBusca("");
     const idx = Math.max(0, filtradas.findIndex((o) => o.value === value));
     setAtivo(idx);

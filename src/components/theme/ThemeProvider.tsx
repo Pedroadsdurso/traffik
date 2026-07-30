@@ -21,6 +21,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // Sync initially from DOM data-theme attribute or localStorage or media query
     const saved = localStorage.getItem(STORAGE_KEY) as Theme | null;
     if (saved === "dark" || saved === "light") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sincroniza com sistema externo (localStorage + prefers-color-scheme), que é exatamente o caso que a doc do React permite
       setThemeState(saved);
       document.documentElement.setAttribute("data-theme", saved);
     } else {

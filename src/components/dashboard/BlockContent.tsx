@@ -74,37 +74,6 @@ function KpiBloco({ v, metric }: { v: TraffikView; metric: string }) {
   );
 }
 
-/** Barra rotulada reutilizada por produto / fonte / pagamento. */
-function Barras({
-  linhas,
-  cor,
-  vazio,
-}: {
-  linhas: { key: string; titulo: React.ReactNode; direita: string; largura: string; sub?: string }[];
-  cor: string;
-  vazio?: string;
-}) {
-  if (linhas.length === 0 && vazio) {
-    return <div className="text-muted" style={sx("font-size:13px;padding:var(--space-2) 0")}>{vazio}</div>;
-  }
-  return (
-    <div style={sx("display:flex;flex-direction:column;gap:var(--space-3);margin-top:var(--space-2)")}>
-      {linhas.map((l) => (
-        <div key={l.key} style={sx("display:flex;flex-direction:column;gap:5px")}>
-          <div style={sx("display:flex;justify-content:space-between;font-size:13px;gap:8px")}>
-            <span>{l.titulo}</span>
-            <span style={sx("font-variant-numeric:tabular-nums;white-space:nowrap")}>{l.direita}</span>
-          </div>
-          <div style={sx("height:6px;border-radius:3px;background:var(--color-neutral-800);overflow:hidden")}>
-            <div style={sx(`height:100%;background:${cor};width:${l.largura}`)} />
-          </div>
-          {l.sub && <div className="text-muted" style={sx("font-size:11px")}>{l.sub}</div>}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 /** Ícone do método de pagamento. */
 function IconePagamento({ nome }: { nome: string }) {
   const n = nome.toLowerCase();

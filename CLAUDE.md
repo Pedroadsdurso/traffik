@@ -2857,9 +2857,12 @@ aguardando o teste do usuário. Sem migration pendente — o deploy é só push.
 
 ### ⚠️ Fila da próxima sessão
 
-Não há item de padronização visual pendente. O que sobrou é **faxina de código
-morto** (lista em "Pendências abertas", abaixo) e o **import/export do Bloco 8**,
-que ficou de fora de propósito.
+Não há item de padronização visual pendente, e o **lint está em zero**. O que
+sobrou é **faxina de código morto** (lista em "Pendências abertas", abaixo) e o
+**import/export do Bloco 8**, que ficou de fora de propósito.
+
+⚠️ **Nenhuma escrita real contra a Graph API foi exercida** — segue sendo a
+verificação mais importante em aberto. Ver "Pendências abertas".
 
 ### O que NÃO está pendente (não refaça)
 
@@ -2873,6 +2876,9 @@ que ficou de fora de propósito.
 | Áreas de Trabalho | ✅ sessões 1–4 + exclusão com escolha |
 | Aproveitamento do espaço | ✅ as 4 telas refeitas em 30/07 — ver a seção própria |
 | SVGs em 256×256 | ✅ **zero**. `Icon.tsx` (`NavIcon`) foi deletado |
+| Lint | ✅ **zero problemas**. Os `eslint-disable` que restam são deliberados e levam o motivo na linha — **não os remova sem ler o motivo** |
+| Texto esticado nos gráficos | ✅ resolvido por `ui/useTamanho` — ver a seção própria |
+| Layout padrão do Dashboard | ✅ 21 blocos, em `PADRAO_KPIS`/`PADRAO_GRAFICOS` |
 
 ### 🔴 Cinco regras que custaram caro — não reabra
 
@@ -2888,7 +2894,10 @@ que ficou de fora de propósito.
 5. **Helper consumido pela UI não pode morar em módulo que importa Prisma.**
    `FeesView` é client component; o import arrastou o driver `pg` (`dns`, `fs`)
    para o bundle e quebrou o build. Ver `lib/areas/taxas.ts`.
-6. **`align-items:start` num grid de cards mata o rodapé alinhado.** Com `start`
+6. **`useTamanho` usa callback ref + nó em estado.** Com `useRef` + deps `[]` o
+   observer nunca se anexa quando o elemento ainda não existe (gráfico que abre
+   vazio) e a largura fica 0 para sempre.
+7. **`align-items:start` num grid de cards mata o rodapé alinhado.** Com `start`
    cada card fica só com a altura do próprio conteúdo, o `margin-top:auto` do
    rodapé não tem folga, e um nome que quebra em 3 linhas desalinha os botões de
    toda a fileira. Grade de cards com rodapé usa `stretch`.
@@ -3002,6 +3011,146 @@ deletado.** 27 nomes novos no `MAPA`, ~35 pontos de uso.
   agora está numa das 3 linhas de destino da aba UTMs. Segue sendo o caso ruim
   documentado (panda preto em fundo transparente, quase invisível no tema
   escuro) — resolver exige arte em versão clara.
+
+## 📊 Gráficos: texto em escala 1:1 e rótulos que raleiam (30/07/2026)
+
+**Sintoma relatado:** no bloco pequeno os rótulos do "Faturamento vs. gasto"
+ficavam **achatados**; no bloco grande, **esticados e enormes**. E "Vendas por
+dia" com 30 dias empilhava datas encostadas umas nas outras.
+
+**Causa: `viewBox` fixo + `preserveAspectRatio="none"`.** O `AreaChart` usava
+`viewBox="0 0 640 260"`, então a escala horizontal era `largura/640` e a vertical
+`altura/260` — valores diferentes, que deformam o **texto** junto com a
+geometria. O bloco é redimensionável, então a mesma tela tinha duas tipografias
+erradas dependendo do arraste do usuário. (O `<pre>` do tooltip já havia sido
+tirado do SVG por esse motivo; os eixos ficaram para trás.)
+
+**`ui/useTamanho.ts`** mede o elemento com `ResizeObserver`. Com a largura em
+estado, o `viewBox` passa a ser o tamanho real (**1 unidade = 1 pixel**, escala
+1,000 medida em runtime) e o gráfico decide **quantos** rótulos cabem.
+
+| | Antes | Agora |
+|---|---|---|
+| Escala do texto | variava com o bloco | sempre 1:1 |
+| Rótulos do eixo X (área) | `ceil(n / 8)`, fixo | pela largura medida; primeiro e **último** garantidos |
+| Rótulos das barras | **todos**, sempre | a cada `ceil(n / (largura/42))`, mais o último |
+
+Medido: 30 barras em 615px → 11 rótulos; o mesmo bloco mais largo → 16. Os 30
+dias do eixo do `AreaChart` couberam inteiros em 2.254px, sem deformar.
+
+> ### ⛔ `useTamanho` usa CALLBACK REF e guarda o nó em ESTADO
+> A primeira versão era `useRef` + `useEffect(…, [])`, e estava **silenciosamente
+> quebrada**: o efeito roda uma vez, e nesse instante o elemento **não existe** —
+> todo gráfico faz `return <ChartEmpty/>` antes do markup quando não há dado, e o
+> Dashboard abre justamente sem dado. `ref.current` era `null`, o observer nunca
+> era anexado, e com deps `[]` **não havia segunda tentativa**: a largura ficava 0
+> para sempre e o raleamento nunca acontecia.
+>
+> Com o nó em estado, **montar o elemento é uma mudança de dependência**.
+>
+> ⚠️ Quem precisa do DOM (um `getBoundingClientRect()` em evento) usa o **`no`**
+> devolvido pelo hook, não `algumRef.current`.
+>
+> ⚠️ **DESTRUTURE o retorno.** Guardar o objeto (`const caixa = useTamanho()`)
+> faz o `react-hooks/refs` tratar todo `caixa.*` como leitura de ref no render e
+> acusar erro até em `caixa.largura`, que é estado comum.
+
+> ⚠️ **`Sparkline`, `Donut`, `Funnel` e `CountryMap` seguem com `viewBox` fixo, e
+> está certo:** o `Sparkline` não tem texto nenhum, e nos outros o texto é HTML
+> por fora do SVG. Esticar só é problema quando há `<text>` dentro.
+
+## 🧭 Layout PADRÃO do Dashboard (30/07/2026)
+
+Definido pelo usuário: **21 blocos**, e é o que toda **área nova** e **conta
+nova** vê. A lista vive em `PADRAO_KPIS` + `PADRAO_GRAFICOS`, em `blocks.ts`.
+
+**10 KPIs:** faturamento · gasto · ROAS · ROI · CPA · CTR · ARPU · ticket médio ·
+vendas pendentes · reembolsadas.
+**11 gráficos:** faturamento vs. gasto · funil · produto · fonte · pagamento ·
+país · vendas por horário · lucro por horário · vendas por dia · taxa de
+aprovação · atividade recente.
+
+Antes entravam só os 8 primeiros KPIs e 6 gráficos — país, funil, aprovação,
+horário e dia nasciam **escondidos** em "Métricas disponíveis", e quem criava uma
+área nova via um dashboard pobre sem descobrir o resto.
+
+> ⚠️ **`kpi:vendas`, `kpi:margem` e `kpi:chargeback` NÃO estão no padrão** — não
+> foram pedidos. Continuam disponíveis em "Métricas disponíveis". Se a ausência
+> de "Vendas" e "Margem de lucro" for descuido, é só acrescentar em `PADRAO_KPIS`.
+>
+> ⚠️ **As larguras SOMAM 12 por fileira.** Mudou uma, ajuste a parceira — senão o
+> RGL empurra o bloco para a linha seguinte e abre um buraco.
+>
+> ⚠️ **A descida de fileira usa a altura do bloco MAIS ALTO da fileira**, não a do
+> bloco atual. `paises` tem `h:8` ao lado de `pagamentos` com `h:6`; com a altura
+> do atual, o bloco seguinte invadiria a fileira anterior.
+>
+> ⚠️ **Layout já salvo NÃO é mexido.** Quem tem `DashboardLayout` no banco
+> continua com o arranjo dele — reorganizar o dashboard de alguém sem pedir seria
+> pior que o problema. Para adotar o novo padrão: "Redefinir configurações".
+
+### 🔴 Bug real achado no caminho: "Redefinir" apagava o layout da área ERRADA
+
+`useDashboardLayout` tinha `redefinir` com deps **`[]`** e `salvar` com
+`[layouts]`, os dois usando `workspaceId` por dentro. `useCallback` congela o
+valor do render em que foi criado, então o callback carregava a área ativa **na
+montagem do Dashboard**: trocar de área e clicar apagava/gravava o layout de
+outra área. No `redefinir` era certeza (nunca recriado); no `salvar` era uma
+corrida que `[layouts]` mascarava.
+
+Agrava porque `redefinir` é destrutivo, imediato e **"Cancelar" não desfaz**.
+
+> ⚠️ **Aviso de `exhaustive-deps` sobre `workspaceId` neste projeto é sinal de
+> bug, não ruído.** Todo o isolamento por área depende desse id chegar certo.
+
+## ✅ Lint zerado — e o que NÃO se conserta obedecendo (30/07/2026)
+
+De **36 problemas (21 erros) para 0**. A distribuição importa mais que o número:
+
+| Regra | Qtd | Desfecho |
+|---|---|---|
+| `no-unused-vars` | 13 | removidos de verdade (ver abaixo) |
+| `react-hooks/refs` | 10 | **consertados**: viraram largura medida |
+| `set-state-in-effect` | 10 | suprimidos **um a um, com o motivo na linha** |
+| `exhaustive-deps` | 2 | 1 bug real (acima) + 1 dep de nó |
+| `immutability` | 1 | `Donut` pré-calcula os ângulos |
+
+**O que era código morto de verdade** (não só "variável sem uso"): o componente
+`Barras` inteiro no `BlockContent` (substituído pelo `Donut`), `NOME_FONTE` no
+`AdsTable` (a legenda virou "Vem do Facebook / Medido pela Traffik / Calculado"),
+as props `onSincronizar`/`sincronizando` do `AdsActionBar` — restos do botão
+"Sincronizar métricas", que o `AdsManagerView` ainda passava — e o `semVenda` da
+`AreasView`, do chip de produto sem venda que saiu na Sessão 3.
+
+> ### ⛔ `set-state-in-effect` NÃO se conserta obedecendo
+> Dois dos 10 são a **regra #4 das "cinco que custaram caro"**: o
+> `useTraffikState` sincroniza as props do servidor por efeito porque o
+> inicializador do `useState` só roda na montagem — sem isso, trocar de área
+> mostra os dados da área ANTERIOR. Outro é o `useOverlay`, cuja correção de foco
+> a regra #3 protege. Os demais são carga de dado e sincronia com sistema externo
+> (`localStorage`, `prefers-color-scheme`), que a própria doc do React permite.
+>
+> **Obedecer à regra aqui reintroduz bugs já pagos.** Cada `eslint-disable` leva
+> o motivo na própria linha.
+
+> ### ⚠️ Ao inserir um `eslint-disable` acima de uma linha, CONFIRA que você não
+> ### substituiu a linha
+> Fazendo isso em lote eu **apaguei três linhas de comportamento** —
+> `setBusca("")` (o campo de busca do `Select` parava de limpar ao reabrir),
+> `setDados(null)` (`BannerPendencias` perdia o estado de carregando) e
+> `setCarregando(true)` (a `RulesView` parava de mostrar que estava carregando).
+> Nenhuma quebrava tipo ou build; o que denunciou foi o lint reclamando de
+> **"Unused eslint-disable directive"** — o comentário tinha ocupado o lugar do
+> `setState` que ele deveria justificar. Restauradas.
+
+> ⚠️ **`public/*.js` saiu do lint** (`eslint.config.mjs`). São os runtimes
+> instaláveis, ES5 por exigência de compatibilidade e **gerados** — lintar com as
+> regras do app só produzia ruído em código que não é da aplicação.
+
+### 🐛 De quebra: o cursor "grabbing" do globo nunca aparecia
+
+`CountryMap` lia `arrasto.current` no `style` durante o render. Mudar um ref não
+redispara render, então o cursor **nunca** trocava ao arrastar. Virou estado.
 
 ### Comandos
 

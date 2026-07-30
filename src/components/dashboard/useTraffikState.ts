@@ -429,6 +429,7 @@ export function useTraffikState(
   // ativa que o usuário acabou de escolher.
   useEffect(() => {
     if (!areasServidor) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- DELIBERADO: ver "cinco regras que custaram caro" #4 no CLAUDE.md. O inicializador do useState só roda na montagem, então sem este efeito trocar de área mostrava os dados da área ANTERIOR. Já compara por conteúdo antes de gravar.
     setS((st) => {
       const igual = JSON.stringify(st.workspaces) === JSON.stringify(areasServidor);
       const principal = areasServidor.find((a) => a.isDefault) ?? null;
@@ -469,6 +470,7 @@ export function useTraffikState(
    * comparação, isto viraria um `setState` por render.
    */
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- DELIBERADO, mesma razão do efeito acima: sincroniza as props do servidor. A comparação por conteúdo é o que impede um setState por render.
     setS((st) => {
       const mudou = <T,>(atual: T, servidor: T | undefined) =>
         servidor !== undefined && JSON.stringify(atual) !== JSON.stringify(servidor);

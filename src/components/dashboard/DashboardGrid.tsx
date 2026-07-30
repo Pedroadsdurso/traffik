@@ -2,7 +2,6 @@
 
 import { Responsive, useContainerWidth, type Layout } from "react-grid-layout";
 
-import type { Viewport } from "@/lib/actions/dashboardLayout";
 import { sx } from "@/lib/sx";
 import { BLOCK_BY_ID, GRID_BREAKPOINTS, GRID_COLS, GRID_ROW_HEIGHT, viewportDoBreakpoint } from "./blocks";
 import { BlockContent } from "./BlockContent";

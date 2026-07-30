@@ -8,7 +8,6 @@ import { faltamTaxas } from "@/lib/areas/taxas";
 import { sx } from "@/lib/sx";
 import { Icone } from "../ui/Icone";
 import { Select } from "../ui/Select";
-import { Checkbox } from "../ui/Checkbox";
 import { InfoTip } from "../ui/InfoTip";
 import { TIMEZONE_OPTIONS, partsInTz } from "@/lib/timezone";
 import type { TraffikView } from "../useTraffikState";
@@ -25,7 +24,9 @@ function CardFusoHorario({ inicial }: { inicial: string }) {
   const [tz, setTz] = useState(inicial);
   const [salvo, setSalvo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [pendente, iniciar] = useTransition();
+  // Só a função de transição é usada; o estado "pendente" não é exibido —
+  // quem dá o retorno visual é a mensagem "Salvo — recarregando os dados…".
+  const [, iniciar] = useTransition();
 
   const p = partsInTz(new Date(), tz);
   const agora = `${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`;

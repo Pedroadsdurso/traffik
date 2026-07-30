@@ -298,8 +298,6 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
           selecionados={selecionados}
           ordemGasto={ordemGasto}
           onOrdenar={() => setOrdemGasto((o) => (o === "desc" ? "asc" : "desc"))}
-          onSincronizar={v.runSync}
-          sincronizando={v.syncBusy}
           // Mostra a idade do dado (atualizada sozinha pelo polling) e só troca
           // pelo resultado do clique manual enquanto ele existir.
           ultimaSync={v.syncResult ?? v.syncLabel}

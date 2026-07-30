@@ -110,63 +110,117 @@ export interface GridItem {
 }
 
 /**
- * Layout padrão: reproduz o dashboard como ele era antes do grid — faixa de
- * KPIs no topo, gráfico grande, dois lado a lado, e as tabelas embaixo.
- * Só os 8 primeiros KPIs entram; o resto fica em "Métricas Disponíveis".
+ * # Layout PADRÃO do produto
+ *
+ * É o que toda **área de trabalho nova** e toda **conta nova** vê ao abrir o
+ * Dashboard pela primeira vez. Definido pelo usuário em 30/07/2026.
+ *
+ * ⚠️ **Esta lista é a fonte da verdade do layout inicial.** Antes entravam só os
+ * 8 primeiros KPIs e 6 gráficos, e o resto — país, funil, taxa de aprovação,
+ * horário, dia — nascia escondido em "Métricas disponíveis". Quem criava uma
+ * área nova via um dashboard pobre e não descobria o resto.
+ *
+ * ## A ordem tem intenção, não é alfabética
+ *
+ * 1. **Dinheiro primeiro** (faturamento, gasto, lucro em multiplicadores) —
+ *    é o que se olha antes de qualquer coisa.
+ * 2. **Eficiência** (CPA, CTR, ARPU, ticket) — o "quanto custa e quanto rende".
+ * 3. **Saúde da venda** (pendentes, reembolsadas) — o que ameaça o número acima.
+ * 4. **A série temporal grande** (faturamento vs. gasto), que é o gráfico que o
+ *    usuário mais olha, em largura total.
+ * 5. **Funil**, que explica POR QUE o número é esse.
+ * 6. **Repartições** (produto, fonte, pagamento, país) em pares.
+ * 7. **Ritmo** (horário, dia) e **qualidade** (taxa de aprovação).
+ * 8. **Atividade recente** no fim: é para conferir evento a evento, não para
+ *    resumir — quem quer resumo já leu tudo acima.
  */
+const PADRAO_KPIS: MetricKey[] = [
+  "faturamento",
+  "gasto",
+  "roas",
+  "roi",
+  "cpa",
+  "ctr",
+  "arpu",
+  "ticket",
+  "pendentes",
+  "reembolsadas",
+];
+
+/**
+ * Gráficos do layout padrão, com a largura em colunas do grid de 12.
+ *
+ * ⚠️ As larguras SOMAM 12 por fileira. Se você mudar uma, ajuste a parceira —
+ * senão o `react-grid-layout` empurra o bloco para a linha seguinte e abre um
+ * buraco no lugar dele.
+ */
+const PADRAO_GRAFICOS: [id: string, largura: number][] = [
+  ["chart:receita", 12],
+  ["chart:funil", 12],
+  ["chart:produtos", 6],
+  ["chart:fontes", 6],
+  ["chart:pagamentos", 6],
+  ["chart:paises", 6],
+  ["chart:vendasHora", 6],
+  ["chart:lucroHora", 6],
+  ["chart:vendasDia", 6],
+  ["chart:aprovacao", 6],
+  ["chart:feed", 12],
+];
+
 export function defaultLayout(viewport: "desktop" | "mobile"): GridItem[] {
   const cols = GRID_COLS[viewport];
   const items: GridItem[] = [];
   let y = 0;
 
-  const kpisVisiveis = KPI_BLOCKS.slice(0, 8);
+  // ── Faixa de KPIs ──
   const kpiW = viewport === "desktop" ? 3 : 2;
   const porLinha = Math.max(1, Math.floor(cols / kpiW));
+  const kpiH = 3;
 
-  kpisVisiveis.forEach((b, idx) => {
+  PADRAO_KPIS.forEach((metric, idx) => {
+    const def = BLOCK_BY_ID.get(`kpi:${metric}`);
+    // Um id inválido aqui seria um bloco fantasma no layout de todo mundo.
+    if (!def) return;
     items.push({
-      i: b.id,
+      i: def.id,
       x: (idx % porLinha) * kpiW,
-      y: y + Math.floor(idx / porLinha) * b.h,
+      y: y + Math.floor(idx / porLinha) * kpiH,
       w: kpiW,
-      h: b.h,
-      minW: b.minW,
-      minH: b.minH,
+      h: kpiH,
+      minW: def.minW,
+      minH: def.minH,
     });
   });
-  y += Math.ceil(kpisVisiveis.length / porLinha) * 3;
+  y += Math.ceil(PADRAO_KPIS.length / porLinha) * kpiH;
 
-  const empilhados: [string, number][] =
-    viewport === "desktop"
-      ? [
-          ["chart:receita", 12],
-          ["chart:produtos", 6],
-          ["chart:fontes", 6],
-          ["chart:pagamentos", 12],
-          ["chart:funil", 12],
-          ["chart:feed", 12],
-        ]
-      : [
-          ["chart:receita", 4],
-          ["chart:produtos", 4],
-          ["chart:fontes", 4],
-          ["chart:pagamentos", 4],
-          ["chart:funil", 4],
-          ["chart:feed", 4],
-        ];
-
+  // ── Gráficos ──
+  // No mobile tudo vira largura total: 4 colunas não comportam dois lado a lado
+  // sem deixar cada gráfico ilegível.
   let x = 0;
-  for (const [id, w] of empilhados) {
-    const def = BLOCK_BY_ID.get(id)!;
+  let alturaDaFileira = 0;
+  for (const [id, larguraDesktop] of PADRAO_GRAFICOS) {
+    const def = BLOCK_BY_ID.get(id);
+    if (!def) continue;
+    const w = viewport === "desktop" ? Math.min(larguraDesktop, cols) : cols;
+
+    // Não cabe na fileira atual: desce pela altura do MAIS ALTO da fileira, não
+    // pela altura deste bloco — senão um bloco baixo faz o próximo invadir a
+    // fileira anterior e o RGL reflui tudo.
     if (x + w > cols) {
+      y += alturaDaFileira;
       x = 0;
-      y += def.h;
+      alturaDaFileira = 0;
     }
+
     items.push({ i: id, x, y, w, h: def.h, minW: def.minW, minH: def.minH });
     x += w;
+    alturaDaFileira = Math.max(alturaDaFileira, def.h);
+
     if (x >= cols) {
+      y += alturaDaFileira;
       x = 0;
-      y += def.h;
+      alturaDaFileira = 0;
     }
   }
 

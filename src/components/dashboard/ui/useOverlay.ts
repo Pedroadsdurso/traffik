@@ -23,6 +23,7 @@ export function useOverlay(aberta: boolean, onClose: () => void) {
   // `document` não existe no SSR; só portamos depois de montar.
   const [montado, setMontado] = useState(false);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- só depois de montar existe `document` para o portal
   useEffect(() => setMontado(true), []);
 
   /**

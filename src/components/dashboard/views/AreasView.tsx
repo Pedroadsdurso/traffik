@@ -151,6 +151,7 @@ export function AreasView() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carrega as áreas do servidor
     void recarregar();
   }, [recarregar]);
 
@@ -371,7 +372,6 @@ function AreaCard({
   const contas = area.accountIds.map((id) => nome(id, opcoes?.accounts));
   const webhooks = area.webhookIds.map((id) => nome(id, opcoes?.webhooks));
   const pixels = area.pixelConfigIds.map((id) => nome(id, opcoes?.pixels));
-  const semVenda = new Set((checks ?? []).filter((c) => c.vendas === 0).map((c) => c.produto));
   const pend = pendencias(area, pendDto, totalDeAreas);
 
   return (
@@ -524,8 +524,6 @@ function AreaDrawer({
       moverContas: [...rascunho.moverContas, id],
       accountIds: rascunho.accountIds.includes(id) ? rascunho.accountIds : [...rascunho.accountIds, id],
     });
-
-  const simples = (v: string): ItemSelecionavel => ({ id: v, label: v });
 
   return (
     <Drawer

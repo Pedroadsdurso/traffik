@@ -49,7 +49,9 @@ export function BannerPendencias({ workspaceId }: { workspaceId: string | null }
 
   useEffect(() => {
     let vivo = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carrega dado do servidor; limpar antes É o estado de carregando
     setDados(null);
+
     getPendenciasDaArea(workspaceId)
       .then((d) => {
         if (!vivo) return;

@@ -1,12 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 import { brl } from "@/lib/format";
 import { calcularFunil, type EtapaEntrada } from "@/lib/funnel";
 import { FUNIL } from "@/lib/explicacoes";
 import { sx } from "@/lib/sx";
 import { ChartEmpty, ChartTooltip, GRAD_FUNIL, useEntrada } from "./chartKit";
+import { useTamanho } from "./useTamanho";
 import { Icone } from "./Icone";
 import { InfoTip } from "./InfoTip";
 
@@ -45,7 +46,13 @@ const BASE = 8;
 export function Funnel({ etapas, ticketMedio = 0 }: { etapas: EtapaEntrada[]; ticketMedio?: number }) {
   const pronto = useEntrada();
   const [tip, setTip] = useState<{ x: number; y: number; i: number } | null>(null);
-  const boxRef = useRef<HTMLDivElement>(null);
+  /**
+   * Um ref só, que serve às duas coisas: origem das coordenadas do tooltip (lido
+   * em evento) e largura medida (lida no render). Eram `boxRef` + leitura de
+   * `boxRef.current.clientWidth` no render, que devolve o valor do frame anterior
+   * e não redispara render quando muda.
+   */
+  const { ref: boxRef, no: boxNo, largura } = useTamanho<HTMLDivElement>();
 
   const { etapas: calc, gargalo } = calcularFunil(etapas, ticketMedio);
   const n = calc.length;
@@ -126,7 +133,7 @@ export function Funnel({ etapas, ticketMedio = 0 }: { etapas: EtapaEntrada[]; ti
                   opacity={tip && tip.i !== i ? 0.45 : 1}
                   style={{ transition: "opacity 200ms var(--ease-out), d 400ms var(--ease-out)", cursor: "pointer" }}
                   onMouseEnter={(ev) => {
-                    const b = boxRef.current?.getBoundingClientRect();
+                    const b = boxNo?.getBoundingClientRect();
                     if (b) setTip({ x: ev.clientX - b.left, y: ev.clientY - b.top, i });
                   }}
                   onMouseLeave={() => setTip(null)}
@@ -186,7 +193,7 @@ export function Funnel({ etapas, ticketMedio = 0 }: { etapas: EtapaEntrada[]; ti
           <ChartTooltip
             x={tip.x}
             y={tip.y}
-            ancorarDireita={tip.x > (boxRef.current?.clientWidth ?? 0) * 0.6}
+            ancorarDireita={largura > 0 && tip.x > largura * 0.6}
             titulo={calc[tip.i]!.label}
             linhas={[
               { cor: GRAD_FUNIL[Math.min(tip.i, GRAD_FUNIL.length - 1)], label: "Total", valor: num(calc[tip.i]!.value) },

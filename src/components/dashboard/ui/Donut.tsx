@@ -64,7 +64,23 @@ export function Donut({
 
   const cx = 80;
   const cy = 80;
-  let acumulado = 0;
+  /**
+   * Ângulos de cada fatia, calculados ANTES do JSX.
+   *
+   * ⚠️ Era um `let acumulado` mutado dentro do `.map()` — ou seja, mutação de
+   * variável externa **durante o render**. Funciona numa passada única, mas o
+   * render do React pode ser reexecutado e descartado, e aí o acumulador entra
+   * sujo na segunda passada. Pré-calcular remove a classe do problema.
+   */
+  const angulos: { ini: number; fim: number }[] = [];
+  {
+    let acc = 0;
+    for (const f of fatias) {
+      const frac = f.value / total;
+      angulos.push({ ini: acc * 360, fim: (acc + frac) * 360 });
+      acc += frac;
+    }
+  }
 
   return (
     <div ref={boxRef}
@@ -82,10 +98,7 @@ export function Donut({
         <circle cx={cx} cy={cy} r={R} fill="none" stroke="var(--color-divider)" strokeWidth={ESPESSURA} opacity={0.6} />
 
         {fatias.map((f, i) => {
-          const frac = f.value / total;
-          const ini = acumulado * 360;
-          const fim = (acumulado + frac) * 360;
-          acumulado += frac;
+          const { ini, fim } = angulos[i]!;
           const on = ativa === i;
           const meio = (ini + fim) / 2;
           // Fatia ativa cresce um pouco e "salta" para fora do centro.

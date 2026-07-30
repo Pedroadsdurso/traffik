@@ -9,6 +9,7 @@ import { brl, plural } from "@/lib/format";
 import { sx } from "@/lib/sx";
 import { WORLD_LAND } from "@/lib/worldGeo";
 import { ChartTooltip } from "./chartKit";
+import { useTamanho } from "./useTamanho";
 
 export interface PaisVenda {
   code: string;
@@ -53,9 +54,20 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
   const [tip, setTip] = useState<{ x: number; y: number; code: string } | null>(null);
 
   const arrasto = useRef<{ x: number; y: number; rot: [number, number] } | null>(null);
+  /**
+   * 🐛 O cursor "grabbing" NUNCA aparecia: ele era lido de `arrasto.current`
+   * durante o render, e mudar um ref não redispara render. Precisa ser estado.
+   */
+  const [arrastando, setArrastando] = useState(false);
   const touchState = useRef<{ dist?: number; x?: number; y?: number; rot?: [number, number] } | null>(null);
   const interagindo = useRef(false);
-  const boxRef = useRef<HTMLDivElement>(null);
+  /**
+   * Um ref só, que serve às duas coisas: origem das coordenadas do tooltip (lido
+   * em evento) e largura medida (lida no render). Eram `boxRef` + leitura de
+   * `boxRef.current.clientWidth` no render, que devolve o valor do frame anterior
+   * e não redispara render quando muda.
+   */
+  const { ref: boxRef, no: boxNo, largura } = useTamanho<HTMLDivElement>();
 
   const rotRef = useRef(rot);
   useEffect(() => {
@@ -81,11 +93,11 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
     };
     raf = requestAnimationFrame(passo);
     return () => cancelAnimationFrame(raf);
-  }, [modo]);
+  }, [modo, boxNo]);
 
   // Previne a rolagem da página inteira no wheel / touch e aplica zoom direcionado ao cursor / pinch
   useEffect(() => {
-    const el = boxRef.current;
+    const el = boxNo;
     if (!el || modo !== "globo") return;
 
     const handleWheel = (e: WheelEvent) => {
@@ -189,7 +201,9 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
       el.removeEventListener("touchmove", handleTouchMove);
       el.removeEventListener("touchend", handleTouchEnd);
     };
-  }, [modo]);
+    // Depende do NÓ: o efeito precisa reanexar os gestos quando o elemento
+    // aparece (o mapa pode montar depois, vindo do estado vazio).
+  }, [modo, boxNo]);
 
   const { caminhoTerra, esfera, marcadores } = useMemo(() => {
     const proj = geoOrthographic()
@@ -267,15 +281,16 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
           onMouseLeave={() => {
             interagindo.current = false;
             arrasto.current = null;
+            setArrastando(false);
             setTip(null);
             setAtivo(null);
           }}
         >
           <svg
             viewBox={`0 0 ${SIZE} ${SIZE}`}
-            style={{ width: "auto", height: "100%", maxWidth: "100%", aspectRatio: "1", cursor: arrasto.current ? "grabbing" : "grab" }}
-            onMouseDown={(e) => (arrasto.current = { x: e.clientX, y: e.clientY, rot })}
-            onMouseUp={() => (arrasto.current = null)}
+            style={{ width: "auto", height: "100%", maxWidth: "100%", aspectRatio: "1", cursor: arrastando ? "grabbing" : "grab" }}
+            onMouseDown={(e) => { arrasto.current = { x: e.clientX, y: e.clientY, rot }; setArrastando(true); }}
+            onMouseUp={() => { arrasto.current = null; setArrastando(false); }}
             onMouseMove={(e) => {
               const a = arrasto.current;
               if (!a) return;
@@ -317,7 +332,7 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
                 <g key={m.code} style={{ cursor: "pointer" }}
                   onMouseEnter={(e) => {
                     setAtivo(m.code);
-                    const box = boxRef.current?.getBoundingClientRect();
+                    const box = boxNo?.getBoundingClientRect();
                     if (box) setTip({ x: e.clientX - box.left, y: e.clientY - box.top, code: m.code });
                   }}
                   onMouseLeave={() => { setAtivo(null); setTip(null); }}
@@ -362,7 +377,7 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
             <ChartTooltip
               x={tip.x}
               y={tip.y}
-              ancorarDireita={tip.x > (boxRef.current?.clientWidth ?? 0) * 0.6}
+              ancorarDireita={largura > 0 && tip.x > largura * 0.6}
               titulo={`${PAIS[marcado.code]?.bandeira ?? "🌐"}  ${nomePais(marcado.code)}`}
               linhas={[
                 { cor: "#8b7ff0", label: "Vendas", valor: String(marcado.sales) },

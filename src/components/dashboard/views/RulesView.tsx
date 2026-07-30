@@ -57,7 +57,9 @@ export function RulesView({ workspaceId }: { workspaceId: string | null }) {
 
   useEffect(() => {
     let vivo = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carrega regras, produtos e perfis do servidor
     setCarregando(true);
+
     Promise.all([listRules(workspaceId), listTrackedProducts(), listAdProfiles(workspaceId)])
       .then(([rs, ps, perfis]) => {
         if (!vivo) return;
