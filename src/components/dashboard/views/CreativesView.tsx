@@ -1,4 +1,5 @@
 import { sx } from "@/lib/sx";
+import { Icone } from "../ui/Icone";
 import { Select } from "../ui/Select";
 import { ImageSlot } from "../ImageSlot";
 import type { TraffikView } from "../useTraffikState";
@@ -55,9 +56,7 @@ export function CreativesView({ v }: { v: TraffikView }) {
                 )}
                 {cr.best && (
                   <span style={sx("position:absolute;top:8px;left:8px;display:flex;align-items:center;gap:5px;background:var(--color-accent-800);color:var(--color-accent-100);font-size:11px;padding:4px 9px;border-radius:12px;pointer-events:none")}>
-                    <svg viewBox="0 0 256 256" width="11" height="11" fill="currentColor" stroke="none">
-                      <path d="M128 24 L156 100 L236 104 L172 152 L196 228 L128 182 L60 228 L84 152 L20 104 L100 100 Z" />
-                    </svg>
+                    <Icone nome="destaque" tamanho={12} />
                     Melhor do dia
                   </span>
                 )}

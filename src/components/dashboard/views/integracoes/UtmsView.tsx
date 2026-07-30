@@ -35,10 +35,19 @@ function download(filename: string, content: string) {
 
 // ─────────────────────────── Bloco 1: Códigos ───────────────────────────
 
+/** Legenda de cada destino: o que muda de um para o outro, em uma linha. */
+const DESTINO_DICA: Record<Destino, string> = {
+  hotmart: "Usa o xcod, com o separador único da sua conta",
+  cartpanda: "Usa o cid para identificar a sua conta",
+  outros: "UTMs no formato padrão, para qualquer plataforma",
+};
+
 function CodigosBlock({ codes }: { codes: UtmCodesDTO | null }) {
   const [open, setOpen] = useState(false);
   const [dest, setDest] = useState<Destino>("hotmart");
   const [copied, setCopied] = useState(false);
+  /** Qual LINHA acabou de ser copiada — separado do `copied` do modal. */
+  const [copiedRow, setCopiedRow] = useState<Destino | null>(null);
 
   const code = codes ? codes[dest] : "";
 
@@ -48,20 +57,64 @@ function CodigosBlock({ codes }: { codes: UtmCodesDTO | null }) {
     setTimeout(() => setCopied(false), 1500);
   }
 
+  function copyRow(d: Destino) {
+    if (!codes) return;
+    navigator.clipboard.writeText(codes[d]);
+    setCopiedRow(d);
+    setTimeout(() => setCopiedRow(null), 1500);
+  }
+
   return (
     <div className="card" style={sx("display:flex;flex-direction:column;gap:var(--space-3)")}>
-      <div style={sx("display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-2)")}>
-        <div>
-          <div className="card-kicker">Códigos</div>
-          <div className="card-title">Parâmetros para o Facebook Ads</div>
-          <p className="card-body" style={sx("margin:4px 0 0")}>
-            Cole estes parâmetros no campo <strong>“Parâmetros de URL”</strong> do seu anúncio. O Facebook
-            preenche campanha/conjunto/anúncio automaticamente, e nós cruzamos a venda com o criativo.
-          </p>
-        </div>
-        <button className="btn btn-primary" type="button" onClick={() => setOpen(true)} disabled={!codes} style={sx("white-space:nowrap")}>
-          Ver opções
-        </button>
+      <div>
+        <div className="card-kicker">Códigos</div>
+        <div className="card-title">Parâmetros para o Facebook Ads</div>
+        <p className="card-body" style={sx("margin:4px 0 0")}>
+          Cole estes parâmetros no campo <strong>“Parâmetros de URL”</strong> do seu anúncio. O Facebook
+          preenche campanha/conjunto/anúncio automaticamente, e nós cruzamos a venda com o criativo.
+        </p>
+      </div>
+
+      {/**
+       * As três plataformas ficam NA TELA, não atrás de um botão "Ver opções".
+       *
+       * Este card era um título e um botão: a escolha do destino e o código viviam
+       * inteiros dentro do modal, então sobrava um card vazio de 500px. Agora a
+       * escolha — que é a informação — está aqui, com o "Copiar" na própria linha
+       * (um clique a menos no caminho principal).
+       *
+       * ⚠️ O CÓDIGO em si continua atrás do modal, por decisão do projeto: bloco
+       * verboso não aparece na listagem. "Ver" abre o modal já naquela plataforma.
+       */}
+      <div style={sx("display:flex;flex-direction:column;border:1px solid var(--color-divider);border-radius:var(--radius-md);overflow:hidden")}>
+        {DESTINOS.map((d, i) => (
+          <div
+            key={d.id}
+            style={sx(
+              "display:flex;align-items:center;gap:10px;padding:var(--space-3);" +
+                (i > 0 ? "border-top:1px solid var(--color-divider);" : ""),
+            )}
+          >
+            {d.id === "outros" ? (
+              <Icone nome="link" tamanho={22} cor="suave" />
+            ) : (
+              <LogoGateway id={d.id} nome={d.label} tamanho={22} />
+            )}
+            <div style={sx("min-width:0;flex:1")}>
+              <div style={sx("font-size:13.5px;font-weight:600")}>{d.label}</div>
+              <div className="text-muted" style={sx("font-size:11.5px;line-height:1.4")}>{DESTINO_DICA[d.id]}</div>
+            </div>
+            <button className="btn btn-secondary" type="button" disabled={!codes} onClick={() => copyRow(d.id)}
+              style={sx("white-space:nowrap;font-size:12px;padding:5px 10px")}>
+              {copiedRow === d.id ? "Copiado!" : "Copiar"}
+            </button>
+            <button className="btn btn-ghost" type="button" disabled={!codes}
+              onClick={() => { setDest(d.id); setOpen(true); }}
+              style={sx("white-space:nowrap;font-size:12px")}>
+              Ver
+            </button>
+          </div>
+        ))}
       </div>
 
       {open && codes && (
@@ -319,7 +372,10 @@ export function UtmsView() {
           dois na tela por um deploy, se contradizendo. Se um dia o script
           voltar a ser global, o aviso volta AQUI e sai do `ScriptsBlock` —
           nunca os dois. */}
-      <div style={sx("display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:var(--space-4);align-items:start")}>
+      {/* Duas colunas de peso igual: agora que os Códigos listam as três
+          plataformas, os dois cards têm massa parecida. O `minmax(0,…)` evita que
+          uma linha longa de dica estoure o track. */}
+      <div style={sx("display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-4);align-items:start")}>
         <CodigosBlock codes={codes} />
         <ScriptsBlock codes={codes} />
       </div>

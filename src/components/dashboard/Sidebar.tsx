@@ -8,7 +8,7 @@ import { usePathname } from "next/navigation";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { logoutAction } from "@/lib/actions/session";
 import { sx } from "@/lib/sx";
-import { NavIcon } from "./Icon";
+import { Icone, type NomeIcone } from "./ui/Icone";
 import { useTraffik } from "./TraffikContext";
 import { WorkspaceSelect } from "./ui/WorkspaceSelect";
 
@@ -17,7 +17,12 @@ export type SidebarUser = { name?: string | null; email?: string | null };
 interface NavItem {
   href: string;
   label: string;
-  icon: string;
+  /**
+   * ⚠️ Nome no mapa de `ui/Icone`, **não um `path` de SVG**. Antes era a string
+   * de desenho (`"M40 40 h72…"`), o que fazia cada item da navegação carregar o
+   * próprio ícone à mão, fora de qualquer padronização de tamanho e traço.
+   */
+  icon: NomeIcone;
   exact?: boolean;
 }
 
@@ -25,23 +30,23 @@ const NAV: { group: string; items: NavItem[] }[] = [
   {
     group: "Análise",
     items: [
-      { href: "/dashboard", label: "Dashboard", icon: "M40 40 h72 v72 h-72 Z M144 40 h72 v72 h-72 Z M40 144 h72 v72 h-72 Z M144 144 h72 v72 h-72 Z", exact: true },
-      { href: "/dashboard/gerenciador", label: "Gerenciador de Anúncios", icon: "M128 40 a88 88 0 100 176 a88 88 0 100 -176 M128 80 a48 48 0 100 96 a48 48 0 100 -96" },
-      { href: "/dashboard/criativos", label: "Criativos", icon: "M32 56 h192 v144 h-192 Z M32 176 L92 128 L140 160 L176 120 L224 164" },
+      { href: "/dashboard", label: "Dashboard", icon: "painel", exact: true },
+      { href: "/dashboard/gerenciador", label: "Gerenciador de Anúncios", icon: "gerenciador" },
+      { href: "/dashboard/criativos", label: "Criativos", icon: "criativos" },
     ],
   },
   {
     group: "Automação",
     items: [
-      { href: "/dashboard/regras", label: "Regras", icon: "M144 24 L48 144 h64 l-16 88 96 -128 h-64 Z" },
-      { href: "/dashboard/notificacoes", label: "Notificações", icon: "M128 32 a56 56 0 00-56 56 c0 46 -24 58 -24 72 h160 c0 -14 -24 -26 -24 -72 a56 56 0 00-56 -56 Z M104 216 a24 24 0 0048 0" },
+      { href: "/dashboard/regras", label: "Regras", icon: "regras" },
+      { href: "/dashboard/notificacoes", label: "Notificações", icon: "sino" },
     ],
   },
   {
     group: "Configurações",
     items: [
-      { href: "/dashboard/integracoes", label: "Integrações", icon: "M96 72 a56 56 0 100 112 a56 56 0 100 -112 M160 72 a56 56 0 100 112 a56 56 0 100 -112" },
-      { href: "/dashboard/taxas", label: "Taxas e Despesas", icon: "M72 184 L184 72 M80 56 a24 24 0 100 48 a24 24 0 100 -48 M176 152 a24 24 0 100 48 a24 24 0 100 -48" },
+      { href: "/dashboard/integracoes", label: "Integrações", icon: "integracoes" },
+      { href: "/dashboard/taxas", label: "Taxas e Despesas", icon: "taxas" },
     ],
   },
 ];
@@ -94,7 +99,7 @@ export function Sidebar({ user }: { user?: SidebarUser }) {
                     }`,
                   )}
                 >
-                  <NavIcon path={n.icon} />
+                  <Icone nome={n.icon} tamanho={18} />
                   <span>{n.label}</span>
                 </Link>
               );
@@ -123,11 +128,7 @@ export function Sidebar({ user }: { user?: SidebarUser }) {
           </div>
           <form action={logoutAction}>
             <button className="btn btn-ghost" type="submit" title="Sair" aria-label="Sair" style={sx("padding:4px")}>
-              <svg viewBox="0 0 256 256" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={16} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M112 216H48a8 8 0 01-8-8V48a8 8 0 018-8h64" />
-                <path d="M176 176l40-48-40-48" />
-                <path d="M216 128H104" />
-              </svg>
+              <Icone nome="sair" tamanho={16} />
             </button>
           </form>
         </div>

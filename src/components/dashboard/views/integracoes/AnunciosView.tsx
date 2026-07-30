@@ -1,6 +1,7 @@
 import { plural } from "@/lib/format";
 import { sx } from "@/lib/sx";
 import { Drawer } from "../../ui/Drawer";
+import { Icone } from "../../ui/Icone";
 import { LogoGateway } from "../../ui/LogoGateway";
 import type { TraffikView } from "../../useTraffikState";
 
@@ -50,9 +51,7 @@ function ProfilePanel({ p }: { p: Profile }) {
           onClick={p.toggleExpanded}
           style={sx("display:flex;align-items:center;gap:10px;background:none;border:none;color:inherit;cursor:pointer;padding:0;text-align:left")}
         >
-          <span style={sx("display:inline-flex;transform:rotate(90deg)")}>
-            <svg viewBox="0 0 256 256" width="12" height="12" fill="currentColor"><path d="M96 60 L176 128 L96 196 Z" /></svg>
-          </span>
+          <Icone nome="chevronBaixo" tamanho={13} />
           <Avatar url={p.pictureUrl} name={p.name} size={34} />
           <span>
             <span className="card-title" style={sx("font-size:15px")}>{p.name} ({p.accountCount})</span>
@@ -105,9 +104,7 @@ export function AnunciosView({ v }: { v: TraffikView }) {
       <div style={sx("max-width:420px")}>
         <div className="card elev-sm" style={sx("align-items:center;text-align:center;gap:var(--space-3);padding:var(--space-6)")}>
           <span style={sx("width:56px;height:56px;border-radius:var(--radius-lg);background:var(--color-accent-800);color:var(--color-accent-100);display:grid;place-items:center")}>
-            <svg viewBox="0 0 256 256" width="30" height="30" fill="none" stroke="currentColor" strokeWidth={16} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M96 72 a56 56 0 100 112 a56 56 0 100 -112 M160 72 a56 56 0 100 112 a56 56 0 100 -112" />
-            </svg>
+            <Icone nome="integracoes" tamanho={30} />
           </span>
           <div style={sx("display:flex;align-items:center;gap:10px")}>
             <LogoGateway id="FACEBOOK" nome="Facebook Ads" tamanho={34} />

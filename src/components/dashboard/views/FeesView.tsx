@@ -90,12 +90,41 @@ function CardFusoHorario({ inicial }: { inicial: string }) {
 function RemoveBtn({ onClick }: { onClick: () => void }) {
   return (
     <button className="btn btn-ghost btn-icon" type="button" onClick={onClick} aria-label="Remover">
-      <svg viewBox="0 0 256 256" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={18} strokeLinecap="round">
-        <line x1="64" y1="64" x2="192" y2="192" />
-        <line x1="192" y1="64" x2="64" y2="192" />
-      </svg>
+      <Icone nome="erro" tamanho={14} />
     </button>
   );
+}
+
+/**
+ * Formulário de "adicionar" no rodapé de cada card de custo.
+ *
+ * ⚠️ **Embrulha, não estica.** Estas três linhas eram `display:flex` rígido numa
+ * coluna de ~1050px: o campo de nome ganhava mil pixels de largura para receber
+ * "Simples Nacional" e o botão ia para o outro lado da tela. Com `flex-wrap` e
+ * `flex:1 1 140px` os campos ficam lado a lado enquanto couber e **quebram em
+ * linhas** quando o card é estreito — sem media query e sem largura fixa em px,
+ * que é o que fazia o layout depender do tamanho da janela.
+ *
+ * Cada filho precisa de `min-width:0`, senão o conteúdo define o mínimo do item
+ * flex e o `wrap` nunca acontece: a linha estoura o card.
+ */
+function FormAdicionar({ children, acao }: { children: React.ReactNode; acao: React.ReactNode }) {
+  return (
+    <div
+      style={sx(
+        "display:flex;flex-wrap:wrap;align-items:flex-end;gap:var(--space-2);margin-top:var(--space-3);" +
+          "padding-top:var(--space-3);border-top:1px solid var(--color-divider)",
+      )}
+    >
+      {children}
+      <div style={sx("flex:0 0 auto;margin-left:auto")}>{acao}</div>
+    </div>
+  );
+}
+
+/** Campo do `FormAdicionar` — encapsula o `flex:1 1 140px;min-width:0`. */
+function CampoForm({ children }: { children: React.ReactNode }) {
+  return <div style={sx("flex:1 1 140px;min-width:0")}>{children}</div>;
 }
 
 export function FeesView({ v }: { v: TraffikView }) {
@@ -132,7 +161,12 @@ export function FeesView({ v }: { v: TraffikView }) {
 
 
   return (
-    <div style={sx("display:grid;grid-template-columns:1fr 320px;gap:var(--space-4);align-items:start")}>
+    /**
+     * ⚠️ `minmax(0,1fr)` e não `1fr`: com `1fr` puro a coluna esquerda tem largura
+     * mínima automática = o conteúdo mais largo, então uma despesa de nome comprido
+     * empurrava a sidebar de 320px para fora e criava rolagem horizontal.
+     */
+    <div style={sx("display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:var(--space-4);align-items:start")}>
 
       {faltando.length > 0 && (
         <div
@@ -155,7 +189,10 @@ export function FeesView({ v }: { v: TraffikView }) {
           </div>
         </div>
       )}
-      <div style={sx("display:flex;flex-direction:column;gap:var(--space-4)")}>
+      {/* Os três cards de custo lado a lado. Antes era uma coluna empilhada de
+          1050px de largura — cada card ocupava a linha inteira para mostrar duas
+          colunas de texto, e sobrava um metro de vazio no meio de cada linha. */}
+      <div style={sx("display:grid;grid-template-columns:repeat(auto-fit,minmax(275px,1fr));gap:var(--space-4);align-items:start")}>
         <div className="card">
           <div className="card-kicker">Gateways de pagamento</div>
           <div className="card-title">Taxas por forma de pagamento</div>
@@ -173,22 +210,32 @@ export function FeesView({ v }: { v: TraffikView }) {
                 </div>
               </div>
             ))}
-            <div style={sx("display:flex;gap:var(--space-2);margin-top:var(--space-2)")}>
-              <Select
-                label=""
-                minWidth={120}
-                value={gatewayMetodo}
-                onChange={setGatewayMetodo}
-                options={[
-                  { value: "PIX", label: "Pix" },
-                  { value: "CARTAO", label: "Cartão" },
-                  { value: "BOLETO", label: "Boleto" },
-                  { value: "OUTRO", label: "Todas" },
-                ]}
-              />
-              <input className="input" style={sx("width:100px")} placeholder="% taxa" value={gatewayPct} onChange={(e) => setGatewayPct(e.target.value)} inputMode="decimal" />
-              <button className="btn btn-secondary" type="button" onClick={() => void v.addGateway(gatewayMetodo, gatewayPct).then(() => setGatewayPct(""))}>Adicionar</button>
-            </div>
+            <FormAdicionar
+              acao={
+                <button className="btn btn-secondary" type="button" disabled={!gatewayPct.trim()}
+                  onClick={() => void v.addGateway(gatewayMetodo, gatewayPct).then(() => setGatewayPct(""))}>
+                  Adicionar taxa
+                </button>
+              }
+            >
+              <CampoForm>
+                <Select
+                  label=""
+                  minWidth={0}
+                  value={gatewayMetodo}
+                  onChange={setGatewayMetodo}
+                  options={[
+                    { value: "PIX", label: "Pix" },
+                    { value: "CARTAO", label: "Cartão" },
+                    { value: "BOLETO", label: "Boleto" },
+                    { value: "OUTRO", label: "Todas" },
+                  ]}
+                />
+              </CampoForm>
+              <CampoForm>
+                <input className="input" style={sx("width:100%")} placeholder="% da taxa" value={gatewayPct} onChange={(e) => setGatewayPct(e.target.value)} inputMode="decimal" />
+              </CampoForm>
+            </FormAdicionar>
           </div>
         </div>
 
@@ -209,17 +256,31 @@ export function FeesView({ v }: { v: TraffikView }) {
                 </div>
               </div>
             ))}
-            <div style={sx("display:flex;gap:var(--space-2);margin-top:var(--space-2)")}>
-              <input className="input" placeholder="Nome (ex.: Simples Nacional)" value={taxNome} onChange={(e) => setTaxNome(e.target.value)} />
-              <input className="input" style={sx("width:100px")} placeholder="% alíquota" value={taxPct} onChange={(e) => setTaxPct(e.target.value)} inputMode="decimal" />
-              <button className="btn btn-secondary" type="button" onClick={() => void v.addTax(taxNome, taxPct).then(() => { setTaxNome(""); setTaxPct(""); })}>Adicionar</button>
-            </div>
+            <FormAdicionar
+              acao={
+                <button className="btn btn-secondary" type="button" disabled={!taxNome.trim() || !taxPct.trim()}
+                  onClick={() => void v.addTax(taxNome, taxPct).then(() => { setTaxNome(""); setTaxPct(""); })}>
+                  Adicionar imposto
+                </button>
+              }
+            >
+              <CampoForm>
+                <input className="input" style={sx("width:100%")} placeholder="Nome (ex.: Simples Nacional)" value={taxNome} onChange={(e) => setTaxNome(e.target.value)} />
+              </CampoForm>
+              <CampoForm>
+                <input className="input" style={sx("width:100%")} placeholder="% da alíquota" value={taxPct} onChange={(e) => setTaxPct(e.target.value)} inputMode="decimal" />
+              </CampoForm>
+            </FormAdicionar>
           </div>
         </div>
 
         <div className="card">
           <div className="card-kicker">Despesas recorrentes</div>
-          <div style={sx("display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-2)")}>
+          <div className="card-title">Custos fixos por mês</div>
+          <div style={sx("display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-3)")}>
+            {v.despesaRows.length === 0 && (
+              <div className="text-muted" style={sx("font-size:13px")}>Nenhuma despesa cadastrada.</div>
+            )}
             {v.despesaRows.map((d) => (
               <div key={d.id} style={sx("display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);padding:var(--space-2) 0")}>
                 <span style={sx("font-size:14px")}>{d.name}</span>
@@ -229,16 +290,25 @@ export function FeesView({ v }: { v: TraffikView }) {
                 </div>
               </div>
             ))}
-            <div style={sx("display:flex;gap:var(--space-2);margin-top:var(--space-2)")}>
-              <input className="input" placeholder="Nome da despesa" value={despesaNome} onChange={(e) => setDespesaNome(e.target.value)} />
-              <input className="input" style={sx("width:120px")} placeholder="Valor R$" value={despesaValor} onChange={(e) => setDespesaValor(e.target.value)} inputMode="decimal" />
-              <button className="btn btn-secondary" type="button" onClick={() => void v.addDespesa(despesaNome, despesaValor).then(() => { setDespesaNome(""); setDespesaValor(""); })}>Adicionar</button>
-            </div>
-            {/* Só a despesa recorrente oferece a escolha. Taxa de gateway e
+            {/* Só a despesa recorrente oferece a escolha de área. Taxa de gateway e
                 imposto são globais por natureza — uma caixa neles convidaria a
                 prender a uma área justamente o que, se prendido, sumiria da
                 conta de lucro das outras em silêncio. */}
-            
+            <FormAdicionar
+              acao={
+                <button className="btn btn-secondary" type="button" disabled={!despesaNome.trim() || !despesaValor.trim()}
+                  onClick={() => void v.addDespesa(despesaNome, despesaValor).then(() => { setDespesaNome(""); setDespesaValor(""); })}>
+                  Adicionar despesa
+                </button>
+              }
+            >
+              <CampoForm>
+                <input className="input" style={sx("width:100%")} placeholder="Nome da despesa" value={despesaNome} onChange={(e) => setDespesaNome(e.target.value)} />
+              </CampoForm>
+              <CampoForm>
+                <input className="input" style={sx("width:100%")} placeholder="Valor por mês (R$)" value={despesaValor} onChange={(e) => setDespesaValor(e.target.value)} inputMode="decimal" />
+              </CampoForm>
+            </FormAdicionar>
           </div>
         </div>
       </div>

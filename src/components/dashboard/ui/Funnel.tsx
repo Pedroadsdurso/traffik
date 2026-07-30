@@ -7,6 +7,7 @@ import { calcularFunil, type EtapaEntrada } from "@/lib/funnel";
 import { FUNIL } from "@/lib/explicacoes";
 import { sx } from "@/lib/sx";
 import { ChartEmpty, ChartTooltip, GRAD_FUNIL, useEntrada } from "./chartKit";
+import { Icone } from "./Icone";
 import { InfoTip } from "./InfoTip";
 
 export type { EtapaEntrada as EtapaFunil };
@@ -221,10 +222,7 @@ export function Funnel({ etapas, ticketMedio = 0 }: { etapas: EtapaEntrada[]; ti
       {/* Resumo do gargalo, em linguagem direta */}
       {gargalo && (
         <div style={sx("display:flex;align-items:center;gap:8px;margin-top:10px;padding:8px 11px;border-radius:var(--radius-md);background:rgba(120,53,15,.22);border:1px solid rgba(245,158,11,.35)")}>
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#f59e0b" strokeWidth={2}
-            strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ flexShrink: 0 }}>
-            <path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" />
-          </svg>
+          <Icone nome="aviso" tamanho={15} cor="aviso" />
           <span style={sx("font-size:12.5px;line-height:1.45")}>
             <strong>Maior perda: entre {gargalo.de} e {gargalo.para}</strong> — {pctFmt(gargalo.perdaPct)} não
             avançaram ({num(gargalo.perdaAbs)} {gargalo.perdaAbs === 1 ? "pessoa" : "pessoas"})

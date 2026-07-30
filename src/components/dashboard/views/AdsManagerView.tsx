@@ -5,16 +5,20 @@ import { useMemo, useState } from "react";
 
 import { combinaStatus } from "@/lib/ads/status";
 import { sx } from "@/lib/sx";
+import { Icone, type NomeIcone } from "../ui/Icone";
 import { Select } from "../ui/Select";
 import { AdsActionBar, type Acao, type AlvoSelecionado, type Nivel } from "./ads/AdsActionBar";
 import { AdsTable, type LinhaTabela } from "./ads/AdsTable";
 import type { TraffikView } from "../useTraffikState";
 
-const ABAS: { key: "campaigns" | "adsets" | "ads" | "accounts"; label: string; icone: string; nivel: Nivel | null }[] = [
-  { key: "accounts", label: "Contas", icone: "M3 7h18v12H3zM3 11h18", nivel: null },
-  { key: "campaigns", label: "Campanhas", icone: "M3 12h4l3-8 4 16 3-8h4", nivel: "campaign" },
-  { key: "adsets", label: "Conjuntos", icone: "M4 6h16M4 12h16M4 18h10", nivel: "adset" },
-  { key: "ads", label: "Anúncios", icone: "M4 5h16v10H4zM8 19h8", nivel: "ad" },
+// ⚠️ `icone` guarda um NOME do mapa de `ui/Icone`, não um `path` de SVG. Era um
+// `path` em string, que é a forma pela qual a divergência de ícones volta: parece
+// dado de configuração e escapa da padronização de tamanho e traço.
+const ABAS: { key: "campaigns" | "adsets" | "ads" | "accounts"; label: string; icone: NomeIcone; nivel: Nivel | null }[] = [
+  { key: "accounts", label: "Contas", icone: "contas", nivel: null },
+  { key: "campaigns", label: "Campanhas", icone: "relatorio", nivel: "campaign" },
+  { key: "adsets", label: "Conjuntos", icone: "conjuntos", nivel: "adset" },
+  { key: "ads", label: "Anúncios", icone: "anuncios", nivel: "ad" },
 ];
 
 /** Link direto para a entidade no Gerenciador de Anúncios do Facebook. */
@@ -233,12 +237,13 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
             <button key={a.key} type="button" role="tab" className="ads-aba" aria-selected={v.adsSub === a.key}
               onClick={() => { v.setAdsSub(a.key); setSelecao(new Set()); }}>
               <span className="ads-aba-icone">
-                <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth={1.9}
-                  strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d={a.icone} /></svg>
+                <Icone nome={a.icone} tamanho={17} />
               </span>
               <span style={sx("min-width:0")}>
                 <span style={sx("display:block;font-size:13.5px;font-weight:600")}>{a.label}</span>
-                <span className="text-muted" style={sx("display:block;font-size:11px")}>{contagem} item(ns)</span>
+                <span className="text-muted" style={sx("display:block;font-size:11px")}>
+                  {plural(contagem, "item", "itens", "nada aqui")}
+                </span>
               </span>
             </button>
           );

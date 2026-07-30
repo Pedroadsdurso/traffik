@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { sx } from "@/lib/sx";
+import { Icone } from "./Icone";
 
 /**
  * Peças compartilhadas por todos os gráficos do Dashboard, para que tooltip,
@@ -72,11 +73,7 @@ export function ChartTooltip({
 export function ChartEmpty({ titulo, dica }: { titulo: string; dica?: string }) {
   return (
     <div style={sx("display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;flex:1;min-height:120px;padding:var(--space-4);text-align:center")}>
-      <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth={1.4}
-        strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.28 }} aria-hidden>
-        <path d="M3 3v18h18" />
-        <path d="M7 15l3.5-3.5 3 3L21 7" />
-      </svg>
+      <Icone nome="grafico" tamanho={26} style={{ opacity: 0.28 }} />
       <div style={sx("font-size:13px;opacity:.75")}>{titulo}</div>
       {dica && <div className="text-muted" style={sx("font-size:11.5px;max-width:280px;line-height:1.5")}>{dica}</div>}
     </div>
@@ -108,11 +105,8 @@ export function Delta({ pct, invertido }: { pct: number | null; invertido?: bool
   const cor = bom ? "#4ade80" : "#f87171";
   return (
     <span style={sx(`display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:${cor}`)}>
-      <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth={2.6}
-        strokeLinecap="round" strokeLinejoin="round" aria-hidden
-        style={{ transform: subiu ? "none" : "rotate(180deg)" }}>
-        <path d="M12 19V5M5 12l7-7 7 7" />
-      </svg>
+      {/* A seta é UMA só, girada quando cai — duas artes divergiriam com o tempo. */}
+      <Icone nome="seta" tamanho={11} style={{ transform: subiu ? "none" : "rotate(180deg)" }} />
       {Math.abs(pct).toFixed(1).replace(".", ",")}%
       <span className="text-muted">vs. anterior</span>
     </span>

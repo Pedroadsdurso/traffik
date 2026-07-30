@@ -146,10 +146,7 @@ function CelulaOrcamento({
         aria-label={`Editar orçamento de ${linha.nome}`}
         style={sx("background:none;border:0;cursor:pointer;color:var(--color-accent);padding:2px;line-height:0;opacity:.75")}
       >
-        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2}
-          strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-          <path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z" />
-        </svg>
+        <Icone nome="editar" tamanho={13} />
       </button>
     </span>
   );

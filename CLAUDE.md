@@ -2850,24 +2850,16 @@ o seletor da sidebar já mostra a área ativa em toda tela.
 
 ## 🚦 COMECE AQUI — estado em 30/07/2026 e a fila da próxima sessão
 
-Tudo abaixo já está **em produção** (último deploy: `3bc1cda`). Sem commit local
-pendente e sem migration pendente.
+Tudo até `3bc1cda` está **em produção**. **A padronização visual terminou** — os
+dois itens que faltavam (aproveitamento do espaço das 4 telas + os SVGs legados)
+foram feitos em 30/07/2026 e estão **na árvore de trabalho, ainda SEM COMMIT**,
+aguardando o teste do usuário. Sem migration pendente — o deploy é só push.
 
-### ⚠️ Fila, em ordem — só faltam DUAS coisas da padronização visual
+### ⚠️ Fila da próxima sessão
 
-**1. Aproveitamento do espaço (Problema 4 do usuário).** Quatro telas têm um card
-pequeno no canto e o resto vazio: **Integrações › Webhooks, Integrações › Pixel,
-Integrações › UTMs e Taxas e Despesas**. Reorganizar para usar a largura, sem
-esticar componente nem deixar buraco.
-
-> ⚠️ Este é o **único item que não é substituição** — precisa de olho no
-> resultado, não de regex. As 4 telas usam `grid auto-fit minmax(360px,1fr)`.
-
-**2. ~25 SVGs inline legados → `ui/Icone`.** Eles ainda estão em `viewBox="0 0 256 256"`
-com `strokeWidth` de 16 a 20, enquanto o `Icone` novo padronizou **24×24 e traço
-1,75**. Estão em `Sidebar`, `Header`, `AdsTable`, `EditDashboardDrawer`,
-`BlockContent`, `chartKit` e `FeesView`. Cabe junto do item 1 — mexe nos mesmos
-arquivos.
+Não há item de padronização visual pendente. O que sobrou é **faxina de código
+morto** (lista em "Pendências abertas", abaixo) e o **import/export do Bloco 8**,
+que ficou de fora de propósito.
 
 ### O que NÃO está pendente (não refaça)
 
@@ -2879,6 +2871,8 @@ arquivos.
 | Scripts expostos | ✅ UTMs e Pixel em gaveta |
 | Bloco 8 (Regras) | ✅ completo, menos import/export (fora de propósito) |
 | Áreas de Trabalho | ✅ sessões 1–4 + exclusão com escolha |
+| Aproveitamento do espaço | ✅ as 4 telas refeitas em 30/07 — ver a seção própria |
+| SVGs em 256×256 | ✅ **zero**. `Icon.tsx` (`NavIcon`) foi deletado |
 
 ### 🔴 Cinco regras que custaram caro — não reabra
 
@@ -2894,6 +2888,120 @@ arquivos.
 5. **Helper consumido pela UI não pode morar em módulo que importa Prisma.**
    `FeesView` é client component; o import arrastou o driver `pg` (`dns`, `fs`)
    para o bundle e quebrou o build. Ver `lib/areas/taxas.ts`.
+6. **`align-items:start` num grid de cards mata o rodapé alinhado.** Com `start`
+   cada card fica só com a altura do próprio conteúdo, o `margin-top:auto` do
+   rodapé não tem folga, e um nome que quebra em 3 linhas desalinha os botões de
+   toda a fileira. Grade de cards com rodapé usa `stretch`.
+
+## 🧱 Aproveitamento do espaço nas 4 telas (30/07/2026)
+
+Quatro telas tinham um card pequeno no canto e o resto vazio. As quatro usavam
+`grid auto-fit minmax(360px,1fr)`, que dá metade da tela a cada bloco
+independentemente de quanto conteúdo cada um tem.
+
+> ### ⚠️ O erro de projeto era supor MUITOS itens. O caso comum é UM.
+> Cheguei a dar **1,5fr** aos gateways de Webhooks por serem "o caminho
+> principal". Ficou pior: com **um** gateway — que é o normal, quem usa a
+> ferramenta tem um checkout — o card de 290px ficava sozinho num track de
+> 1350px. Era o mesmo "card no canto", só menor.
+>
+> **Dimensione a coluna pelo caso de 1–2 itens, não pelo de 10.** Colunas iguais
+> de ~680px cabem exatamente 2 trilhas de card: 1 webhook + o tile de adicionar
+> preenchem a fileira, e com 4 viram duas fileiras cheias.
+
+| Tela | Antes | Agora |
+|---|---|---|
+| **Webhooks** | 2 colunas `auto-fit`, linhas de largura total, conteúdo em 200px de altura | 2 colunas iguais; gateways em **grade de cards**; estado vazio da chave explica **quando** ela serve |
+| **Pixel** | `max-width:920px`, cada pixel numa linha de 35px | full width, **um card** com intro + grade de cards; chip âmbar de "não envia nada" |
+| **UTMs** | card esquerdo = um título e um botão (tudo dentro do modal) | as **3 plataformas na tela**, com Copiar na linha; o código segue no modal |
+| **Taxas** | coluna de 1050px, `Nome da despesa` com 1050px de largura | **3 cards de custo lado a lado** + sidebar; formulário que **embrulha** |
+
+### O tile "+" dentro da grade é layout, não só ação
+
+`+ Adicionar` como **tile tracejado no fim da grade** (padrão que Integrações ›
+Anúncios já usava) é o que garante que a fileira nunca fique com um card solto.
+
+> ⚠️ **Onde há tile, NÃO há botão no cabeçalho.** Os dois seriam a mesma ação em
+> dois lugares — o erro do "Editar" duplicado no card de webhook. A regra que
+> ficou: **galeria usa tile; lista usa botão no cabeçalho** (por isso Credenciais
+> de API, que é lista numa coluna estreita, manteve o botão).
+
+### Detalhes que não são óbvios
+
+- **`minmax(0,1fr)` em vez de `1fr`** em todo grid de 2 colunas: com `fr` puro o
+  mínimo do track é o conteúdo, e uma linha longa do `<pre>` do payload ou um nome
+  de despesa comprido **estoura o track e cria rolagem horizontal na página**.
+- **`item` da grade é `div` com borda, não `.card`** quando está dentro de um
+  `.card`: o fundo seria o mesmo do pai e o cartão desapareceria.
+- **`FormAdicionar` embrulha com `flex:1 1 140px` + `min-width:0`**, sem media
+  query. Sem o `min-width:0` o conteúdo define o mínimo do item flex, o `wrap`
+  nunca acontece e a linha estoura o card.
+- **O modal de "Parâmetros de URL" foi MANTIDO** — a regra do Bloco 11 (dado
+  verboso não aparece na listagem) continua valendo. O que entrou no card foi a
+  **escolha** da plataforma, com "Copiar" na própria linha.
+
+> ### ⛔ Espaço vazio NÃO se preenche com bloco de código
+> Cheguei a abrir o "Como usar" das Credenciais de API por padrão (`<details open>`)
+> quando não havia chave, com o argumento de que era o momento em que a pessoa
+> precisava do payload — e de que enchia a coluna. **Reprovado pelo usuário em
+> 30/07/2026, nas duas frentes:** um bloco de código escancarado e, pior, uma
+> explicação que só um dev entenderia (*"envie um **POST** para o **endpoint** com
+> a chave no **cabeçalho** `Authorization`; os nomes dos campos são
+> **tolerantes**"*).
+>
+> **Quem lê esta tela é gestor de tráfego. Quem consome aquele bloco é a pessoa
+> que fez o checkout dele.** Então:
+> - o `<details>` volta a nascer **fechado**, e chama-se **"O que entregar para
+>   quem cuida do seu site"** — o título já diz a quem interessa;
+> - o texto de dentro começa com *"você não precisa entender o que aparece aqui"*
+>   e manda gerar a chave e repassar dois blocos;
+> - a URL e o exemplo ganharam rótulos em português (*"Endereço para enviar as
+>   vendas"*, *"Exemplo de como enviar"*) em vez de nada;
+> - **o vazio da coluna é preenchido pelo estado vazio da chave**, que explica em
+>   linguagem normal *quando* uma chave é necessária (checkout sob medida, ou
+>   plataforma fora da lista). Isso é conteúdo útil; o code dump não era.
+>
+> Vale a regra de microcópia que já existia, aplicada ao caso: **POST, endpoint,
+> cabeçalho, payload e "campos tolerantes" são jargão de PROGRAMAÇÃO e saem.**
+> `gateway` e `checkout` são vocabulário do usuário e ficam.
+
+## 🎨 Convergência de ícones CONCLUÍDA (30/07/2026)
+
+Os 11 SVGs em `viewBox="0 0 256 256"` (`strokeWidth` de 16 a 20) foram migrados
+para `ui/Icone`, que é 24×24 com traço 1,75. **`Icon.tsx` (`NavIcon`) foi
+deletado.** 27 nomes novos no `MAPA`, ~35 pontos de uso.
+
+> ### ⛔ Banco de `path` em string é COMO a divergência volta
+> Dois lugares guardavam `icon: "M40 40 h72…"` num array de configuração — o `NAV`
+> da `Sidebar` (7 ícones) e as `ABAS` do `AdsManagerView` (4). Parecia dado,
+> era desenho, e escapava de qualquer padronização de tamanho e traço.
+>
+> **Campo de ícone dirigido por dados guarda um `NomeIcone`, nunca um `path`.**
+
+- **`Icone` ganhou `style?: CSSProperties`**, mesclado depois da base. É só para
+  `transform`/`animation`/`opacity` — a seta do delta que gira 180° na queda, o
+  caret do menu, o "Atualizar" que roda, a opacidade do estado vazio. **Não é
+  porta para cor:** cor passa por `cor`, senão volta a haver hex solto na view.
+- **`IconeEvento` do feed deixou de receber cor.** A pílula em volta já pinta
+  `color:<cor do evento>` e o ícone herda por `currentColor`.
+- **`pix` é `QrCode`**: no Brasil o Pix *é* o QR code. O losango genérico anterior
+  não dizia nada.
+- **Não passam por aqui, de propósito:** os `<svg>` de `Funnel`, `Donut`,
+  `CountryMap`, `AreaChart` e o `Sparkline` do `chartKit` são telas de gráfico
+  desenhadas por coordenada. `Select`, `Checkbox`, `InfoTip` e `WorkspaceSelect`
+  têm um SVG cada, já em 24×24, que é o desenho interno do primitivo.
+
+### Achados de quebra
+
+- **`EditDashboardDrawer` é código MORTO e inalcançável.** Está montado em
+  `DashboardShell`, mas **ninguém chama `openEditDash`** — quem edita o dashboard
+  é o painel inline "Métricas disponíveis" do Bloco 2. Entra na faxina.
+- **`AdsManagerView` mostrava `{contagem} item(ns)`**, que o `plural()` existe
+  para eliminar. Corrigido para "2 itens" / "nada aqui".
+- **A logo da Cartpanda ficou mais exposta.** Antes só aparecia nas abas do modal;
+  agora está numa das 3 linhas de destino da aba UTMs. Segue sendo o caso ruim
+  documentado (panda preto em fundo transparente, quase invisível no tema
+  escuro) — resolver exige arte em versão clara.
 
 ### Comandos
 
@@ -2918,6 +3026,9 @@ arquivo local, de propósito.
 - **Nav morto no `useTraffikState`** (`navAnalise`, `pageTitle`, `activeTab`,
   `fbTabs`…), o gerador de link/snippet antigo (`utmUrl`, `snippetText`) e o
   `ruleForm` com ~37 handlers, órfão desde que a `RulesView` foi reescrita.
+- **`EditDashboardDrawer` + `editDashOpen`/`openEditDash`/`closeEditDash`/
+  `metricList`** — a gaveta está montada no `DashboardShell` mas **nada a abre**;
+  quem edita o dashboard é o painel inline do Bloco 2. Descoberto em 30/07/2026.
 - **`Workspace.accountIds` / `webhookIds` / `pixelConfigIds` / `products`** —
   mortos, mantidos pela regra dos dois deploys.
 - **`DashboardLayout.workspaceId` nullable** — o NOT NULL entra num 2º deploy.

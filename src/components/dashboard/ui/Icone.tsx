@@ -3,24 +3,54 @@
 import {
   AlertTriangle,
   ArrowLeftRight,
+  ArrowUp,
   Ban,
+  Barcode,
   BarChart3,
   Bell,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
   CircleCheck,
   Clock,
   Check,
   Compass,
+  CreditCard,
   DollarSign,
+  Eye,
   Globe,
+  Image as ImageIcon,
   Info,
+  Layers,
+  LayoutGrid,
+  LineChart,
+  Link,
   Link2,
+  ListFilter,
+  LogOut,
   MapPin,
+  MonitorPlay,
+  Moon,
+  MousePointerClick,
+  Pencil,
+  Percent,
+  QrCode,
+  Receipt,
+  RefreshCw,
   Settings2,
+  ShoppingCart,
+  SlidersHorizontal,
+  Star,
+  Sun,
   Pin,
   Sparkles,
+  Target,
   Trash2,
   Undo2,
+  UserPlus,
+  Wallet,
   X,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 
@@ -43,15 +73,26 @@ import { sx } from "@/lib/sx";
  * instalar. São SVGs com traço uniforme, `currentColor` e `viewBox` 24×24, que é
  * exatamente o padrão para o qual estamos convergindo.
  *
- * ## ⚠️ Convergência: 24×24 e traço 1,75
+ * ## ✅ Convergência CONCLUÍDA: 24×24 e traço 1,75
  *
- * O produto tinha **dois sistemas de coordenada** misturados — `0 0 24 24` (14
- * usos) e `0 0 256 256` (11 usos) — com `strokeWidth` de 1 a 20. Visualmente
- * parecidos, mas cada ícone novo exigia decidir qual sistema, e errar aparece.
- * Tudo o que passa por aqui é 24×24 com o mesmo traço.
+ * O produto tinha **dois sistemas de coordenada** misturados — `0 0 24 24` e
+ * `0 0 256 256`, com `strokeWidth` de 1 a 20. Visualmente parecidos, mas cada
+ * ícone novo exigia decidir qual sistema, e errar aparece. Em 30/07/2026 os 11
+ * SVGs em 256×256 foram migrados para cá e o `Icon.tsx` (`NavIcon`) foi
+ * **deletado** — não existe mais nenhum ícone de conteúdo fora deste mapa.
  *
  * ⚠️ **Ícone novo entra NESTE mapa**, não solto na view. É o que impede a
  * divergência de voltar.
+ *
+ * ⚠️ **Banco de `path` em string é a forma que a divergência volta.** Tanto o
+ * `NavIcon` quanto as abas do Gerenciador guardavam `icon: "M40 40 h72…"` num
+ * array de configuração — parecia dado, era desenho, e escapava de qualquer
+ * padronização. Se precisar de ícone dirigido por dados, o campo guarda um
+ * `NomeIcone`, nunca um `path`.
+ *
+ * ⚠️ **Os `<svg>` de `Funnel`, `Donut`, `CountryMap`, `AreaChart` e o
+ * `Sparkline` do `chartKit` NÃO passam por aqui** — são telas de gráfico
+ * desenhadas por coordenada, não ícones. Não tente unificá-los.
  */
 const MAPA = {
   aviso: AlertTriangle,
@@ -74,6 +115,47 @@ const MAPA = {
   vendaPendente: Clock,
   relatorio: BarChart3,
   sino: Bell,
+
+  // ── Navegação da sidebar (eram um banco de `path` em `Icon.tsx`) ──
+  painel: LayoutGrid,
+  gerenciador: Target,
+  criativos: ImageIcon,
+  regras: Zap,
+  integracoes: Link,
+  taxas: Percent,
+  sair: LogOut,
+
+  // ── Controles de interface ──
+  temaClaro: Sun,
+  temaEscuro: Moon,
+  chevronCima: ChevronUp,
+  chevronBaixo: ChevronDown,
+  chevronDireita: ChevronRight,
+  editar: Pencil,
+  atualizar: RefreshCw,
+  ajustes: SlidersHorizontal,
+  destaque: Star,
+  grafico: LineChart,
+  seta: ArrowUp,
+
+  // ── Formas de pagamento. `pix` é QrCode porque no Brasil o Pix É o QR code —
+  //    o losango genérico anterior não dizia nada. ──
+  pix: QrCode,
+  cartao: CreditCard,
+  boleto: Barcode,
+  pagamento: Wallet,
+
+  // ── Tipos de evento do feed de atividade ──
+  clique: MousePointerClick,
+  carrinho: ShoppingCart,
+  lead: UserPlus,
+  visita: Eye,
+
+  // ── Abas do Gerenciador de Anúncios ──
+  contas: Receipt,
+  conjuntos: ListFilter,
+  anuncios: MonitorPlay,
+  camadas: Layers,
 } satisfies Record<string, LucideIcon>;
 
 export type NomeIcone = keyof typeof MAPA;
@@ -96,11 +178,19 @@ export function Icone({
   tamanho = 16,
   cor = "neutro",
   className,
+  style,
 }: {
   nome: NomeIcone;
   tamanho?: number;
   cor?: keyof typeof CORES;
   className?: string;
+  /**
+   * ⚠️ Só para `transform`, `animation` e `opacity` — o ícone que gira quando o
+   * menu abre, a seta do delta que aponta para baixo na queda, o "Atualizar" que
+   * roda enquanto sincroniza. **Não é uma porta para cor:** cor passa por `cor`,
+   * senão a paleta de intenções deixa de valer e voltamos a ter hex solto na view.
+   */
+  style?: React.CSSProperties;
 }) {
   const Svg = MAPA[nome];
   return (
@@ -113,7 +203,7 @@ export function Icone({
       // pesado ao lado do corpo de texto, 1,5 desaparece no tema escuro.
       strokeWidth={1.75}
       color={CORES[cor]}
-      style={sx("flex:none;display:block")}
+      style={{ ...sx("flex:none;display:block"), ...style }}
     />
   );
 }

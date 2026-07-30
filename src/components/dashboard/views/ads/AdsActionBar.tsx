@@ -4,6 +4,7 @@ import { plural } from "@/lib/format";
 import { useEffect, useRef, useState } from "react";
 
 import { sx } from "@/lib/sx";
+import { Icone } from "../../ui/Icone";
 import { Modal } from "../../ui/Modal";
 
 export type Nivel = "campaign" | "adset" | "ad";
@@ -121,11 +122,14 @@ export function AdsActionBar({
             onClick={() => setMenuAberto((o) => !o)} aria-haspopup="menu" aria-expanded={menuAberto}
             style={sx("display:inline-flex;align-items:center;gap:7px")}>
             {nada ? "Ações" : `${n} selecionada${n > 1 ? "s" : ""}`}
-            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2}
-              strokeLinecap="round" strokeLinejoin="round" aria-hidden
-              style={{ transform: menuAberto ? "rotate(180deg)" : "none", transition: "transform var(--dur-fast) var(--ease-out)" }}>
-              <path d="M6 9l6 6 6-6" />
-            </svg>
+            <Icone
+              nome="chevronBaixo"
+              tamanho={13}
+              style={{
+                transform: menuAberto ? "rotate(180deg)" : "none",
+                transition: "transform var(--dur-fast) var(--ease-out)",
+              }}
+            />
           </button>
 
           {menuAberto && (

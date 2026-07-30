@@ -19,6 +19,7 @@ import { plural } from "@/lib/format";
 import { CONFIG } from "@/lib/explicacoes";
 import { sx } from "@/lib/sx";
 import { Select } from "../../ui/Select";
+import { Icone } from "../../ui/Icone";
 import { InfoTip } from "../../ui/InfoTip";
 import { Drawer } from "../../ui/Drawer";
 import { SnippetBox } from "../../ui/SnippetBox";
@@ -169,47 +170,106 @@ export function PixelView() {
   }
 
   return (
-    <div style={sx("display:flex;flex-direction:column;gap:var(--space-3);max-width:920px")}>
-      <div className="card">
-        <div style={sx("display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-2)")}>
-          <div>
-            <div className="card-kicker">Pixel</div>
-            <div className="card-title">Pixels da Meta + Conversions API</div>
-            <p className="card-body" style={sx("margin:4px 0 0")}>
-              Cadastre um pixel, configure quais eventos disparar e gere o script para instalar no seu site.
-            </p>
-          </div>
-          <button className="btn btn-primary" type="button" onClick={openNew} style={sx("white-space:nowrap")}>
-            + Adicionar Pixel
+    /* O `max-width:920px` saiu: num container de ~1390px ele deixava 470px de ar
+       morto à direita, e cada pixel era uma linha de 35px dentro dele. */
+    <div style={sx("display:flex;flex-direction:column;gap:var(--space-4)")}>
+      {/* Intro e galeria dentro do MESMO card, como o bloco de Webhooks — assim as
+          duas abas de Integrações lêem como irmãs. Em cards separados, a intro
+          virava uma faixa de 2.200px com três linhas de texto e o resto vazio.
+
+          ⚠️ Sem botão de adicionar no cabeçalho: quem adiciona é o tile tracejado
+          no fim da grade. Os dois juntos seriam a mesma ação em dois lugares. */}
+      <div className="card" style={sx("gap:var(--space-3)")}>
+        <div style={sx("max-width:70ch")}>
+          <div className="card-kicker">Pixel</div>
+          <div className="card-title">Pixels da Meta + Conversions API</div>
+          <p className="card-body" style={sx("margin:4px 0 0")}>
+            Cadastre um pixel, configure quais eventos disparar e gere o script para instalar no seu site.
+          </p>
+        </div>
+
+        {/* Grade de cards + tile tracejado de adicionar no fim, igual à vitrine de
+            perfis de Integrações › Anúncios. */}
+        <div style={sx("display:grid;grid-template-columns:repeat(auto-fill,minmax(265px,1fr));gap:var(--space-3);align-items:stretch")}>
+        {pixels.map((px) => {
+          const eventosAtivos = px.rules.filter((r) => r.enabled).length;
+          // Pixel sem nenhum pixel da Meta, ou com todos sem token, NÃO envia nada
+          // — e aparecia como "Ativo" na listagem. O único jeito de descobrir era
+          // abrir a gaveta.
+          const semDestino = px.metaPixels.length === 0 || px.metaPixels.every((m) => !m.hasToken);
+          return (
+            /* Item da grade é div com borda, NÃO `.card`: dentro de um `.card` o
+               fundo seria o mesmo do pai e o cartão desapareceria. Igual a Webhooks. */
+            <div
+              key={px.id}
+              style={sx(
+                "border:1px solid var(--color-border);border-radius:var(--radius-md,12px);padding:var(--space-3);" +
+                  "display:flex;flex-direction:column;gap:var(--space-3)",
+              )}
+            >
+              <div style={sx("display:flex;align-items:flex-start;gap:8px")}>
+                <span className="card-title" style={sx("font-size:15px;line-height:1.25;min-width:0;flex:1;word-break:break-word")}>
+                  {px.name}
+                </span>
+                <span className={px.enabled ? "tag tag-accent" : "tag tag-neutral"} style={sx("flex:none")}>
+                  {px.enabled ? "Ativo" : "Inativo"}
+                </span>
+              </div>
+
+              <div style={sx("display:grid;grid-template-columns:1fr 1fr;gap:var(--space-2)")}>
+                <div>
+                  <div style={sx("font-size:17px;font-variant-numeric:tabular-nums;line-height:1.1")}>{px.metaPixels.length}</div>
+                  <div className="card-meta">{plural(px.metaPixels.length, "pixel da Meta", "pixels da Meta")}</div>
+                </div>
+                <div>
+                  <div style={sx("font-size:17px;font-variant-numeric:tabular-nums;line-height:1.1")}>{eventosAtivos}</div>
+                  <div className="card-meta">{plural(eventosAtivos, "evento ativo", "eventos ativos")}</div>
+                </div>
+              </div>
+
+              {semDestino && (
+                <div style={sx("display:flex;gap:7px;align-items:flex-start;font-size:11.5px;line-height:1.45;color:var(--color-warning,#fbbf24)")}>
+                  <Icone nome="aviso" tamanho={13} cor="aviso" />
+                  <span>
+                    {px.metaPixels.length === 0
+                      ? "Nenhum pixel da Meta — os eventos não chegam ao Facebook."
+                      : "Falta conectar: sem token, os eventos não chegam ao Facebook."}
+                  </span>
+                </div>
+              )}
+
+              <div style={sx("display:flex;align-items:center;gap:8px;margin-top:auto;padding-top:var(--space-2);border-top:1px solid var(--color-divider)")}>
+                <Toggle on={px.enabled} onClick={() => toggle(px.id)} />
+                <span style={sx("flex:1")} />
+                <button className="btn btn-secondary" type="button" onClick={() => openEdit(px)}
+                  style={sx("font-size:12px;padding:5px 10px;white-space:nowrap")}>
+                  Editar / ver
+                </button>
+                <button className="btn btn-ghost" type="button" onClick={() => remove(px.id)}
+                  style={sx("font-size:12px;white-space:nowrap")}>
+                  Remover
+                </button>
+              </div>
+            </div>
+          );
+        })}
+
+          <button
+            type="button"
+            onClick={openNew}
+            style={sx(
+              "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:150px;" +
+                "border:1px dashed var(--color-accent);border-radius:var(--radius-md,12px);background:transparent;" +
+                "color:var(--color-accent);cursor:pointer;padding:var(--space-3);text-align:center",
+            )}
+          >
+            <span style={sx("font-size:28px;line-height:1")}>+</span>
+            <span style={sx("font-size:13px")}>
+              {pixels.length === 0 ? "Cadastrar seu primeiro pixel" : "Adicionar pixel"}
+            </span>
           </button>
         </div>
       </div>
-
-      {pixels.length === 0 ? (
-        <div className="card text-muted" style={sx("font-size:13px")}>Nenhum pixel cadastrado ainda.</div>
-      ) : (
-        pixels.map((px) => (
-          <div className="card" key={px.id}>
-            <div style={sx("display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);flex-wrap:wrap")}>
-              <div>
-                <div style={sx("display:flex;align-items:center;gap:8px")}>
-                  <span className="card-title" style={sx("font-size:15px")}>{px.name}</span>
-                  <span className={px.enabled ? "tag tag-accent" : "tag tag-neutral"}>{px.enabled ? "Ativo" : "Inativo"}</span>
-                </div>
-                <div className="card-meta">
-                  {plural(px.metaPixels.length, "pixel da Meta", "pixels da Meta")} ·{" "}
-                  {plural(px.rules.filter((r) => r.enabled).length, "evento ativo", "eventos ativos")}
-                </div>
-              </div>
-              <div style={sx("display:flex;align-items:center;gap:10px")}>
-                <Toggle on={px.enabled} onClick={() => toggle(px.id)} />
-                <button className="btn btn-secondary" type="button" onClick={() => openEdit(px)}>Editar / ver</button>
-                <button className="btn btn-ghost" type="button" onClick={() => remove(px.id)}>Remover</button>
-              </div>
-            </div>
-          </div>
-        ))
-      )}
 
       <Drawer
         aberta={modalOpen}

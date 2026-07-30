@@ -1,4 +1,5 @@
 import { sx } from "@/lib/sx";
+import { Icone } from "./ui/Icone";
 import type { TraffikView } from "./useTraffikState";
 
 export function EditDashboardDrawer({ v }: { v: TraffikView }) {
@@ -17,10 +18,7 @@ export function EditDashboardDrawer({ v }: { v: TraffikView }) {
             <div className="text-muted" style={sx("font-size:12px")}>Escolha e reordene os cards de métrica</div>
           </div>
           <button className="btn btn-ghost btn-icon" type="button" onClick={v.closeEditDash} aria-label="Fechar">
-            <svg viewBox="0 0 256 256" width="16" height="16" fill="none" stroke="currentColor" strokeWidth={18} strokeLinecap="round">
-              <line x1="64" y1="64" x2="192" y2="192" />
-              <line x1="192" y1="64" x2="64" y2="192" />
-            </svg>
+            <Icone nome="erro" tamanho={16} />
           </button>
         </div>
         <div style={sx("display:flex;flex-direction:column;gap:6px;margin-top:var(--space-2)")}>
@@ -29,14 +27,10 @@ export function EditDashboardDrawer({ v }: { v: TraffikView }) {
               <button className="sw" role="switch" aria-checked={m.on} onClick={m.toggle} />
               <span style={sx(`flex:1;font-size:14px;${m.on ? "" : "opacity:.45"}`)}>{m.label}</span>
               <button className="btn btn-ghost btn-icon" style={sx("width:26px;height:26px")} type="button" onClick={m.moveUp} aria-label="Subir">
-                <svg viewBox="0 0 256 256" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={20} strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="64,160 128,96 192,160" />
-                </svg>
+                <Icone nome="chevronCima" tamanho={14} />
               </button>
               <button className="btn btn-ghost btn-icon" style={sx("width:26px;height:26px")} type="button" onClick={m.moveDown} aria-label="Descer">
-                <svg viewBox="0 0 256 256" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={20} strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="64,96 128,160 192,96" />
-                </svg>
+                <Icone nome="chevronBaixo" tamanho={14} />
               </button>
             </div>
           ))}

@@ -21,57 +21,101 @@ const GATEWAYS: { id: string; name: string; enabled: boolean }[] = [
 function WebhooksBlock({ v }: { v: TraffikView }) {
   return (
     <div className="card" style={sx("display:flex;flex-direction:column;gap:var(--space-3)")}>
-      <div style={sx("display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-2)")}>
-        <div>
-          <div className="card-kicker">Webhooks</div>
-          <div className="card-title">Recebimento de vendas</div>
-          <p className="card-body" style={sx("margin:4px 0 0")}>
-            Conecte o gateway de pagamento para que as vendas cheguem à Traffik em tempo real.
-          </p>
-        </div>
-        <button className="btn btn-primary" type="button" onClick={v.openWebhookModal} style={sx("white-space:nowrap")}>
-          + Adicionar Webhook
-        </button>
+      {/* ⚠️ Sem botão de adicionar aqui: quem adiciona é o tile tracejado no fim da
+          grade, como em Integrações › Anúncios. Os dois juntos seriam a mesma ação
+          em dois lugares — o erro do "Editar" duplicado no card de webhook. */}
+      <div>
+        <div className="card-kicker">Webhooks</div>
+        <div className="card-title">Recebimento de vendas</div>
+        <p className="card-body" style={sx("margin:4px 0 0;max-width:70ch")}>
+          Conecte o gateway de pagamento para que as vendas cheguem à Traffik em tempo real.
+        </p>
       </div>
 
-      {v.webhooks.length === 0 ? (
-        <div
-          className="text-muted"
-          style={sx("border:1px dashed var(--color-border);border-radius:var(--radius-md,12px);padding:var(--space-4);text-align:center;font-size:13px")}
-        >
-          Nenhum webhook cadastrado ainda. Clique em <strong>Adicionar Webhook</strong> para começar.
-        </div>
-      ) : (
-        // A URL NÃO aparece aqui: a listagem mostra só o essencial e o detalhe
-        // fica na gaveta de edição (padrão "revelar sob demanda").
-        v.webhooks.map((w) => (
-          <div
-            key={w.id}
-            style={sx("border:1px solid var(--color-border);border-radius:var(--radius-md,12px);padding:var(--space-3);display:flex;align-items:center;gap:10px;transition:border-color var(--dur-fast) var(--ease-out)")}
-          >
-            <LogoGateway id={w.platform} nome={v.webhookPlatformLabel(w.platform)} />
-            <div style={sx("min-width:0;flex:1")}>
-              <div style={sx("display:flex;align-items:center;gap:8px;flex-wrap:wrap")}>
-                <span className="card-title" style={sx("font-size:14px")}>{w.name}</span>
-                <span className={w.active ? "tag tag-accent" : "tag tag-neutral"}>{w.active ? "Ativado" : "Desativado"}</span>
+      {(
+        /**
+         * Cards numa grade em vez de linhas de largura total.
+         *
+         * As linhas jogavam nome à esquerda e três botões à extremidade oposta de
+         * uma faixa de 700px, com o meio vazio; e a tela toda cabia em 200px de
+         * altura num viewport de 745. Em card, cada gateway fica com a informação
+         * agrupada e a largura da tela é usada de verdade.
+         *
+         * ⚠️ A URL continua FORA daqui: a listagem mostra nome, status e uso, e o
+         * detalhe vive na gaveta de edição (padrão "revelar sob demanda").
+         */
+        <div style={sx("display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:var(--space-3);align-items:stretch")}>
+          {/* ⚠️ `align-items:stretch` (o padrão), NÃO `start`: com `start` cada card
+              fica só com a altura do próprio conteúdo, o `margin-top:auto` do rodapé
+              não tem folga para empurrar, e um nome que quebra em 3 linhas desalinha
+              os botões de toda a fileira. */}
+          {v.webhooks.map((w) => (
+            <div
+              key={w.id}
+              style={sx(
+                "border:1px solid var(--color-border);border-radius:var(--radius-md,12px);padding:var(--space-3);" +
+                  "display:flex;flex-direction:column;gap:var(--space-3);transition:border-color var(--dur-fast) var(--ease-out)",
+              )}
+            >
+              <div style={sx("display:flex;align-items:flex-start;gap:10px")}>
+                <LogoGateway id={w.platform} nome={v.webhookPlatformLabel(w.platform)} />
+                <div style={sx("min-width:0;flex:1")}>
+                  <div className="card-title" style={sx("font-size:14px;line-height:1.3;word-break:break-word")}>{w.name}</div>
+                  <div className="card-meta">{v.webhookPlatformLabel(w.platform)}</div>
+                </div>
+                <span className={w.active ? "tag tag-accent" : "tag tag-neutral"} style={sx("flex:none")}>
+                  {w.active ? "Ativado" : "Desativado"}
+                </span>
               </div>
-              <div className="card-meta">
-                {v.webhookPlatformLabel(w.platform)} · {plural(w.eventCount, "venda recebida", "vendas recebidas", "nenhuma venda ainda")}
-                {w.hasSecret ? " · conectado" : ""}
+
+              <div style={sx("display:flex;flex-direction:column;gap:2px")}>
+                <span style={sx("font-size:18px;font-variant-numeric:tabular-nums;line-height:1.1")}>{w.eventCount}</span>
+                <span className="card-meta">
+                  {plural(w.eventCount, "venda recebida", "vendas recebidas", "nenhuma venda ainda")}
+                  {w.hasSecret ? " · conectado" : ""}
+                </span>
+              </div>
+
+              <div style={sx("display:flex;align-items:center;gap:8px;margin-top:auto;padding-top:var(--space-2);border-top:1px solid var(--color-divider)")}>
+                <button className="sw" role="switch" aria-checked={w.active} onClick={() => v.toggleWebhook(w.id)}
+                  aria-label={`${w.active ? "Desativar" : "Ativar"} ${w.name}`} />
+                <span style={sx("flex:1")} />
+                <button className="btn btn-secondary" type="button" onClick={() => v.openEditWebhook(w)}
+                  style={sx("white-space:nowrap;font-size:12px;padding:5px 10px")}>
+                  Editar
+                </button>
+                <button className="btn btn-ghost" type="button" onClick={() => v.removeWebhook(w.id)}
+                  style={sx("white-space:nowrap;font-size:12px")}>
+                  Remover
+                </button>
               </div>
             </div>
-            <button className="sw" role="switch" aria-checked={w.active} onClick={() => v.toggleWebhook(w.id)}
-              aria-label={`${w.active ? "Desativar" : "Ativar"} ${w.name}`} />
-            <button className="btn btn-secondary" type="button" onClick={() => v.openEditWebhook(w)}
-              style={sx("white-space:nowrap")}>
-              Editar
-            </button>
-            <button className="btn btn-ghost" type="button" onClick={() => v.removeWebhook(w.id)}
-              style={sx("white-space:nowrap")}>
-              Remover
-            </button>
-          </div>
-        ))
+          ))}
+
+          {/**
+           * O tile de adicionar mora DENTRO da grade, como o "+ Adicionar perfil"
+           * de Integrações › Anúncios.
+           *
+           * ⚠️ É o que resolve o caso de UM webhook só: sem ele, um card de 290px
+           * ficava sozinho numa faixa de 1350px — exatamente o "card no canto" que
+           * estamos consertando. Com o tile a fileira lê como galeria, e o estado
+           * vazio deixa de precisar de um painel próprio.
+           */}
+          <button
+            type="button"
+            onClick={v.openWebhookModal}
+            style={sx(
+              "display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:150px;" +
+                "border:1px dashed var(--color-accent);border-radius:var(--radius-md,12px);background:transparent;" +
+                "color:var(--color-accent);cursor:pointer;padding:var(--space-3);text-align:center",
+            )}
+          >
+            <span style={sx("font-size:28px;line-height:1")}>+</span>
+            <span style={sx("font-size:13px")}>
+              {v.webhooks.length === 0 ? "Conectar seu primeiro gateway" : "Adicionar webhook"}
+            </span>
+          </button>
+        </div>
       )}
     </div>
   );
@@ -102,9 +146,10 @@ Content-Type: application/json
       <div style={sx("display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-2)")}>
         <div>
           <div className="card-kicker">Credenciais de API</div>
-          <div className="card-title">Integração genérica</div>
+          <div className="card-title">Checkout próprio</div>
           <p className="card-body" style={sx("margin:4px 0 0")}>
-            Gere uma chave para enviar vendas de qualquer sistema, sem depender de um gateway específico.
+            Se as suas vendas não vêm de um dos gateways ao lado, uma chave permite que o seu
+            próprio sistema registre as vendas aqui.
           </p>
         </div>
         <button className="btn btn-primary" type="button" onClick={v.openCredModal} style={sx("white-space:nowrap")}>
@@ -113,11 +158,18 @@ Content-Type: application/json
       </div>
 
       {v.apiCredentials.length === 0 ? (
+        /* O estado vazio explica QUANDO isto serve, em linguagem normal. É o que
+           ocupa a coluna de forma útil — antes essa vaga era preenchida abrindo o
+           bloco de código, que é o oposto de útil para quem lê esta tela. */
         <div
-          className="text-muted"
-          style={sx("border:1px dashed var(--color-border);border-radius:var(--radius-md,12px);padding:var(--space-4);text-align:center;font-size:13px")}
+          style={sx("border:1px dashed var(--color-border);border-radius:var(--radius-md,12px);padding:var(--space-4);font-size:13px;line-height:1.6")}
         >
-          Nenhuma credencial gerada. Crie uma para autenticar envios de venda via API.
+          <strong>Nenhuma chave criada ainda.</strong>
+          <div className="text-muted" style={sx("margin-top:4px")}>
+            Você só precisa de uma chave se o seu checkout foi feito sob medida, ou se usa uma
+            plataforma que ainda não está na lista ao lado. Ela é o que autoriza esse sistema a
+            registrar vendas na sua conta.
+          </div>
         </div>
       ) : (
         v.apiCredentials.map((c) => {
@@ -172,17 +224,56 @@ Content-Type: application/json
         })
       )}
 
+      {/**
+       * ⚠️ RECOLHIDO por padrão, e o texto de fora NÃO é para programador.
+       *
+       * Isto já esteve aberto quando não havia chave, "para encher a coluna", e o
+       * usuário reprovou as duas coisas: um bloco de código escancarado na tela e
+       * uma explicação que só um dev entenderia — falava de POST, endpoint,
+       * cabeçalho Authorization e "campos tolerantes".
+       *
+       * Quem lê esta tela é gestor de tráfego; quem consome o conteúdo daqui é a
+       * pessoa que fez o checkout dele. Então o texto de fora diz **o que fazer**
+       * (gerar a chave e repassar duas coisas) e avisa que o resto pode ser
+       * ignorado. O bloco técnico continua existindo porque é o que se entrega ao
+       * desenvolvedor — só não é mais empurrado na cara de quem não vai usá-lo.
+       *
+       * ⛔ Não reabra por padrão e não traga o jargão de volta.
+       */}
       <details style={sx("border-top:1px solid var(--color-border);padding-top:var(--space-2)")}>
-        <summary style={sx("cursor:pointer;font-size:13px;font-weight:600")}>Como usar</summary>
+        <summary style={sx("cursor:pointer;font-size:13px;font-weight:600")}>
+          O que entregar para quem cuida do seu site
+        </summary>
         <p className="card-body" style={sx("margin:var(--space-2) 0")}>
-          Envie um <strong>POST</strong> para o endpoint abaixo com a chave no cabeçalho <code>Authorization</code>.
-          Campos aceitos são tolerantes (aceita <code>value/valor/amount</code>, <code>status/situacao</code> etc.).
+          Você não precisa entender o que aparece aqui. Gere uma chave acima, copie os dois
+          blocos abaixo e mande para quem fez o seu checkout — é o suficiente para a pessoa
+          ligar o seu sistema à Traffik.
         </p>
+
+        <div className="card-kicker" style={sx("margin-bottom:4px")}>Endereço para enviar as vendas</div>
+        <div style={sx("display:flex;align-items:center;gap:8px;margin-bottom:var(--space-3)")}>
+          <input
+            className="input"
+            readOnly
+            value={ingestUrl}
+            style={sx("flex:1;min-width:0;font-size:12px;font-family:ui-monospace,monospace")}
+            onFocus={(e) => e.target.select()}
+          />
+          <button className="btn btn-secondary" type="button" onClick={() => v.copyCredKey("__url__", ingestUrl)}
+            style={sx("white-space:nowrap")}>
+            {v.copiedCredId === "__url__" ? "Copiado!" : "Copiar"}
+          </button>
+        </div>
+
+        <div className="card-kicker" style={sx("margin-bottom:4px")}>Exemplo de como enviar</div>
         <pre
           style={sx("background:var(--color-bg,#0b0b0f);border:1px solid var(--color-border);border-radius:8px;padding:var(--space-3);font-size:11.5px;font-family:ui-monospace,monospace;overflow-x:auto;white-space:pre;margin:0")}
         >
           {payloadExample}
         </pre>
+        <p className="text-muted" style={sx("font-size:11.5px;margin:var(--space-2) 0 0;line-height:1.5")}>
+          Os nomes dos campos aceitam as variações mais comuns, em português e em inglês.
+        </p>
       </details>
     </div>
   );
@@ -336,7 +427,24 @@ function CredentialModal({ v }: { v: TraffikView }) {
 export function WebhooksView({ v }: { v: TraffikView }) {
   return (
     <div style={sx("display:flex;flex-direction:column;gap:var(--space-3)")}>
-      <div style={sx("display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:var(--space-4);align-items:start")}>
+      {/**
+       * Duas colunas de peso IGUAL, cada uma com ~680px.
+       *
+       * ⚠️ Cheguei a dar 1,5fr aos gateways por serem o caminho principal, e ficou
+       * pior: **o caso comum é UM gateway**. Num track de 1350px o card de 290px
+       * ficava sozinho com 1000px de vazio ao lado — o mesmo "card no canto" que
+       * estamos consertando, só menor. Com 680px cabem exatamente 2 colunas de
+       * card, então 1 webhook + o tile de adicionar preenchem a fileira; com 4,
+       * viram duas fileiras cheias.
+       *
+       * ⚠️ `minmax(0,…)` e não `1fr 1fr` puro: com `fr` puro o mínimo do track é o
+       * conteúdo, e uma linha longa do `<pre>` do payload estouraria a coluna e
+       * criaria rolagem horizontal na página inteira.
+       *
+       * Grade fixa de 2 colunas como a de Taxas e Despesas — este shell é
+       * desktop-first (sidebar de 236px fixa) e não tem ponto de empilhamento.
+       */}
+      <div style={sx("display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-4);align-items:start")}>
         <WebhooksBlock v={v} />
         <ApiCredentialsBlock v={v} />
       </div>

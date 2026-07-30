@@ -47,24 +47,12 @@ export function Header() {
           aria-label={theme === "dark" ? "Alternar para Tema Claro" : "Alternar para Tema Escuro"}
           title={theme === "dark" ? "Tema Claro" : "Tema Escuro"}
         >
-          {theme === "dark" ? (
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="5" />
-              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-            </svg>
-          ) : (
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-            </svg>
-          )}
+          <Icone nome={theme === "dark" ? "temaClaro" : "temaEscuro"} tamanho={18} />
         </button>
 
         <div style={sx("position:relative")}>
           <button className="btn btn-secondary btn-icon" type="button" onClick={v.toggleNotifOpen} aria-label="Notificações" style={sx("position:relative")}>
-            <svg viewBox="0 0 256 256" width="18" height="18" fill="none" stroke="currentColor" strokeWidth={16} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M128 32 a56 56 0 00-56 56 c0 46 -24 58 -24 72 h160 c0 -14 -24 -26 -24 -72 a56 56 0 00-56 -56 Z" />
-              <path d="M104 216 a24 24 0 0048 0" />
-            </svg>
+            <Icone nome="sino" tamanho={18} />
             {v.notifUnread > 0 && (
               <span style={sx("position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--color-accent);color:var(--color-bg);font-size:10px;font-weight:700;display:grid;place-items:center")}>
                 {v.notifUnread > 9 ? "9+" : v.notifUnread}

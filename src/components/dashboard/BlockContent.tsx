@@ -10,6 +10,7 @@ import { AreaChart } from "./ui/AreaChart";
 import { CountryMap } from "./ui/CountryMap";
 import { Donut } from "./ui/Donut";
 import { Funnel } from "./ui/Funnel";
+import { Icone, type NomeIcone } from "./ui/Icone";
 import { InfoTip } from "./ui/InfoTip";
 import { useDensidade } from "./ui/useDensidade";
 import { METRICAS } from "@/lib/explicacoes";
@@ -107,17 +108,12 @@ function Barras({
 /** Ícone do método de pagamento. */
 function IconePagamento({ nome }: { nome: string }) {
   const n = nome.toLowerCase();
-  const d =
-    n.includes("pix") ? "M12 2l4 4-4 4-4-4 4-4zm0 12l4 4-4 4-4-4 4-4zM2 12l4-4 4 4-4 4-4-4zm12 0l4-4 4 4-4 4-4-4z"
-    : n.includes("cart") ? "M2 7h20v12H2zM2 11h20"
-    : n.includes("bolet") ? "M4 5v14M8 5v14M12 5v14M16 5v14M20 5v14"
-    : "M12 2a10 10 0 100 20 10 10 0 000-20zM8 12h8";
-  return (
-    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={1.8}
-      strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ flex: "none", opacity: 0.75 }}>
-      <path d={d} />
-    </svg>
-  );
+  const icone: NomeIcone =
+    n.includes("pix") ? "pix"
+    : n.includes("cart") ? "cartao"
+    : n.includes("bolet") ? "boleto"
+    : "pagamento";
+  return <Icone nome={icone} tamanho={14} style={{ opacity: 0.75 }} />;
 }
 
 /**
@@ -179,22 +175,23 @@ function AprovacaoBloco({ v }: { v: TraffikView }) {
   );
 }
 
-/** Ícone por tipo de evento do feed. */
-function IconeEvento({ tipo, cor }: { tipo: string; cor: string }) {
-  const d =
-    tipo === "clique" ? "M9 3l10 7-4.5 1.5L17 17l-2.5 1.5-2.5-5L9 17V3z"
-    : tipo === "checkout" || tipo === "add_to_cart" ? "M6 6h15l-1.5 9h-12zM6 6L5 3H2m4 17a1 1 0 100 2 1 1 0 000-2zm11 0a1 1 0 100 2 1 1 0 000-2z"
-    : tipo === "lead" ? "M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"
-    : tipo === "pageview" ? "M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7zm10 3a3 3 0 100-6 3 3 0 000 6z"
-    : tipo === "venda_aprovada" ? "M20 6L9 17l-5-5"
-    : tipo === "venda_pendente" ? "M12 7v5l3 2M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-    : "M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L14.7 3.9a2 2 0 00-3.4 0z";
-  return (
-    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke={cor} strokeWidth={2}
-      strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ flex: "none" }}>
-      <path d={d} />
-    </svg>
-  );
+/**
+ * Ícone por tipo de evento do feed.
+ *
+ * ⚠️ **Não recebe cor.** A pílula em volta já pinta `color: <cor do evento>`, e o
+ * ícone herda por `currentColor` — o `cor` que existia aqui repassava o mesmo hex
+ * duas vezes e seria hoje a única cor solta fora da paleta de `ui/Icone`.
+ */
+function IconeEvento({ tipo }: { tipo: string }) {
+  const icone: NomeIcone =
+    tipo === "clique" ? "clique"
+    : tipo === "checkout" || tipo === "add_to_cart" ? "carrinho"
+    : tipo === "lead" ? "lead"
+    : tipo === "pageview" ? "visita"
+    : tipo === "venda_aprovada" ? "vendaAprovada"
+    : tipo === "venda_pendente" ? "vendaPendente"
+    : "aviso";
+  return <Icone nome={icone} tamanho={13} />;
 }
 
 /**
@@ -244,7 +241,7 @@ function FeedBloco({ v }: { v: TraffikView }) {
                   style={sx(`animation:fade-rise 300ms ${Math.min(i * 18, 260)}ms var(--ease-out) both`)}>
                   <td>
                     <span style={sx(`display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:11px;white-space:nowrap;background:color-mix(in srgb, ${f.cor} 16%, transparent);color:${f.cor}`)}>
-                      <IconeEvento tipo={f.type} cor={f.cor} />
+                      <IconeEvento tipo={f.type} />
                       {f.typeLabel}
                     </span>
                   </td>
