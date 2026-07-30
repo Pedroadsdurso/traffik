@@ -2862,6 +2862,44 @@ pelo usuário em 30/07/2026.
 Segundo gateway, com a camada de parsers que suporta muitos outros depois.
 **Destrava o item 2.**
 
+> ### ✅ O CRITÉRIO DE ACEITE: o teste do décimo gateway
+> **Integrar o 10º gateway tem de custar um arquivo de parser + o cadastro da
+> plataforma. Zero mudança em qualquer outro lugar.**
+>
+> Se integrar o próximo exigir mexer em rota, em `ingestSale`, na UI de
+> Webhooks, num `switch` ou num `if` de plataforma, **a arquitetura falhou** —
+> não importa quão limpo esteja o parser. O teste não é "o código está bonito",
+> é "quantos arquivos eu toco".
+>
+> Hoje a rota `/api/webhook/sale/[webhookId]` já escolhe o parser pela
+> `platform`, e o `GATEWAYS` da `WebhooksView` já é um array extensível. Os dois
+> são o embrião certo — o trabalho é levar isso até o fim, não recomeçar.
+
+> ### 🎛️ CAPACIDADES são propriedade do REGISTRO, nunca caso especial no código
+> Gateways diferem no que conseguem entregar, e **essa diferença tem de ser
+> declarada como dado**, ao lado do parser:
+>
+> | Capacidade | Por que importa | Se faltar |
+> |---|---|---|
+> | **Manda o IP do comprador?** | é a fonte confiável do país da venda | a venda cai no fallback do clique, e **55,6% do tráfego humano passa pelo datacenter da Meta** — o país vira estimativa |
+> | **Manda `fbc`/`fbp`?** | melhora a correspondência na CAPI | perde sinal de atribuição |
+> | **Manda taxas já calculadas?** | evita recalcular gateway/imposto | o cálculo cai em `lib/financeiro.ts`, com as taxas cadastradas |
+> | **Manda telefone? Em que formato?** | E.164 antes do hash da CAPI | ver `lib/facebook/telefone.ts` |
+> | **Reentrega o mesmo evento?** | idempotência | já coberto pelo upsert monotônico |
+>
+> ⚠️ **Declarar, e não descobrir por `if`.** Um `if (platform === "CAKTO")`
+> espalhado pela ingestão é exatamente o que faz o 10º gateway custar caro. A
+> capacidade vira campo do registro; o código lê o campo.
+>
+> ⚠️ **A tela precisa ler isso.** É o que permite avisar "este gateway não manda
+> o IP do comprador, então o país destas vendas é estimado" — hoje o chip âmbar
+> "estimado" do ranking já existe e é alimentado por `countrySource`. A
+> capacidade declarada é o que torna o aviso **preventivo** em vez de
+> retrospectivo.
+>
+> A tabela por gateway já iniciada está em "REQUISITO DE TODA INTEGRAÇÃO DE
+> GATEWAY NOVA" — **Kirvano ✅ confirmado com 15 vendas reais**, os demais ❓.
+
 > ### 🔴 Restrição que vale desde já
 > **O reprocessamento PRECISA preservar `country`/`countrySource` quando já não
 > são nulos.** `ingestSale` recalcula `paisDaVenda` a cada ingestão e a 2ª fonte
