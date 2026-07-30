@@ -2857,9 +2857,15 @@ aguardando o teste do usuário. Sem migration pendente — o deploy é só push.
 
 ### ⚠️ Fila da próxima sessão
 
-Não há item de padronização visual pendente, e o **lint está em zero**. O que
-sobrou é **faxina de código morto** (lista em "Pendências abertas", abaixo) e o
-**import/export do Bloco 8**, que ficou de fora de propósito.
+**Retomar pela GEOLOCALIZAÇÃO** — ver a seção "🌍 GEOLOCALIZAÇÃO — ESTADO
+ATUAL". A base local está pronta e testada, mas **ainda não é consultada por
+ninguém**: falta chamar `resolverPais()` nas rotas. Há uma **ordem que não pode
+inverter** registrada lá (backfill do país ANTES da anonimização, que é
+irreversível e exige backup).
+
+Fora isso: **faxina de código morto** (lista em "Pendências abertas") e o
+**import/export do Bloco 8**, que ficou de fora de propósito. O lint está em
+zero e não há item de padronização visual pendente.
 
 ⚠️ **Nenhuma escrita real contra a Graph API foi exercida** — segue sendo a
 verificação mais importante em aberto. Ver "Pendências abertas".
@@ -3407,72 +3413,76 @@ comprimento.
 **exigência da Meta**, que recusa esses dois hasheados. Nome do comprador **não
 é enviado**.
 
-## 🌍 GEOLOCALIZAÇÃO — estado e a ordem que NÃO pode inverter
+## 🌍 GEOLOCALIZAÇÃO — ESTADO ATUAL (fim da sessão de 30/07/2026)
 
-### ✅ Pronto
-- **`lib/geo/clientIp.ts`** — extração única do IP, robusta atrás de proxy.
-  Substituiu **três** cópias de `x-forwarded-for.split(",")[0]`.
-- **`npm run test:ip`** — 27 asserções (Vercel, VPS+nginx, Cloudflare, forja).
-- **`GET /api/diagnostico/ip`** — diz qual `PROXIES_CONFIAVEIS` usar no ambiente
-  real, em vez de deduzir.
-- Pasta `lib/geo/` criada, pronta para receber a base.
+### ✅ Pronto e testado — **mas ainda INERTE**
 
-### ✅ Pronto (continuação)
-- **`npm run geo:atualizar`** → `scripts/gen-ip-country.mjs` baixa o
-  `user-country-ipv4.csv` (**PDDL-1.0**, sem conta) e gera
-  `lib/geo/ipCountryData.ts`: **290.457 faixas · 251 países · 1,4 MB binários**
-  em base64. **COMMITADO**, como `worldPaths.ts` e `public/*.js`.
-- **`lib/geo/pais.ts`** — `resolverPais(header, ip)`. Busca binária, ~19
-  comparações, sem I/O e sem rede.
-- **`npm run test:pais`** — 30 asserções com IPs reais (US, AU, BR).
+- **Extração de IP única e testável** (`lib/geo/clientIp.ts`), cobrindo Vercel,
+  VPS+nginx e Cloudflare. Substituiu **três** cópias de
+  `x-forwarded-for.split(",")[0]`, que pega o valor que o CLIENTE controla.
+- **Base `user-country`**: 290.457 faixas · 251 países · 1,4 MB binários ·
+  **PDDL-1.0** (domínio público, sem exigir conta). Artefato **commitado**.
+- **`npm run geo:atualizar`** regenera o artefato (rotina mensal).
+- **`resolverPais()`** funcionando: header da plataforma como **atalho**, base
+  local como **caminho principal** — sem o header o resultado é **idêntico**.
+- **`/api/diagnostico/ip`** protegida por `DIAGNOSTICO_IP` (**404** sem a
+  variável — 404 e não 403, para nem confirmar que a rota existe).
+- **186 asserções em 6 suítes, 0 falhas** (`pais` 30 · `ip` 27 · `telefone` 28 ·
+  `financeiro` 42 · `periodo` 33 · `areas` 26).
 
-> ⚠️ **Cobertura CONTÍNUA**: os buracos do espaço IPv4 (blocos reservados) são
-> entradas explícitas apontando para "desconhecido". Por isso o fim de uma faixa
-> é o início da próxima e bastam **5 bytes** por entrada, em vez de 9. Sem isso,
-> um IP num bloco reservado herdaria o país da faixa anterior — pior que
-> responder "não identificado".
+> ### 🔴 A BASE AINDA NÃO É CONSULTADA POR NINGUÉM
+> O `/api/track/click` e o webhook **não chamam `resolverPais()`**. Tudo acima
+> existe, está testado e commitado, e **o globo continua vazio** até o passo 1
+> abaixo. Não confunda "pronto" com "ligado".
+
+### ⏳ PRÓXIMOS PASSOS, NESTA ORDEM EXATA
+
+1. **Chamar `resolverPais()`** no `/api/track/click` e no webhook → gravar em
+   `Click.country` e `Sale.country`.
+2. **Backfill do país** nos cliques que ainda têm IP legível.
+3. **SÓ ENTÃO**: hash do IP (`sha256(ENCRYPTION_KEY + ip)`) e limpeza do IP em
+   `Sale.rawPayload` e `WebhookLog.payloadRaw`.
+4. **Ranking do globo** com "Não identificado" agrupado, nunca sumindo.
+
+> ### 🔴🔴 REGRA QUE NÃO PODE INVERTER: passo 2 ANTES do passo 3
 >
-> ⚠️ **IPv4 apenas.** IPv6 devolve `null`, tratado como não identificado, nunca
-> como um país errado.
+> Anonimizar antes do backfill **destrói para sempre** a única chance de derivar
+> o país do histórico. Não há como voltar atrás.
 >
-> ⚠️ **Atualização mensal**: rodar `npm run geo:atualizar`, conferir o resumo
-> (nº de faixas e países) e commitar a saída.
-
-### ⏳ Falta, NESTA ORDEM
-1. ✅ ~~Gerador da base~~ — **mas a base ainda NÃO é consultada por ninguém.**
-   Falta chamar `resolverPais()` no `/api/track/click` e no webhook, e gravar em
-   `Click.country` / `Sale.country`. (`ip-location-db`, **PDDL-1.0**, sem conta).
-   `user-country-ipv4.csv`, formato `start_ip,end_ip,país`, **sem cabeçalho**.
-   Converter em array binário ordenado (~1,2 MB) e **commitar**, como
-   `worldPaths.ts` e `public/*.js` já fazem. Busca binária em memória.
-2. Resolução de país no `/api/track/click` e no webhook.
-3. **Hash do IP** — `sha256(ENCRYPTION_KEY + ip)`, mesmo padrão do
-   `ApiCredential.keyHash`. Preserva o casamento de `matchClick`; truncar
-   para /24 quebraria (vários visitantes dividem /24).
-4. Limpeza do IP em `Sale.rawPayload` e `WebhookLog.payloadRaw` **antes** de
-   persistir — hoje o IP fica ali indefinidamente.
-5. **Backfill** do país nos `Click` que ainda têm IP.
-6. Ranking do globo com **"Não identificado"** agrupado, nunca sumindo.
-
-> ### 🔴🔴 A ORDEM DO BACKFILL NÃO PODE INVERTER
-> **PAÍS PRIMEIRO, ANONIMIZAÇÃO DEPOIS.**
+> **O passo 3 é IRREVERSÍVEL — exige backup de produção antes:**
+> ```bash
+> npm run backup -- --url '<connection string de produção>'
+> ```
 >
-> O backfill (5) só é possível enquanto `Click.ip` ainda tem o IP legível.
-> Anonimizar antes (3/4) **destrói a única chance** de derivar o país do
-> histórico — e não há como voltar atrás.
->
-> Na prática: aplicar 1 e 2, rodar o backfill, **conferir a contagem**, e só
-> então aplicar 3 e 4.
+> Ordem prática: aplicar o passo 1 → rodar o backfill → **conferir a contagem de
+> registros atualizados** → só então o passo 3.
 
-> ### ⛔ A BASE LOCAL é o caminho principal. O header da Vercel é só atalho.
-> O usuário vai migrar para **VPS**. Se existir `x-vercel-ip-country`, usa (evita
-> a busca); se não existir, cai na base local **com o mesmo resultado**. **Nada
-> pode depender do header para funcionar** — senão a migração quebra a
-> geolocalização inteira e o sintoma só aparece com tráfego real.
+### 📌 Decisões registradas
 
-⚠️ **MaxMind e IP2Location LITE exigem conta** e o usuário não consegue criar.
-O `geo-whois-asn-country` que eu havia recomendado **não existe mais**: o repo
-deixou de usar WHOIS de RIR porque as AUPs proíbem mapeamento geográfico.
+- **A base local é o caminho PRINCIPAL; o header da Vercel é só atalho**, porque
+  o produto vai migrar para **VPS dedicada**. Nada pode depender do header para
+  funcionar — senão a migração quebra a geolocalização e o sintoma só aparece
+  com tráfego real já perdido.
+- **`PROXIES_CONFIAVEIS`**: errar para **MAIS** aceita IP forjado; errar para
+  **MENOS** grava o IP do proxy e todo visitante vira o mesmo endereço. Tabela
+  por ambiente documentada na seção "IP do visitante".
+- **MaxMind e IP2Location LITE exigem cadastro** e estão descartados. O
+  `geo-whois-asn-country` que chegou a ser cogitado **não existe mais**: o
+  repositório deixou de usar WHOIS de RIR porque as AUPs proíbem mapeamento
+  geográfico.
+- **Cobertura contínua** no artefato: buracos do espaço IPv4 são entradas
+  explícitas para "desconhecido". 5 bytes por entrada em vez de 9, e um IP em
+  bloco reservado não herda o país da faixa anterior.
+- **IPv4 apenas.** IPv6 devolve `null` (não identificado), nunca país errado.
+
+### ⚠️ Pendência conhecida
+
+`/api/diagnostico/ip` manipula `process.env.PROXIES_CONFIAVEIS` para simular
+cada valor e restaura no `finally`. Em serverless é seguro (uma requisição por
+instância); **numa VPS com concorrência, duas chamadas simultâneas poderiam se
+atrapalhar** por um instante. Não afeta o `/api/track/click` — o efeito seria um
+número errado na própria página de diagnóstico. **Ajustar para receber o valor
+por parâmetro em vez de mexer no ambiente.**
 
 ### Comandos
 
