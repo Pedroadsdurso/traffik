@@ -12,6 +12,7 @@ import {
   keyToDateColumn,
   zonedToUtc,
 } from "@/lib/timezone";
+import { calcularFinanceiro, type Composicao } from "@/lib/financeiro";
 import { janelaAnterior, janelaDoPeriodo, type PeriodoNome } from "@/lib/periodo";
 import type { PaymentMethod } from "@/generated/prisma/enums";
 
@@ -52,6 +53,14 @@ export interface DashboardData {
     spend: number;
     sales: number;
     pendentes: number;
+    /**
+     * VALOR somado das vendas pendentes, em R$.
+     *
+     * ⚠️ O card mostra o VALOR, não a contagem. "12 vendas pendentes" não diz
+     * quanto dinheiro está na mesa — R$ 240,00 diz. A contagem continua em
+     * `pendentes`, exibida como informação secundária.
+     */
+    pendentesValor: number;
     reembolsadas: number;
     chargebackRate: number;
     ticket: number;
@@ -63,6 +72,8 @@ export interface DashboardData {
     ctr: number;
     clicks: number;
     profit: number;
+    /** Faturamento bruto menos gateway, coprodução, impostos e custo de produto. */
+    liquido: number;
     /** Faturamento ÷ compradores únicos (Bloco 4). */
     arpu: number;
     buyers: number;
@@ -78,6 +89,14 @@ export interface DashboardData {
     sparklines: Record<string, number[]>;
   };
   expenses: { gateway: number; tax: number; recurring: number; total: number };
+  /**
+   * Composição completa do líquido e do lucro, item por item.
+   *
+   * ⚠️ Vai inteira para o cliente porque o tooltip precisa mostrar CADA desconto.
+   * Um lucro sem decomposição é impossível de conferir — e `faltando` é o que
+   * denuncia desconto não cadastrado, que faz o líquido parecer maior.
+   */
+  financeiro: Composicao;
   products: { name: string; total: number; sales: number }[];
   sources: { name: string; total: number }[];
   payments: { name: string; total: number; count: number }[];
@@ -164,29 +183,6 @@ function resolveRange(f: DashboardFilters, tz: string): Range {
 
 function num(v: unknown): number {
   return typeof v === "number" ? v : Number(v ?? 0);
-}
-
-/** Custo de gateway + imposto + despesas recorrentes sobre um faturamento. */
-function computeExpenses(
-  expenses: { type: string; calc: string; amount: number; paymentMethod: PaymentMethod | null }[],
-  revenueByPayment: Map<PaymentMethod, number>,
-  totalRevenue: number,
-) {
-  let gateway = 0;
-  let tax = 0;
-  let recurring = 0;
-  for (const e of expenses) {
-    if (e.type === "TAXA_GATEWAY") {
-      // Base é o faturamento da forma de pagamento associada (ou tudo, se nula).
-      const base = e.paymentMethod ? revenueByPayment.get(e.paymentMethod) ?? 0 : totalRevenue;
-      gateway += e.calc === "PERCENTUAL" ? (base * e.amount) / 100 : e.amount;
-    } else if (e.type === "IMPOSTO") {
-      tax += e.calc === "PERCENTUAL" ? (totalRevenue * e.amount) / 100 : e.amount;
-    } else {
-      recurring += e.amount; // despesa recorrente no período (aproximação)
-    }
-  }
-  return { gateway, tax, recurring, total: gateway + tax + recurring };
 }
 
 async function windowAggregate(
@@ -406,6 +402,8 @@ export async function computeDashboard(userId: string, filters: DashboardFilters
       spend: summary.spend,
       sales: summary.salesCount,
       pendentes: summary.pendentes,
+      pendentesValor: summary.pendentesValor,
+      liquido: summary.financeiro.liquido,
       reembolsadas: summary.reembolsadas,
       chargebackRate: summary.chargebackRate,
       ticket: summary.ticket,
@@ -422,6 +420,7 @@ export async function computeDashboard(userId: string, filters: DashboardFilters
     deltas,
     chart,
     expenses: summary.expenses,
+    financeiro: summary.financeiro,
     products: summary.products,
     sources: summary.sources,
     payments: summary.payments,
@@ -441,7 +440,10 @@ function summarize(w: Window) {
   const approved = w.sales.filter((s) => s.status === "APROVADA");
   const revenue = approved.reduce((a, s) => a + num(s.value), 0);
   const salesCount = approved.length;
-  const pendentes = w.sales.filter((s) => s.status === "PENDENTE").length;
+  const pendentesLista = w.sales.filter((s) => s.status === "PENDENTE");
+  const pendentes = pendentesLista.length;
+  // ⚠️ VALOR, não contagem: é o que diz quanto dinheiro está esperando pagamento.
+  const pendentesValor = pendentesLista.reduce((a, v) => a + num(v.value), 0);
   const reembolsadas = w.sales.filter((s) => s.status === "REEMBOLSADA").length;
   const chargebacks = w.sales.filter((s) => s.status === "CHARGEBACK").length;
   const totalSalesEvents = w.sales.length;
@@ -462,13 +464,16 @@ function summarize(w: Window) {
   for (const s of approved) {
     revenueByPayment.set(s.paymentMethod, (revenueByPayment.get(s.paymentMethod) ?? 0) + num(s.value));
   }
-  const exp = computeExpenses(
-    w.expenses.map((e) => ({ ...e, amount: num(e.amount) })),
-    revenueByPayment,
-    revenue,
-  );
-  const profit = revenue - spend - exp.total;
-  const totalCost = spend + exp.total;
+  // ⚠️ A conta de lucro vive em `lib/financeiro.ts` — a MESMA função que os cards
+  // de Faturamento Líquido e Lucro usam, e que a tela de Taxas exibe. Era um
+  // `computeExpenses` local, e acrescentar os cards criaria uma segunda conta.
+  const fin = calcularFinanceiro({
+    bruto: revenue,
+    brutoPorPagamento: revenueByPayment,
+    gastoAnuncios: spend,
+    despesas: w.expenses.map((e) => ({ ...e, amount: num(e.amount) })),
+  });
+  const profit = fin.lucro;
   // ROI como **multiplicador** (Bloco 4), na mesma escala do ROAS: 1,87x.
   //
   // ⚠️ NÃO existe clamp aqui, e o piso de −1,00x é matemático, não um bug:
@@ -483,8 +488,8 @@ function summarize(w: Window) {
   // Sem custo nenhum o ROI é indefinido (dividir por zero), não "zero": devolver
   // 0 fazia a tela dizer "0,00x" — que se lê como empate — para uma conta que
   // faturou sem gastar. Agora vira `null` e a UI mostra "—".
-  const roi = totalCost > 0 ? profit / totalCost : null;
-  const margin = revenue ? (profit / revenue) * 100 : 0;
+  const roi = fin.roi;
+  const margin = fin.margem;
 
   // ARPU = faturamento ÷ compradores únicos. O comprador é identificado pelo
   // e-mail; vendas sem e-mail não dá para agrupar, então cada uma conta como um
@@ -595,7 +600,7 @@ function summarize(w: Window) {
   // proporção do faturamento daquela hora — não há como atribuí-las por hora,
   // então o rateio proporcional é a aproximação honesta. Gasto de anúncio vem
   // de métricas diárias e também é rateado.
-  const custoSobreReceita = revenue ? (spend + exp.total) / revenue : 0;
+  const custoSobreReceita = revenue ? (spend + fin.totalDescontos) / revenue : 0;
 
   // `hourInTz` em vez de `getHours()`: era exatamente aqui que uma venda das
   // 17h em Brasília aparecia às 20h — o processo na Vercel roda em UTC e
@@ -624,12 +629,15 @@ function summarize(w: Window) {
     .map((k) => ({ date: k, ...(diaMap.get(k) ?? { sales: 0, revenue: 0 }) }))
     .slice(-30);
 
-  const expenses = { gateway: exp.gateway, tax: exp.tax, recurring: exp.recurring, total: exp.total };
+  const expenses = { gateway: fin.gateway, tax: fin.impostos, recurring: fin.despesas, total: fin.totalDescontos };
 
   return {
-    revenue, salesCount, pendentes, reembolsadas, chargebackRate,
+    revenue, salesCount, pendentes, pendentesValor, reembolsadas, chargebackRate,
     spend, clicksCount, ticket, cpa, roas, ctr, profit, roi, margin, arpu, buyers,
     expenses, products, sources, payments, funnel, byHour, byDay, byCountry, approval,
+    // A composição inteira viaja até a UI: o tooltip do Faturamento Líquido e do
+    // Lucro precisa mostrar CADA desconto, senão o número é impossível de conferir.
+    financeiro: fin,
   };
 }
 

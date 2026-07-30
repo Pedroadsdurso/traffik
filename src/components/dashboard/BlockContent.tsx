@@ -61,13 +61,28 @@ function KpiBloco({ v, metric }: { v: TraffikView; metric: string }) {
           <InfoTip conteudo={{ ...METRICAS[metric]!, valores: v.valoresMetrica(metric) }} tamanho={12} />
         )}
       </div>
-      <div style={sx(`font-family:var(--font-heading);font-weight:500;font-size:${tamanhoNumero}px;line-height:1.1;font-variant-numeric:tabular-nums;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap`)}>
+      {/* ⚠️ A cor vem da métrica (`corFinanceira`), não da view: ROI, Lucro e
+          Margem ficam vermelhos no negativo. Decidir cor aqui faria a mesma
+          métrica aparecer de cores diferentes em telas diferentes. */}
+      <div style={sx(`font-family:var(--font-heading);font-weight:500;font-size:${tamanhoNumero}px;line-height:1.1;font-variant-numeric:tabular-nums;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap${k.cor ? `;color:${k.cor}` : ""}`)}>
         {k.value}
       </div>
       {(mostrarSparkline || mostrarDelta) && (
         <div style={sx("margin-top:auto;display:flex;flex-direction:column;gap:6px;min-height:0;overflow:hidden")}>
           {mostrarSparkline && <Sparkline valores={serie} />}
-          {mostrarDelta && <Delta pct={k.delta} invertido={k.invertido} />}
+          {/* ⚠️ Sem delta, o `Delta` imprimia "vs. período anterior" — um rótulo
+              de comparação para um card que NÃO compara nada. Cinco cards caíam
+              nisso (pendentes, reembolsadas, chargeback, líquido, lucro). Quando
+              a métrica não tem variação, quem informa é o `trendLabel`, que diz
+              algo de verdade: "12 vendas aguardando pagamento". */}
+          {mostrarDelta &&
+            (k.delta != null ? (
+              <Delta pct={k.delta} invertido={k.invertido} />
+            ) : (
+              <span className="text-muted" style={sx("font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap")}>
+                {k.trendLabel}
+              </span>
+            ))}
         </div>
       )}
     </Bloco>

@@ -12,6 +12,7 @@ import {
   type AdProfileDTO,
 } from "@/lib/actions/facebook";
 import type { PixelConfigDTO } from "@/lib/actions/pixels";
+import { corFinanceira } from "@/lib/financeiro";
 import type { PeriodoNome } from "@/lib/periodo";
 import type { NomeIcone } from "./ui/Icone";
 import {
@@ -51,7 +52,7 @@ import {
 import type { CreativeRow } from "@/lib/ads/creatives";
 import type { AdsOverview } from "@/lib/ads/overview";
 import type { DashboardData } from "@/lib/dashboard/metrics";
-import { brl, brl0, buildPoints, elapsed, multFmt, pct, roasFmt } from "@/lib/format";
+import { brl, brl0, buildPoints, elapsed, multFmt, pct, plural, roasFmt } from "@/lib/format";
 import { setLastWorkspaceId, type WorkspaceDTO } from "@/lib/actions/workspaces";
 import { DEFAULT_TIMEZONE } from "@/lib/timezone";
 import type { MetricKey, TabKey } from "./types";
@@ -201,11 +202,18 @@ interface State {
 }
 
 const DEFAULT_METRIC_ORDER: MetricKey[] = [
-  "faturamento", "gasto", "roas", "roi", "margem", "vendas",
+  "faturamento", "liquido", "lucroLiquido", "gasto", "roas", "roi", "margem", "vendas",
   "cpa", "ticket", "arpu", "ctr", "pendentes", "reembolsadas", "chargeback",
 ];
+/**
+ * ⚠️ Líquido e Lucro entram DESLIGADOS aqui, e isso não os esconde: o layout
+ * padrão do Dashboard (`blocks.ts`) é quem decide o que aparece de início, e
+ * este mapa só serve à lista antiga de "métricas disponíveis". Ligá-los aqui
+ * mudaria o dashboard de quem já tem layout salvo, sem pedir.
+ */
 const DEFAULT_METRIC_VISIBLE: Record<MetricKey, boolean> = {
-  faturamento: true, gasto: true, roas: true, roi: true, margem: true, vendas: true,
+  faturamento: true, liquido: false, lucroLiquido: false, gasto: true, roas: true, roi: true,
+  margem: true, vendas: true,
   cpa: true, ticket: true, arpu: false, ctr: false, pendentes: false, reembolsadas: false, chargeback: false,
 };
 
@@ -678,6 +686,9 @@ export function useTraffikState(
   const margin = k?.margin ?? 0;
   const ctr = k?.ctr ?? 0;
   const pendentes = k?.pendentes ?? 0;
+  const pendentesValor = k?.pendentesValor ?? 0;
+  const liquido = k?.liquido ?? 0;
+  const lucro = k?.profit ?? 0;
   const reembolsadas = k?.reembolsadas ?? 0;
   const chargebackRate = k?.chargebackRate ?? 0;
 
@@ -704,21 +715,55 @@ export function useTraffikState(
 
   const reg: Record<
     MetricKey,
-    { label: string; value: string; trendColor: string; trendPath: string; trendLabel: string; delta: number | null; invertido: boolean }
+    {
+      label: string;
+      value: string;
+      trendColor: string;
+      trendPath: string;
+      trendLabel: string;
+      delta: number | null;
+      invertido: boolean;
+      /** Cor do NÚMERO, quando a métrica é financeira. Ver `corFinanceira`. */
+      cor?: string;
+    }
   > = {
     faturamento: { label: "Faturamento", value: brl(revenue), ...trendOf("revenue") },
+    // ⚠️ Líquido e Lucro NÃO têm delta: o backend não calcula variação para eles
+    // (dependem das taxas do período, que não são reprocessadas na janela
+    // anterior). Um delta inventado aqui seria pior que nenhum.
+    liquido: {
+      label: "Faturamento líquido",
+      value: brl(liquido),
+      delta: null, invertido: false, trendColor: N, trendPath: UP_PATH,
+      trendLabel: "após taxas e impostos",
+      cor: corFinanceira(liquido, "lucro"),
+    },
+    lucroLiquido: {
+      label: "Lucro",
+      value: brl(lucro),
+      delta: null, invertido: false, trendColor: N, trendPath: UP_PATH,
+      trendLabel: "líquido − anúncios − despesas",
+      cor: corFinanceira(lucro, "lucro"),
+    },
     gasto: { label: "Gasto total", value: brl(spend), ...trendOf("spend", true) },
     roas: { label: "ROAS", value: roasFmt(roas), ...trendOf("roas") },
     // Bloco 4: ROI passa a ser multiplicador (era "1331%"), com 2 casas como
     // nos exemplos do roteiro. Sem custo no período não há ROI — mostra "—".
-    roi: { label: "ROI", value: roi != null ? multFmt(roi) : "—", ...trendOf("roi") },
-    margem: { label: "Margem de lucro", value: pct(margin), ...trendOf("margem") },
+    roi: { label: "ROI", value: roi != null ? multFmt(roi) : "—", ...trendOf("roi"), cor: corFinanceira(roi, "roi") },
+    margem: { label: "Margem de lucro", value: pct(margin), ...trendOf("margem"), cor: corFinanceira(margin, "lucro") },
     vendas: { label: "Vendas", value: String(sales), ...trendOf("sales") },
     cpa: { label: "CPA", value: brl(cpa), ...trendOf("cpa", true) },
     ticket: { label: "Ticket médio", value: brl(ticket), ...trendOf("ticket") },
     arpu: { label: "ARPU", value: brl(arpu), ...trendOf("arpu") },
     ctr: { label: "CTR", value: pct(ctr), ...trendOf("ctr") },
-    pendentes: { label: "Vendas pendentes", value: String(pendentes), delta: null, invertido: false, trendColor: N, trendPath: DOWN_PATH, trendLabel: "aguardando pgto." },
+    // ⚠️ VALOR em destaque, contagem como apoio. "12 vendas pendentes" não diz
+    // quanto dinheiro está na mesa; "R$ 240,00" diz.
+    pendentes: {
+      label: "Vendas pendentes",
+      value: brl(pendentesValor),
+      delta: null, invertido: false, trendColor: N, trendPath: DOWN_PATH,
+      trendLabel: plural(pendentes, "venda aguardando pagamento", "vendas aguardando pagamento", "nenhuma aguardando"),
+    },
     reembolsadas: { label: "Reembolsadas", value: String(reembolsadas), delta: null, invertido: false, trendColor: N, trendPath: DOWN_PATH, trendLabel: "no período" },
     chargeback: { label: "Taxa de chargeback", value: pct(chargebackRate), delta: null, invertido: false, trendColor: A, trendPath: UP_PATH, trendLabel: "sobre eventos de venda" },
   };
@@ -845,6 +890,35 @@ export function useTraffikState(
         setS((st) => ({ ...st, expenses: st.expenses.filter((x) => x.id !== e.id) }));
       },
     }));
+  /**
+   * Linhas editáveis de um tipo de despesa percentual.
+   *
+   * ⚠️ Extraído porque a mesma forma se repetia para imposto e ia se repetir para
+   * coprodução e custo de produto — quatro cópias do mesmo `onChange`/`commit`
+   * divergiriam na primeira correção.
+   */
+  const linhasPercentuais = (tipo: string) =>
+    s.expenses
+      .filter((e) => e.type === tipo)
+      .map((e) => ({
+        id: e.id,
+        name: e.name,
+        amountStr: String(e.amount),
+        onChange: (ev: React.ChangeEvent<HTMLInputElement>) => {
+          const amount = parseFloat(ev.target.value) || 0;
+          setS((st) => ({ ...st, expenses: st.expenses.map((x) => (x.id === e.id ? { ...x, amount } : x)) }));
+        },
+        commit: (ev: React.FocusEvent<HTMLInputElement>) =>
+          updateExpense(e.id, { amount: parseFloat(ev.target.value) || 0 }).catch(() => {}),
+        remove: async () => {
+          await deleteExpense(e.id);
+          setS((st) => ({ ...st, expenses: st.expenses.filter((x) => x.id !== e.id) }));
+        },
+      }));
+
+  const coproducaoExpenses = linhasPercentuais("COPRODUCAO");
+  const custoProdutoExpenses = linhasPercentuais("CUSTO_PRODUTO");
+
   const taxExpenses = s.expenses
     .filter((e) => e.type === "IMPOSTO")
     .map((e) => ({
@@ -1584,6 +1658,8 @@ export function useTraffikState(
 
     gatewayExpenses,
     taxExpenses,
+    coproducaoExpenses,
+    custoProdutoExpenses,
     despesaRows,
     // Novo gateway
     newGatewayMethod: s.newGatewayMethod,
@@ -1623,6 +1699,34 @@ export function useTraffikState(
       const amount = parseFloat(pct) || 0;
       if (!amount) return;
       const created = await createExpense({ name: nome.trim() || "Imposto", type: "IMPOSTO", calc: "PERCENTUAL", amount });
+      setS((st) => ({ ...st, expenses: [...st.expenses, created] }));
+    },
+    /**
+     * Coprodução/afiliado e custo de produto — os dois descontos que faltavam.
+     *
+     * ⚠️ São PERCENTUAIS sobre o faturamento, como o imposto. Sem eles
+     * cadastrados o Faturamento Líquido aparece maior do que é, e o card avisa.
+     */
+    addCoproducao: async (nome: string, pct: string) => {
+      const amount = parseFloat(pct) || 0;
+      if (!amount) return;
+      const created = await createExpense({
+        name: nome.trim() || "Coprodução",
+        type: "COPRODUCAO",
+        calc: "PERCENTUAL",
+        amount,
+      });
+      setS((st) => ({ ...st, expenses: [...st.expenses, created] }));
+    },
+    addCustoProduto: async (nome: string, pct: string) => {
+      const amount = parseFloat(pct) || 0;
+      if (!amount) return;
+      const created = await createExpense({
+        name: nome.trim() || "Custo de produto",
+        type: "CUSTO_PRODUTO",
+        calc: "PERCENTUAL",
+        amount,
+      });
       setS((st) => ({ ...st, expenses: [...st.expenses, created] }));
     },
     // Nova despesa recorrente

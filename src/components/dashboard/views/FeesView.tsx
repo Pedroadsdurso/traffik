@@ -144,6 +144,10 @@ export function FeesView({ v }: { v: TraffikView }) {
   const [gatewayPct, setGatewayPct] = useState("");
   const [taxNome, setTaxNome] = useState("");
   const [taxPct, setTaxPct] = useState("");
+  const [coprodNome, setCoprodNome] = useState("");
+  const [coprodPct, setCoprodPct] = useState("");
+  const [custoNome, setCustoNome] = useState("");
+  const [custoPct, setCustoPct] = useState("");
   const [despesaNome, setDespesaNome] = useState("");
   const [despesaValor, setDespesaValor] = useState("");
 
@@ -158,6 +162,8 @@ export function FeesView({ v }: { v: TraffikView }) {
   const faltando = faltamTaxas([
     ...(v.gatewayExpenses.length ? ["TAXA_GATEWAY"] : []),
     ...(v.taxExpenses.length ? ["IMPOSTO"] : []),
+    ...(v.coproducaoExpenses.length ? ["COPRODUCAO"] : []),
+    ...(v.custoProdutoExpenses.length ? ["CUSTO_PRODUTO"] : []),
   ]);
 
 
@@ -270,6 +276,78 @@ export function FeesView({ v }: { v: TraffikView }) {
               </CampoForm>
               <CampoForm>
                 <input className="input" style={sx("width:100%")} placeholder="% da alíquota" value={taxPct} onChange={(e) => setTaxPct(e.target.value)} inputMode="decimal" />
+              </CampoForm>
+            </FormAdicionar>
+          </div>
+        </div>
+
+        {/* Os dois descontos que faltavam para o Faturamento Líquido ser honesto.
+            São PERCENTUAIS sobre o faturamento, como o imposto. */}
+        <div className="card">
+          <div className="card-kicker">Coprodução e afiliados</div>
+          <div className="card-title">Comissões sobre a venda</div>
+          <div style={sx("display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-3)")}>
+            {v.coproducaoExpenses.length === 0 && (
+              <div className="text-muted" style={sx("font-size:13px")}>Nenhuma comissão cadastrada.</div>
+            )}
+            {v.coproducaoExpenses.map((c) => (
+              <div key={c.id} style={sx("display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)")}>
+                <span style={sx("font-size:14px")}>{c.name}</span>
+                <div style={sx("display:flex;align-items:center;gap:6px")}>
+                  <input className="input" style={sx("width:80px;text-align:right")} value={c.amountStr} onChange={c.onChange} onBlur={c.commit} inputMode="decimal" />
+                  <span className="text-muted">%</span>
+                  <RemoveBtn onClick={c.remove} />
+                </div>
+              </div>
+            ))}
+            <FormAdicionar
+              acao={
+                <button className="btn btn-secondary" type="button" disabled={!coprodPct.trim()}
+                  onClick={() => void v.addCoproducao(coprodNome, coprodPct).then(() => { setCoprodNome(""); setCoprodPct(""); })}>
+                  Adicionar comissão
+                </button>
+              }
+            >
+              <CampoForm>
+                <input className="input" style={sx("width:100%")} placeholder="Nome (ex.: Afiliado João)" value={coprodNome} onChange={(e) => setCoprodNome(e.target.value)} />
+              </CampoForm>
+              <CampoForm>
+                <input className="input" style={sx("width:100%")} placeholder="% da comissão" value={coprodPct} onChange={(e) => setCoprodPct(e.target.value)} inputMode="decimal" />
+              </CampoForm>
+            </FormAdicionar>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-kicker">Custo de produto</div>
+          <div className="card-title">Custo por venda realizada</div>
+          <div style={sx("display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-3)")}>
+            {v.custoProdutoExpenses.length === 0 && (
+              <div className="text-muted" style={sx("font-size:13px")}>Nenhum custo de produto cadastrado.</div>
+            )}
+            {v.custoProdutoExpenses.map((c) => (
+              <div key={c.id} style={sx("display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)")}>
+                <span style={sx("font-size:14px")}>{c.name}</span>
+                <div style={sx("display:flex;align-items:center;gap:6px")}>
+                  <input className="input" style={sx("width:80px;text-align:right")} value={c.amountStr} onChange={c.onChange} onBlur={c.commit} inputMode="decimal" />
+                  <span className="text-muted">%</span>
+                  <RemoveBtn onClick={c.remove} />
+                </div>
+              </div>
+            ))}
+            <FormAdicionar
+              acao={
+                <button className="btn btn-secondary" type="button" disabled={!custoPct.trim()}
+                  onClick={() => void v.addCustoProduto(custoNome, custoPct).then(() => { setCustoNome(""); setCustoPct(""); })}>
+                  Adicionar custo
+                </button>
+              }
+            >
+              <CampoForm>
+                <input className="input" style={sx("width:100%")} placeholder="Nome (ex.: Impressão + envio)" value={custoNome} onChange={(e) => setCustoNome(e.target.value)} />
+              </CampoForm>
+              <CampoForm>
+                <input className="input" style={sx("width:100%")} placeholder="% do faturamento" value={custoPct} onChange={(e) => setCustoPct(e.target.value)} inputMode="decimal" />
               </CampoForm>
             </FormAdicionar>
           </div>

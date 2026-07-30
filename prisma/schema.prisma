@@ -94,6 +94,10 @@ enum ExpenseType {
   TAXA_GATEWAY
   IMPOSTO
   DESPESA_RECORRENTE
+  /// Comissão de coprodutor ou afiliado — percentual sobre o faturamento.
+  COPRODUCAO
+  /// Custo do produto (produção, entrega, plataforma) — percentual ou fixo.
+  CUSTO_PRODUTO
 }
 
 enum ExpenseCalc {

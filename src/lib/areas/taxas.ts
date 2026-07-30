@@ -15,9 +15,20 @@
  * esquecer o imposto faz o lucro aparecer **maior do que é**, com número
  * plausível, e nada denuncia. Este é o que denuncia.
  */
+/**
+ * ⚠️ Os quatro descontos que compõem o Faturamento Líquido. Coprodução e custo de
+ * produto entraram em 30/07/2026 — sem eles na lista, faltar uma comissão de
+ * afiliado não gerava aviso nenhum e o líquido aparecia maior do que é.
+ *
+ * A ordem é a da cadeia de desconto, não alfabética.
+ */
+const DESCONTOS: [tipo: string, rotulo: string][] = [
+  ["TAXA_GATEWAY", "taxa do gateway"],
+  ["COPRODUCAO", "coprodução ou afiliado"],
+  ["IMPOSTO", "imposto"],
+  ["CUSTO_PRODUTO", "custo de produto"],
+];
+
 export function faltamTaxas(tipos: string[]): string[] {
-  const falta: string[] = [];
-  if (!tipos.includes("TAXA_GATEWAY")) falta.push("taxa do gateway");
-  if (!tipos.includes("IMPOSTO")) falta.push("imposto");
-  return falta;
+  return DESCONTOS.filter(([t]) => !tipos.includes(t)).map(([, rotulo]) => rotulo);
 }

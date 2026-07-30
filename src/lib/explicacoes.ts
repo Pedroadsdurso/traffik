@@ -70,6 +70,37 @@ export const METRICAS: Record<string, ConteudoInfo> = {
     formula: "Faturamento ÷ Gasto",
     fonte: "derivada",
   },
+  liquido: {
+    titulo: "Faturamento líquido",
+    corpo: [
+      "O que sobra do faturamento depois do que sai por causa da própria venda.",
+      "Não desconta anúncio nem despesa fixa — isso é o Lucro.",
+    ],
+    formula: "Bruto − taxa do gateway − coprodução − impostos − custo de produto",
+    alerta:
+      "Desconto que você não cadastrou em Taxas e Despesas vale ZERO — e aí este número aparece MAIOR do que a realidade, continuando plausível. O tooltip mostra a composição, e o que estiver faltando vem avisado.",
+    fonte: "derivada",
+  },
+  /**
+   * ⚠️ Chave PRÓPRIA, separada de `lucro`.
+   *
+   * `lucro` já existia e descreve o lucro BRUTO do Gerenciador ("não desconta
+   * taxas, impostos nem despesas"), que é uma métrica diferente com o mesmo nome
+   * de tela. Duas entradas com a mesma chave fariam o card do Dashboard exibir a
+   * explicação do Gerenciador — dizendo que NÃO desconta taxas, justamente o
+   * oposto do que ele faz.
+   */
+  lucroLiquido: {
+    titulo: "Lucro",
+    corpo: [
+      "O que realmente sobra no fim: o líquido menos o que você gastou para vender.",
+      "Vermelho é prejuízo.",
+    ],
+    formula: "Faturamento líquido − gasto com anúncios − despesas recorrentes",
+    alerta:
+      "Depende das taxas cadastradas. Sem taxa de gateway nem imposto lançados, o lucro aparece maior do que é.",
+    fonte: "derivada",
+  },
   roi: {
     titulo: "ROI — Retorno sobre o Investimento",
     corpo: [

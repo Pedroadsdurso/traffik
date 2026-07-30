@@ -4,6 +4,10 @@ import { useState } from "react";
 
 import { brl, brl0, pct } from "@/lib/format";
 import { derivar, somar, type LinhaBase } from "@/lib/ads/metrics";
+// ⚠️ A cor vem de `lib/financeiro.ts`. Aqui havia um ternário inline que pintava
+// lucro POSITIVO de verde — contra a regra do produto, em que só o negativo tem
+// cor. Duas telas decidindo cor por conta própria divergem.
+import { corFinanceira } from "@/lib/financeiro";
 import { sx } from "@/lib/sx";
 import { Checkbox } from "../../ui/Checkbox";
 import { Icone } from "../../ui/Icone";
@@ -299,9 +303,9 @@ export function AdsTable({
                   <td>{n0(l.results)}</td>
                   <td>{m.cpa != null ? brl(m.cpa) : traco}</td>
                   <td>{brl(l.revenue)}</td>
-                  <td style={sx(`color:${m.lucro > 0 ? "#4ade80" : m.lucro < 0 ? "#f87171" : "inherit"}`)}>{brl(m.lucro)}</td>
+                  <td style={sx(`color:${corFinanceira(m.lucro, "lucro")}`)}>{brl(m.lucro)}</td>
                   <td>{m.roas != null ? `${m.roas.toFixed(2).replace(".", ",")}x` : traco}</td>
-                  <td>{m.roi != null ? `${m.roi.toFixed(2).replace(".", ",")}x` : traco}</td>
+                  <td style={sx(`color:${corFinanceira(m.roi, "roi")}`)}>{m.roi != null ? `${m.roi.toFixed(2).replace(".", ",")}x` : traco}</td>
                   <td>{(l.ic ?? 0) > 0 ? n0(l.ic ?? 0) : traco}</td>
                   <td>{m.cpi != null ? brl(m.cpi) : traco}</td>
                   <td>{(l.cliquesAtribuidos ?? 0) > 0 ? n0(l.cliquesAtribuidos ?? 0) : traco}</td>
@@ -331,9 +335,9 @@ export function AdsTable({
               <td>{n0(totais.results)}</td>
               <td>{md.cpa != null ? brl(md.cpa) : traco}</td>
               <td>{brl(totais.revenue)}</td>
-              <td style={sx(`color:${md.lucro > 0 ? "#4ade80" : md.lucro < 0 ? "#f87171" : "inherit"}`)}>{brl(md.lucro)}</td>
+              <td style={sx(`color:${corFinanceira(md.lucro, "lucro")}`)}>{brl(md.lucro)}</td>
               <td>{md.roas != null ? `${md.roas.toFixed(2).replace(".", ",")}x` : traco}</td>
-              <td>{md.roi != null ? `${md.roi.toFixed(2).replace(".", ",")}x` : traco}</td>
+              <td style={sx(`color:${corFinanceira(md.roi, "roi")}`)}>{md.roi != null ? `${md.roi.toFixed(2).replace(".", ",")}x` : traco}</td>
               <td>{(totais.ic ?? 0) > 0 ? n0(totais.ic ?? 0) : traco}</td>
               <td>{md.cpi != null ? brl(md.cpi) : traco}</td>
               <td>{(totais.cliquesAtribuidos ?? 0) > 0 ? n0(totais.cliquesAtribuidos ?? 0) : traco}</td>

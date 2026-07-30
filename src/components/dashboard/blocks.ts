@@ -53,6 +53,8 @@ export function viewportDoBreakpoint(bp: string): "desktop" | "mobile" {
 const KPI_BLOCKS: BlockDef[] = (
   [
     ["faturamento", "Faturamento"],
+    ["liquido", "Faturamento líquido"],
+    ["lucroLiquido", "Lucro"],
     ["gasto", "Gasto total"],
     ["roas", "ROAS"],
     ["roi", "ROI"],

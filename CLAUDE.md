@@ -3238,11 +3238,77 @@ de erro **já estavam feitos**. O que faltava era o **"Atualizado há Xs"**: o
 é onde fica o botão, não havia como saber se o número é de agora ou de 20 minutos
 atrás. Ele desaparece enquanto sincroniza, porque aí quem informa é o botão.
 
+## 💰 Faturamento líquido, Lucro e cores (30/07/2026 — Prompt B)
+
+`src/lib/financeiro.ts` é a **conta única** de líquido, lucro, margem, ROI e das
+cores dessas métricas.
+
+### 🔴 Coprodução e custo de produto NÃO EXISTIAM
+
+`ExpenseType` tinha só `TAXA_GATEWAY`, `IMPOSTO` e `DESPESA_RECORRENTE`. Sem os
+dois tipos novos, o Faturamento Líquido só descontaria gateway e imposto e
+apareceria **maior que a realidade** — continuando plausível, que é o pior tipo de
+erro. Migration `20260730120000` acrescenta `COPRODUCAO` e `CUSTO_PRODUTO`
+(**aditiva**: `ALTER TYPE ... ADD VALUE`, nenhuma linha muda de tipo), e a tela de
+Taxas ganhou dois cards para cadastrá-los.
+
+### A cadeia
+
+```
+  Faturamento bruto        (vendas APROVADAS no período)
+− Taxa de gateway          (por FORMA DE PAGAMENTO, não sobre o total)
+− Coprodução / afiliados
+− Impostos
+− Custo de produto
+= FATURAMENTO LÍQUIDO
+− Gasto com anúncios
+− Despesas recorrentes
+= LUCRO
+```
+
+> ### ⚠️ Desconto não cadastrado vale ZERO — e `faltando` é o que denuncia
+> Nada é obrigatório, para a conta não quebrar. O efeito colateral é que o líquido
+> fica **maior que a realidade** e o número continua plausível. Por isso
+> `Composicao.faltando` devolve quais descontos estão ausentes, e o aviso âmbar da
+> tela de Taxas agora cobre os **quatro** (antes só gateway e imposto).
+> **Não remova esse campo sem tornar as taxas obrigatórias.**
+
+> ### ⚠️ A cor vem de `corFinanceira`, nunca decidida na view
+> - **Negativo é sempre VERMELHO** — prejuízo tem de saltar aos olhos.
+> - **ROI positivo é VERDE**; é uma nota de desempenho.
+> - **Lucro e margem positivos ficam na cor NORMAL, sem `+`.** Pintar todo lucro
+>   de verde tira o contraste de quando algo dá errado, e `+R$ 340` parece erro de
+>   digitação.
+>
+> O `AdsTable` tinha um ternário inline pintando lucro **positivo de verde** —
+> contra a regra. Foi substituído, e o ROI da tabela também passou a ter cor.
+
+> ### ⚠️ `lucroLiquido` e `lucro` são chaves DIFERENTES
+> `METRICAS.lucro` já existia e descreve o lucro **bruto** do Gerenciador ("não
+> desconta taxas, impostos nem despesas"). O card do Dashboard usa
+> **`lucroLiquido`**, com explicação própria. Uma chave só faria o card do
+> Dashboard exibir a explicação que diz o **oposto** do que ele faz.
+
+- **Vendas pendentes virou VALOR.** "12 vendas pendentes" não diz quanto dinheiro
+  está na mesa; `R$ 240,00` diz. A contagem ficou como linha de apoio.
+- **Card sem delta deixou de imprimir "vs. período anterior"** — um rótulo de
+  comparação num card que não compara nada. Cinco cards caíam nisso; agora usam o
+  `trendLabel`, que diz algo de verdade.
+- Líquido e Lucro **não têm delta** de propósito: dependem das taxas do período,
+  que não são reprocessadas na janela anterior. Delta inventado seria pior.
+- Os dois cards estão em **"Métricas disponíveis"**, arrastáveis. **Não entram no
+  layout padrão**, que é a transcrição aprovada de 12 KPIs.
+
+**`npm run test:financeiro` — 33 asserções**: cadeia completa, taxa incidindo só
+sobre a própria forma de pagamento, desconto ausente valendo zero **e** denunciado,
+ROI `null` com custo zero (não `0`), piso de −1,00x, valor fixo, e as 6 regras de cor.
+
 ### Comandos
 
 ```bash
 npm run test:areas       # 26 asserções, atribuição por área (backup de produção)
 npm run test:periodo     # 33 asserções, janelas de período (puro, TZ=UTC)
+npm run test:financeiro  # 33 asserções, líquido/lucro/ROI e cores (puro)
 npm run db:onde          # em qual banco o .env aponta
 npm run script:onde      # onde falta reinstalar o script de UTM
 npm run backup -- --url '<connection string>'   # SEMPRE com --url
