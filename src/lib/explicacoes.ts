@@ -295,6 +295,56 @@ export const CONFIG: Record<string, ConteudoInfo> = {
     corpo: ["De quanto em quanto tempo a regra é avaliada."],
     alerta: "Depende de um cron externo estar configurado — sem ele, nenhuma regra roda sozinha.",
   },
+  regraTeto: {
+    titulo: "Teto de orçamento",
+    corpo: [
+      "O valor máximo que esta regra pode colocar no orçamento diário. Ela nunca passa daí.",
+      "É obrigatório nas regras que aumentam orçamento.",
+    ],
+    alerta:
+      "Sem teto, uma regra de +20% aumentaria o orçamento a cada execução: 100 → 120 → 144 → 173… Por isso a Traffik recusa o aumento quando o teto está em branco.",
+  },
+  regraJanela: {
+    titulo: "Intervalo de execução",
+    corpo: [
+      "A faixa de horário em que a regra pode agir, no seu horário local.",
+      "Fora dela, ela não é avaliada — útil para não mexer em campanha de madrugada.",
+    ],
+    lista: ["Deixe em “qualquer hora” para rodar sempre", "22h → 6h atravessa a meia-noite"],
+  },
+  regraContas: {
+    titulo: "Contas de anúncio",
+    corpo: [
+      "Em quais contas esta regra pode agir. Em branco = todas as contas desta área de trabalho.",
+    ],
+    alerta:
+      "A regra nunca age em conta de outra área, mesmo em branco — a Traffik sempre limita ao que pertence à área onde ela foi criada.",
+  },
+  despesaArea: {
+    titulo: "Só nesta área de trabalho",
+    corpo: [
+      "Desmarcado, a taxa vale para todas as suas operações — é o certo para imposto e taxa de gateway.",
+      "Marcado, ela desconta só do lucro desta área.",
+    ],
+    alerta: "Marque apenas se o custo é exclusivo desta operação. Do contrário o lucro das outras áreas fica maior do que a realidade.",
+  },
+  contaUnicaPorArea: {
+    titulo: "Uma conta, uma área",
+    corpo: [
+      "Cada conta de anúncio pertence a uma área de trabalho só.",
+      "É o que impede o mesmo investimento de ser contado como se fossem duas operações — o que inflaria ROAS, ROI e CPA das duas.",
+    ],
+    lista: ["Conta já usada aparece bloqueada, com o nome da área que a ocupa", "“Mover para cá” transfere ao salvar"],
+  },
+  utmPorArea: {
+    titulo: "Este script é desta área",
+    corpo: [
+      "Instale-o na página de vendas desta operação. Cada área tem o seu.",
+      "Ele faz o tráfego sem campanha identificada (direto, orgânico, outros canais) entrar nesta área em vez de cair na Principal.",
+    ],
+    alerta:
+      "Tráfego pago já é separado pelo utm_campaign da campanha na Meta — o script resolve o resto. Scripts antigos continuam funcionando.",
+  },
   regraLimite: {
     titulo: "Limite diário de execuções",
     corpo: [

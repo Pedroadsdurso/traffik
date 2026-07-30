@@ -4,10 +4,12 @@ import { useState } from "react";
 
 import type { CreateRuleInput, RuleDTO } from "@/lib/actions/rules";
 import type { RuleCondition } from "@/lib/rules/engine";
+import { METRICAS as AJUDA } from "@/lib/explicacoes";
 import { brl } from "@/lib/format";
 import { sx } from "@/lib/sx";
 import { Checkbox } from "../../ui/Checkbox";
 import { Drawer } from "../../ui/Drawer";
+import { InfoTip, type ConteudoInfo } from "../../ui/InfoTip";
 import { ListaSelecionavel } from "../../ui/ListaSelecionavel";
 import { Select } from "../../ui/Select";
 
@@ -184,10 +186,28 @@ export function paraInput(d: RascunhoRegra, workspaceId: string | null): CreateR
   };
 }
 
-function Campo({ label, dica, children }: { label: string; dica?: string; children: React.ReactNode }) {
+/**
+ * Rótulo + campo.
+ *
+ * ⚠️ Explicação longa vai no `info` (tooltip ⓘ), não no `dica`. Parágrafo de
+ * ajuda embaixo de cada campo empilha ruído numa gaveta que já tem 10 campos —
+ * quem sabe o que quer só quer preencher. `dica` fica para a linha curta que
+ * muda com a escolha (ex.: a unidade selecionada).
+ */
+function Campo({
+  label, dica, info, children,
+}: {
+  label: string;
+  dica?: string;
+  info?: ConteudoInfo;
+  children: React.ReactNode;
+}) {
   return (
     <div style={sx("display:flex;flex-direction:column;gap:5px")}>
-      <div style={sx("font-size:12px;font-weight:600")}>{label}</div>
+      <div style={sx("display:flex;align-items:center;gap:5px")}>
+        <span style={sx("font-size:12px;font-weight:600")}>{label}</span>
+        {info && <InfoTip conteudo={info} tamanho={12} />}
+      </div>
       {dica && <div className="text-muted" style={sx("font-size:11.5px;line-height:1.45")}>{dica}</div>}
       {children}
     </div>
@@ -307,10 +327,7 @@ export function RuleDrawer({
         />
       </Campo>
 
-      <Campo
-        label="Contas de anúncio"
-        dica="Vazio = todas as contas desta área. O motor sempre intersecta com as contas da área, então uma conta de outra área nunca é afetada."
-      >
+      <Campo label="Contas de anúncio" info={AJUDA.regraContas}>
         <ListaSelecionavel
           itens={contas}
           selecionados={d.contas}
@@ -436,11 +453,7 @@ export function RuleDrawer({
           {(d.acao === "aumentar" || d.acao === "definir") && (
             <Campo
               label={`Teto de orçamento${exigeTeto ? " (obrigatório)" : " (opcional)"}`}
-              dica={
-                exigeTeto
-                  ? "Sem teto, o motor RECUSA o aumento — uma regra de +20% multiplicaria o orçamento a cada execução (100 → 120 → 144 → 173…). O orçamento nunca passa deste valor."
-                  : "Limite máximo. Se o valor definido passar dele, o motor trava no teto."
-              }
+              info={AJUDA.regraTeto}
             >
               <input
                 className="input"
@@ -463,18 +476,15 @@ export function RuleDrawer({
       <div style={sx("height:1px;background:var(--color-divider)")} />
 
       <div style={sx("display:flex;gap:var(--space-3);flex-wrap:wrap")}>
-        <Campo label="Período de cálculo">
+        <Campo label="Período de cálculo" info={AJUDA.regraPeriodo}>
           <Select label="" value={d.calcPeriod} options={PERIODOS} onChange={(calcPeriod) => patch({ calcPeriod })} minWidth={175} />
         </Campo>
-        <Campo label="Frequência">
+        <Campo label="Frequência" info={AJUDA.regraFrequencia}>
           <Select label="" value={d.frequencyMin} options={FREQUENCIAS} onChange={(frequencyMin) => patch({ frequencyMin })} minWidth={185} />
         </Campo>
       </div>
 
-      <Campo
-        label="Intervalo de execução"
-        dica="Janela em que a regra pode agir, na sua hora local. Fora dela ela não é avaliada. Deixe em “Qualquer hora” para rodar sempre."
-      >
+      <Campo label="Intervalo de execução" info={AJUDA.regraJanela}>
         <div style={sx("display:flex;gap:6px;align-items:center")}>
           <Select label="" value={d.windowStart} options={HORAS} onChange={(windowStart) => patch({ windowStart })} minWidth={140} />
           <span className="text-muted" style={sx("font-size:12px")}>até</span>
@@ -482,7 +492,7 @@ export function RuleDrawer({
         </div>
       </Campo>
 
-      <Campo label="Limite de execuções diárias" dica="Trava de segurança: quantas vezes por dia a regra pode agir.">
+      <Campo label="Limite de execuções diárias" info={AJUDA.regraLimite}>
         <div style={sx("display:flex;gap:10px;align-items:center")}>
           <input
             className="input"

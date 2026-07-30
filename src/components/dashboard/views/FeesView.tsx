@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { setMyTimezone } from "@/lib/actions/profile";
 import { CONFIG } from "@/lib/explicacoes";
 import { sx } from "@/lib/sx";
+import { Checkbox } from "../ui/Checkbox";
 import { InfoTip } from "../ui/InfoTip";
 import { TIMEZONE_OPTIONS, partsInTz } from "@/lib/timezone";
 import type { TraffikView } from "../useTraffikState";
@@ -193,15 +194,18 @@ export function FeesView({ v }: { v: TraffikView }) {
                 imposto são globais por natureza — uma caixa neles convidaria a
                 prender a uma área justamente o que, se prendido, sumiria da
                 conta de lucro das outras em silêncio. */}
-            <label style={sx("display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12px;cursor:pointer")}>
-              <input type="checkbox" checked={despesaSoNestaArea} onChange={(e) => setDespesaSoNestaArea(e.target.checked)} />
-              <span className="text-muted">
-                Só nesta Área de Trabalho{" "}
-                {v.despesaSoNestaArea
-                  ? "— não entra no lucro das outras áreas."
-                  : "(desmarcado: vale para todas as áreas)"}
-              </span>
-            </label>
+            {/* ⚠️ A explicação foi para o ⓘ. O rótulo carregava o comportamento
+                do próprio checkbox entre parênteses — "(desmarcado: vale para
+                todas as áreas)" —, texto que só existe porque ninguém achou
+                outro lugar para pôr. */}
+            <div style={sx("display:flex;align-items:center;gap:5px;margin-top:8px")}>
+              <Checkbox
+                checked={despesaSoNestaArea}
+                onChange={setDespesaSoNestaArea}
+                label="Só nesta área de trabalho"
+              />
+              <InfoTip conteudo={CONFIG.despesaArea!} tamanho={12} />
+            </div>
           </div>
         </div>
       </div>

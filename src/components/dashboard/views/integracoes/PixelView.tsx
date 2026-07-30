@@ -16,7 +16,9 @@ import {
 import { getPublicAppUrl } from "@/lib/appUrl";
 import { pixelScript } from "@/lib/pixel/script";
 import { plural } from "@/lib/format";
+import { CONFIG } from "@/lib/explicacoes";
 import { sx } from "@/lib/sx";
+import { InfoTip } from "../../ui/InfoTip";
 import { Drawer } from "../../ui/Drawer";
 import { SnippetBox } from "../../ui/SnippetBox";
 
@@ -273,7 +275,10 @@ export function PixelView() {
               {/* Initiate Checkout */}
               <div style={sx("border:1px solid var(--color-border);border-radius:10px;padding:var(--space-3);display:flex;flex-direction:column;gap:8px")}>
                 <div style={sx("display:flex;align-items:center;justify-content:space-between")}>
-                  <span style={sx("font-weight:600;font-size:13px")}>Regra de Initiate Checkout</span>
+                  <span style={sx("display:flex;align-items:center;gap:5px;font-weight:600;font-size:13px")}>
+                    Regra de Initiate Checkout
+                    <InfoTip conteudo={CONFIG.pixelIC!} tamanho={12} />
+                  </span>
                   <Toggle on={form.ic.enabled} onClick={() => setForm({ ...form, ic: { ...form.ic, enabled: !form.ic.enabled } })} />
                 </div>
                 {form.ic.enabled && (

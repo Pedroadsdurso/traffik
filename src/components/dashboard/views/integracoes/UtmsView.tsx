@@ -5,7 +5,9 @@ import { useEffect, useState } from "react";
 import { getUtmCodes, type UtmCodesDTO } from "@/lib/actions/utm";
 import { getPublicAppUrl } from "@/lib/appUrl";
 import { backRedirectScript, utmScript } from "@/lib/utm/scripts";
+import { CONFIG } from "@/lib/explicacoes";
 import { sx } from "@/lib/sx";
+import { InfoTip } from "../../ui/InfoTip";
 import { LogoGateway } from "../../ui/LogoGateway";
 import { Modal } from "../../ui/Modal";
 import { SnippetBox } from "../../ui/SnippetBox";
@@ -131,10 +133,12 @@ function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
         <div className="card-title">
           Instale na página de vendas de <strong>{codes?.workspaceName ?? "—"}</strong>
         </div>
-        <p className="card-body" style={sx("margin:6px 0 0")}>
-          Este script é <strong>desta Área de Trabalho</strong>. Instale-o na página de vendas
-          desta operação — cada área tem o seu, para o rastreamento não se misturar.
-        </p>
+        <div style={sx("display:flex;align-items:center;gap:5px;margin-top:6px")}>
+          <span className="card-body">
+            Este script é <strong>desta área</strong>. Instale na página de vendas desta operação.
+          </span>
+          <InfoTip conteudo={CONFIG.utmPorArea!} tamanho={12} />
+        </div>
       </div>
 
       {faltaInstalar && (

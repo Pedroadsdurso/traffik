@@ -18,9 +18,11 @@ import {
 } from "@/lib/actions/workspaces";
 import { brl, palavra } from "@/lib/format";
 import { getPendenciasDasAreas, type PendenciasDTO } from "@/lib/actions/diagnostics";
+import { CONFIG } from "@/lib/explicacoes";
 import { sx } from "@/lib/sx";
 import { ExcluirAreaDialog } from "./areas/ExcluirAreaDialog";
 import { Drawer } from "../ui/Drawer";
+import { InfoTip, type ConteudoInfo } from "../ui/InfoTip";
 import { ListaSelecionavel, type ItemSelecionavel } from "../ui/ListaSelecionavel";
 
 /** Cores do marcador. Poucas e distintas — o ponto tem 8px, gradação não se lê. */
@@ -443,10 +445,24 @@ function AreaCard({
 
 // ──────────────────────────── Gaveta de criar/editar ────────────────────────────
 
-function Campo({ label, dica, children }: { label: string; dica?: string; children: React.ReactNode }) {
+/**
+ * ⚠️ Explicação longa vai no `info` (tooltip ⓘ), não no `dica`. Parágrafo de
+ * ajuda embaixo de cada campo empilha ruído; `dica` fica para a linha curta.
+ */
+function Campo({
+  label, dica, info, children,
+}: {
+  label: string;
+  dica?: string;
+  info?: ConteudoInfo;
+  children: React.ReactNode;
+}) {
   return (
     <div className="field">
-      <label>{label}</label>
+      <label style={sx("display:flex;align-items:center;gap:5px")}>
+        <span>{label}</span>
+        {info && <InfoTip conteudo={info} tamanho={12} />}
+      </label>
       {dica && <p className="text-muted" style={sx("margin:0 0 6px;font-size:11.5px;line-height:1.5")}>{dica}</p>}
       {children}
     </div>
@@ -572,10 +588,7 @@ function AreaDrawer({
               é a única dimensão em que "mover entre áreas" é uma operação real
               (uma conta pertence a exatamente uma área). Webhook e pixel se
               vinculam na criação, dentro da área. */}
-          <Campo
-            label="Contas de anúncio"
-            dica="Uma conta pertence a apenas uma área — é o que impede o mesmo investimento de ser contado duas vezes. Contas de outra área aparecem bloqueadas, com o nome da área que as ocupa; “Mover para cá” transfere ao salvar."
-          >
+          <Campo label="Contas de anúncio" info={CONFIG.contaUnicaPorArea}>
             <ListaSelecionavel
               itens={itensContas}
               selecionados={rascunho.accountIds}

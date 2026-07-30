@@ -2171,14 +2171,42 @@ Gerenciador, AdsActionBar, AdsTable, ListaSelecionavel, CountryMap, Dashboard.
 > gerado no painel da Kirvano" é instrução correta — é assim que a Kirvano chama.
 > Saiu só onde era ESTADO interno ("token salvo", "· token").
 
-### ⚠️ Falta (grupos 3 e 4)
+### Grupos 3 e 4 — explicação virou tooltip
 
-- **9 explicações em texto corrido → tooltip ⓘ** (`ui/InfoTip` já existe): teto de
-  orçamento, janela, período de cálculo, despesa por área, conta única, script de
-  UTM, etapas do funil, colunas do Gerenciador, eventos do pixel.
-- **12 métricas sem tooltip** (`ROAS · ROI · CPA · CPM · CPC · CTR · CPI · ARPU ·
-  Ticket · Margem · Lucro · Cliq. atr.`). ⚠️ A explicação é **da conta, não do
-  termo**: o usuário sabe o que é ROAS, não sabe qual gasto a Traffik usou.
+> ⚠️ **Meu levantamento estava errado: o grupo 4 já estava feito.**
+> `lib/explicacoes.ts` já tinha as 12 métricas (`ROAS · ROI · CPA · CPM · CPC ·
+> CTR · CPI · ARPU · Ticket · Margem · Lucro · Cliq. atr.`), as 5 etapas do funil
+> e vários campos de configuração. **Confira `explicacoes.ts` antes de "adicionar
+> tooltips"** — o catálogo é mais completo do que parece de fora.
+
+A lacuna real eram os campos criados nas sessões recentes, onde eu mesmo pus
+explicação em **texto corrido**. Seis entradas novas em `explicacoes.ts`:
+`regraTeto`, `regraJanela`, `regraContas`, `despesaArea`, `contaUnicaPorArea`,
+`utmPorArea`.
+
+> ⚠️ **A explicação de métrica é da CONTA, não do termo.** O usuário sabe o que é
+> ROAS; o que ele não sabe é **qual gasto a Traffik usou**. Por isso as entradas
+> têm `formula` e `fonte` (Vem do Facebook / Medido pela Traffik / Calculado).
+
+**O `Campo` de `RuleDrawer` e de `AreasView` ganhou `info`**, e o `dica` ficou
+para a linha curta que muda com a escolha (ex.: a unidade selecionada).
+Parágrafo de ajuda embaixo de cada campo empilha ruído numa gaveta de 10 campos.
+
+Saiu daí o pior exemplo do projeto: `"Só nesta Área de Trabalho (desmarcado:
+vale para todas as áreas)"` — um rótulo carregando o comportamento do próprio
+checkbox entre parênteses. Virou rótulo limpo + ⓘ.
+
+### ⚠️ Falta da padronização visual (Frente 2)
+
+- **~22 `<select>` nativos em 8 arquivos** — o `ui/Select` (Bloco 3) já existe;
+  é adoção, não construção. As telas novas (RuleDrawer, RulesView) já nasceram
+  sem nenhum.
+- **7 checkboxes nativos em 4 arquivos** — `ui/Checkbox` já existe (Bloco 8) e
+  já foi adotado em Taxas e no diálogo de exclusão.
+- **Ícones em dois sistemas**: `0 0 24 24` (14×) e `0 0 256 256` (11×).
+  Unificar em 24×24.
+- Preservar as exceções: selects de mês/ano do `DateRangePicker` (nativos de
+  propósito) e a página `test-checkout`.
 
 ## 🐛 Campo perdia o foco a cada tecla — causa raiz em `useOverlay`
 
