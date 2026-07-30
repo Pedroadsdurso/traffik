@@ -9,9 +9,9 @@ import { sx } from "@/lib/sx";
 export type FonteDado = "meta" | "nosso" | "derivada";
 
 const FONTE_META: Record<FonteDado, { cor: string; label: string }> = {
-  meta: { cor: "#60a5fa", label: "Meta Ads" },
-  nosso: { cor: "#a78bfa", label: "Nosso rastreamento · tempo real" },
-  derivada: { cor: "#94a3b8", label: "Calculada" },
+  meta: { cor: "#60a5fa", label: "Vem do Facebook" },
+  nosso: { cor: "#a78bfa", label: "Medido pela Traffik" },
+  derivada: { cor: "#94a3b8", label: "Calculado" },
 };
 
 export interface ConteudoInfo {

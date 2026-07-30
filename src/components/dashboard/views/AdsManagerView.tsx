@@ -1,5 +1,6 @@
 "use client";
 
+import { plural } from "@/lib/format";
 import { useMemo, useState } from "react";
 
 import { combinaStatus } from "@/lib/ads/status";
@@ -88,7 +89,7 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
       base = raw.accounts.map((ac) => ({
         id: ac.id, fbId: ac.fbAccountId, nome: ac.name,
         status: ac.tracking ? "ACTIVE" : "PAUSED",
-        sub: `${ac.fbAccountId} · ${ac.campaigns} campanha(s)`,
+        sub: `${ac.fbAccountId} · ${plural(ac.campaigns, "campanha", "campanhas")}`,
         spend: ac.spend, impressions: 0, clicks: 0, results: 0, revenue: ac.revenue,
       }));
     }
@@ -164,7 +165,7 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
         setResultado(
           falhas.length === 0
             ? `✓ ${data.sucessos} item(ns) atualizados no Facebook.`
-            : `${data.sucessos} ok · ${falhas.length} falha(s): ${falhas.map((f) => `${f.nome} (${f.erro})`).join("; ")}`,
+            : `${data.sucessos} ok · ${plural(falhas.length, "falhou", "falharam")}: ${falhas.map((f) => `${f.nome} (${f.erro})`).join("; ")}`,
         );
         setSelecao(new Set());
         v.refreshAds();
@@ -203,7 +204,7 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
   function copiarId() {
     const ids = linhas.filter((l) => selecao.has(l.id)).map((l) => l.fbId);
     navigator.clipboard.writeText(ids.join("\n"));
-    setResultado(`✓ ${ids.length} ID(s) copiados.`);
+    setResultado(`✓ ${plural(ids.length, "ID copiado", "IDs copiados")}`);
   }
   function abrirNoFacebook() {
     const l = linhas.find((x) => selecao.has(x.id));
@@ -329,7 +330,7 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
         vazio={
           v.adsSub === "accounts"
             ? "Nenhuma conta conectada. Conecte um perfil em Integrações › Anúncios."
-            : "Nada aqui. Sincronize as métricas ou ajuste os filtros."
+            : "Nenhuma campanha neste período. Tente outro intervalo ou outro status."
         }
       />
     </div>

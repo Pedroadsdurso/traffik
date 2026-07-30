@@ -1,5 +1,6 @@
 "use client";
 
+import { plural } from "@/lib/format";
 import { useCallback, useEffect, useState } from "react";
 
 import {
@@ -81,7 +82,7 @@ function PixelTestCard() {
 
       {pixels.length === 0 ? (
         <p className="card-body" style={sx("color:var(--color-warning,#fbbf24);margin:var(--space-2) 0 0")}>
-          Nenhum pixel com token da CAPI. Cadastre um na aba Pixel.
+          Nenhum pixel conectado. Cadastre um na aba Pixel.
         </p>
       ) : (
         <div style={sx("display:flex;gap:var(--space-2);margin-top:var(--space-3);flex-wrap:wrap;align-items:flex-end")}>
@@ -90,7 +91,7 @@ function PixelTestCard() {
             <select className="input" value={pixelId} onChange={(e) => setPixelId(e.target.value)}>
               {pixels.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} ({p.metaCount} pixel(s) Meta)
+                  {p.name} ({plural(p.metaCount, "pixel da Meta", "pixels da Meta")})
                 </option>
               ))}
             </select>
@@ -286,7 +287,7 @@ function TrackingTestCard() {
           </div>
 
           <div>
-            <div style={sx("font-size:12px;font-weight:600;margin-bottom:6px")}>Vínculo no banco</div>
+            <div style={sx("font-size:12px;font-weight:600;margin-bottom:6px")}>Onde este link foi reconhecido</div>
             <div style={sx("display:flex;flex-direction:column;gap:4px;font-size:12.5px")}>
               <div>
                 Campanha:{" "}

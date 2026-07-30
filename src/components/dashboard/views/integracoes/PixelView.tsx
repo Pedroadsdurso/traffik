@@ -15,6 +15,7 @@ import {
 } from "@/lib/actions/pixels";
 import { getPublicAppUrl } from "@/lib/appUrl";
 import { pixelScript } from "@/lib/pixel/script";
+import { plural } from "@/lib/format";
 import { sx } from "@/lib/sx";
 import { Drawer } from "../../ui/Drawer";
 import { SnippetBox } from "../../ui/SnippetBox";
@@ -193,8 +194,8 @@ export function PixelView() {
                   <span className={px.enabled ? "tag tag-accent" : "tag tag-neutral"}>{px.enabled ? "Ativo" : "Inativo"}</span>
                 </div>
                 <div className="card-meta">
-                  {px.metaPixels.length} pixel(s) da Meta ·{" "}
-                  {px.rules.filter((r) => r.enabled).length} evento(s) ativo(s)
+                  {plural(px.metaPixels.length, "pixel da Meta", "pixels da Meta")} ·{" "}
+                  {plural(px.rules.filter((r) => r.enabled).length, "evento ativo", "eventos ativos")}
                 </div>
               </div>
               <div style={sx("display:flex;align-items:center;gap:10px")}>
@@ -242,14 +243,14 @@ export function PixelView() {
                 </div>
                 {form.metaPixels.map((m, i) => (
                   <div key={i} style={sx("display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12.5px;background:var(--color-bg);border-radius:8px;padding:8px 10px")}>
-                    <span style={sx("font-family:ui-monospace,monospace")}>{m.pixelId}{m.nickname ? ` · ${m.nickname}` : ""}{m.accessToken ? " · token" : m.savedToken ? " · token salvo" : " · sem token"}</span>
+                    <span style={sx("font-family:ui-monospace,monospace")}>{m.pixelId}{m.nickname ? ` · ${m.nickname}` : ""}{m.accessToken ? " · conectado" : m.savedToken ? " · conectado" : " · falta conectar"}</span>
                     <button className="btn btn-ghost" type="button" onClick={() => removeMeta(i)} style={sx("padding:4px 8px;font-size:11px")}>remover</button>
                   </div>
                 ))}
                 {metaOpen && (
                   <div style={sx("display:flex;flex-direction:column;gap:8px;background:var(--color-bg);border-radius:8px;padding:10px")}>
                     <input className="input" placeholder="ID do pixel" value={meta.pixelId} onChange={(e) => setMeta({ ...meta, pixelId: e.target.value })} />
-                    <input className="input" placeholder="Token de acesso (CAPI)" value={meta.accessToken} onChange={(e) => setMeta({ ...meta, accessToken: e.target.value })} />
+                    <input className="input" placeholder="Token de acesso do pixel" value={meta.accessToken} onChange={(e) => setMeta({ ...meta, accessToken: e.target.value })} />
                     <input className="input" placeholder="Apelido (opcional)" value={meta.nickname} onChange={(e) => setMeta({ ...meta, nickname: e.target.value })} />
                     <div style={sx("display:flex;gap:8px;justify-content:flex-end")}>
                       <button className="btn btn-ghost" type="button" onClick={() => setMetaOpen(false)}>Fechar</button>

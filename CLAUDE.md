@@ -2123,6 +2123,63 @@ estão no histórico. Ambas precisam ser rotacionadas em Supabase › Settings �
 Database › Reset database password (e a de produção atualizada na Vercel, com
 **Redeploy**). Eu nunca preciso da senha — só do formato da string.
 
+## ✍️ Microcópia: benefício em vez de mecanismo (grupos 1 e 2)
+
+**~30 textos reescritos.** A interface explicava COMO foi construída em vez de
+O QUE faz.
+
+> ### ⛔ Simplifique jargão de PROGRAMAÇÃO, nunca de TRÁFEGO
+> **ROAS, ROI, CPA, CTR, CPM, criativo, CBO, ABO, conjunto, pixel, UTM, gateway,
+> campanha** são o vocabulário NATIVO do usuário (gestor de tráfego /
+> infoprodutor) — ele entende "ROAS" melhor que "retorno sobre investimento em
+> anúncios". Trocar isso por linguagem "acessível" **piora** o produto.
+>
+> O que sai é o que só o programador conhece: **banco de dados, filtro (como
+> definição), query, token, coluna, nullable, FK, catch-all, derivada**.
+
+### `plural()` e `palavra()` em `lib/format.ts`
+
+`43 evento(s) recebido(s)` → `43 vendas recebidas`. O parêntese é gambiarra de
+código vazando na tela. O helper aceita a forma plural **completa**, porque
+português não pluraliza só com "s" (`mês` → `meses`), e um terceiro argumento
+opcional para o zero (`"nenhuma venda ainda"`).
+
+Aplicado em 12 arquivos — Webhooks, Pixel, Anúncios, Testes, Áreas, Regras,
+Gerenciador, AdsActionBar, AdsTable, ListaSelecionavel, CountryMap, Dashboard.
+
+### Trocas de vocabulário
+
+| Antes | Depois |
+|---|---|
+| "Um conjunto de filtros, salvo com um nome… não separa os dados **no banco**" | "Separe suas operações sem misturar os números" |
+| "Área padrão: mostra tudo. Ao criar outras áreas, o que elas levarem sai daqui" | "Sua operação principal. O que você mover para outras áreas deixa de aparecer aqui." |
+| "Só para você lembrar. **Não filtra nada.**" | "Uma nota para você. Não muda nada nos números." |
+| "**Nada selecionado — este campo não filtra.**" | "Nada escolhido — vale para todos." |
+| "Todo campo em branco significa '**não filtra por isto**'" | "Campo em branco vale para todos." |
+| "**token protegido**" / "**token salvo**" | "conectado" |
+| "**sem token**" | "falta conectar" |
+| "Nenhum pixel com **token da CAPI**" | "Nenhum pixel conectado — os eventos não chegam ao Facebook." |
+| "**Vínculo no banco**" (aba Testes) | "Onde este link foi reconhecido" |
+| "Nada aqui. Sincronize as métricas ou ajuste os filtros." | "Nenhuma campanha neste período. Tente outro intervalo ou outro status." |
+| Legenda: "Meta Ads · **Nosso rastreamento** · **Derivada**" | "Vem do Facebook · Medido pela Traffik · Calculado" |
+
+> ⚠️ **"Filtro" sobreviveu onde é AÇÃO DE TELA** ("ajuste os filtros") e saiu onde
+> era DEFINIÇÃO ("um conjunto de filtros"). Filtrar relatório é vocabulário de
+> tráfego; explicar um produto como "conjunto de filtros" é falar de implementação.
+
+> ⚠️ **"Token" ficou onde é o nome do que o usuário cola**: "Cole aqui o token
+> gerado no painel da Kirvano" é instrução correta — é assim que a Kirvano chama.
+> Saiu só onde era ESTADO interno ("token salvo", "· token").
+
+### ⚠️ Falta (grupos 3 e 4)
+
+- **9 explicações em texto corrido → tooltip ⓘ** (`ui/InfoTip` já existe): teto de
+  orçamento, janela, período de cálculo, despesa por área, conta única, script de
+  UTM, etapas do funil, colunas do Gerenciador, eventos do pixel.
+- **12 métricas sem tooltip** (`ROAS · ROI · CPA · CPM · CPC · CTR · CPI · ARPU ·
+  Ticket · Margem · Lucro · Cliq. atr.`). ⚠️ A explicação é **da conta, não do
+  termo**: o usuário sabe o que é ROAS, não sabe qual gasto a Traffik usou.
+
 ## 🐛 Campo perdia o foco a cada tecla — causa raiz em `useOverlay`
 
 **Sintoma:** digitar no nome ou na descrição de uma Área de Trabalho perdia o

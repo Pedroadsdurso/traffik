@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { plural } from "@/lib/format";
 import { sx } from "@/lib/sx";
 
 export interface ItemSelecionavel {
@@ -60,7 +61,7 @@ export function ListaSelecionavel({
   const conhecidos = new Set(itens.map((i) => i.id));
   const orfaos: ItemSelecionavel[] = selecionados
     .filter((id) => !conhecidos.has(id))
-    .map((id) => ({ id, label: id, detalhe: "Não está mais na lista — desmarque para remover o filtro" }));
+    .map((id) => ({ id, label: id, detalhe: "Não existe mais. Desmarque para tirar daqui." }));
   const todos = [...itens, ...orfaos];
 
   const termo = busca.trim().toLowerCase();
@@ -130,8 +131,8 @@ export function ListaSelecionavel({
 
       <div className="text-muted" style={sx("font-size:11px")}>
         {selecionados.length === 0
-          ? "Nada selecionado — este campo não filtra."
-          : `${selecionados.length} selecionado(s).`}
+          ? "Nada escolhido — vale para todos."
+          : `${plural(selecionados.length, "selecionado", "selecionados")}`}
       </div>
     </div>
   );

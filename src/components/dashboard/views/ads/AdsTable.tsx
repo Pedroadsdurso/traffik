@@ -222,15 +222,15 @@ export function AdsTable({
     <div style={sx("display:flex;gap:var(--space-3);align-items:center;flex-wrap:wrap;font-size:11px;padding:0 2px 7px")}>
       <span style={sx("display:inline-flex;align-items:center;gap:5px")}>
         <span style={sx(`width:5px;height:5px;border-radius:50%;background:${COR_FONTE.meta}`)} />
-        <span className="text-muted">Meta Ads</span>
+        <span className="text-muted">Vem do Facebook</span>
       </span>
       <span style={sx("display:inline-flex;align-items:center;gap:5px")}>
         <span style={sx(`width:5px;height:5px;border-radius:50%;background:${COR_FONTE.nosso}`)} />
-        <span className="text-muted">Nosso rastreamento · tempo real</span>
+        <span className="text-muted">Medido pela Traffik</span>
       </span>
       <span style={sx("display:inline-flex;align-items:center;gap:5px")}>
         <span style={sx(`width:5px;height:5px;border-radius:50%;background:${COR_FONTE.misto}`)} />
-        <span className="text-muted">Derivada</span>
+        <span className="text-muted">Calculado</span>
       </span>
       <span style={sx("display:inline-flex;align-items:center;gap:4px")}>
         <span className="text-muted" style={sx("opacity:.75")}>Por que difere da Meta?</span>

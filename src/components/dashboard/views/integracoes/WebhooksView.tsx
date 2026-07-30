@@ -1,3 +1,4 @@
+import { plural } from "@/lib/format";
 import { sx } from "@/lib/sx";
 import { CampoCopiavel, Drawer } from "../../ui/Drawer";
 import { LogoGateway } from "../../ui/LogoGateway";
@@ -55,8 +56,8 @@ function WebhooksBlock({ v }: { v: TraffikView }) {
                 <span className={w.active ? "tag tag-accent" : "tag tag-neutral"}>{w.active ? "Ativado" : "Desativado"}</span>
               </div>
               <div className="card-meta">
-                {v.webhookPlatformLabel(w.platform)} · {w.eventCount} evento(s) recebido(s)
-                {w.hasSecret ? " · token protegido" : ""}
+                {v.webhookPlatformLabel(w.platform)} · {plural(w.eventCount, "venda recebida", "vendas recebidas", "nenhuma venda ainda")}
+                {w.hasSecret ? " · conectado" : ""}
               </div>
             </div>
             <button className="sw" role="switch" aria-checked={w.active} onClick={() => v.toggleWebhook(w.id)}

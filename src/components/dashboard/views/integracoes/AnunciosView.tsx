@@ -1,3 +1,4 @@
+import { plural } from "@/lib/format";
 import { sx } from "@/lib/sx";
 import { Drawer } from "../../ui/Drawer";
 import { LogoGateway } from "../../ui/LogoGateway";
@@ -152,7 +153,7 @@ export function AnunciosView({ v }: { v: TraffikView }) {
         onClose={() => aberto?.toggleExpanded()}
         largura={560}
         titulo={aberto?.name ?? ""}
-        descricao={aberto ? `${aberto.accountCount} conta(s) de anúncio · ${aberto.trackedCount} rastreando` : undefined}
+        descricao={aberto ? `${plural(aberto.accountCount, "conta de anúncio", "contas de anúncio")} · ${aberto.trackedCount} rastreando` : undefined}
       >
         {aberto && <ProfilePanel p={aberto} />}
       </Drawer>

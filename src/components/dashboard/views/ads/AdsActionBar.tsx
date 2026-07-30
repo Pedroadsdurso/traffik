@@ -1,5 +1,6 @@
 "use client";
 
+import { plural } from "@/lib/format";
 import { useEffect, useRef, useState } from "react";
 
 import { sx } from "@/lib/sx";
@@ -198,7 +199,7 @@ export function AdsActionBar({
                     A Meta não oferece desfazer — a ação é <strong>irreversível</strong>.
                   </>
                 ) : confirmar.acao === "duplicate" ? (
-                  <>Serão duplicadas <strong>{n} campanha(s)</strong>, com conjuntos e anúncios.</>
+                  <>Serão duplicadas <strong>{plural(n, "campanha", "campanhas")}</strong>, com conjuntos e anúncios.</>
                 ) : (
                   <>A ação será aplicada a <strong>{n} item(ns)</strong> direto no Facebook.</>
                 )}
@@ -209,13 +210,13 @@ export function AdsActionBar({
                 <>
                   {nivel === "campaign" && cbos.length > 0 && (
                     <p className="text-muted" style={sx("margin:0;font-size:12px;line-height:1.5")}>
-                      {cbos.length} campanha(s) são <strong>CBO</strong> — têm orçamento próprio, então ele é
+                      {plural(cbos.length, "campanha é", "campanhas são")} <strong>CBO</strong> — têm orçamento próprio, então ele é
                       alterado <strong>no nível da campanha</strong>.
                     </p>
                   )}
                   {orcamentoBloqueado && (
                     <p style={sx("margin:0;font-size:12px;line-height:1.5;color:var(--color-warning,#fbbf24)")}>
-                      {abos.length} campanha(s) são <strong>ABO</strong>: o orçamento vive nos <strong>conjuntos</strong>,
+                      {plural(abos.length, "campanha é", "campanhas são")} <strong>ABO</strong>: o orçamento vive nos <strong>conjuntos</strong>,
                       não na campanha. Abra a aba <strong>Conjuntos</strong> e altere por lá — a Meta recusaria a
                       alteração no nível da campanha.
                     </p>

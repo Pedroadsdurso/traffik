@@ -75,3 +75,26 @@ export function buildPoints(arr: number[], max: number, w: number, h: number, pa
   const n = arr.length;
   return arr.map((v, i) => `${(i * w) / (n - 1)},${h - pad - (v / max) * (h - pad * 2)}`).join(" ");
 }
+
+/**
+ * Plural de verdade, em vez de `evento(s)`.
+ *
+ * O parêntese é gambiarra de código vazando na tela: ninguém escreve "43
+ * evento(s) recebido(s)" num produto. Aceita a forma plural completa porque
+ * português não pluraliza só com "s" (`mês` → `meses`).
+ *
+ * ```
+ * plural(1, "venda", "vendas")   // "1 venda"
+ * plural(43, "venda", "vendas")  // "43 vendas"
+ * plural(0, "venda", "vendas")   // "nenhuma venda" quando `zero` é dado
+ * ```
+ */
+export function plural(n: number, singular: string, pluralForma: string, zero?: string): string {
+  if (n === 0 && zero) return zero;
+  return `${n} ${n === 1 ? singular : pluralForma}`;
+}
+
+/** Só a palavra, sem o número — para quando o número já está na frase. */
+export function palavra(n: number, singular: string, pluralForma: string): string {
+  return n === 1 ? singular : pluralForma;
+}

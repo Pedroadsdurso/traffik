@@ -16,7 +16,7 @@ import {
   type OpcoesAreas,
   type WorkspaceDTO,
 } from "@/lib/actions/workspaces";
-import { brl } from "@/lib/format";
+import { brl, palavra } from "@/lib/format";
 import { getPendenciasDasAreas, type PendenciasDTO } from "@/lib/actions/diagnostics";
 import { sx } from "@/lib/sx";
 import { ExcluirAreaDialog } from "./areas/ExcluirAreaDialog";
@@ -94,8 +94,8 @@ function pendencias(
         nivel: "info",
         texto:
           totalDeAreas <= 1
-            ? "Área padrão: mostra tudo. Ao criar outras áreas, o que elas levarem sai daqui automaticamente."
-            : "Área padrão: mostra tudo o que as outras áreas não levaram, inclusive tráfego sem UTM e venda sem clique.",
+            ? "Sua operação principal. O que você mover para outras áreas deixa de aparecer aqui."
+            : "Sua operação principal. Recebe tudo o que não pertence às outras áreas — inclusive visitas sem UTM e vendas sem origem identificada.",
       },
     ];
   }
@@ -399,7 +399,7 @@ function AreaCard({
                 </div>
               ))}
               {(checks ?? []).length > 5 && (
-                <div className="text-muted" style={sx("font-size:11px")}>+{(checks ?? []).length - 5} outro(s)</div>
+                <div className="text-muted" style={sx("font-size:11px")}>+{(checks ?? []).length - 5} {palavra((checks ?? []).length - 5, "outro", "outros")}</div>
               )}
             </div>
           )}
@@ -502,7 +502,7 @@ function AreaDrawer({
       aberta
       largura={600}
       titulo={rascunho.id ? "Editar área" : "Nova área de trabalho"}
-      descricao="Tudo numa tela só. Todo campo deixado em branco significa “não filtra por isto”."
+      descricao="Campo em branco vale para todos."
       onClose={onFechar}
       rodape={
         <>
@@ -528,7 +528,7 @@ function AreaDrawer({
         </div>
       </Campo>
 
-      <Campo label="Descrição" dica="Só para você lembrar do que é esta área. Não filtra nada.">
+      <Campo label="Descrição" dica="Uma nota para você. Não muda nada nos números.">
         <textarea className="input" rows={2} value={rascunho.description}
           placeholder="Ex.: Oferta de emagrecimento — tráfego BR, gateway Kirvano"
           onChange={(e) => patch({ description: e.target.value })} />

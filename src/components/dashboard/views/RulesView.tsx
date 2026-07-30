@@ -13,7 +13,7 @@ import {
   updateRule,
   type RuleDTO,
 } from "@/lib/actions/rules";
-import { brl, elapsed } from "@/lib/format";
+import { brl, elapsed, plural } from "@/lib/format";
 import { sx } from "@/lib/sx";
 import { Drawer } from "../ui/Drawer";
 import { Modal } from "../ui/Modal";
@@ -326,7 +326,7 @@ function GavetaLog({ r, onClose }: { r: RuleDTO; onClose: () => void }) {
                 <span style={sx(`width:7px;height:7px;border-radius:50%;background:${STATUS_COR[l.status] ?? "var(--color-text)"}`)} />
                 <strong>{STATUS_LABEL[l.status] ?? l.status}</strong>
                 <span className="text-muted">{new Date(l.ranAt).toLocaleString("pt-BR")}</span>
-                {l.affected > 0 && <span className="tag tag-neutral" style={sx("font-size:11px")}>{l.affected} afetada(s)</span>}
+                {l.affected > 0 && <span className="tag tag-neutral" style={sx("font-size:11px")}>{plural(l.affected, "campanha afetada", "campanhas afetadas")}</span>}
               </div>
 
               {l.message && <div className="text-muted" style={sx("font-size:12px;margin-top:4px")}>{l.message}</div>}

@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { PAIS, nomePais } from "@/lib/countries";
-import { brl } from "@/lib/format";
+import { brl, plural } from "@/lib/format";
 import { sx } from "@/lib/sx";
 import { WORLD_LAND } from "@/lib/worldGeo";
 import { ChartTooltip } from "./chartKit";
@@ -245,7 +245,7 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
                   <div style={sx("display:flex;justify-content:space-between;font-size:12.5px;gap:8px")}>
                     <span>
                       <span className="text-muted" style={sx("margin-right:6px")}>{i + 1}.</span>
-                      {nomePais(d.code)} <span className="text-muted">· {d.sales} venda(s)</span>
+                      {nomePais(d.code)} <span className="text-muted">· {plural(d.sales, "venda", "vendas")}</span>
                     </span>
                     <span style={sx("font-variant-numeric:tabular-nums;white-space:nowrap")}>
                       {brl(d.revenue)} · {pct.toFixed(1).replace(".", ",")}%
