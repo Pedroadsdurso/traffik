@@ -247,13 +247,26 @@ export function AreasView() {
         </button>
       </div>
 
-      {arquivadas.length > 0 && (
+      {/* ⚠️ A condição inclui `mostrarArquivadas`, e não só `arquivadas.length`.
+          Desarquivar a última área estando nesta aba zerava a contagem, a barra
+          desaparecia e o usuário ficava preso numa lista vazia sem botão de
+          voltar — reportado em teste. */}
+      {(arquivadas.length > 0 || mostrarArquivadas) && (
         <div style={sx("display:flex;gap:6px")}>
           <button className={mostrarArquivadas ? "btn btn-ghost" : "btn btn-secondary"} type="button" onClick={() => setMostrarArquivadas(false)}>
             Ativas ({ativas.length})
           </button>
           <button className={mostrarArquivadas ? "btn btn-secondary" : "btn btn-ghost"} type="button" onClick={() => setMostrarArquivadas(true)}>
             Arquivadas ({arquivadas.length})
+          </button>
+        </div>
+      )}
+
+      {mostrarArquivadas && arquivadas.length === 0 && (
+        <div className="card" style={sx("text-align:center;padding:var(--space-5) var(--space-4)")}>
+          <div className="card-body">Nenhuma área arquivada.</div>
+          <button className="btn btn-secondary" type="button" onClick={() => setMostrarArquivadas(false)} style={sx("margin-top:var(--space-3)")}>
+            Voltar para as áreas ativas
           </button>
         </div>
       )}

@@ -225,13 +225,17 @@ function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
         </button>
       </CartaoScript>
 
+      {/* ⚠️ Este script NÃO faz o redirecionamento. Quem intercepta o "voltar"
+          é a sua página de back redirect (ou o gateway); este snippet só leva o
+          rastreamento até lá, para a visita não perder a origem do anúncio no
+          caminho. O texto anterior prometia o redirecionamento e estava errado. */}
       <CartaoScript
         icone="↩️"
-        titulo="Recuperação de saída"
-        descricao="Quando o visitante clica em “voltar”, leva ele para uma oferta sua em vez de deixar sair — mantendo a origem do anúncio."
+        titulo="Rastreamento da página de back redirect"
+        descricao="Se você usa uma página de back redirect, instale este script nela também. Sem ele, quem passa por ali perde a origem do anúncio e a venda deixa de ser atribuída à campanha."
       >
         <button className="btn btn-primary" type="button" onClick={() => setGaveta("back")}>
-          Configurar
+          Ver script
         </button>
       </CartaoScript>
 
@@ -259,8 +263,8 @@ function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
 
       <Drawer
         aberta={gaveta === "back"}
-        titulo="Recuperação de saída"
-        descricao="Para onde levar quem clica em “voltar”"
+        titulo="Rastreamento da página de back redirect"
+        descricao="Informe o endereço da sua página de back redirect"
         largura={620}
         onClose={() => setGaveta(null)}
         rodape={
@@ -275,7 +279,7 @@ function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
         }
       >
         <div className="field">
-          <label>Para onde levar o visitante</label>
+          <label>Endereço da sua página de back redirect</label>
           <input
             className="input"
             value={backUrl}

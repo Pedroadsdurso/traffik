@@ -235,9 +235,18 @@ function CardRegra({
           <div style={sx("font-size:15px;font-weight:600")}>{r.name}</div>
           <div className="text-muted" style={sx("font-size:12.5px;margin-top:2px")}>{r.summary}</div>
         </div>
-        <label style={sx("flex:none;cursor:pointer")} title={r.active ? "Ativa" : "Inativa"}>
-          <input type="checkbox" className="sw" checked={r.active} onChange={onToggle} />
-        </label>
+        {/* ⚠️ `.sw` é estilizado para `<button role="switch">`, NÃO para
+            `<input type="checkbox">`. Com o input, o `::after` do CSS desenhava a
+            bolinha do switch EM CIMA do checkbox nativo. Todos os outros toggles
+            da ferramenta usam este mesmo padrão de botão. */}
+        <button
+          className="sw"
+          role="switch"
+          aria-checked={r.active}
+          onClick={onToggle}
+          aria-label={`${r.active ? "Desativar" : "Ativar"} ${r.name}`}
+          style={sx("flex:none")}
+        />
       </div>
 
       {aumentaSemTeto && (

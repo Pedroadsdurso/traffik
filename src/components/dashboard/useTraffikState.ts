@@ -446,6 +446,52 @@ export function useTraffikState(
     });
   }, [areasServidor, ultimaArea]);
 
+  /**
+   * 🐛 SINCRONIZA AS LISTAS DO SERVIDOR. Sem isto, trocar de área não trocava
+   * Integrações, Regras nem Taxas.
+   *
+   * O estado nasce de `useState(() => initialState(props))`, e o inicializador
+   * de `useState` **só roda na montagem**. Quando `trocarWorkspace` chama
+   * `router.refresh()`, o servidor devolve os dados da área nova — e o estado
+   * os IGNORAVA, porque o componente não remonta numa navegação de mesma rota.
+   *
+   * O sintoma não era só "demora": a tela mostrava o webhook e o pixel da área
+   * ANTERIOR. Clicar em "Editar" ali agia sobre a integração de outra
+   * operação — o usuário reportou exatamente isso, "configurei o webhook da
+   * área secundária e mudou o da principal". Também explicava o "delay de ~1
+   * minuto": não havia atualização nenhuma, só uma remontagem eventual ao
+   * navegar para outra rota.
+   *
+   * ⚠️ Só sincroniza o que é **dado do servidor**. Estado de formulário e de
+   * modal fica de fora de propósito: reescrevê-lo fecharia a gaveta que o
+   * usuário tem aberta a cada refresh.
+   *
+   * ⚠️ Compara por conteúdo antes de gravar. O layout re-renderiza em toda
+   * navegação e as props chegam com identidade nova mesmo sem mudança; sem a
+   * comparação, isto viraria um `setState` por render.
+   */
+  useEffect(() => {
+    setS((st) => {
+      const mudou = <T,>(atual: T, servidor: T | undefined) =>
+        servidor !== undefined && JSON.stringify(atual) !== JSON.stringify(servidor);
+      const patch: Partial<State> = {};
+      if (mudou(st.webhooks, opts.initialWebhooks)) patch.webhooks = opts.initialWebhooks;
+      if (mudou(st.adProfiles, opts.initialProfiles)) patch.adProfiles = opts.initialProfiles;
+      if (mudou(st.pixels, opts.initialPixels)) patch.pixels = opts.initialPixels;
+      if (mudou(st.rules, opts.initialRules)) patch.rules = opts.initialRules;
+      if (mudou(st.expenses, opts.initialExpenses)) patch.expenses = opts.initialExpenses;
+      if (mudou(st.apiCredentials, opts.initialApiCredentials)) patch.apiCredentials = opts.initialApiCredentials;
+      return Object.keys(patch).length ? { ...st, ...patch } : st;
+    });
+  }, [
+    opts.initialWebhooks,
+    opts.initialProfiles,
+    opts.initialPixels,
+    opts.initialRules,
+    opts.initialExpenses,
+    opts.initialApiCredentials,
+  ]);
+
   function set(patch: Partial<State>) {
     setS((st) => ({ ...st, ...patch }));
   }
