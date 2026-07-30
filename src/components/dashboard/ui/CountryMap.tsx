@@ -12,10 +12,20 @@ import { ChartTooltip } from "./chartKit";
 import { useTamanho } from "./useTamanho";
 
 export interface PaisVenda {
+  /** ISO-2, ou `""` para "não identificado". */
   code: string;
   sales: number;
   revenue: number;
+  /** Quantas herdaram o país do clique em vez de trazer o próprio. */
+  estimadas: number;
 }
+
+/**
+ * Âmbar dos avisos. `--color-warning` NÃO existe em `globals.css` — o fallback
+ * é o que de fato pinta. Mesmo padrão do `AreasView`; sem ele o chip "estimado"
+ * herda a cor do texto e o aviso deixa de parecer aviso.
+ */
+const AMBAR = "var(--color-warning,#fbbf24)";
 
 const SIZE = 300; // lado do viewBox (o globo é sempre quadrado)
 const MARGEM = 6;
@@ -249,7 +259,9 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
         <div style={sx("display:flex;flex-direction:column;gap:9px;overflow:auto;flex:1;padding:2px")}>
           {dados.length === 0 ? (
             <div className="text-muted" style={sx("font-size:13px;display:grid;place-items:center;flex:1")}>
-              Nenhuma venda com país identificado.
+              {/* Só aparece quando NÃO HÁ VENDA. Venda sem país vira a linha
+                  "Não identificado" no ranking, e não este vazio. */}
+              Nenhuma venda no período.
             </div>
           ) : (
             dados.map((d, i) => {
@@ -259,18 +271,37 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
                   <div style={sx("display:flex;justify-content:space-between;font-size:12.5px;gap:8px")}>
                     <span>
                       <span className="text-muted" style={sx("margin-right:6px")}>{i + 1}.</span>
-                      <span style={sx("margin-right:5px")}>{PAIS[d.code]?.bandeira ?? "🌐"}</span>
-                      {nomePais(d.code)} <span className="text-muted">· {plural(d.sales, "venda", "vendas")}</span>
-                      {/* ⚠️ País sem posição no mapa é MARCADO, nunca omitido: o
-                          ranking é a única tela onde ele apareceria, e um mercado
-                          que some é justamente o que o usuário está procurando. */}
-                      {!temPosicao(d.code) && (
+                      <span style={sx("margin-right:5px")}>{d.code ? (PAIS[d.code]?.bandeira ?? "🌐") : "❔"}</span>
+                      {d.code ? nomePais(d.code) : <span className="text-muted">Não identificado</span>}{" "}
+                      <span className="text-muted">· {plural(d.sales, "venda", "vendas")}</span>
+                      {/* ⚠️ Nada aqui SOME: nem a venda sem país, nem o país sem
+                          posição no mapa, nem o país estimado. O que desaparece
+                          em silêncio é justamente o que o usuário precisa ver —
+                          um mercado novo, ou uma região que a base cobre mal. */}
+                      {!d.code && (
+                        <span
+                          className="text-muted"
+                          style={sx("margin-left:6px;font-size:11px;border:1px solid var(--color-neutral-700);border-radius:4px;padding:0 5px")}
+                          title="Sem IP do comprador no pagamento, ou IP fora da base. A cobertura é de ~100% na América Latina e na Europa, e menor na África (~96%)."
+                        >
+                          sem localização
+                        </span>
+                      )}
+                      {d.code && !temPosicao(d.code) && (
                         <span
                           className="text-muted"
                           style={sx("margin-left:6px;font-size:11px;border:1px solid var(--color-neutral-700);border-radius:4px;padding:0 5px")}
                           title="País reconhecido, mas sem posição cadastrada no mapa. Aparece no ranking; não ganha ponto no globo."
                         >
                           sem posição no mapa
+                        </span>
+                      )}
+                      {d.estimadas > 0 && (
+                        <span
+                          style={sx(`margin-left:6px;font-size:11px;border:1px solid ${AMBAR};color:${AMBAR};border-radius:4px;padding:0 5px`)}
+                          title={`${d.estimadas} destas vendas não trouxeram o país no pagamento e herdaram o da visita. Quem compra pelo navegador do Instagram ou do Facebook aparece no país do servidor da Meta, então esse valor é estimativa.`}
+                        >
+                          {d.estimadas === d.sales ? "estimado" : `${d.estimadas} estimada(s)`}
                         </span>
                       )}
                     </span>

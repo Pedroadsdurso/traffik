@@ -102,7 +102,8 @@ export interface DashboardData {
   payments: { name: string; total: number; count: number }[];
   funnel: { cliques: number; visitas: number; checkouts: number; iniciadas: number; vendas: number };
   /** Vendas aprovadas por país (ISO-2), ordenado por faturamento — Bloco 5. */
-  byCountry: { code: string; sales: number; revenue: number }[];
+  /** `code: ""` = não identificado. Nunca é descartado — ver `paisMap`. */
+  byCountry: { code: string; sales: number; revenue: number; estimadas: number }[];
   /** Taxa de aprovação por método de pagamento — Bloco 5. */
   approval: { name: string; geradas: number; pagas: number; rate: number }[];
   /** 24 posições (0–23) da janela filtrada — Bloco 4. */
@@ -555,13 +556,28 @@ function summarize(w: Window) {
 
   // ── Vendas por país (Bloco 5) ──
   // Prefere o país da venda; cai no país do clique quando o gateway não manda.
-  const paisMap = new Map<string, { sales: number; revenue: number }>();
+  //
+  // ⚠️ **Venda sem país NÃO é descartada** — vira a entrada `code: ""`, que a
+  // tela mostra como "Não identificado". Antes ela sumia do bloco inteiro, e o
+  // ranking dava a impressão de que 100% das vendas estavam geolocalizadas.
+  // Some justamente quem a base não cobre (a África tem ~4% de lacuna), que é o
+  // caso em que o usuário mais precisa saber que não sabemos.
+  //
+  // ⚠️ `estimadas` conta as que herdaram o país do CLIQUE em vez de trazer o
+  // próprio. O clique pode ter passado pelo datacenter da rede social (55,6% do
+  // tráfego humano vem do navegador embutido do app), então esse país é palpite,
+  // não medida. Hoje isso é 0 com a Kirvano — que manda o IP do comprador —,
+  // mas é propriedade DELA, não do nosso desenho: um gateway novo que não mande
+  // IP faz o número subir, e é assim que a tela avisa.
+  const paisMap = new Map<string, { sales: number; revenue: number; estimadas: number }>();
   for (const s of approved) {
-    const code = (s.country ?? s.click?.country ?? "").trim().toUpperCase();
-    if (!code) continue;
-    const cur = paisMap.get(code) ?? { sales: 0, revenue: 0 };
+    const proprio = (s.country ?? "").trim().toUpperCase();
+    const doClique = (s.click?.country ?? "").trim().toUpperCase();
+    const code = proprio || doClique;
+    const cur = paisMap.get(code) ?? { sales: 0, revenue: 0, estimadas: 0 };
     cur.sales += 1;
     cur.revenue += num(s.value);
+    if (!proprio && doClique) cur.estimadas += 1;
     paisMap.set(code, cur);
   }
   const byCountry = [...paisMap.entries()]

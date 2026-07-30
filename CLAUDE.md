@@ -2857,15 +2857,17 @@ aguardando o teste do usuário. Sem migration pendente — o deploy é só push.
 
 ### ⚠️ Fila da próxima sessão
 
-**GEOLOCALIZAÇÃO — passos 1 a 3 FEITOS.** As rotas resolvem o país, a base cobre
-IPv4 **e IPv6**, e o mapa foi de 32 para **252 países**. O que falta é **rodar o
-backfill de novo em produção** (recupera 13 vendas IPv6) — comando na seção
-"🌍 GEOLOCALIZAÇÃO".
+**GEOLOCALIZAÇÃO — passos 1 a 4 FEITOS e o backfill APLICADO em produção.**
+As rotas resolvem o país, a base cobre IPv4 **e IPv6**, o mapa foi de 32 para
+**252 países**, e o histórico foi preenchido: **237 cliques · 15 vendas** (eram
+0 e 2). 11 vendas são perda definitiva — nunca tiveram IP no payload.
 
-⚠️ **Dois achados desta sessão mudaram a ordem, e os dois BLOQUEIAM o hash do
-IP** (que é irreversível): a marcação de bot e o **navegador embutido do app da
-Meta**, que responde por **55,6% do tráfego humano** e falseia o país do clique.
-Ver as seções próprias.
+⚠️ **Dois achados mudaram a ordem, e os dois BLOQUEIAM o hash do IP** (que é
+irreversível): a marcação de bot e o **navegador embutido do app da Meta**, que
+responde por **55,6% do tráfego humano** e falseia o país do clique. Ver as
+seções próprias.
+
+**Próxima sessão: marcação de bot (passo 5)** — tem migration.
 
 Fora isso: **faxina de código morto** (lista em "Pendências abertas") e o
 **import/export do Bloco 8**, que ficou de fora de propósito. O lint está em
@@ -3484,6 +3486,57 @@ Dados de teste removidos por id depois (7 vendas, 5 cliques, 1 webhook, 2 evento
 9 logs, 9 notificações órfãs — a `Notification.saleId` é `SetNull`, então elas
 **não** somem com a venda). `tsc`, `lint` e `next build` limpos.
 
+### ✅ Backfill APLICADO em produção (30/07/2026)
+
+| | Antes | Depois |
+|---|---|---|
+| Cliques com país | 0 | **237** — BR 147 · US 65 · IE 25 |
+| Vendas com país | 2 | **15** (todas pelo IP do comprador no payload) |
+| Vendas irrecuperáveis | — | **11** (sem IP nenhum no payload) |
+
+O backfill IPv4 e o IPv6 acabaram rodando **num único `--aplicar`**, porque a
+execução IPv4 anterior tinha ficado só na simulação. **Não deu diferença: o
+script é idempotente** (`UPDATE … AND country IS NULL`), então a passada única
+com a base completa resolveu os dois de uma vez.
+
+> ⚠️ As 11 vendas sem IP são **perda definitiva**, não pendência. Nenhum passo
+> futuro as recupera — o payload daquelas vendas nunca teve IP do comprador.
+
+### 🔌 REQUISITO DE TODA INTEGRAÇÃO DE GATEWAY NOVA
+
+> ### 🔴 Pergunte SEMPRE: este gateway manda o IP do comprador no payload?
+>
+> É a diferença entre geolocalização **medida** e **estimada**, e ela não
+> aparece na tela sozinha — o número fica plausível dos dois jeitos.
+>
+> | O gateway manda IP? | O que acontece |
+> |---|---|
+> | **Sim** (Kirvano) | `Sale.country` vem do IP real do comprador. Confiável. |
+> | **Não** | A venda cai no **fallback do clique** — e 55,6% dos cliques passam pelo datacenter da Meta, então o país é palpite |
+>
+> Ao integrar um gateway, cheque no payload real as chaves que
+> `normalizeSale` procura: `ip` · `buyer_ip` · `customer.ip` · `ip_address`. Se
+> nenhuma vier, **registre aqui** — e considere pedir o campo ao gateway, que
+> costuma existir e só não vir por padrão.
+>
+> ⚠️ **Zero vendas dependem do fallback hoje.** Isso é propriedade da **Kirvano**,
+> não do nosso desenho. Não escreva código assumindo que `Sale.country` é sempre
+> confiável.
+
+**A ferramenta detecta sozinha.** `computeDashboard` conta, por país, quantas
+vendas herdaram o país do clique em vez de trazer o próprio (`byCountry[].estimadas`),
+e o ranking marca com um chip **âmbar "estimado"**, com o motivo no `title`.
+Nenhuma migration foi necessária: `Sale.country` nulo + `Click.country` presente
+**é** a assinatura do fallback.
+
+| Gateway | Manda IP do comprador? | Verificado em |
+|---|---|---|
+| **Kirvano** | ✅ sim (`customer.ip`) | 30/07/2026, 15 vendas reais |
+| Hotmart | ❓ não integrado | — |
+| Kiwify | ❓ não integrado | — |
+| Cartpanda | ❓ não integrado | — |
+| Chave de API (`/api/webhook/ingest`) | ⚠️ depende de quem envia | documentar no "Como usar" |
+
 ### 📋 Como rodar o backfill em PRODUÇÃO
 
 ```bash
@@ -3534,10 +3587,10 @@ ALLOW_PROD_WRITES=EU_QUERO_MESMO_ESCREVER_EM_PRODUCAO \
 | 1 | Chamar `resolverPais()` nas rotas | ✅ feito |
 | 2 | Backfill IPv4 do histórico | ✅ script pronto · **usuário rodou** |
 | 3 | **IPv6 na base** + cobertura mundial do mapa | ✅ feito nesta sessão |
-| 4 | **Rodar o backfill de novo** (recupera as vendas IPv6) | ⏳ **pendente — comando abaixo** |
-| 5 | Marcação de bot (`Click.bot`) — tem migration | ⏳ próxima sessão |
-| 6 | Correção do navegador embutido de app | ⏳ proposta pronta, não implementada |
-| 7 | **Hash do IP + limpeza dos `rawPayload`** | 🔒 **BLOQUEADO até 4, 5 e 6** |
+| 4 | Rodar o backfill de novo (recupera as vendas IPv6) | ✅ **aplicado — 237 cliques · 15 vendas** |
+| 5 | Marcação de bot (`Click.bot`) — tem migration | ⏳ **PRÓXIMA SESSÃO** |
+| 6 | Correção do navegador embutido de app | ⏳ proposta pronta e decidida, não implementada |
+| 7 | **Hash do IP + limpeza dos `rawPayload`** | 🔒 **BLOQUEADO até 5 e 6** |
 
 > ### 🔴🔴 O HASH DO IP É O ÚLTIMO PASSO, E DEPENDE DE TODOS OS ANTERIORES
 >
@@ -3612,6 +3665,27 @@ do bloco que o contém, quase sempre correto.
 > mapeando um país para outro. O gerador **aborta** acima de 256 e diz para
 > trocar por `Uint16Array`.
 
+### 💰 O artefato de 5,7 MB — custo MEDIDO, não estimado
+
+| | |
+|---|---|
+| `import` do módulo | 66 ms |
+| 1ª consulta IPv4 (decodifica a base) | 3,3 ms |
+| 1ª consulta IPv6 (decodifica a base) | 3,6 ms |
+| **Cold start total** | **73 ms** |
+| Consulta aquecida IPv4 | **0,18 µs** |
+| Consulta aquecida IPv6 | **0,50 µs** |
+| Bundle do servidor (`.next/server`) | **35 MB** — limite da Vercel é 250 MB |
+
+- **O artefato fica num chunk próprio** (`chunks/src_lib_geo_pais_ts_*.js`,
+  5,76 MB). Rota que não importa a base **não paga nada** — o dashboard, as
+  notificações e o sync seguem iguais.
+- **Nunca vai para o navegador.** Só rotas de API o importam.
+- Os 66 ms do `import` foram medidos com type-stripping do `.ts`; no build de
+  produção o parse é de `.js` já compilado, então o número real é **menor**.
+- **73 ms uma vez por instância fria**, contra ~99 ms de UMA ida ao Supabase.
+  Está na mesma ordem de grandeza de uma query — e a base não faz I/O nenhum.
+
 ### Cobertura por região (amostragem de 2.000 IPs por RIR)
 
 | RIR | Cobertura IPv4 | IPv6 |
@@ -3622,9 +3696,21 @@ do bloco que o contém, quase sempre correto.
 | APNIC (Ásia-Pacífico) | 99,3% | ✓ KR, IN, CN |
 | **AFRINIC (África)** | **95,9%** | ✓ DZ, TZ |
 
-**A única lacuna real é a África, com ~4% do espaço sem país.** Fica registrado
-porque o efeito é silencioso: o visitante simplesmente não aparece no mapa. Se
-um cliente rodar oferta para a África e vir "não identificado" demais, é aqui.
+**A única lacuna real é a África, com ~4% do espaço sem país.**
+
+> ### ⚠️ Venda que a base não cobre aparece como "Não identificado" — nunca some
+> Antes, `byCountry` fazia `if (!code) continue` e a venda sem país **sumia do
+> bloco inteiro**. O ranking então dava a impressão de que 100% das vendas
+> estavam geolocalizadas, e o único caso em que isso importa — a região que a
+> base cobre mal — era o invisível.
+>
+> Hoje ela vira a entrada `code: ""`, mostrada como **"Não identificado"** com
+> chip **"sem localização"**, e o `title` explica a cobertura por região
+> (~100% na América Latina e na Europa, **~96% na África**).
+>
+> **Nunca chutar.** `paisDoIp` devolve `null` para bloco não coberto em vez de
+> herdar o país da faixa anterior — é para isso que existem as entradas de
+> "buraco" na cobertura contínua.
 
 ### O mapa saiu de 32 para 252 países
 
@@ -3728,6 +3814,68 @@ Sinais, em ordem de confiança:
 > - **Fuso horário do navegador** (`Intl.DateTimeFormat().resolvedOptions()`) —
 >   `America/Sao_Paulo` é sinal geográfico direto e o script já roda no cliente.
 >   Custa um campo no payload do `t.js`.
+
+### 🎯 `targeting.geo_locations` — a fonte decidida (respostas de 30/07/2026)
+
+**(a) A Graph API expõe, e é barata.** `targeting` é um campo do **AdSet**, e o
+`syncAdSets` já faz `GET /{account}/adsets` com `fields=…`. Acrescentar
+`targeting{geo_locations}` à lista **não é uma chamada nova** — é um campo a mais
+numa requisição que já acontece. **Custo de rate limit: zero.**
+
+> ⚠️ **É do AdSet, não da Campaign.** Campanha com 3 conjuntos pode ter 3
+> segmentações diferentes. A união dos conjuntos é o país possível da campanha.
+>
+> ⚠️ `geo_locations` tem várias formas: `countries: ["BR"]`, `country_groups`,
+> `regions`, `cities` (com `country` dentro), `geo_markets`, `zips`. E existe
+> `excluded_geo_locations`. Ler só `countries` perde a campanha segmentada por
+> cidade — que é comum. **Colete o conjunto de países de todas as formas.**
+
+**(b) Sim, o desempate parcial é a melhor parte da ideia.** A segmentação
+raramente dá o país sozinha, mas **elimina candidatos**, e é aí que o sinal fraco
+vira forte:
+
+| Situação | Conclusão |
+|---|---|
+| Segmenta 1 país | **O país É esse.** Nada mais precisa entrar |
+| IP diz `US`, campanha roda `BR`+`MX` | `US` está **errado com certeza**. Escolha entre BR e MX pelo carrier/locale — que agora decide entre 2, não entre 195 |
+| IP diz `BR`, campanha roda `BR`+`MX` | IP **compatível** → mantém `BR`, sem heurística nenhuma |
+| Sem campanha (orgânico/direto) | Sem desempate. Cai no IP |
+
+O ganho é justamente esse: **`pt_BR` é fraco como afirmação e forte como
+desempate.** Entre "BR ou MX", `pt_BR` decide bem; entre 195 países, não.
+
+**(c) Sincronizar junto com a estrutura, não sob demanda.** Três razões:
+
+1. É **campo na chamada que já existe** — sob demanda seria uma requisição nova
+   por clique, e cliques chegam a dezenas por minuto.
+2. O clique é gravado **no instante em que acontece**; consultar a Graph API
+   dentro do `/api/track/click` colocaria uma chamada externa no caminho de uma
+   rota que hoje só escreve no banco.
+3. A segmentação muda raramente — é ato humano, como criar campanha. É
+   exatamente o critério do ciclo `COMPLETO` (3 min) vs. `METRICAS` (20s).
+
+Precisa de **migration**: `AdSet.geoCountries String[]`. Aditiva.
+
+> ⚠️ **Anúncio sem conjunto sincronizado não tem desempate.** O `utm_content`
+> leva o id do anúncio, e é preciso subir até o AdSet — que só existe se o ciclo
+> completo já rodou. Para tráfego recém-criado, cai no IP.
+
+### 📥 Coletar agora, usar depois: `Accept-Language` e fuso do navegador
+
+Aprovados como **dado barato de coletar hoje**. Nenhum dos dois existe ainda:
+
+- **`Accept-Language`** — header já presente em toda requisição do `/api/track/click`.
+  Mais rico que o locale do UA: traz lista com pesos (`pt-BR,pt;q=0.9,en;q=0.8`).
+  Custa **uma linha** e uma coluna.
+- **Fuso do navegador** — `Intl.DateTimeFormat().resolvedOptions().timeZone` no
+  `t.js`. `America/Sao_Paulo` é sinal **geográfico direto**, não linguístico —
+  mais forte que o locale, e não sofre do problema do brasileiro morando fora.
+
+> ⚠️ Mexer no `t.js` significa **snippet reinstalado** para valer (regra
+> permanente: nenhum identificador emitido muda de significado, mas campo novo
+> só chega de quem reinstalar). O `Accept-Language` não tem esse custo — é
+> header, funciona com o script já instalado. **Faça os dois, sabendo que um
+> começa a valer na hora e o outro conforme os clientes reinstalarem.**
 
 > ### 🔴 A SOLUÇÃO DEPENDE DO IP — por isso vem ANTES do hash
 > Decidir "este visitante está num datacenter da Meta" exige **comparar o IP com
