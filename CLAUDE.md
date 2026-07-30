@@ -2857,10 +2857,15 @@ aguardando o teste do usuário. Sem migration pendente — o deploy é só push.
 
 ### ⚠️ Fila da próxima sessão
 
-**GEOLOCALIZAÇÃO: os passos 1 e 2 estão FEITOS** — as rotas resolvem o país e o
-script de backfill está pronto e testado. Falta **rodar o backfill em produção**
-(comandos na seção "🌍 GEOLOCALIZAÇÃO"), e só depois disso vem o passo 3, que é
-**irreversível** e exige backup.
+**GEOLOCALIZAÇÃO — passos 1 a 3 FEITOS.** As rotas resolvem o país, a base cobre
+IPv4 **e IPv6**, e o mapa foi de 32 para **252 países**. O que falta é **rodar o
+backfill de novo em produção** (recupera 13 vendas IPv6) — comando na seção
+"🌍 GEOLOCALIZAÇÃO".
+
+⚠️ **Dois achados desta sessão mudaram a ordem, e os dois BLOQUEIAM o hash do
+IP** (que é irreversível): a marcação de bot e o **navegador embutido do app da
+Meta**, que responde por **55,6% do tráfego humano** e falseia o país do clique.
+Ver as seções próprias.
 
 Fora isso: **faxina de código morto** (lista em "Pendências abertas") e o
 **import/export do Bloco 8**, que ficou de fora de propósito. O lint está em
@@ -3522,27 +3527,215 @@ ALLOW_PROD_WRITES=EU_QUERO_MESMO_ESCREVER_EM_PRODUCAO \
 - **186 asserções em 6 suítes, 0 falhas** (`pais` 30 · `ip` 27 · `telefone` 28 ·
   `financeiro` 42 · `periodo` 33 · `areas` 26).
 
-### ⏳ PRÓXIMOS PASSOS, NESTA ORDEM EXATA
+### ⏳ ORDEM DOS PASSOS — revisada em 30/07/2026 (sessão 2)
 
-1. ~~Chamar `resolverPais()` nas rotas~~ → ✅ **feito**
-2. **Backfill do histórico** → ✅ script pronto e testado; **falta rodar em
-   produção** (roteiro acima)
-3. **SÓ ENTÃO**: hash do IP (`sha256(ENCRYPTION_KEY + ip)`) e limpeza do IP em
-   `Sale.rawPayload` e `WebhookLog.payloadRaw`.
-4. **Ranking do globo** com "Não identificado" agrupado, nunca sumindo.
+| | Passo | Estado |
+|---|---|---|
+| 1 | Chamar `resolverPais()` nas rotas | ✅ feito |
+| 2 | Backfill IPv4 do histórico | ✅ script pronto · **usuário rodou** |
+| 3 | **IPv6 na base** + cobertura mundial do mapa | ✅ feito nesta sessão |
+| 4 | **Rodar o backfill de novo** (recupera as vendas IPv6) | ⏳ **pendente — comando abaixo** |
+| 5 | Marcação de bot (`Click.bot`) — tem migration | ⏳ próxima sessão |
+| 6 | Correção do navegador embutido de app | ⏳ proposta pronta, não implementada |
+| 7 | **Hash do IP + limpeza dos `rawPayload`** | 🔒 **BLOQUEADO até 4, 5 e 6** |
 
-> ### 🔴🔴 REGRA QUE NÃO PODE INVERTER: passo 2 ANTES do passo 3
+> ### 🔴🔴 O HASH DO IP É O ÚLTIMO PASSO, E DEPENDE DE TODOS OS ANTERIORES
 >
-> Anonimizar antes do backfill **destrói para sempre** a única chance de derivar
-> o país do histórico. Não há como voltar atrás.
+> Ele é **irreversível**: destrói a única fonte de que os passos 2, 3 e 6
+> dependem. Cada passo anterior que ficar para depois dele fica para **nunca**.
 >
-> **O passo 3 é IRREVERSÍVEL — exige backup de produção antes:**
+> A ordem já quase se inverteu uma vez: o plano original era anonimizar logo
+> depois do backfill IPv4, e isso teria congelado **50% das vendas sem país**
+> — todas IPv6, todas brasileiras, incluindo uma aprovada. O que salvou foi
+> medir antes de executar.
+>
+> **Antes do passo 7, confirme que estão resolvidos:**
+> - [ ] Backfill rodado **depois** do IPv6, com a contagem conferida
+> - [ ] Bot marcado (usa `userAgent`, que o hash **não** apaga — mas a
+>       classificação retroativa precisa do dado de antes)
+> - [ ] Navegador de app resolvido — **depende do `userAgent`, e a proposta usa
+>       o IP para decidir se o visitante está num datacenter de rede social**
+>
+> **E exige backup imediatamente antes:**
 > ```bash
 > npm run backup -- --url '<connection string de produção>'
 > ```
+
+## 🌐 IPv6 e cobertura mundial do mapa (30/07/2026, sessão 2)
+
+### Por que o IPv6 deixou de ser opcional
+
+Medido no backup de produção: **100% das vendas sem país eram IPv6** — 14 de 14,
+todas do bloco `2804:29b8::/32` (LACNIC/Brasil), **incluindo a única venda
+aprovada** entre elas. E **0 cliques eram IPv6**.
+
+Não é coincidência: o clique chega pelo navegador (o site é servido em IPv4),
+mas o gateway registra o IP do comprador na rede móvel ou de casa, onde o IPv6
+já é padrão no Brasil. **A tabela `Sale` é IPv6; a `Click` é IPv4.**
+
+| | Antes | Depois |
+|---|---|---|
+| Vendas com país (backup real) | 2 de 26 | **15 de 26** |
+| Cliques com país | 237 | 237 (já eram IPv4) |
+
+### O prefixo é truncado em 64 bits
+
+| Prefixo | Entradas | Faixas perdidas | Binário |
+|---|---|---|---|
+| **64 (escolhido)** | 329.970 | 12.417 (4,5%) | **2,84 MB** |
+| 56 | 262.590 | 87.061 (32%) | 2,00 MB |
+| 48 | 240.242 | 104.720 (38%) | 1,60 MB |
+
+Os cortes menores economizam pouco e descartam um terço das faixas. As 4,5%
+perdidas em 64 são alocações mais específicas — cliente único, que herda o país
+do bloco que o contém, quase sempre correto.
+
+> ### ⚠️ Nada de BigInt no caminho quente
+> `ipv6ParaPrefixo()` devolve **dois `number` de 32 bits** (`alto`, `baixo`), e a
+> busca binária compara lexicograficamente. BigInt aloca no heap a cada
+> operação, e isto roda em toda requisição de clique e em toda venda. O gerador
+> usa BigInt — ele roda uma vez por mês, na sua máquina.
+
+> ### ⚠️ IPv4-mapeado (`::ffff:1.2.3.4`) tem desvio próprio
+> É um IPv4 escrito em notação IPv6: a base de IPv6 **não** o cobre, a de IPv4
+> sim. Sem o desvio em `paisDoIp`, todo cliente atrás de um proxy dual-stack
+> cairia em "não identificado".
+
+> ### ⚠️ `*` seguido de `/` FECHA O COMENTÁRIO
+> Escrever `**/64**` num bloco `/** … */` quebrou o gerador e depois o `pais.ts`
+> com `SyntaxError`. Nos comentários deste projeto, prefixo IPv6 se escreve
+> **sem barra** ("truncado em 64 bits").
+
+> ### 🔒 A guarda de 256 países não é teórica
+> O índice do país é um `Uint8`. Com IPv4 e IPv6 compartilhando a tabela, o total
+> subiu de **251 para 252** — a 4 de estourar e dar a volta em silêncio,
+> mapeando um país para outro. O gerador **aborta** acima de 256 e diz para
+> trocar por `Uint16Array`.
+
+### Cobertura por região (amostragem de 2.000 IPs por RIR)
+
+| RIR | Cobertura IPv4 | IPv6 |
+|---|---|---|
+| LACNIC (América Latina) | **100,0%** | ✓ AR, BR |
+| RIPE (Europa/Oriente Médio) | **100,0%** | ✓ DE, IE |
+| ARIN (América do Norte) | 99,9% | ✓ US |
+| APNIC (Ásia-Pacífico) | 99,3% | ✓ KR, IN, CN |
+| **AFRINIC (África)** | **95,9%** | ✓ DZ, TZ |
+
+**A única lacuna real é a África, com ~4% do espaço sem país.** Fica registrado
+porque o efeito é silencioso: o visitante simplesmente não aparece no mapa. Se
+um cliente rodar oferta para a África e vir "não identificado" demais, é aqui.
+
+### O mapa saiu de 32 para 252 países
+
+Os 32 eram "os que aparecem em infoproduto em português" — premissa errada para
+uma ferramenta usada por quem roda oferta mundial: **o mercado novo era
+justamente o invisível**. Hoje cobre os 193 membros da ONU + territórios com
+tráfego próprio, e `npm run test:pais` **falha** se a base resolver um país que
+o mapa não sabe desenhar. Paridade atual: **252 no mapa · 252 na base**.
+
+- **A bandeira é CALCULADA** (`bandeiraDe`), pelos indicadores regionais Unicode.
+  250 emojis literais num arquivo-fonte são convite a erro invisível — um emoji
+  errado é indistinguível de um certo em code review.
+- **`FX` e `AN` estão na tabela de propósito.** São códigos ISO **obsoletos**
+  (França metropolitana; Antilhas Neerlandesas, dissolvidas em 2010) que a base
+  de IP ainda emite para blocos antigos. Sem eles a venda seria geolocalizada e
+  mesmo assim não apareceria.
+- **País sem posição no mapa é MARCADO no ranking, nunca omitido** — chip "sem
+  posição no mapa" com explicação no `title`. É a mesma regra do "Não
+  identificado": o que some em silêncio é o que o usuário está procurando.
+
+## 🔴 ACHADO: o navegador embutido do app da Meta falseia a geolocalização
+
+**Medido no backup de produção (30/07/2026). Diagnóstico feito, solução NÃO
+implementada** — ver o passo 6 da ordem.
+
+O navegador embutido do Instagram e do Facebook roteia pela infraestrutura da
+Meta. O IP que chega até nós é o de um **datacenter da Meta**, não o do
+visitante. Isso não é caso de borda neste produto: **é o caminho principal.**
+
+| | Cliques | % dos humanos |
+|---|---|---|
+| Instagram (app) | 70 | 35,4% |
+| Facebook (app) | 40 | 20,2% |
+| **Total em navegador embutido** | **110** | **55,6%** |
+
+De 198 cliques humanos (237 menos 39 bots), **29 resolveram para fora do Brasil**
+sendo brasileiros — com `pt_BR` no user agent e, em 8 deles, **`FBCR/VIVO`**, a
+operadora Vivo.
+
+> ### ⚠️ Foi por pouco que isto não virou "filtrar os gringos"
+> A suspeita inicial era de que os 90 cliques US+IE fossem todos crawler. A
+> decomposição mostrou **37 bots e 53 pessoas reais** — e as 2 únicas vendas que
+> casaram com um clique vieram justamente do navegador do app. Filtrar por país
+> teria apagado compradores.
 >
-> Ordem prática: ✅ passo 1 → **rodar o backfill em produção** → conferir a
-> contagem de registros atualizados → só então o passo 3.
+> **Regra que fica: país NUNCA é critério de filtragem.** Critério é `userAgent`
+> e origem de datacenter.
+
+### ✅ Onde o problema NÃO está: as vendas
+
+Verificado no backup, e é melhor do que se temia:
+
+| Fonte do país da venda | Vendas |
+|---|---|
+| IP do comprador no payload (fonte confiável) | 15 |
+| **Só o país do clique casado (exposto ao erro)** | **0** |
+| Sem fonte nenhuma | 11 |
+
+**Nenhuma venda depende hoje do fallback para o clique**, porque a Kirvano manda
+o IP do comprador em todo payload — e esse IP é o real dele, não o da Meta.
+O globo de "Vendas por país" **não está contaminado**.
+
+> ⚠️ **Isso é uma propriedade da Kirvano, não do desenho.** Um gateway que não
+> mande o IP do comprador faz toda venda dele cair no país do clique — e aí o
+> erro entra no globo. `metrics.ts` faz `s.country ?? s.click?.country`.
+
+**O que está errado é a geografia do CLIQUE**: "Vendas por país" está certo, mas
+qualquer análise de *visitas* por país está inflando US/IE e subnotificando o
+país real.
+
+### Proposta (a implementar no passo 6)
+
+**Gravar a FONTE do país junto com o país** — `Click.countrySource` /
+`Sale.countrySource`, com valores `payload` · `ip` · `carrier` · `locale` ·
+`clique` · `header`. Sem isso não há como auditar nem como a tela dizer "isto é
+estimativa". É a parte mais importante da proposta.
+
+**Desempate só quando o IP cai em datacenter conhecido de rede social** — nunca
+sobrescrevendo IP residencial legítimo. Um americano de verdade comprando pelo
+Instagram continua `US`.
+
+Sinais, em ordem de confiança:
+
+| Sinal | Força | Ressalva |
+|---|---|---|
+| `FBCR/<operadora>` | **forte** | operadora é geográfica por natureza. Só 8 dos 29 casos tinham |
+| Idioma do `Accept-Language` da requisição | média | **não é coletado hoje** — ver abaixo |
+| `pt_BR` no user agent | **fraca** | é o idioma do aparelho. Brasileiro fora mantém `pt_BR`; celular em inglês no Brasil mostra `en_US` |
+
+> ### 💡 Fonte melhor que carrier e locale, que não estava em consideração
+> **O `utm_campaign` já diz o país da campanha.** O clique veio de um anúncio da
+> Meta cujo id está no UTM (Bloco 11) — e a segmentação geográfica daquela
+> campanha é buscável na Graph API. Para tráfego pago, que é o caso de uso
+> inteiro deste produto, isso é **mais confiável que qualquer heurística de UA**:
+> é o que o próprio anunciante configurou.
+>
+> Duas outras, mais baratas:
+> - **`Accept-Language` da requisição** — mais rico que o locale do UA (traz
+>   lista com pesos, ex. `pt-BR,pt;q=0.9,en;q=0.8`). **Não é coletado hoje**;
+>   coletar é uma linha no `/api/track/click`.
+> - **Fuso horário do navegador** (`Intl.DateTimeFormat().resolvedOptions()`) —
+>   `America/Sao_Paulo` é sinal geográfico direto e o script já roda no cliente.
+>   Custa um campo no payload do `t.js`.
+
+> ### 🔴 A SOLUÇÃO DEPENDE DO IP — por isso vem ANTES do hash
+> Decidir "este visitante está num datacenter da Meta" exige **comparar o IP com
+> as faixas ASN da Meta**. Depois do passo 7 o IP vira hash e essa comparação
+> deixa de ser possível — para o histórico, para sempre.
+>
+> Se o passo 7 rodar antes do 6, a correção fica limitada ao tráfego futuro e os
+> cliques já gravados ficam com o país errado, sem recurso.
 
 ### 📌 Decisões registradas
 

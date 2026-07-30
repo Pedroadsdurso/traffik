@@ -1,4 +1,11 @@
-import { FAIXAS_B64, PAISES, TOTAL_FAIXAS } from "./ipCountryData";
+import {
+  BITS_IPV6,
+  FAIXAS6_B64,
+  FAIXAS_B64,
+  PAISES,
+  TOTAL_FAIXAS,
+  TOTAL_FAIXAS6,
+} from "./ipCountryData";
 
 /**
  * # IP → país, com base LOCAL
@@ -20,16 +27,25 @@ import { FAIXAS_B64, PAISES, TOTAL_FAIXAS } from "./ipCountryData";
  *
  * São ~19 comparações para 290 mil faixas. Sem I/O, sem parse, sem rede.
  *
- * ## ⚠️ IPv4 apenas, por enquanto
+ * ## IPv6 (30/07/2026)
  *
- * O arquivo de IPv6 é quase o dobro e o tráfego brasileiro de origem de anúncio
- * ainda é majoritariamente IPv4. Um IPv6 devolve `null` — que é tratado como
- * "não identificado", nunca como um país errado.
+ * Cobertos desde que **100% das vendas sem país eram IPv6** — o clique chega
+ * pelo navegador (o site é IPv4), mas o gateway registra o IP do comprador na
+ * rede móvel/casa, onde o IPv6 já é padrão no Brasil. Sem isso, metade das
+ * vendas ficaria sem país para sempre depois da anonimização.
+ *
+ * O prefixo é truncado em 64 bits — ver a tabela de custo em
+ * `scripts/gen-ip-country.mjs`. (Escrito sem barra: `*` seguido de `/` fecharia
+ * este comentário.)
  */
 
 /** Decodificado uma vez por processo, na primeira consulta. */
 let inicios: Uint32Array | null = null;
 let indices: Uint8Array | null = null;
+/** IPv6: as duas metades de 32 bits do prefixo /64, mais os índices. */
+let alto6: Uint32Array | null = null;
+let baixo6: Uint32Array | null = null;
+let indices6: Uint8Array | null = null;
 
 function carregar(): void {
   if (inicios) return;
@@ -41,6 +57,21 @@ function carregar(): void {
   for (let i = 0; i < n; i++) ini[i] = buf.readUInt32BE(i * 4);
   inicios = ini;
   indices = new Uint8Array(buf.subarray(n * 4, n * 5));
+}
+
+function carregar6(): void {
+  if (alto6) return;
+  const buf = Buffer.from(FAIXAS6_B64, "base64");
+  const n = TOTAL_FAIXAS6;
+  const a = new Uint32Array(n);
+  const b = new Uint32Array(n);
+  for (let i = 0; i < n; i++) {
+    a[i] = buf.readUInt32BE(i * 4);
+    b[i] = buf.readUInt32BE(n * 4 + i * 4);
+  }
+  alto6 = a;
+  baixo6 = b;
+  indices6 = new Uint8Array(buf.subarray(n * 8, n * 9));
 }
 
 /** `1.2.3.4` → inteiro de 32 bits. `null` se não for um IPv4 válido. */
@@ -58,6 +89,73 @@ export function ipv4ParaInt(ip: string): number | null {
 }
 
 /**
+ * IPv6 → as duas metades de 32 bits do prefixo `/64`.
+ *
+ * ⚠️ **Sem BigInt, de propósito.** Isto roda em toda requisição de clique e em
+ * toda venda; BigInt aloca no heap a cada operação. Dois `number` de 32 bits
+ * cabem exatos num double e comparam-se lexicograficamente.
+ *
+ * Aceita a forma comprimida (`::`), IPv4-mapeado (`::ffff:1.2.3.4` → tratado
+ * como IPv4 por quem chama) e zona de escopo (`%eth0`), que é descartada.
+ */
+export function ipv6ParaPrefixo(ip: string): { alto: number; baixo: number } | null {
+  if (BITS_IPV6 !== 64) throw new Error("ipv6ParaPrefixo assume prefixo /64");
+
+  const semZona = ip.split("%")[0]!.trim().toLowerCase();
+  const partes = semZona.split("::");
+  if (partes.length > 2) return null;
+
+  const esq = partes[0] ? partes[0].split(":") : [];
+  const dir = partes.length === 2 ? (partes[1] ? partes[1].split(":") : []) : null;
+  // Só o prefixo /64 importa, mas a expansão do `::` precisa do total de grupos.
+  const grupos =
+    dir === null ? esq : [...esq, ...Array(8 - esq.length - dir.length).fill("0"), ...dir];
+  if (grupos.length !== 8) return null;
+
+  let alto = 0;
+  let baixo = 0;
+  for (let i = 0; i < 4; i++) {
+    const g = grupos[i]!;
+    if (!/^[0-9a-f]{1,4}$/.test(g)) return null;
+    const v = parseInt(g, 16);
+    // Os 4 primeiros grupos são o /64: os 2 primeiros na metade alta.
+    if (i < 2) alto = alto * 0x10000 + v;
+    else baixo = baixo * 0x10000 + v;
+  }
+  return { alto: alto >>> 0, baixo: baixo >>> 0 };
+}
+
+/** País de um IPv6, pelo prefixo /64. `null` quando a base não cobre. */
+function paisDoIpv6(ip: string): string | null {
+  const p = ipv6ParaPrefixo(ip);
+  if (!p) return null;
+
+  carregar6();
+  const a = alto6!;
+  const b = baixo6!;
+
+  // Busca binária lexicográfica sobre (alto, baixo) — a última faixa cujo
+  // prefixo é ≤ o consultado.
+  let lo = 0;
+  let hi = a.length - 1;
+  let achado = -1;
+  while (lo <= hi) {
+    const meio = (lo + hi) >>> 1;
+    const menorOuIgual = a[meio]! < p.alto || (a[meio]! === p.alto && b[meio]! <= p.baixo);
+    if (menorOuIgual) {
+      achado = meio;
+      lo = meio + 1;
+    } else {
+      hi = meio - 1;
+    }
+  }
+  if (achado < 0) return null;
+
+  const pais = PAISES[indices6![achado]!];
+  return pais && pais !== "\0" ? pais : null;
+}
+
+/**
  * País (ISO-2) de um endereço IPv4, pela base local.
  *
  * `null` quando: não é IPv4, está num bloco sem país conhecido, ou a base não
@@ -66,7 +164,17 @@ export function ipv4ParaInt(ip: string): number | null {
  */
 export function paisDoIp(ip: string | null | undefined): string | null {
   if (!ip) return null;
-  const alvo = ipv4ParaInt(ip.trim());
+  const s = ip.trim();
+
+  // IPv4-mapeado (`::ffff:187.45.192.1`) é um IPv4 escrito em notação IPv6 — a
+  // base de IPv6 não o cobre, mas a de IPv4 sim. Sem este desvio, todo cliente
+  // atrás de um proxy dual-stack cairia em "não identificado".
+  const mapeado = /^::ffff:((?:\d{1,3}\.){3}\d{1,3})$/i.exec(s);
+  const puro = mapeado ? mapeado[1]! : s;
+
+  if (puro.includes(":")) return paisDoIpv6(puro);
+
+  const alvo = ipv4ParaInt(puro);
   if (alvo === null) return null;
 
   carregar();

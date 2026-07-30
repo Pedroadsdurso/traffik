@@ -4,7 +4,7 @@ import { geoOrthographic, geoPath, geoCircle } from "d3-geo";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useTheme } from "@/components/theme/ThemeProvider";
-import { PAIS, nomePais } from "@/lib/countries";
+import { PAIS, nomePais, temPosicao } from "@/lib/countries";
 import { brl, plural } from "@/lib/format";
 import { sx } from "@/lib/sx";
 import { WORLD_LAND } from "@/lib/worldGeo";
@@ -259,7 +259,20 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
                   <div style={sx("display:flex;justify-content:space-between;font-size:12.5px;gap:8px")}>
                     <span>
                       <span className="text-muted" style={sx("margin-right:6px")}>{i + 1}.</span>
+                      <span style={sx("margin-right:5px")}>{PAIS[d.code]?.bandeira ?? "🌐"}</span>
                       {nomePais(d.code)} <span className="text-muted">· {plural(d.sales, "venda", "vendas")}</span>
+                      {/* ⚠️ País sem posição no mapa é MARCADO, nunca omitido: o
+                          ranking é a única tela onde ele apareceria, e um mercado
+                          que some é justamente o que o usuário está procurando. */}
+                      {!temPosicao(d.code) && (
+                        <span
+                          className="text-muted"
+                          style={sx("margin-left:6px;font-size:11px;border:1px solid var(--color-neutral-700);border-radius:4px;padding:0 5px")}
+                          title="País reconhecido, mas sem posição cadastrada no mapa. Aparece no ranking; não ganha ponto no globo."
+                        >
+                          sem posição no mapa
+                        </span>
+                      )}
                     </span>
                     <span style={sx("font-variant-numeric:tabular-nums;white-space:nowrap")}>
                       {brl(d.revenue)} · {pct.toFixed(1).replace(".", ",")}%
