@@ -66,6 +66,10 @@ function parseUmaVenda(payload: Json): VendaNormalizada {
       ) ?? "Produto",
     produtoId: toStr(pick(payload, ["product_id", "productId", "offer_id", "plan_id"]), 191),
     status: statusPeloTexto(pick(payload, ["status", "situacao", "payment_status", "order_status", "event"])),
+    // Sem gateway conhecido não há como saber se o evento é de checkout. O
+    // comportamento antigo — "PENDENTE gera InitiateCheckout" — é preservado
+    // aqui, e só aqui, para a ingestão por chave de API não mudar.
+    gerouCheckout: statusPeloTexto(pick(payload, ["status", "situacao", "payment_status", "order_status", "event"])) === "PENDENTE",
     formaDePagamento: mapPayment(
       pick(payload, ["payment_method", "forma_pagamento", "paymentMethod", "payment_type", "method"]),
     ),

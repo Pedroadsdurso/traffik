@@ -13,8 +13,21 @@ datasource db {
 
 // ───────────────────────────── Enums ─────────────────────────────
 
+/// Estados de uma venda, em ordem de avanço.
+///
+/// ⚠️ A ORDEM IMPORTA: o upsert monotônico (`ingestSale`) usa uma tabela de
+/// força para decidir quem sobrescreve quem, porque o gateway não garante a
+/// ordem de entrega e ainda reentrega o mesmo evento.
+///
+/// ABANDONADA < PENDENTE < EXPIRADA < APROVADA < (REEMBOLSADA/CHARGEBACK/CANCELADA)
 enum SaleStatus {
+  /// Chegou ao checkout e não gerou pagamento. NÃO é venda pendente.
+  ABANDONADA
+  /// Pagamento gerado (PIX, boleto), aguardando.
   PENDENTE
+  /// O pagamento gerado venceu. Não é terminal: o cliente pode gerar outro e
+  /// pagar — visto em produção (PIX_GENERATED -> PIX_EXPIRED -> PIX_GENERATED).
+  EXPIRADA
   APROVADA
   REEMBOLSADA
   CHARGEBACK

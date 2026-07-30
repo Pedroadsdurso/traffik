@@ -29,7 +29,8 @@
     "test:periodo": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-periodo.mjs",
     "script:onde": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/onde-reinstalar-script.mjs",
     "test:gateways": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-gateways.mjs",
-    "test:receptor": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-receptor.mjs"
+    "test:receptor": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-receptor.mjs",
+    "backfill:status": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/backfill-status.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

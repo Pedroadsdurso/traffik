@@ -135,6 +135,20 @@ export interface VendaNormalizada {
   status: SaleStatus;
   formaDePagamento: PaymentMethod;
 
+  /**
+   * Este evento significa que o comprador **chegou ao checkout**?
+   *
+   * ⚠️ NÃO é `status === "PENDENTE"`, e essa era a suposição que quebrava. Um
+   * carrinho abandonado chegou ao checkout e não é venda pendente; um PIX gerado
+   * é as duas coisas. Enquanto "gerou checkout" era inferido do status, separar
+   * os dois estados apagaria o `InitiateCheckout` do funil como efeito colateral
+   * invisível.
+   *
+   * Alimenta `webhook/checkoutEvent.ts`, que é a única via de InitiateCheckout
+   * quando o checkout é hospedado pelo gateway e não dá para instalar o `px.js`.
+   */
+  gerouCheckout: boolean;
+
   // ─────────────── comprador ───────────────
 
   email: string | null;

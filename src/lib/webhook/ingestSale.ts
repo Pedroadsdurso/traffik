@@ -10,11 +10,22 @@ import { dispatchSaleNotification } from "@/lib/webhook/dispatchNotification";
 import { dispatchPurchaseEvents } from "@/lib/webhook/dispatchPixel";
 import { matchClick, type ClickMatch } from "@/lib/webhook/matchClick";
 import type { VendaNormalizada } from "@/lib/gateways/contrato";
+import { matchesSobrescreviveis, paisesSobrescreviveis } from "@/lib/gateways/fontes";
 
 export interface IngestContext {
   userId: string;
   /** Webhook de origem (quando a venda chega por um gateway). */
   webhookId?: string | null;
+  /**
+   * Credencial de API que ingeriu a venda, quando não veio por webhook.
+   *
+   * 🐛 Esta coluna era **lida em 6 lugares e escrita em NENHUM**. Ela é o passo 4
+   * da precedência de área ("credencial de API dona"), então toda venda ingerida
+   * por chave de API caía na Principal em vez da área da credencial — e o ramo
+   * inteiro da precedência nunca disparava. Ver o 5º caso do PROCEDIMENTO no
+   * CLAUDE.md.
+   */
+  apiCredentialId?: string | null;
 }
 
 export interface IngestResult {
@@ -48,6 +59,7 @@ export async function ingestSale(
   const saleData = {
     userId: ctx.userId,
     webhookId: ctx.webhookId ?? null,
+    apiCredentialId: ctx.apiCredentialId ?? null,
     externalId: data.externalId,
     value: data.valor,
     currency: data.moeda,
@@ -81,7 +93,7 @@ export async function ingestSale(
       // Venda gerada e ainda não paga = checkout iniciado, direto da fonte.
       // É a única via que funciona com checkout hospedado pelo gateway, onde
       // não há como instalar o nosso script na página.
-      await registrarCheckoutDoGateway(sale.id);
+      await registrarCheckoutDoGateway(sale.id, data.gerouCheckout);
       await dispatchPurchaseEvents(sale.id);
       await dispatchSaleNotification(sale.id);
     } catch (e) {
@@ -130,12 +142,25 @@ function paisDaVenda(data: VendaNormalizada, match: ClickMatch): { pais: string 
  * gerada, e ambos disputam a mesma linha.
  */
 const FORCA: Record<SaleStatus, number> = {
-  PENDENTE: 0,
-  APROVADA: 1,
+  // Chegou ao checkout e não gerou pagamento. É o estado MENOS avançado: um
+  // ABANDONED_CART reentregue não pode rebaixar um PIX que já foi gerado.
+  ABANDONADA: 0,
+  PENDENTE: 1,
+  // ⚠️ EXPIRADA fica ACIMA de PENDENTE e ABAIXO de APROVADA, e as duas coisas
+  // importam. Acima: a reentrega do PIX_GENERATED antigo não ressuscita um PIX
+  // vencido como pendente. Abaixo: se o cliente gerar outro PIX e PAGAR, o
+  // SALE_APPROVED sobrescreve e a venda entra no faturamento.
+  //
+  // O custo consciente: cliente que gera um PIX NOVO depois do vencimento fica
+  // exibido como EXPIRADA até pagar. Erra para o lado de subnotificar pendente,
+  // que é o oposto do bug que estamos consertando — e o faturamento, que é o
+  // número que mais importa, sai certo nos dois casos.
+  EXPIRADA: 2,
+  APROVADA: 3,
   // Terminais: acontecem depois de uma aprovação e nunca devem ser revertidos.
-  REEMBOLSADA: 2,
-  CHARGEBACK: 2,
-  CANCELADA: 2,
+  REEMBOLSADA: 4,
+  CHARGEBACK: 4,
+  CANCELADA: 4,
 };
 
 /** Status atuais que um status novo tem permissão de sobrescrever. */
@@ -169,12 +194,13 @@ async function upsertMonotonico(
   country: string | null,
 ) {
   const novoStatus = saleData.status as SaleStatus;
+  const countrySource = saleData.countrySource ?? null;
 
   // 1) Garante a linha. `skipDuplicates` transforma a corrida de criação num
   //    no-op em vez de erro P2002.
   await prisma.sale.createMany({ data: [saleData], skipDuplicates: true });
 
-  // 2) Atualiza só se o evento não for um "retrocesso" de status.
+  // 2) Campos DECLARADOS: atualiza só se o evento não for um "retrocesso" de status.
   await prisma.sale.updateMany({
     where: { userId, externalId, status: { in: podeSobrescrever(novoStatus) } },
     data: {
@@ -184,14 +210,39 @@ async function upsertMonotonico(
       ...(Number(saleData.value) > 0 ? { value: saleData.value } : {}),
       ...(saleData.paymentMethod !== "OUTRO" ? { paymentMethod: saleData.paymentMethod } : {}),
       ...(novoStatus === "APROVADA" ? { approvedAt: new Date() } : {}),
-      // Só melhora o match; nunca desvincula um clique já casado.
-      ...(match.clickId ? { clickId: match.clickId, matchMethod: match.method } : {}),
-      // Idem para o país: o evento de "gerada" pode chegar sem clique casado e o
-      // de "paga" já com ele. Sobrescrever com `null` apagaria o país descoberto.
-      ...(country ? { country, countrySource: saleData.countrySource } : {}),
       rawPayload: rawPayload as object,
     },
   });
+
+  // 3) Campos DERIVADOS: instrução SEPARADA, com o `WHERE` da precedência de
+  //    fonte. A REGRA 2 do contrato — reprocessar nunca degrada dado resolvido.
+  //
+  //    ⚠️ Por que não cabe no update acima: lá o `WHERE` é sobre o STATUS, e
+  //    aqui é sobre a PROCEDÊNCIA. São perguntas diferentes ("este evento é mais
+  //    novo?" × "esta inferência é melhor?") e um evento pode responder sim a uma
+  //    e não à outra — o reembolso que chega sem clique casado é exatamente isso.
+  if (country) {
+    await prisma.sale.updateMany({
+      where: {
+        userId,
+        externalId,
+        // Vazio, ou preenchido por uma fonte que a nova pode substituir.
+        OR: [{ country: null }, { countrySource: { in: paisesSobrescreviveis(countrySource) } }],
+      },
+      data: { country, countrySource },
+    });
+  }
+
+  if (match.clickId) {
+    await prisma.sale.updateMany({
+      where: {
+        userId,
+        externalId,
+        OR: [{ clickId: null }, { matchMethod: { in: matchesSobrescreviveis(match.method) } }],
+      },
+      data: { clickId: match.clickId, matchMethod: match.method },
+    });
+  }
 
   const sale = await prisma.sale.findUniqueOrThrow({
     where: { userId_externalId: { userId, externalId } },

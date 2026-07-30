@@ -2934,6 +2934,81 @@ no caminho de recusa (2 idas ao banco), ~700 ms no caminho completo.
 > problemas de uma vez: estoura o orçamento do gateway e segura conexão do pool,
 > alongando a janela de disputa entre eventos concorrentes.
 
+### Etapa 2 — precedência de fonte e dois bugs de status
+
+**A REGRA 2 saiu do papel** (`lib/gateways/fontes.ts`): a força da procedência
+entra no `WHERE` do `UPDATE`, em instrução separada da do status. São perguntas
+diferentes — "este evento é mais novo?" × "esta inferência é melhor?" — e um
+evento pode responder sim a uma e não à outra.
+
+> 🐛 **Bug que já existia:** o upsert fazia `...(match.clickId ? {...} : {})`,
+> que protege contra apagar com `null` e **não** contra sobrescrever com fonte
+> mais fraca. Um segundo evento casando por `ip` num clique DIFERENTE substituía
+> um match `direct`. A venda passava a apontar para outro visitante — e daí saem
+> país, campanha e atribuição.
+
+**Fonte desconhecida vale 0**, o mínimo. Esquecer de cadastrar nunca amplia
+permissão de escrita — mesma regra da autenticação: a dúvida vira bloqueio.
+
+#### 🔴 PIX vencido e carrinho abandonado inflavam "Vendas pendentes" em 67%
+
+Medido na produção: **13 das 14 vendas pendentes estavam erradas.**
+
+| | Vendas | Valor |
+|---|---|---|
+| Exibido | 14 | R$ 512,35 |
+| PIX vencido (`PIX_EXPIRED`) | 12 | R$ 317,65 |
+| Carrinho abandonado | 1 | R$ 24,90 |
+| **Pendente de verdade** | **1** | **R$ 169,80** |
+
+`PIX_EXPIRED` não estava no mapa e caía num fallback que só reconhecia
+`"APPROVED"` — virava PENDENTE apesar de o payload dizer `status: "CANCELED"`.
+
+> ### ⚠️ A correção que importa NÃO foi acrescentar o evento ao mapa
+> Foi trocar o fallback pelo `statusPeloTexto()`. Tentar adivinhar a lista
+> completa de eventos de um gateway é uma corrida que se perde sempre; ler o
+> campo de situação, que o gateway preenche de qualquer jeito, faz o **próximo**
+> evento desconhecido cair no lugar certo em vez de virar "pendente" por omissão.
+
+**Migration `20260730220000`** acrescenta `EXPIRADA` e `ABANDONADA`.
+
+> ### ⛔ Por que NÃO reusar CANCELADA para o PIX vencido
+> Ela é **terminal** (força 4), e o dado real traz a sequência
+> `PIX_GENERATED → PIX_EXPIRED → PIX_GENERATED` no MESMO pedido: o cliente volta
+> a tentar. Com status terminal, o `SALE_APPROVED` seguinte não conseguiria
+> sobrescrever e **a venda paga sumiria do faturamento**. Perder receita para
+> consertar um KPI seria péssimo negócio.
+>
+> A escala virou `ABANDONADA 0 < PENDENTE 1 < EXPIRADA 2 < APROVADA 3 < terminais 4`.
+> EXPIRADA acima de PENDENTE impede que a reentrega do `PIX_GENERATED` antigo
+> ressuscite o PIX vencido; abaixo de APROVADA garante que pagar corrige tudo.
+>
+> ⚠️ **Custo consciente:** quem gera um PIX NOVO depois do vencimento fica
+> exibido como EXPIRADA até pagar. Erra para o lado de *subnotificar* pendente —
+> o oposto do bug — e o faturamento sai certo nos dois casos.
+
+> ### ⚠️ `gerouCheckout` existe porque separar os status quase apagou o funil
+> `checkoutEvent.ts` decidia por `status === "PENDENTE"`. Com o carrinho
+> abandonado virando ABANDONADA, ele deixaria de gerar `InitiateCheckout` — o
+> funil encolheria como efeito colateral **invisível** de uma correção de KPI.
+> Hoje quem decide é o EVENTO, declarado pelo parser no contrato.
+
+#### `npm run backfill:status` — simula por padrão
+
+> ### ⚠️ A guarda óbvia estava ERRADA, e só rodar contra linhas reais mostrou
+> A primeira versão recusava qualquer rebaixamento (`FORCA[novo] <= FORCA[atual]`)
+> — e `PENDENTE → ABANDONADA` **é** um rebaixamento, ou seja, ela vetava
+> exatamente a correção que existe para fazer.
+>
+> A guarda certa é outra: no upsert em tempo real dois EVENTOS disputam a linha
+> e o mais avançado vence; no backfill é o MESMO evento relido por um parser
+> corrigido. O que sobra a proteger é o que custaria caro perder — venda
+> **APROVADA** e os terminais, cujo status veio de mapeamento explícito e nunca
+> do fallback quebrado.
+>
+> Provado no dev com os 4 casos semeados: PIX vencido → EXPIRADA, carrinho →
+> ABANDONADA, PIX gerado **fica** PENDENTE, e a venda APROVADA **não é tocada**.
+
 ### O que a etapa 1 **não** fez
 
 Etapas 2 a 8, na ordem acordada: precedência de fonte (2) · `pedidoId`+`itemTipo`
@@ -3088,6 +3163,29 @@ desempata — comportamento correto, mas silencioso.
 | Resumo do gargalo do funil | no DOM, **invisível** desde que foi escrito | ao conferir outra coisa na tela |
 | `/api/cron/manutencao` | rota completa, **nunca agendada** — rodou zero vezes | ao ir criar uma rota que já existia |
 | Consulta da purga de IP | escrita e testada por função pura — **nunca executada contra linha nenhuma** | o usuário perguntou |
+| **`Sale.apiCredentialId`** | **6 leitores, ZERO escritores** — coluna sempre nula | ao mapear o `receber.ts` da etapa 1 |
+
+> ### 🔴 O 5º caso é o mais caro — e o mais silencioso
+> `Sale.apiCredentialId` é o **passo 4 da precedência de área** ("credencial de
+> API dona"). Ele é lido em `areas/precedencia.ts`, `dashboard/metrics.ts`,
+> `ads/overview.ts`, `ads/creatives.ts`, `areas/exclusao.ts` e
+> `actions/notifications.ts` — **seis lugares** — e não era escrito em lugar
+> nenhum. Toda venda ingerida por chave de API caía na Principal, e o ramo
+> inteiro da precedência nunca disparou nem uma vez.
+>
+> **51 dos 115 payloads reais de produção entraram por essa porta.**
+>
+> Nada denunciava: a coluna existe, o schema está certo, os seis leitores tratam
+> `null` como "sem credencial" — que é indistinguível de "credencial não
+> registrada". `tsc`, `lint`, `build` e todos os testes passavam.
+>
+> ⚠️ **Backfill é impossível, e por um motivo que vale registrar:** o
+> `WebhookLog` não guarda qual credencial autenticou a requisição, e a
+> `ApiCredential` tem **zero linhas em produção** — as chaves usadas nos testes
+> dos Blocos 10 e 13 foram excluídas depois. Mesmo que a coluna tivesse sido
+> preenchida na época, o `onDelete: SetNull` a teria zerado. As 8 vendas
+> ingeridas por chave continuam na Principal, o que é **correto**: nenhuma
+> credencial existente as reivindica. Corrigido para as próximas.
 
 O denominador comum: **`tsc`, `lint`, `build` e os testes passam com a coisa
 desligada.** Nenhuma dessas ferramentas pergunta "alguém chama isto?".

@@ -28,7 +28,15 @@ const JANELA_DEDUP_MS = 6 * 60 * 60 * 1000;
  *
  * Nunca lança: registrar o evento não pode derrubar a ingestão da venda.
  */
-export async function registrarCheckoutDoGateway(saleId: string): Promise<"criado" | "duplicado" | "ignorado"> {
+export async function registrarCheckoutDoGateway(
+  saleId: string,
+  gerouCheckout: boolean,
+): Promise<"criado" | "duplicado" | "ignorado"> {
+  // ⚠️ Quem decide é o EVENTO, não o status. Antes era `status === "PENDENTE"`,
+  // e a suposição quebrou ao separar ABANDONADA de PENDENTE: um carrinho
+  // abandonado chegou ao checkout, mas deixaria de gerar InitiateCheckout — o
+  // funil encolheria como efeito colateral invisível de uma correção de KPI.
+  if (!gerouCheckout) return "ignorado";
   try {
     const sale = await prisma.sale.findUnique({
       where: { id: saleId },
@@ -40,7 +48,7 @@ export async function registrarCheckoutDoGateway(saleId: string): Promise<"criad
         click: { select: { fbclid: true } },
       },
     });
-    if (!sale || sale.status !== "PENDENTE") return "ignorado";
+    if (!sale) return "ignorado";
 
     // Sem `externalId` não há chave estável para deduplicar reentrega.
     const eventId = sale.externalId ? `gw:${sale.externalId}` : null;

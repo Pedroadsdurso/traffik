@@ -4,6 +4,7 @@ import {
   isObj,
   mapPayment,
   pick,
+  statusPeloTexto,
   toNumber,
   toNumeroOuNulo,
   toStr,
@@ -32,14 +33,35 @@ const EVENTO_STATUS: Record<string, SaleStatus> = {
   SALE_REFUNDED: "REEMBOLSADA",
   SALE_CHARGEBACK: "CHARGEBACK",
   SALE_REFUSED: "CANCELADA",
-  ABANDONED_CART: "PENDENTE",
+  // ⚠️ ABANDONADA, não PENDENTE: o carrinho abandonado nunca gerou pagamento, e
+  // somá-lo a "vendas pendentes" misturava "desistiu" com "vai pagar".
+  ABANDONED_CART: "ABANDONADA",
   PIX_GENERATED: "PENDENTE",
+  // 🐛 PIX_EXPIRED NÃO ESTAVA AQUI. Ele caía no fallback, que só reconhecia
+  // "APPROVED", e virava PENDENTE — apesar de o payload trazer `status:
+  // "CANCELED"`. Eram 12 das 14 vendas pendentes da produção, R$ 317,65
+  // exibidos como dinheiro a receber que não existia.
+  PIX_EXPIRED: "EXPIRADA",
   BANK_SLIP_GENERATED: "PENDENTE",
+  BANK_SLIP_EXPIRED: "EXPIRADA",
   SALE_PENDING: "PENDENTE",
   SUBSCRIPTION_CANCELED: "CANCELADA",
   SUBSCRIPTION_EXPIRED: "CANCELADA",
   SUBSCRIPTION_RENEWED: "APROVADA",
 };
+
+/**
+ * Eventos que significam "o comprador chegou ao checkout", independente do
+ * status resultante. Ver `VendaNormalizada.gerouCheckout`.
+ */
+const EVENTO_GEROU_CHECKOUT = new Set([
+  "PIX_GENERATED",
+  "PIX_EXPIRED",
+  "BANK_SLIP_GENERATED",
+  "BANK_SLIP_EXPIRED",
+  "SALE_PENDING",
+  "ABANDONED_CART",
+]);
 
 /** Descrição legível do evento, para o log e a aba Testes. */
 export function rotuloDoEvento(event: string): string {
@@ -95,15 +117,20 @@ function parseUmaVenda(payload: Json): VendaNormalizada {
   const utm = isObj(payload["utm"]) ? (payload["utm"] as Json) : {};
   const cookies = isObj(payload["cookies"]) ? (payload["cookies"] as Json) : {};
 
-  // Status: prioriza o evento; se desconhecido, usa o campo `status` textual.
+  // Status: prioriza o evento; se desconhecido, lê o campo `status` textual.
   //
-  // ⚠️ Esta comparação com "APPROVED" é DELIBERADAMENTE literal, e não o
-  // `statusPeloTexto()` genérico. Ela reproduz o comportamento de hoje byte a
-  // byte — trocá-la mudaria o status de eventos reais que já estão no banco.
-  // Ver o achado do `PIX_EXPIRED` no relatório da etapa 1.
-  const status: SaleStatus =
-    EVENTO_STATUS[evento] ??
-    (String(pick(payload, ["status"]) ?? "").toUpperCase() === "APPROVED" ? "APROVADA" : "PENDENTE");
+  // 🐛 O fallback antigo comparava com a string literal "APPROVED" e devolvia
+  // PENDENTE para todo o resto. Foi ele que transformou 12 PIX vencidos em
+  // vendas pendentes: o payload dizia `status: "CANCELED"` e ninguém olhava.
+  //
+  // ⚠️ Esta é a correção ESTRUTURAL, mais importante que acrescentar
+  // `PIX_EXPIRED` ao mapa: em vez de tentar adivinhar a lista completa de
+  // eventos da Kirvano, um evento que a gente não conheça passa a ser lido pelo
+  // campo de situação — que o gateway preenche de qualquer jeito. Assim o
+  // próximo evento novo cai no lugar certo em vez de virar "pendente" por
+  // omissão.
+  const conhecido = EVENTO_STATUS[evento];
+  const status: SaleStatus = conhecido ?? statusPeloTexto(pick(payload, ["status"]));
 
   const valorBruto = pick(payload, ["total_price", "total", "amount", "value"]);
   const valor = toNumber(valorBruto ?? (produto ? pick(produto, ["price"]) : undefined));
@@ -136,6 +163,7 @@ function parseUmaVenda(payload: Json): VendaNormalizada {
       "Produto",
     produtoId: toStr(produto ? pick(produto, ["id", "offer_id"]) : undefined, 191),
     status,
+    gerouCheckout: EVENTO_GEROU_CHECKOUT.has(evento),
     formaDePagamento: mapPayment(pick(payload, ["payment_method", "method"])),
 
     email: toStr(pick(payload, ["customer.email", "email"]), 191),
