@@ -3381,6 +3381,50 @@ receber a primeira venda real com telefone, confira e acrescente ao teste.**
 **exigência da Meta**, que recusa esses dois hasheados. Nome do comprador **não
 é enviado**.
 
+## 🌍 GEOLOCALIZAÇÃO — estado e a ordem que NÃO pode inverter
+
+### ✅ Pronto
+- **`lib/geo/clientIp.ts`** — extração única do IP, robusta atrás de proxy.
+  Substituiu **três** cópias de `x-forwarded-for.split(",")[0]`.
+- **`npm run test:ip`** — 27 asserções (Vercel, VPS+nginx, Cloudflare, forja).
+- **`GET /api/diagnostico/ip`** — diz qual `PROXIES_CONFIAVEIS` usar no ambiente
+  real, em vez de deduzir.
+- Pasta `lib/geo/` criada, pronta para receber a base.
+
+### ⏳ Falta, NESTA ORDEM
+1. Gerador da base **`user-country`** (`ip-location-db`, **PDDL-1.0**, sem conta).
+   `user-country-ipv4.csv`, formato `start_ip,end_ip,país`, **sem cabeçalho**.
+   Converter em array binário ordenado (~1,2 MB) e **commitar**, como
+   `worldPaths.ts` e `public/*.js` já fazem. Busca binária em memória.
+2. Resolução de país no `/api/track/click` e no webhook.
+3. **Hash do IP** — `sha256(ENCRYPTION_KEY + ip)`, mesmo padrão do
+   `ApiCredential.keyHash`. Preserva o casamento de `matchClick`; truncar
+   para /24 quebraria (vários visitantes dividem /24).
+4. Limpeza do IP em `Sale.rawPayload` e `WebhookLog.payloadRaw` **antes** de
+   persistir — hoje o IP fica ali indefinidamente.
+5. **Backfill** do país nos `Click` que ainda têm IP.
+6. Ranking do globo com **"Não identificado"** agrupado, nunca sumindo.
+
+> ### 🔴🔴 A ORDEM DO BACKFILL NÃO PODE INVERTER
+> **PAÍS PRIMEIRO, ANONIMIZAÇÃO DEPOIS.**
+>
+> O backfill (5) só é possível enquanto `Click.ip` ainda tem o IP legível.
+> Anonimizar antes (3/4) **destrói a única chance** de derivar o país do
+> histórico — e não há como voltar atrás.
+>
+> Na prática: aplicar 1 e 2, rodar o backfill, **conferir a contagem**, e só
+> então aplicar 3 e 4.
+
+> ### ⛔ A BASE LOCAL é o caminho principal. O header da Vercel é só atalho.
+> O usuário vai migrar para **VPS**. Se existir `x-vercel-ip-country`, usa (evita
+> a busca); se não existir, cai na base local **com o mesmo resultado**. **Nada
+> pode depender do header para funcionar** — senão a migração quebra a
+> geolocalização inteira e o sintoma só aparece com tráfego real.
+
+⚠️ **MaxMind e IP2Location LITE exigem conta** e o usuário não consegue criar.
+O `geo-whois-asn-country` que eu havia recomendado **não existe mais**: o repo
+deixou de usar WHOIS de RIR porque as AUPs proíbem mapeamento geográfico.
+
 ### Comandos
 
 ```bash

@@ -157,8 +157,18 @@ export function calcularFinanceiro(opts: {
     totalDescontos,
     custoTotal,
     margem: bruto ? (lucro / bruto) * 100 : 0,
-    // ⚠️ `null`, não `0` — ver o comentário no tipo.
-    roi: custoTotal > 0 ? lucro / custoTotal : null,
+    /**
+     * ⚠️ `null` também quando NÃO HOUVE MOVIMENTO — não só quando o custo é zero.
+     *
+     * A conta é matematicamente correta em qualquer caso, mas uma despesa fixa
+     * cadastrada (R$ 20/mês, por exemplo) sozinha produzia `lucro = −20`,
+     * `custoTotal = 20` e portanto **−1,00x em vermelho num painel zerado** — a
+     * tela gritando prejuízo num período em que nada aconteceu.
+     *
+     * Sem faturamento E sem gasto de anúncio não existe retorno a medir. A tela
+     * mostra "—", que é a resposta honesta.
+     */
+    roi: bruto === 0 && gastoAnuncios === 0 ? null : custoTotal > 0 ? lucro / custoTotal : null,
     faltando: (Object.values(POR_TIPO) as RotuloDesconto[]).filter((r) => !cadastrados.has(r)),
   };
 }
@@ -177,7 +187,10 @@ export function calcularFinanceiro(opts: {
  * relatórios). Uma cor decidida na view é uma cor que divergirá.
  */
 export function corFinanceira(valor: number | null, tipo: "roi" | "lucro"): string {
-  if (valor === null) return "var(--color-text)";
+  // ⚠️ `null` e ZERO são NEUTROS. Zero pintado de verde diria "está indo bem"
+  // para um painel sem movimento nenhum — e é justamente o estado em que o
+  // usuário mais precisa que a tela não afirme nada.
+  if (valor === null || valor === 0) return "var(--color-text)";
   if (valor < 0) return "var(--color-danger, #f87171)";
   return tipo === "roi" ? "var(--color-success, #4ade80)" : "var(--color-text)";
 }

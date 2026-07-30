@@ -132,6 +132,20 @@ console.log("\n\x1b[1mPrejuízo e ROI indefinido\x1b[0m");
   const f = calcularFinanceiro({ bruto: 0, brutoPorPagamento: new Map(), gastoAnuncios: 0, despesas: [] });
   eq("tudo zero não divide por zero na margem", f.margem, 0);
 }
+{
+  // 🔴 O caso que o usuário reportou: painel zerado mostrando −1,00x em vermelho.
+  // Uma despesa fixa sozinha produzia lucro −20 / custo 20 = −1,00x, e a tela
+  // gritava prejuizo num periodo em que nada aconteceu.
+  const f = calcularFinanceiro({
+    bruto: 0,
+    brutoPorPagamento: new Map(),
+    gastoAnuncios: 0,
+    despesas: [fixo("DESPESA_RECORRENTE", 20)],
+  });
+  eq("sem venda E sem anuncio -> ROI null, mesmo com despesa fixa", f.roi, null);
+  eq("a despesa continua no lucro (ela existe)", f.lucro, -20);
+}
+eq("zero e NEUTRO, nao verde", corFinanceira(0, "roi"), "var(--color-text)");
 
 // ── 5. Valor FIXO em vez de percentual ─────────────────────────────────────
 console.log("\n\x1b[1mDesconto de valor fixo\x1b[0m");

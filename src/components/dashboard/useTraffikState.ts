@@ -746,7 +746,7 @@ export function useTraffikState(
       cor: corFinanceira(lucro, "lucro"),
     },
     gasto: { label: "Gasto total", value: brl(spend), ...trendOf("spend", true) },
-    roas: { label: "ROAS", value: roasFmt(roas), ...trendOf("roas") },
+    roas: { label: "ROAS", value: roasFmt(roas), ...trendOf("roas"), cor: corFinanceira(roas, "roi") },
     // Bloco 4: ROI passa a ser multiplicador (era "1331%"), com 2 casas como
     // nos exemplos do roteiro. Sem custo no período não há ROI — mostra "—".
     roi: { label: "ROI", value: roi != null ? multFmt(roi) : "—", ...trendOf("roi"), cor: corFinanceira(roi, "roi") },

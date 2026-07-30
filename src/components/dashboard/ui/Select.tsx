@@ -161,7 +161,11 @@ export function Select({
               aria-label={`Buscar em ${label}`}
             />
           )}
-          <div id={listaId} role="listbox" aria-label={label} style={sx("max-height:240px;overflow:auto")}>
+          <div id={listaId} role="listbox" aria-label={label} /* 340px cabem as 8 opções mais longas do produto (o seletor de período tem
+                 7) sem barra de rolagem. Em 240px o de período rolava, e rolar uma
+                 lista de 7 itens é atrito puro. Listas realmente longas — contas de
+                 anúncio, produtos — continuam rolando, que aí é o certo. */
+              style={sx("max-height:340px;overflow:auto")}>
             {filtradas.length === 0 ? (
               <div className="text-muted" style={sx("font-size:12.5px;padding:8px 10px")}>Nada encontrado.</div>
             ) : (
