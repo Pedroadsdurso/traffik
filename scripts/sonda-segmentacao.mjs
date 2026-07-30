@@ -34,6 +34,12 @@ import pg from "pg";
 import { GRAPH_URL } from "@/lib/facebook/graph";
 import { decryptSecret } from "@/lib/crypto/secrets";
 
+/** Mesmos status que o `sync.ts` sincroniza, para os números baterem. */
+const STATUS_SINCRONIZADOS = JSON.stringify([
+  "ACTIVE", "PAUSED", "ARCHIVED", "ADSET_PAUSED", "CAMPAIGN_PAUSED", "DISAPPROVED",
+  "PENDING_REVIEW", "PREAPPROVED", "PENDING_BILLING_INFO", "IN_PROCESS", "WITH_ISSUES",
+]);
+
 const args = process.argv.slice(2);
 const mostrarCru = args.includes("--cru");
 const iUrl = args.indexOf("--url");
@@ -111,15 +117,34 @@ async function main() {
     } catch {
       token = conta.accessToken; // token legado em texto puro
     }
-    const u = `${GRAPH_URL}/${conta.fbAccountId}/adsets?` + new URLSearchParams({
+    // ⚠️ O PREFIXO `act_` É OBRIGATÓRIO. `AdAccount.fbAccountId` guarda só o
+    // número; `/1234/adsets` devolve "(#100) Tried accessing nonexisting field
+    // (adsets)", que soa como problema de permissão e não é. O `sync.ts` monta
+    // `/act_${fbAccountId}` — esta sonda errou isso na primeira versão e passou
+    // um diagnóstico falso de "a Graph não responde".
+    //
+    // Mesmo `effective_status` do sync: sem ele a sonda contaria conjuntos que o
+    // sync nunca grava, e os números não bateriam com o banco de propósito
+    // nenhum.
+    const params = new URLSearchParams({
       fields: "id,name,targeting{geo_locations}",
-      limit: "50",
+      effective_status: STATUS_SINCRONIZADOS,
+      limit: "100",
       access_token: token,
     });
+    // Tolerante ao prefixo já presente: a PRODUÇÃO guarda `fbAccountId` sem
+    // `act_` (por isso o `sync.ts` o acrescenta e funciona), mas o seed de
+    // desenvolvimento guarda COM. Sem esta normalização a sonda montava
+    // `act_act_dev_A` e falhava só no dev — ou seja, quebrava exatamente onde eu
+    // a testo antes de mandar para produção.
+    const contaId = `act_${String(conta.fbAccountId).replace(/^act_/, "")}`;
+    const u = `${GRAPH_URL}/${contaId}/adsets?${params}`;
     const r = await fetch(u);
     const j = await r.json();
     if (!r.ok || j.error) {
       console.log(`   ${C.r}✗ ${conta.name}: ${j.error?.message ?? r.status}${C.x}`);
+      // A URL (sem o token) é o que permite diagnosticar sem adivinhar.
+      console.log(`     ${C.d}${u.replace(/access_token=[^&]*/, "access_token=***")}${C.x}`);
       continue;
     }
     const lista = j.data ?? [];

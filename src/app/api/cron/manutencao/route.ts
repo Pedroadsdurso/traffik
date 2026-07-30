@@ -2,11 +2,23 @@ import type { NextRequest } from "next/server";
 
 import { cronAutorizado, naoAutorizado } from "@/lib/cronAuth";
 import { prisma } from "@/lib/prisma";
+import { RETENCAO_DIAS, anonimizarIp } from "@/lib/geo/anonimizarIp";
 
 export const maxDuration = 60;
 
-/** Retenção do log de webhooks. É dado de depuração, não de negócio. */
-const DIAS_WEBHOOK_LOG = 90;
+/**
+ * Retenção do log de webhooks — DIFERENCIADA por status.
+ *
+ * ⚠️ Era 90 dias para tudo. O log de SUCESSO é redundante: o payload já está
+ * duplicado em `Sale.rawPayload`, então apagá-lo não perde nada. O log de FALHA
+ * é a **única cópia** — e é justamente o que se depura quando um gateway "manda
+ * e não chega", conversa que com o suporte deles leva semanas.
+ *
+ * `RECEBIDO` que nunca fechou significa que o processamento estourou no meio:
+ * tratado como falha, pelo mesmo motivo.
+ */
+const DIAS_LOG_SUCESSO = 30;
+const DIAS_LOG_FALHA = 90;
 
 /** A partir de quantos dias do vencimento do token avisar o usuário. */
 const AVISO_TOKEN_DIAS = 14;
@@ -36,9 +48,33 @@ export async function GET(req: NextRequest) {
   if (!cronAutorizado(req)) return naoAutorizado();
 
   const agora = new Date();
-  const corte = new Date(agora.getTime() - DIAS_WEBHOOK_LOG * 864e5);
 
-  const purgados = await prisma.webhookLog.deleteMany({ where: { createdAt: { lt: corte } } });
+  const purgadosSucesso = await prisma.webhookLog.deleteMany({
+    where: { status: "PROCESSADO", createdAt: { lt: new Date(agora.getTime() - DIAS_LOG_SUCESSO * 864e5) } },
+  });
+  const purgadosFalha = await prisma.webhookLog.deleteMany({
+    where: {
+      status: { in: ["REJEITADO", "ERRO", "RECEBIDO"] },
+      createdAt: { lt: new Date(agora.getTime() - DIAS_LOG_FALHA * 864e5) },
+    },
+  });
+
+  // ── Anonimização progressiva do IP dos cliques ──────────────────────────
+  // Passada a retenção, o IP em claro não serve mais para nada: o match por IP
+  // tem janela de 12h e a atribuição da Meta é de 7 dias. Ver
+  // `lib/geo/anonimizarIp.ts` para por que isto é progressivo e não de uma vez.
+  const corteIp = new Date(agora.getTime() - RETENCAO_DIAS * 864e5);
+  const aAnonimizar = await prisma.click.findMany({
+    where: { ip: { not: null }, timestamp: { lt: corteIp }, NOT: { ip: { startsWith: "iph.v1." } } },
+    select: { id: true, ip: true },
+    // Teto por execução: o cron é diário e a primeira passada pode ter um
+    // histórico grande. Melhor 5 mil por dia do que uma transação gigante que
+    // estoura o `maxDuration` e não anonimiza nada.
+    take: 5000,
+  });
+  for (const c of aAnonimizar) {
+    await prisma.click.update({ where: { id: c.id }, data: { ip: anonimizarIp(c.ip!) } });
+  }
 
   // Tokens vencendo ou já vencidos.
   const limite = new Date(agora.getTime() + AVISO_TOKEN_DIAS * 864e5);
@@ -74,8 +110,13 @@ export async function GET(req: NextRequest) {
 
   return Response.json({
     ok: true,
-    webhookLogsPurgados: purgados.count,
-    retencaoDias: DIAS_WEBHOOK_LOG,
+    webhookLogsPurgados: { sucesso: purgadosSucesso.count, falha: purgadosFalha.count },
+    retencaoLogDias: { sucesso: DIAS_LOG_SUCESSO, falha: DIAS_LOG_FALHA },
+    ipsAnonimizados: aAnonimizar.length,
+    // `true` = havia mais que o teto e a próxima execução continua. Sem este
+    // campo, uma primeira passada parcial pareceria uma passada completa.
+    ipsRestantes: aAnonimizar.length === 5000,
+    retencaoIpDias: RETENCAO_DIAS,
     tokensAvisados: avisos,
     perfisEmRisco: perfis.length,
   });

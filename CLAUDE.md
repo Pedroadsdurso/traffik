@@ -3610,7 +3610,7 @@ ALLOW_PROD_WRITES=EU_QUERO_MESMO_ESCREVER_EM_PRODUCAO \
 | 4 | Rodar o backfill de novo (recupera as vendas IPv6) | ✅ **aplicado — 237 cliques · 15 vendas** |
 | 5 | Marcação de bot (`Click.bot`) | ✅ **feito — tem MIGRATION, ver ordem de deploy** |
 | 6 | Correção do navegador embutido de app | ✅ **feito — tem MIGRATION** |
-| 7B | **Purga progressiva do `Click.ip`** + retenção do `WebhookLog` | 🔓 aprovado, aguardando a sonda |
+| 7B | **Purga progressiva do `Click.ip`** + retenção do `WebhookLog` | ✅ **feito** — sem migration |
 | 7A | **Limpeza do IP nos payloads** | ⏸️ **ADIADO** — depende da arquitetura de parsers |
 
 > ### 🔴🔴 O HASH DO IP É O ÚLTIMO PASSO, E DEPENDE DE TODOS OS ANTERIORES
@@ -3951,7 +3951,28 @@ e aceitar perder a CAPI.
 > **A favor da (3):** os dois usos do IP têm **PRAZO**. Passado ele, o IP em
 > claro não serve para nada — só fica guardado.
 
-### FASE B — purga progressiva (aprovada, a implementar)
+### FASE B — purga progressiva ✅ IMPLEMENTADA (30/07/2026)
+
+`src/lib/geo/anonimizarIp.ts` · guarda em `capi.ts` · `matchClick` tolerante ·
+`/api/cron/manutencao` estendido · `npm run ip:simular` · `npm run test:match`.
+**Sem migration** — só usa colunas que já existem.
+
+> ### 🔴 A rota `/api/cron/manutencao` JÁ EXISTIA e NUNCA foi agendada
+> Criada em 28/07/2026 (commit `ec9891c`) com retenção de `WebhookLog` e aviso
+> de token vencendo — e **não estava no `.github/workflows/cron.yml`**. Rodou
+> zero vezes. O CLAUDE.md listava a retenção como dívida aberta; ela estava
+> escrita e inerte.
+>
+> **É o mesmo modo de falha da base de países antes do passo 1, e da terceira
+> vez que ele aparece nesta sessão.** Agendada agora, diariamente às 04h UTC
+> (01h em Brasília) — horário de baixo tráfego porque ela ESCREVE.
+>
+> ⚠️ **Ao criar rota de cron, agende no mesmo commit.** Uma rota sem agendamento
+> não falha, não avisa e parece pronta.
+
+**Retenção do `WebhookLog` passou de 90 fixos para diferenciada** (30 dias para
+`PROCESSADO`, 90 para falha/órfão): o log de sucesso é redundante com
+`Sale.rawPayload`; o de falha é a única cópia.
 
 **Retenção: 7 dias.** Três prazos se somam e o maior manda:
 
@@ -4004,7 +4025,7 @@ Log de sucesso é redundante; log de falha é o produto. E as falhas sem dono
 `RECEBIDO` que nunca fechou = processamento estourou no meio; tratado como
 `ERRO`.
 
-**Teste de regressão do match — 4 casos, todos exigidos:**
+**Teste de regressão do match — `npm run test:match`, 12 asserções:**
 
 1. Clique com IP conhecido → venda com o mesmo IP, **sem `click_id`** →
    `matchMethod === "ip"` e o `clickId` certo
@@ -4015,6 +4036,18 @@ Log de sucesso é redundante; log de falha é o produto. E as falhas sem dono
 
 > ⚠️ **O caso 2 é o que dá valor ao teste.** Sem ele, um `where` quebrado que
 > casasse com qualquer clique passaria despercebido.
+
+⚠️ O teste **duplica** o `where` do `matchClick` em SQL, como a `geo:sonda`
+duplica a extração do `sync.ts`. Se importasse a função, um bug nela passaria
+por "tudo certo". Escreve no banco de DEV, passa pelo `guard-db` e limpa por id.
+
+**`npm run ip:simular`** — só leitura, **sem `--aplicar` de propósito**: quem
+escreve é o cron, com teto de 5.000 por execução. Uma segunda porta para uma
+operação irreversível seria uma a mais do que o necessário. Mostra quantos IPs
+seriam anonimizados, quantos ficam legíveis, quantas vendas perderiam
+`client_ip_address`, **em quais chaves o IP aparece dentro dos payloads** (é
+assim que se descobre o nome que um gateway novo usa) e a contagem de país
+resolvido — que tem de ser idêntica antes e depois.
 
 ### FASE A — limpeza do IP nos payloads: ⏸️ ADIADA
 
@@ -4308,6 +4341,8 @@ npm run geo:backfill     # país do histórico. SIMULA; --aplicar escreve
 npm run test:bots        # 35 asserções, classificação de robô (puro)
 npm run bot:reclassificar # reavalia Click.bot pelo userAgent. SIMULA; --aplicar escreve
 npm run test:desempate   # 27 asserções, país quando o IP contradiz a campanha
+npm run test:match       # 12 asserções, match por IP sobrevive à purga (banco de DEV)
+npm run ip:simular -- --url '<conn>'   # o que a purga faria. NUNCA escreve
 npm run geo:sonda -- --url '<conn>'   # a segmentacao esta chegando? (so leitura)
 npm run test:ip          # 27 asserções, IP atrás de proxy (Vercel, VPS, Cloudflare)
 npm run test:telefone    # 25 asserções, E.164 antes do hash da CAPI

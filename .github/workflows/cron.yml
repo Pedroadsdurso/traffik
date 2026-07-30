@@ -19,6 +19,9 @@ on:
     - cron: "*/15 * * * *"
     # De hora em hora: relatórios.
     - cron: "0 * * * *"
+    # Diário, 04h UTC (01h em Brasília): manutenção. Horário de baixo tráfego
+    # porque ela ESCREVE — anonimiza IP e apaga log.
+    - cron: "0 4 * * *"
   # Permite disparar manualmente pela aba Actions (útil para testar).
   workflow_dispatch:
 
@@ -64,6 +67,21 @@ jobs:
         run: |
           code=$(curl -sS -o /tmp/out.json -w '%{http_code}' --max-time 300 \
             -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/run-rules")
+          echo "HTTP $code"; cat /tmp/out.json; echo
+          [ "$code" = "200" ] || exit 1
+
+      # ⚠️ Esta rota EXISTIA desde 28/07/2026 e NUNCA foi agendada — o código
+      # rodava zero vezes. A retenção de WebhookLog parecia resolvida no
+      # CLAUDE.md e na prática continuava aberta. Rota sem agendamento é o
+      # mesmo tipo de inércia silenciosa da base de países antes do passo 1.
+      - name: Manutenção diária
+        if: github.event.schedule == '0 4 * * *' || github.event_name == 'workflow_dispatch'
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' --max-time 300 \
+            -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/manutencao")
           echo "HTTP $code"; cat /tmp/out.json; echo
           [ "$code" = "200" ] || exit 1
 

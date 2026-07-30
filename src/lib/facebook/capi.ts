@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { podeIrParaCapi } from "@/lib/geo/anonimizarIp";
 
 import { GRAPH_URL } from "@/lib/facebook/graph";
 import { normalizarTelefoneE164 } from "@/lib/facebook/telefone";
@@ -57,7 +58,15 @@ export async function sendServerEvent(input: ServerEventInput): Promise<{ ok: bo
   if (em) userData.em = [em];
   if (ph) userData.ph = [ph];
   if (country) userData.country = [country];
-  if (input.clientIp) userData.client_ip_address = input.clientIp;
+  // ⚠️ `client_ip_address` e `client_user_agent` são os DOIS únicos campos que
+  // a Meta exige em CLARO — ela recusa os dois hasheados. Depois da purga
+  // progressiva (`lib/geo/anonimizarIp.ts`) o `Click.ip` pode estar anonimizado,
+  // e enviar um hash aqui não faria a chamada falhar: degradaria em silêncio a
+  // correspondência de todo `Purchase`. A guarda pede que o valor PAREÇA um IP.
+  //
+  // ⚠️ Omitir é melhor que enviar um IP velho. Passados 7 dias ele
+  // provavelmente já é de outro assinante — seria sinal ERRADO, não fraco.
+  if (podeIrParaCapi(input.clientIp)) userData.client_ip_address = input.clientIp.trim();
   if (input.clientUserAgent) userData.client_user_agent = input.clientUserAgent;
   // fbc é derivado do fbclid: fb.1.<timestamp>.<fbclid>
   if (input.fbclid) userData.fbc = `fb.1.${Math.floor(Date.now() / 1000)}.${input.fbclid}`;
