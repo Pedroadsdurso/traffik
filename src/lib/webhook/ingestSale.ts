@@ -1,5 +1,6 @@
 import { after } from "next/server";
 import { extrairIpDoCliente } from "@/lib/geo/clientIp";
+import { normalizarPais, paisDoIp } from "@/lib/geo/pais";
 
 import type { Prisma } from "@/generated/prisma/client";
 import type { SaleStatus } from "@/generated/prisma/enums";
@@ -7,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { registrarCheckoutDoGateway } from "@/lib/webhook/checkoutEvent";
 import { dispatchSaleNotification } from "@/lib/webhook/dispatchNotification";
 import { dispatchPurchaseEvents } from "@/lib/webhook/dispatchPixel";
-import { matchClick } from "@/lib/webhook/matchClick";
+import { matchClick, type ClickMatch } from "@/lib/webhook/matchClick";
 import type { NormalizedSale } from "@/lib/webhook/normalizeSale";
 
 export interface IngestContext {
@@ -35,6 +36,7 @@ export async function ingestSale(
   fallbackIp: string | null,
 ): Promise<IngestResult> {
   const match = await matchClick(ctx.userId, data.clickId, data.ip ?? fallbackIp);
+  const country = paisDaVenda(data, match);
 
   const saleData = {
     userId: ctx.userId,
@@ -49,7 +51,7 @@ export async function ingestSale(
     buyerEmail: data.buyerEmail,
     buyerName: data.buyerName,
     buyerPhone: data.buyerPhone,
-    country: data.country,
+    country,
     matchMethod: match.method,
     clickId: match.clickId,
     approvedAt: data.status === "APROVADA" ? new Date() : null,
@@ -58,7 +60,7 @@ export async function ingestSale(
 
   const sale =
     data.externalId != null
-      ? await upsertMonotonico(ctx.userId, data.externalId, saleData, match, rawPayload)
+      ? await upsertMonotonico(ctx.userId, data.externalId, saleData, match, rawPayload, country)
       : await prisma.sale.create({ data: saleData, select: { id: true, status: true, matchMethod: true } });
 
   if (ctx.webhookId) {
@@ -87,6 +89,35 @@ export async function ingestSale(
   });
 
   return { id: sale.id, status: sale.status, match: sale.matchMethod ?? "none" };
+}
+
+/**
+ * País de uma venda — em ordem de confiabilidade.
+ *
+ * > ### 🔴 O IP DA CONEXÃO DO WEBHOOK NÃO É O COMPRADOR
+ * > Quem abre a conexão aqui é o servidor do gateway (Kirvano, Hotmart…), não a
+ * > pessoa que comprou. Passar esse IP — ou o `x-vercel-ip-country` da
+ * > requisição — para a resolução carimbaria **toda venda** com o país do
+ * > datacenter do gateway. O número continuaria plausível (um país real, com
+ * > vendas de verdade), e o mapa inteiro apontaria para o lugar errado sem nada
+ * > denunciar. Por isso `resolverPais()` **não** é chamada neste caminho.
+ * >
+ * > É o oposto de `/api/track/click`, onde quem faz a requisição é o visitante.
+ *
+ * | # | Fonte | Por quê |
+ * |---|---|---|
+ * | 1 | `country` do payload, se já for ISO-2 | o gateway conhece o comprador |
+ * | 2 | IP **do payload** (`buyer_ip`, `customer.ip`) | é o IP do comprador, não o do gateway |
+ * | 3 | País do clique casado | o visitante falou direto conosco naquele momento |
+ * | 4 | `country` do payload cru | último recurso: não casa no mapa, mas aparece no ranking em vez de sumir |
+ */
+function paisDaVenda(data: NormalizedSale, match: ClickMatch): string | null {
+  return (
+    normalizarPais(data.country) ??
+    paisDoIp(data.ip) ??
+    normalizarPais(match.country) ??
+    data.country
+  );
 }
 
 /**
@@ -131,6 +162,7 @@ async function upsertMonotonico(
   saleData: Prisma.SaleCreateManyInput,
   match: { clickId: string | null; method: string },
   rawPayload: unknown,
+  country: string | null,
 ) {
   const novoStatus = saleData.status as SaleStatus;
 
@@ -150,6 +182,9 @@ async function upsertMonotonico(
       ...(novoStatus === "APROVADA" ? { approvedAt: new Date() } : {}),
       // Só melhora o match; nunca desvincula um clique já casado.
       ...(match.clickId ? { clickId: match.clickId, matchMethod: match.method } : {}),
+      // Idem para o país: o evento de "gerada" pode chegar sem clique casado e o
+      // de "paga" já com ele. Sobrescrever com `null` apagaria o país descoberto.
+      ...(country ? { country } : {}),
       rawPayload: rawPayload as object,
     },
   });

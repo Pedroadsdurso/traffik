@@ -112,7 +112,26 @@ export function paisDoHeader(header: (nome: string) => string | null): string | 
  * Resolve o país de uma requisição: header primeiro (barato), base local depois.
  *
  * É esta a função que as rotas devem chamar — não as duas separadas.
+ *
+ * > ### 🔴 Só serve quando quem FEZ a requisição é o visitante
+ * > Num webhook de gateway, quem abre a conexão é o servidor da Kirvano — o
+ * > header e o IP da conexão são do **gateway**, não do comprador. Chamar isto
+ * > ali carimbaria toda venda com o país do datacenter, em silêncio e de forma
+ * > plausível. Ver `paisDaVenda()` em `webhook/ingestSale.ts`.
  */
 export function resolverPais(header: (nome: string) => string | null, ip: string | null): string | null {
   return paisDoHeader(header) ?? paisDoIp(ip);
+}
+
+/**
+ * Normaliza um país vindo de payload de gateway para ISO-2 maiúsculo.
+ *
+ * ⚠️ **Aceita SÓ o que já é ISO-2.** Gateways mandam `"BR"`, mas também
+ * `"Brasil"`, `"BRA"` e `"brazil"` — e um `"BRASIL"` gravado na coluna não casa
+ * com nada no mapa nem no ranking, ficando como um país fantasma. Devolver
+ * `null` para o resto é o que deixa a resolução por IP assumir, que acerta.
+ */
+export function normalizarPais(v: string | null | undefined): string | null {
+  const s = v?.trim().toUpperCase();
+  return s && /^[A-Z]{2}$/.test(s) ? s : null;
 }

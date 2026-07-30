@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { ipDaRequisicao } from "@/lib/geo/clientIp";
+import { normalizarPais, resolverPais } from "@/lib/geo/pais";
 
 import { prisma } from "@/lib/prisma";
 
@@ -63,6 +64,15 @@ export async function POST(req: NextRequest) {
       })
     : null;
 
+  // Aqui quem faz a requisição É o visitante: o script roda no navegador dele.
+  // Por isso o header da plataforma e o IP da conexão são dele — o oposto do
+  // webhook, onde quem conecta é o servidor do gateway.
+  const ip = ipDaRequisicao(req);
+  // ⚠️ O servidor vence o `country` do corpo: o corpo vem do navegador e é
+  // forjável. Hoje nenhum script envia esse campo, mas a ordem tem de estar
+  // certa antes de algum passar a enviar.
+  const country = resolverPais((n) => req.headers.get(n), ip) ?? normalizarPais(str(body.country, 8));
+
   const click = await prisma.click.create({
     data: {
       userId: user.id,
@@ -77,8 +87,8 @@ export async function POST(req: NextRequest) {
       ttclid: str(body.ttclid, 512),
       url: str(body.url),
       referrer: str(body.referrer),
-      country: str(body.country, 8),
-      ip: ipDaRequisicao(req),
+      country,
+      ip,
       userAgent: str(req.headers.get("user-agent"), 512),
     },
     select: { clickId: true },

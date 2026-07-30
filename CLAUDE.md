@@ -2857,11 +2857,10 @@ aguardando o teste do usuário. Sem migration pendente — o deploy é só push.
 
 ### ⚠️ Fila da próxima sessão
 
-**Retomar pela GEOLOCALIZAÇÃO** — ver a seção "🌍 GEOLOCALIZAÇÃO — ESTADO
-ATUAL". A base local está pronta e testada, mas **ainda não é consultada por
-ninguém**: falta chamar `resolverPais()` nas rotas. Há uma **ordem que não pode
-inverter** registrada lá (backfill do país ANTES da anonimização, que é
-irreversível e exige backup).
+**GEOLOCALIZAÇÃO: os passos 1 e 2 estão FEITOS** — as rotas resolvem o país e o
+script de backfill está pronto e testado. Falta **rodar o backfill em produção**
+(comandos na seção "🌍 GEOLOCALIZAÇÃO"), e só depois disso vem o passo 3, que é
+**irreversível** e exige backup.
 
 Fora isso: **faxina de código morto** (lista em "Pendências abertas") e o
 **import/export do Bloco 8**, que ficou de fora de propósito. O lint está em
@@ -3413,9 +3412,102 @@ comprimento.
 **exigência da Meta**, que recusa esses dois hasheados. Nome do comprador **não
 é enviado**.
 
-## 🌍 GEOLOCALIZAÇÃO — ESTADO ATUAL (fim da sessão de 30/07/2026)
+## 🌍 GEOLOCALIZAÇÃO — ESTADO ATUAL (30/07/2026, sessão 2)
 
-### ✅ Pronto e testado — **mas ainda INERTE**
+### ✅ LIGADA — passos 1 e 2 feitos
+
+A base deixou de ser inerte: `/api/track/click` e a ingestão de venda resolvem o
+país e gravam em `Click.country` / `Sale.country`. **O backfill do histórico
+ainda não rodou em produção** — é o único passo manual que sobrou antes do
+passo 3.
+
+| | Onde | O que faz |
+|---|---|---|
+| ✅ | `/api/track/click` | `resolverPais(header, ip)` — aqui quem requisita **é** o visitante |
+| ✅ | `webhook/ingestSale.ts` | `paisDaVenda()` — 4 fontes, **nenhuma delas o IP da conexão** |
+| ✅ | `matchClick` | passou a devolver o país do clique casado, 3ª fonte da venda |
+| ✅ | `npm run geo:backfill` | simula por padrão; `--aplicar` escreve. Idempotente |
+| ⏳ | produção | **rodar o backfill** (ver o roteiro abaixo) |
+
+> ### 🔴 O IP DA CONEXÃO DE UM WEBHOOK NÃO É O COMPRADOR
+> Quem abre a conexão num webhook é o servidor do gateway. Passar esse IP — ou o
+> `x-vercel-ip-country` daquela requisição — para `resolverPais()` carimbaria
+> **toda venda** com o país do datacenter da Kirvano. Seria um país real, com
+> vendas reais, e nada denunciaria o erro. Por isso `resolverPais()` só é chamada
+> no `/api/track/click`, e a venda usa `paisDaVenda()`, nesta ordem:
+>
+> | # | Fonte | Por quê |
+> |---|---|---|
+> | 1 | `country` do payload, **se já for ISO-2** | o gateway conhece o comprador |
+> | 2 | IP **do payload** (`buyer_ip`, `customer.ip`) | é o IP do comprador |
+> | 3 | País do clique casado | o visitante falou direto conosco naquele momento |
+> | 4 | `country` cru do payload | último recurso, para não sumir do ranking |
+>
+> ⚠️ **`normalizarPais()` recusa o que não é ISO-2.** Gateways mandam `"Brasil"`,
+> `"BRA"`, `"brazil"` — e um `"BRASIL"` gravado na coluna não casa com nada no
+> mapa nem no ranking, virando país fantasma. Recusar é o que deixa a resolução
+> por IP assumir, que acerta.
+>
+> ⚠️ **O `country` do CORPO não vence o servidor** no `/api/track/click`: o corpo
+> vem do navegador e é forjável. Nenhum script envia esse campo hoje, mas a ordem
+> tinha de estar certa antes de algum passar a enviar.
+
+> ### ⚠️ O upsert monotônico não pode APAGAR o país
+> A "gerada" pode chegar sem clique casado e a "paga" já com ele — ou o inverso.
+> O `updateMany` só grava `country` quando tem um, pelo mesmo motivo do `clickId`:
+> sobrescrever com `null` apagaria o país já descoberto.
+
+### 🧪 Verificado ponta a ponta (dev server + banco de dev) — 17 asserções, 0 falhas
+
+| Caso | Resultado |
+|---|---|
+| IP brasileiro, 1 proxy | `BR` |
+| **XFF forjado** (`8.8.8.8` na frente da cadeia) | `BR` — a mentira do cliente foi ignorada |
+| `x-vercel-ip-country: PT` (atalho) | `PT` |
+| Corpo forjando `country=US`, IP irlandês | `IE` — o servidor vence |
+| IPv6 | `null` — nunca país errado |
+| **Venda sem fonte, conexão de `8.8.8.8`** | `null` — **o IP do gateway NÃO virou US** |
+| Venda com IP do comprador no payload | `BR` |
+| Venda com `"Brasil"` + IP holandês | `NL` — texto livre recusado |
+| Venda com `"pt"` no payload + IP `BR` | `PT` — payload ISO-2 vence |
+| Venda casada por `click_id` | herdou o `IE` do clique |
+| Pendente com país → aprovada **sem** país | continua `PT` |
+| Pendente sem país → aprovada com IP `BR` | virou `BR` |
+| Backfill: 2ª passada | **0 resolvidos** (idempotente) |
+
+Dados de teste removidos por id depois (7 vendas, 5 cliques, 1 webhook, 2 eventos,
+9 logs, 9 notificações órfãs — a `Notification.saleId` é `SetNull`, então elas
+**não** somem com a venda). `tsc`, `lint` e `next build` limpos.
+
+### 📋 Como rodar o backfill em PRODUÇÃO
+
+```bash
+# 1. BACKUP primeiro — o passo 3 é irreversível e o Supabase Free não tem PITR
+npm run backup -- --url '<connection string de produção>'
+
+# 2. SIMULE (não escreve nada) e leia os números
+npm run geo:backfill -- --url '<connection string de produção>'
+
+# 3. Só depois de conferir:
+ALLOW_PROD_WRITES=EU_QUERO_MESMO_ESCREVER_EM_PRODUCAO \
+  npm run geo:backfill -- --url '<connection string de produção>' --aplicar
+```
+
+- **Sem `--aplicar` é só leitura.** Imprime quantos resolveu, por qual fonte, e
+  quantos ficaram sem país **com o motivo** (sem IP · IP privado · IPv6 · IPv4
+  fora da base). É esse relatório que diz se o resultado faz sentido.
+- **Cliques primeiro, vendas depois** — a 3ª fonte da venda é o país do clique,
+  que acabou de ser preenchido. Na ordem inversa quase nada herdaria.
+- **Idempotente**: o `UPDATE` tem `AND country IS NULL`, então rodar duas vezes
+  não mexe no que já foi resolvido.
+- A trava exige a autorização por extenso porque escreve em produção — e com
+  `--url` o script **reescreve `process.env.DATABASE_URL` antes de chamar o
+  guard**, senão a trava avaliaria o banco errado e liberaria indevidamente.
+
+> ⚠️ **O backfill lê o IP do comprador de dentro do `Sale.rawPayload`.** É
+> exatamente esse campo que o passo 3 vai limpar — daí a ordem ser inegociável.
+
+### ✅ Pronto e testado desde a sessão anterior
 
 - **Extração de IP única e testável** (`lib/geo/clientIp.ts`), cobrindo Vercel,
   VPS+nginx e Cloudflare. Substituiu **três** cópias de
@@ -3430,16 +3522,11 @@ comprimento.
 - **186 asserções em 6 suítes, 0 falhas** (`pais` 30 · `ip` 27 · `telefone` 28 ·
   `financeiro` 42 · `periodo` 33 · `areas` 26).
 
-> ### 🔴 A BASE AINDA NÃO É CONSULTADA POR NINGUÉM
-> O `/api/track/click` e o webhook **não chamam `resolverPais()`**. Tudo acima
-> existe, está testado e commitado, e **o globo continua vazio** até o passo 1
-> abaixo. Não confunda "pronto" com "ligado".
-
 ### ⏳ PRÓXIMOS PASSOS, NESTA ORDEM EXATA
 
-1. **Chamar `resolverPais()`** no `/api/track/click` e no webhook → gravar em
-   `Click.country` e `Sale.country`.
-2. **Backfill do país** nos cliques que ainda têm IP legível.
+1. ~~Chamar `resolverPais()` nas rotas~~ → ✅ **feito**
+2. **Backfill do histórico** → ✅ script pronto e testado; **falta rodar em
+   produção** (roteiro acima)
 3. **SÓ ENTÃO**: hash do IP (`sha256(ENCRYPTION_KEY + ip)`) e limpeza do IP em
    `Sale.rawPayload` e `WebhookLog.payloadRaw`.
 4. **Ranking do globo** com "Não identificado" agrupado, nunca sumindo.
@@ -3454,8 +3541,8 @@ comprimento.
 > npm run backup -- --url '<connection string de produção>'
 > ```
 >
-> Ordem prática: aplicar o passo 1 → rodar o backfill → **conferir a contagem de
-> registros atualizados** → só então o passo 3.
+> Ordem prática: ✅ passo 1 → **rodar o backfill em produção** → conferir a
+> contagem de registros atualizados → só então o passo 3.
 
 ### 📌 Decisões registradas
 
@@ -3492,6 +3579,7 @@ npm run test:periodo     # 33 asserções, janelas de período (puro, TZ=UTC)
 npm run test:financeiro  # 33 asserções, líquido/lucro/ROI e cores (puro)
 npm run test:pais        # 30 asserções, IP -> país pela base local
 npm run geo:atualizar    # regenera a base (mensal) — commitar a saída
+npm run geo:backfill     # país do histórico. SIMULA; --aplicar escreve
 npm run test:ip          # 27 asserções, IP atrás de proxy (Vercel, VPS, Cloudflare)
 npm run test:telefone    # 25 asserções, E.164 antes do hash da CAPI
 npm run db:onde          # em qual banco o .env aponta
