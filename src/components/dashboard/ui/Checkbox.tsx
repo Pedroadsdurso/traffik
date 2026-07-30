@@ -22,6 +22,7 @@ export function Checkbox({
   dica,
   disabled = false,
   tipo = "checkbox",
+  rotuloAcessivel,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
@@ -30,6 +31,11 @@ export function Checkbox({
   dica?: React.ReactNode;
   disabled?: boolean;
   tipo?: "checkbox" | "radio";
+  /**
+   * Para quando NÃO há texto visível — a coluna de seleção de uma tabela, por
+   * exemplo. Sem isto o leitor de tela anuncia "caixa de seleção" e nada mais.
+   */
+  rotuloAcessivel?: string;
 }) {
   const raio = tipo === "radio" ? "50%" : "5px";
 
@@ -45,6 +51,7 @@ export function Checkbox({
         checked={checked}
         disabled={disabled}
         onChange={(e) => onChange(e.target.checked)}
+        aria-label={rotuloAcessivel}
         // Escondido do olho, presente para o teclado e o leitor de tela.
         style={sx("position:absolute;opacity:0;width:1px;height:1px;margin:0;pointer-events:none")}
       />

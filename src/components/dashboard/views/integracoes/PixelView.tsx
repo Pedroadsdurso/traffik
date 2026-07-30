@@ -18,6 +18,7 @@ import { pixelScript } from "@/lib/pixel/script";
 import { plural } from "@/lib/format";
 import { CONFIG } from "@/lib/explicacoes";
 import { sx } from "@/lib/sx";
+import { Select } from "../../ui/Select";
 import { InfoTip } from "../../ui/InfoTip";
 import { Drawer } from "../../ui/Drawer";
 import { SnippetBox } from "../../ui/SnippetBox";
@@ -232,9 +233,11 @@ export function PixelView() {
               </div>
               <div className="field">
                 <label>Tipo</label>
-                <select className="input" value="META" disabled>
-                  <option value="META">Meta (Facebook)</option>
-                </select>
+                {/* Uma opção só: um select com um item é ruído. Quando entrar um segundo
+                    provedor, isto volta a ser `<Select>`. */}
+                <div className="input" style={sx("display:flex;align-items:center;opacity:.7;cursor:default")}>
+                  Meta (Facebook)
+                </div>
               </div>
 
               {/* Pixels da Meta */}
@@ -285,12 +288,18 @@ export function PixelView() {
                   <>
                     <div className="field">
                       <label>Regra de detecção</label>
-                      <select className="input" value={form.ic.type} onChange={(e) => setForm({ ...form, ic: { ...form.ic, type: e.target.value as DetectionType } })}>
-                        <option value="clique_checkout">Clique no link de checkout (recomendado)</option>
-                        <option value="contem_texto">Contém texto</option>
-                        <option value="contem_css">Contém CSS</option>
-                        <option value="contem_url">Contém URL da página</option>
-                      </select>
+                      <Select
+                        label=""
+                        minWidth={290}
+                        value={form.ic.type}
+                        onChange={(vv) => setForm({ ...form, ic: { ...form.ic, type: vv as DetectionType } })}
+                        options={[
+                        { value: "clique_checkout", label: "Clique no link de checkout (recomendado)" },
+                        { value: "contem_texto", label: "Contém texto" },
+                        { value: "contem_css", label: "Contém CSS" },
+                        { value: "contem_url", label: "Contém URL da página" },
+                        ]}
+                      />
                     </div>
                     <input className="input" value={form.ic.value} onChange={(e) => setForm({ ...form, ic: { ...form.ic, value: e.target.value } })}
                       placeholder={
@@ -334,17 +343,29 @@ export function PixelView() {
                   <>
                     <div className="field">
                       <label>Configuração de envio</label>
-                      <select className="input" value={form.purchase.sendMode} onChange={(e) => setForm({ ...form, purchase: { ...form.purchase, sendMode: e.target.value } })}>
-                        <option value="APENAS_APROVADAS">Apenas aprovadas</option>
-                        <option value="TODAS">Aprovadas e pendentes</option>
-                      </select>
+                      <Select
+                        label=""
+                        minWidth={210}
+                        value={form.purchase.sendMode}
+                        onChange={(vv) => setForm({ ...form, purchase: { ...form.purchase, sendMode: vv as "APENAS_APROVADAS" | "TODAS" } })}
+                        options={[
+                        { value: "APENAS_APROVADAS", label: "Apenas aprovadas" },
+                        { value: "TODAS", label: "Aprovadas e pendentes" },
+                        ]}
+                      />
                     </div>
                     <div className="field">
                       <label>Valor do envio</label>
-                      <select className="input" value={form.purchase.valueMode} onChange={(e) => setForm({ ...form, purchase: { ...form.purchase, valueMode: e.target.value } })}>
-                        <option value="VALOR_DA_VENDA">Valor da venda</option>
-                        <option value="VALOR_FIXO">Comissão (valor fixo)</option>
-                      </select>
+                      <Select
+                        label=""
+                        minWidth={210}
+                        value={form.purchase.valueMode}
+                        onChange={(vv) => setForm({ ...form, purchase: { ...form.purchase, valueMode: vv as "VALOR_DA_VENDA" | "VALOR_FIXO" } })}
+                        options={[
+                        { value: "VALOR_DA_VENDA", label: "Valor da venda" },
+                        { value: "VALOR_FIXO", label: "Comissão (valor fixo)" },
+                        ]}
+                      />
                     </div>
                     {form.purchase.valueMode === "VALOR_FIXO" && (
                       <div className="field">
@@ -354,10 +375,13 @@ export function PixelView() {
                     )}
                     <div className="field">
                       <label>Produto</label>
-                      <select className="input" value={form.purchase.targetProduct} onChange={(e) => setForm({ ...form, purchase: { ...form.purchase, targetProduct: e.target.value } })}>
-                        <option value="">Todos os produtos</option>
-                        {products.map((p) => <option key={p} value={p}>{p}</option>)}
-                      </select>
+                      <Select
+                        label=""
+                        minWidth={230}
+                        value={form.purchase.targetProduct}
+                        onChange={(vv) => setForm({ ...form, purchase: { ...form.purchase, targetProduct: vv } })}
+                        options={[{ value: "", label: "Todos os produtos" }, ...products.map((p) => ({ value: p, label: p }))]}
+                      />
                     </div>
                   </>
                 )}

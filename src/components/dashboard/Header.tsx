@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { sx } from "@/lib/sx";
+import { Icone } from "./ui/Icone";
 import { useTraffik } from "./TraffikContext";
 
 const TITLES: [test: (p: string) => boolean, title: string, subtitle: string][] = [
@@ -86,7 +87,7 @@ export function Header() {
                 ) : (
                   v.notifItems.map((n) => (
                     <div key={n.id} style={sx(`display:flex;gap:10px;padding:var(--space-2) var(--space-3);border-radius:var(--radius-md);${n.read ? "" : "background:var(--color-bg);"}`)}>
-                      <span style={sx("font-size:16px;flex:none")}>{n.icon}</span>
+                      <Icone nome={n.icone.nome} tamanho={16} cor={n.icone.cor} />
                       <div style={sx("min-width:0;flex:1")}>
                         <div style={sx("font-size:13px")}>{n.title}</div>
                         <div className="text-muted" style={sx("font-size:12px")}>{n.content}</div>

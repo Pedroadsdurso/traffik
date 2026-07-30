@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { plural } from "@/lib/format";
 import { sx } from "@/lib/sx";
+import { Checkbox } from "./Checkbox";
 
 export interface ItemSelecionavel {
   id: string;
@@ -98,8 +99,8 @@ export function ListaSelecionavel({
                   `cursor:${bloqueado ? "not-allowed" : "pointer"};opacity:${bloqueado ? ".5" : "1"};` +
                   `background:${marcado ? "color-mix(in srgb, var(--color-accent) 16%, transparent)" : "transparent"}`,
               )}>
-              <input type="checkbox" checked={marcado} disabled={bloqueado} onChange={() => alternar(i.id)}
-                style={sx("margin-top:2px;flex:none;accent-color:var(--color-accent)")} />
+              <Checkbox checked={marcado} disabled={bloqueado} onChange={() => alternar(i.id)} label=""
+                rotuloAcessivel={i.label} />
               <span style={sx("min-width:0;flex:1")}>
                 <span style={sx("display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap")}>{i.label}</span>
                 {(i.bloqueio || i.detalhe) && (

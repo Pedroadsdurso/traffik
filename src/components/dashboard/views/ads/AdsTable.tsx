@@ -5,6 +5,7 @@ import { useState } from "react";
 import { brl, brl0, pct } from "@/lib/format";
 import { derivar, somar, type LinhaBase } from "@/lib/ads/metrics";
 import { sx } from "@/lib/sx";
+import { Checkbox } from "../../ui/Checkbox";
 import { Icone } from "../../ui/Icone";
 import { InfoTip } from "../../ui/InfoTip";
 import { METRICAS } from "@/lib/explicacoes";
@@ -243,8 +244,7 @@ export function AdsTable({
         <thead>
           <tr>
             <th className="fixa fixa-1">
-              <input type="checkbox" checked={todasMarcadas} onChange={onSelecionarTodas}
-                aria-label="Selecionar todas as linhas" />
+              <Checkbox checked={todasMarcadas} onChange={onSelecionarTodas} label="" rotuloAcessivel="Selecionar todas as linhas" />
             </th>
             <th className="fixa fixa-2">Status</th>
             <th className="fixa fixa-3">Nome</th>
@@ -283,8 +283,8 @@ export function AdsTable({
               return (
                 <tr key={l.id} className={marcada ? "linha-marcada" : undefined}>
                   <td className="fixa fixa-1">
-                    <input type="checkbox" checked={marcada} onChange={() => onSelecionar(l.id)}
-                      aria-label={`Selecionar ${l.nome}`} />
+                    <Checkbox checked={marcada} onChange={() => onSelecionar(l.id)} label=""
+                      rotuloAcessivel={`Selecionar ${l.nome}`} />
                   </td>
                   <td className="fixa fixa-2">
                     {/* Toggle deslizante, não play/pause — Bloco 6, item 3. */}

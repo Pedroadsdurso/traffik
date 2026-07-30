@@ -12,6 +12,7 @@ import {
   type AdProfileDTO,
 } from "@/lib/actions/facebook";
 import type { PixelConfigDTO } from "@/lib/actions/pixels";
+import type { NomeIcone } from "./ui/Icone";
 import {
   createExpense,
   deleteExpense,
@@ -1113,10 +1114,24 @@ export function useTraffikState(
   if (ns.showUtmCampaign) previewParts.push("sua-campanha");
   const notifPreview = previewParts.join(" · ");
 
-  const NOTIF_ICON: Record<string, string> = { VENDA_APROVADA: "💰", VENDA_PENDENTE: "⏳", RELATORIO: "📊", REGRA_EXECUTADA: "⚙️", SISTEMA: "🔔" };
+  /**
+   * Ícone e cor por tipo de notificação.
+   *
+   * ⚠️ Devolve o NOME do ícone (`ui/Icone`), não um emoji. Emoji é desenhado
+   * pelo sistema operacional: muda de forma entre plataformas, ignora a cor da
+   * marca e some no tema escuro em alguns aparelhos. A cor aqui carrega
+   * informação — verde para venda aprovada, âmbar para pendente.
+   */
+  const NOTIF_ICON: Record<string, { nome: NomeIcone; cor: "ok" | "aviso" | "marca" | "suave" }> = {
+    VENDA_APROVADA: { nome: "vendaAprovada", cor: "ok" },
+    VENDA_PENDENTE: { nome: "vendaPendente", cor: "aviso" },
+    RELATORIO: { nome: "relatorio", cor: "marca" },
+    REGRA_EXECUTADA: { nome: "automacao", cor: "marca" },
+    SISTEMA: { nome: "sino", cor: "suave" },
+  };
   const notifItems = s.notifications.map((n) => ({
     id: n.id,
-    icon: NOTIF_ICON[n.type] ?? "🔔",
+    icone: NOTIF_ICON[n.type] ?? { nome: "sino" as NomeIcone, cor: "suave" as const },
     title: n.title,
     content: n.content,
     read: n.read,

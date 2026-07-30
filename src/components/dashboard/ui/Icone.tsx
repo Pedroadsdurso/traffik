@@ -4,6 +4,10 @@ import {
   AlertTriangle,
   ArrowLeftRight,
   Ban,
+  BarChart3,
+  Bell,
+  CircleCheck,
+  Clock,
   Check,
   Compass,
   DollarSign,
@@ -66,6 +70,10 @@ const MAPA = {
   globo: Globe,
   dinheiro: DollarSign,
   fixado: Pin,
+  vendaAprovada: CircleCheck,
+  vendaPendente: Clock,
+  relatorio: BarChart3,
+  sino: Bell,
 } satisfies Record<string, LucideIcon>;
 
 export type NomeIcone = keyof typeof MAPA;
