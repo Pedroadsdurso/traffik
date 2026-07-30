@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 
 import { setMyTimezone } from "@/lib/actions/profile";
 import { CONFIG } from "@/lib/explicacoes";
+import { faltamTaxas } from "@/lib/areas/taxas";
 import { sx } from "@/lib/sx";
 import { Select } from "../ui/Select";
 import { Checkbox } from "../ui/Checkbox";
@@ -114,10 +115,45 @@ export function FeesView({ v }: { v: TraffikView }) {
   const [taxPct, setTaxPct] = useState("");
   const [despesaNome, setDespesaNome] = useState("");
   const [despesaValor, setDespesaValor] = useState("");
-  const [despesaSoNestaArea, setDespesaSoNestaArea] = useState(false);
+
+  /**
+   * 🔴 AVISO QUE TORNA VISÍVEL A FALHA DA TAXA POR ÁREA.
+   *
+   * Com taxas isoladas por área (decisão de 30/07/2026), esquecer de cadastrar o
+   * imposto ou a taxa do gateway numa área faz o lucro dela aparecer **maior do
+   * que é** — e o número continua plausível, então nada denuncia. Este aviso é o
+   * que denuncia. **Não remova sem antes reintroduzir a taxa global.**
+   */
+  const faltando = faltamTaxas([
+    ...(v.gatewayExpenses.length ? ["TAXA_GATEWAY"] : []),
+    ...(v.taxExpenses.length ? ["IMPOSTO"] : []),
+  ]);
+
 
   return (
     <div style={sx("display:grid;grid-template-columns:1fr 320px;gap:var(--space-4);align-items:start")}>
+
+      {faltando.length > 0 && (
+        <div
+          className="card"
+          style={sx(
+            "grid-column:1/-1;display:flex;gap:10px;align-items:flex-start;" +
+              "border-left:3px solid #f59e0b;background:color-mix(in srgb, #f59e0b 7%, var(--color-surface))",
+          )}
+        >
+          <span aria-hidden style={sx("font-size:16px;line-height:1.2")}>⚠️</span>
+          <div style={sx("font-size:13px;line-height:1.55")}>
+            <strong>
+              Esta área não tem {faltando.join(" nem ")} cadastrad{faltando.length > 1 ? "os" : "o"}.
+            </strong>
+            <div className="text-muted" style={sx("margin-top:3px")}>
+              O lucro que aparece no painel desta operação está <strong>maior do que a
+              realidade</strong>, porque esse custo não está sendo descontado. Cada área tem as
+              suas próprias taxas — cadastre {faltando.length > 1 ? "as duas" : "essa"} aqui.
+            </div>
+          </div>
+        </div>
+      )}
       <div style={sx("display:flex;flex-direction:column;gap:var(--space-4)")}>
         <div className="card">
           <div className="card-kicker">Gateways de pagamento</div>
@@ -195,24 +231,13 @@ export function FeesView({ v }: { v: TraffikView }) {
             <div style={sx("display:flex;gap:var(--space-2);margin-top:var(--space-2)")}>
               <input className="input" placeholder="Nome da despesa" value={despesaNome} onChange={(e) => setDespesaNome(e.target.value)} />
               <input className="input" style={sx("width:120px")} placeholder="Valor R$" value={despesaValor} onChange={(e) => setDespesaValor(e.target.value)} inputMode="decimal" />
-              <button className="btn btn-secondary" type="button" onClick={() => void v.addDespesa(despesaNome, despesaValor, despesaSoNestaArea).then(() => { setDespesaNome(""); setDespesaValor(""); })}>Adicionar</button>
+              <button className="btn btn-secondary" type="button" onClick={() => void v.addDespesa(despesaNome, despesaValor).then(() => { setDespesaNome(""); setDespesaValor(""); })}>Adicionar</button>
             </div>
             {/* Só a despesa recorrente oferece a escolha. Taxa de gateway e
                 imposto são globais por natureza — uma caixa neles convidaria a
                 prender a uma área justamente o que, se prendido, sumiria da
                 conta de lucro das outras em silêncio. */}
-            {/* ⚠️ A explicação foi para o ⓘ. O rótulo carregava o comportamento
-                do próprio checkbox entre parênteses — "(desmarcado: vale para
-                todas as áreas)" —, texto que só existe porque ninguém achou
-                outro lugar para pôr. */}
-            <div style={sx("display:flex;align-items:center;gap:5px;margin-top:8px")}>
-              <Checkbox
-                checked={despesaSoNestaArea}
-                onChange={setDespesaSoNestaArea}
-                label="Só nesta área de trabalho"
-              />
-              <InfoTip conteudo={CONFIG.despesaArea!} tamanho={12} />
-            </div>
+            
           </div>
         </div>
       </div>

@@ -276,19 +276,23 @@ export function construirMapa(d: DadosDoMapa): MapaDeAreas {
 }
 
 /**
- * Despesas que se aplicam a uma área.
+ * Despesas de uma área — **isoladas**, como o resto da configuração.
  *
- * 🔴 **`workspaceId` NULO = vale para TODAS as áreas.** Taxa de gateway e
- * imposto são globais por natureza. Se elas fossem migradas "para a Principal",
- * toda área secundária passaria a calcular lucro **sem imposto nenhum** — e o
- * número continuaria parecendo plausível, que é a falha silenciosa que este
- * projeto já pagou caro duas vezes.
+ * ⚠️ **Isto reverteu a semântica anterior** (`NULL` = vale para todas as áreas),
+ * por decisão do usuário em 30/07/2026: ele quer cada área com as suas próprias
+ * taxas. A migration `20260730120000` levou as despesas nulas para a Principal.
+ *
+ * 🔴 **O risco que a decisão anterior evitava continua real:** uma área sem taxa
+ * de gateway ou sem imposto cadastrado calcula lucro **sem eles** — número maior
+ * que a realidade, e plausível. A mitigação é a TELA avisar (`faltamTaxas`, em
+ * `escopoConfig.ts`), transformando erro silencioso em erro visível. **Se o aviso
+ * sair, o risco volta inteiro.**
  */
 export function despesaVale(despesa: { workspaceId: string | null }, areaId: string): boolean {
-  return despesa.workspaceId === null || despesa.workspaceId === areaId;
+  return despesa.workspaceId === areaId;
 }
 
 /** `where` do Prisma equivalente ao `despesaVale`, para filtrar na consulta. */
 export function whereDespesasDaArea(areaId: string) {
-  return { OR: [{ workspaceId: null }, { workspaceId: areaId }] };
+  return { workspaceId: areaId };
 }

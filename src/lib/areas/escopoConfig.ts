@@ -61,10 +61,19 @@ export async function escopoDeConfig(
 }
 
 /**
- * 🔴 Despesas são diferentes: **NULO = vale para TODAS as áreas**, não "sem
- * dono". Taxa de gateway e imposto são globais por natureza, então a lista
- * SEMPRE inclui as nulas — inclusive numa área secundária.
+ * Despesas de UMA área — isoladas, como o resto.
+ *
+ * ⚠️ **Isto reverteu a semântica anterior** (NULO = vale para todas as áreas),
+ * por decisão do usuário em 30/07/2026: ele quer cada área com suas próprias
+ * taxas. A migration `20260730120000` levou as despesas nulas para a Principal.
+ *
+ * 🔴 **O risco que a decisão anterior evitava continua real:** área sem taxa de
+ * gateway ou sem imposto cadastrado calcula lucro **sem eles** — número maior
+ * que a realidade, e plausível. A mitigação é a TELA avisar (`faltamTaxas`),
+ * transformando erro silencioso em erro visível. Se um dia o aviso sair, o risco
+ * volta inteiro.
  */
 export function whereDespesas(areaId: string) {
-  return { OR: [{ workspaceId: null }, { workspaceId: areaId }] };
+  return { workspaceId: areaId };
 }
+

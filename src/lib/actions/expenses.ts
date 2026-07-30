@@ -58,23 +58,15 @@ export interface CreateExpenseInput {
   amount: number;
   paymentMethod?: PaymentMethod | null;
   recurrence?: ExpenseRecurrence;
-  /**
-   * `true` (padrão) = vale para todas as áreas → grava `workspaceId` NULO.
-   * `false` = só para a área ativa.
-   */
-  todasAsAreas?: boolean;
+  /** Area dona. Omitido = a area ativa. Toda despesa pertence a uma area. */
   workspaceId?: string | null;
 }
 
 export async function createExpense(input: CreateExpenseInput): Promise<ExpenseDTO> {
   const userId = await requireUserId();
-  // Padrão = global. Taxa e imposto quase sempre valem para o negócio inteiro,
-  // e prender por engano é o erro caro (some da conta de lucro das outras
-  // áreas em silêncio); soltar por engano é visível na tela.
-  const global = input.todasAsAreas !== false;
-  const escopo = global
-    ? null
-    : await escopoDeConfig(userId, input.workspaceId ?? (await getLastWorkspaceId()));
+  // Toda despesa nasce vinculada a area ativa. Nao existe mais despesa
+  // global: o usuario pediu isolamento por area em 30/07/2026.
+  const escopo = await escopoDeConfig(userId, input.workspaceId ?? (await getLastWorkspaceId()));
   const row = await prisma.expense.create({
     data: {
       userId,
@@ -84,7 +76,7 @@ export async function createExpense(input: CreateExpenseInput): Promise<ExpenseD
       amount: input.amount,
       paymentMethod: input.paymentMethod ?? null,
       recurrence: input.recurrence ?? "MENSAL",
-      workspaceId: escopo?.areaId || null,
+      workspaceId: escopo.areaId || null,
     },
   });
   return toDTO(row);

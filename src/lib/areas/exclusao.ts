@@ -34,8 +34,16 @@ export interface PreviaExclusao {
 
 /** Escolha por grupo. O padrão de cada uma é sempre a opção mais segura. */
 export interface OpcoesExclusao {
-  /** `desvincular` (padrão) não mexe em nada no Facebook. */
-  contas?: "mover" | "desvincular";
+  /**
+   * `mover` (padrao) leva para a Principal. `remover` APAGA a conta da
+   * ferramenta.
+   *
+   * 🔴 `remover` derruba `Campaign`, `AdSet`, `Ad` e `DailyAdMetric` por
+   * cascade -- ou seja, **apaga todo o historico de gasto daquela conta**, que e
+   * a base de ROAS, ROI e CPA de todos os periodos. A tela avisa em vermelho e o
+   * usuario escolhe; nada disso acontece por omissao.
+   */
+  contas?: "mover" | "remover";
   webhooks?: "mover" | "excluir";
   pixels?: "mover" | "excluir";
   /**
@@ -302,13 +310,14 @@ export async function excluirArea(
   // ── 2. CONFIGURAÇÃO, grupo por grupo ─────────────────────────────────────
   const paraPrincipal = { workspaceId: principalId };
 
-  // Conta de anúncio: NUNCA apaga a linha. `Campaign`/`AdSet`/`Ad`/
-  // `DailyAdMetric` pendem dela com `Cascade` — apagar destruiria todo o
-  // histórico de gasto. "Desvincular" é o mais destrutivo que faz sentido.
-  await prisma.adAccount.updateMany({
-    where: { userId, workspaceId: id },
-    data: opcoes.contas === "mover" ? paraPrincipal : { workspaceId: null },
-  });
+  // 🔴 `remover` APAGA a conta, e com ela o historico de gasto inteiro
+  // (`Campaign`/`AdSet`/`Ad`/`DailyAdMetric` pendem dela com Cascade). E opcao
+  // explicita, escolhida na tela com aviso em vermelho -- nunca o padrao.
+  if (opcoes.contas === "remover") {
+    await prisma.adAccount.deleteMany({ where: { userId, workspaceId: id } });
+  } else {
+    await prisma.adAccount.updateMany({ where: { userId, workspaceId: id }, data: paraPrincipal });
+  }
 
   if (opcoes.webhooks === "excluir") await prisma.webhook.deleteMany({ where: { userId, workspaceId: id } });
   else await prisma.webhook.updateMany({ where: { userId, workspaceId: id }, data: paraPrincipal });

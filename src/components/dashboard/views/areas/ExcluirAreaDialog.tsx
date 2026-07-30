@@ -114,7 +114,7 @@ export function ExcluirAreaDialog({
   const [erro, setErro] = useState<string | null>(null);
 
   // Padrões seguros. Nenhum deles apaga nada.
-  const [contas, setContas] = useState("desvincular");
+  const [contas, setContas] = useState("mover");
   const [webhooks, setWebhooks] = useState("mover");
   const [pixels, setPixels] = useState("mover");
   const [regras, setRegras] = useState("excluir");
@@ -204,7 +204,11 @@ export function ExcluirAreaDialog({
   const resumo: string[] = [];
   if (previa) {
     if (previa.contas.length > 0)
-      resumo.push(contas === "mover" ? "As contas de anúncio passam para a área Principal." : "As contas de anúncio ficam sem área e voltam a aparecer na Principal.");
+      resumo.push(
+        contas === "mover"
+          ? "As contas de anúncio passam para a área Principal."
+          : "As contas de anúncio saem da Traffik, junto com o histórico de investimento delas.",
+      );
     if (previa.webhooks.length > 0)
       resumo.push(webhooks === "mover" ? "Os gateways continuam recebendo vendas, agora na Principal." : "Os gateways são removidos e param de receber vendas.");
     if (previa.pixels.length > 0)
@@ -261,8 +265,14 @@ export function ExcluirAreaDialog({
             valor={contas}
             onChange={setContas}
             escolhas={[
-              { valor: "desvincular", titulo: "Apenas desvincular" },
               { valor: "mover", titulo: "Mover para a área Principal" },
+              {
+                valor: "remover",
+                titulo: "Remover da ferramenta",
+                perigo: true,
+                aviso:
+                  "A conta sai da Traffik junto com a área, e o histórico de investimento dela vai embora — todo o gasto já registrado, de todos os períodos. ROAS, ROI e CPA do passado deixam de existir para essas campanhas. Nada muda no Facebook: a conta continua lá, intacta.",
+              },
             ]}
           />
 

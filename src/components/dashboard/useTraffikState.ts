@@ -147,8 +147,6 @@ interface State {
   expenses: ExpenseDTO[];
   newDespesaName: string;
   newDespesaValue: string;
-  /** Despesa recorrente restrita à área ativa. Padrão `false` = vale para todas. */
-  despesaSoNestaArea: boolean;
   newGatewayMethod: string;
   newGatewayPct: string;
   newTaxName: string;
@@ -272,7 +270,6 @@ function initialState(
     expenses: initialExpenses,
     newDespesaName: "",
     newDespesaValue: "",
-    despesaSoNestaArea: false,
     newGatewayMethod: "PIX",
     newGatewayPct: "",
     newTaxName: "",
@@ -1583,9 +1580,7 @@ export function useTraffikState(
     newDespesaValue: s.newDespesaValue,
     onNewDespesaName: (e: React.ChangeEvent<HTMLInputElement>) => set({ newDespesaName: e.target.value }),
     onNewDespesaValue: (e: React.ChangeEvent<HTMLInputElement>) => set({ newDespesaValue: e.target.value }),
-    despesaSoNestaArea: s.despesaSoNestaArea,
-    toggleDespesaSoNestaArea: () => setS((st) => ({ ...st, despesaSoNestaArea: !st.despesaSoNestaArea })),
-    addDespesa: async (nome: string, valor: string, soNestaArea: boolean) => {
+    addDespesa: async (nome: string, valor: string) => {
       const amount = parseFloat(valor) || 0;
       if (!nome.trim() || !amount) return;
       const created = await createExpense({
@@ -1594,11 +1589,6 @@ export function useTraffikState(
         calc: "FIXO",
         amount,
         recurrence: "MENSAL",
-        // Padrão: vale para todas as áreas. Só a despesa recorrente oferece a
-        // escolha — taxa de gateway e imposto são globais por natureza, e uma
-        // caixa neles convidaria a prender por engano justamente o que, se
-        // prendido, some da conta de lucro das outras áreas em silêncio.
-        todasAsAreas: !soNestaArea,
         workspaceId: s.workspaceAtiva,
       });
       setS((st) => ({ ...st, expenses: [...st.expenses, created] }));
