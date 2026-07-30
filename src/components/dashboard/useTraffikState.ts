@@ -12,6 +12,7 @@ import {
   type AdProfileDTO,
 } from "@/lib/actions/facebook";
 import type { PixelConfigDTO } from "@/lib/actions/pixels";
+import type { PeriodoNome } from "@/lib/periodo";
 import type { NomeIcone } from "./ui/Icone";
 import {
   createExpense,
@@ -55,7 +56,12 @@ import { setLastWorkspaceId, type WorkspaceDTO } from "@/lib/actions/workspaces"
 import { DEFAULT_TIMEZONE } from "@/lib/timezone";
 import type { MetricKey, TabKey } from "./types";
 
-type DashPeriod = "hoje" | "7d" | "30d" | "custom";
+/**
+ * ⚠️ Vem de `lib/periodo.ts`. Era uma união local de 4 valores, uma TERCEIRA
+ * cópia da mesma lista (havia outra em `metrics.ts` e outra na rota). Um período
+ * novo tinha de ser escrito em três lugares para funcionar.
+ */
+type DashPeriod = PeriodoNome;
 
 interface RuleForm {
   name: string;
@@ -122,7 +128,9 @@ interface State {
   dashSource: string;
   adsSearch: string;
   adsStatus: string;
-  adsPeriod: "hoje" | "7d" | "30d";
+  adsPeriod: PeriodoNome;
+  adsFrom: string | null;
+  adsTo: string | null;
   adsAccount: string;
   adsData: AdsOverview | null;
   adsLoading: boolean;
@@ -134,7 +142,9 @@ interface State {
   newCampaignObjective: string;
   newCampaignBudget: string;
   newCampaignBusy: boolean;
-  creativesPeriod: "hoje" | "7d" | "30d";
+  creativesPeriod: PeriodoNome;
+  creativesFrom: string | null;
+  creativesTo: string | null;
   creativesSort: "roas" | "ctr" | "spend" | "sales";
   creativesData: CreativeRow[] | null;
   creativesLoading: boolean;
@@ -246,6 +256,8 @@ function initialState(
     adsSearch: "",
     adsStatus: "todos",
     adsPeriod: "7d",
+    adsFrom: null,
+    adsTo: null,
     adsAccount: "todas",
     adsData: null,
     adsLoading: true,
@@ -258,6 +270,8 @@ function initialState(
     newCampaignBudget: "",
     newCampaignBusy: false,
     creativesPeriod: "7d",
+    creativesFrom: null,
+    creativesTo: null,
     creativesSort: "roas",
     creativesData: null,
     creativesLoading: true,
@@ -540,6 +554,12 @@ export function useTraffikState(
     const controller = new AbortController();
     async function carregar() {
       const qs = new URLSearchParams({ period: s.adsPeriod, account: s.adsAccount });
+      // `custom` é o único período que precisa das datas: os outros o servidor
+      // resolve sozinho, no fuso do usuário.
+      if (s.adsPeriod === "custom" && s.adsFrom) {
+        qs.set("from", s.adsFrom);
+        qs.set("to", s.adsTo ?? s.adsFrom);
+      }
       if (s.workspaceAtiva) qs.set("ws", s.workspaceAtiva);
       try {
         const res = await fetch(`/api/ads?${qs.toString()}`, { signal: controller.signal });
@@ -566,7 +586,7 @@ export function useTraffikState(
     // (ver `startPolling`), então não custa nada com o painel em segundo plano.
     const stop = startPolling(() => { void carregar(); }, ADS_POLL_MS);
     return () => { active = false; controller.abort(); stop(); };
-  }, [s.adsPeriod, s.adsAccount, s.workspaceAtiva, s.adsRefreshKey]);
+  }, [s.adsPeriod, s.adsFrom, s.adsTo, s.adsAccount, s.workspaceAtiva, s.adsRefreshKey]);
 
   // Ranking de criativos.
   useEffect(() => {
@@ -574,6 +594,10 @@ export function useTraffikState(
     const controller = new AbortController();
     (async () => {
       const qs = new URLSearchParams({ period: s.creativesPeriod, sort: s.creativesSort });
+      if (s.creativesPeriod === "custom" && s.creativesFrom) {
+        qs.set("from", s.creativesFrom);
+        qs.set("to", s.creativesTo ?? s.creativesFrom);
+      }
       if (s.workspaceAtiva) qs.set("ws", s.workspaceAtiva);
       try {
         const res = await fetch(`/api/creatives?${qs.toString()}`, { signal: controller.signal });
@@ -585,7 +609,7 @@ export function useTraffikState(
       }
     })();
     return () => { active = false; controller.abort(); };
-  }, [s.creativesPeriod, s.creativesSort, s.workspaceAtiva, s.adsRefreshKey]);
+  }, [s.creativesPeriod, s.creativesFrom, s.creativesTo, s.creativesSort, s.workspaceAtiva, s.adsRefreshKey]);
 
   // Perfis e contas de anúncio: repescagem a cada 30s.
   //
@@ -1190,7 +1214,10 @@ export function useTraffikState(
     dashTo: s.dashTo,
     // Setters por valor: os filtros do Bloco 3 são componentes próprios, não
     // `<select>` nativos, então não existe mais um ChangeEvent para ler.
-    setDashPeriod: (p: DashPeriod) => set({ dashPeriod: p }),
+    // ⚠️ Sair do "Personalizado" LIMPA o intervalo. Sem isso, o rótulo do
+    // seletor voltaria a mostrar as datas antigas ao reescolher "Personalizado".
+    setDashPeriod: (p: DashPeriod, from?: string, to?: string) =>
+      set({ dashPeriod: p, dashFrom: from ?? null, dashTo: to ?? null }),
     setDashAccount: (v: string) => set({ dashAccount: v }),
     setDashProduct: (v: string) => set({ dashProduct: v }),
     setDashSource: (v: string) => set({ dashSource: v }),
@@ -1346,6 +1373,8 @@ export function useTraffikState(
     adsSearch: s.adsSearch,
     adsStatus: s.adsStatus,
     adsPeriod: s.adsPeriod,
+    adsFrom: s.adsFrom,
+    adsTo: s.adsTo,
     adsAccount: s.adsAccount,
     /**
      * Idade do dado vindo do Facebook. Existe para o usuário PARAR de clicar em
@@ -1364,16 +1393,20 @@ export function useTraffikState(
     // Os `onAdsX` que recebiam `ChangeEvent` existiam só para o `<select>`
     // nativo — ver a nota sobre padronização de controles no CLAUDE.md.
     setAdsStatus: (adsStatus: string) => set({ adsStatus }),
-    setAdsPeriod: (adsPeriod: string) => set({ adsPeriod: adsPeriod as "hoje" | "7d" | "30d" }),
+    setAdsPeriod: (adsPeriod: PeriodoNome, from?: string, to?: string) =>
+      set({ adsPeriod, adsFrom: from ?? null, adsTo: to ?? null }),
     setAdsAccount: (adsAccount: string) => set({ adsAccount }),
     adsAccountOptions: (ao?.accounts ?? []).map((a) => ({ id: a.id, name: a.name })),
     filteredCampaigns, filteredAdsets, filteredAds, accounts, creatives,
 
     // Ranking de criativos
     creativesPeriod: s.creativesPeriod,
+    creativesFrom: s.creativesFrom,
+    creativesTo: s.creativesTo,
     creativesSort: s.creativesSort,
     creativesLoading: s.creativesLoading,
-    setCreativesPeriod: (creativesPeriod: string) => set({ creativesPeriod: creativesPeriod as "hoje" | "7d" | "30d" }),
+    setCreativesPeriod: (creativesPeriod: PeriodoNome, from?: string, to?: string) =>
+      set({ creativesPeriod, creativesFrom: from ?? null, creativesTo: to ?? null }),
     setCreativesSort: (creativesSort: string) => set({ creativesSort: creativesSort as "roas" | "ctr" | "spend" | "sales" }),
 
     // Criar campanha

@@ -1,10 +1,12 @@
 import { getUserTimezone } from "@/lib/userTimezone";
 import { carregarMapaDeAreas } from "@/lib/areas/atribuicao";
 import { prisma } from "@/lib/prisma";
-import { addDaysToKey, dayStart, keyToDateColumn, todayKey } from "@/lib/timezone";
+import { janelaDoPeriodo, type PeriodoNome } from "@/lib/periodo";
+import { dayEnd, dayKeyInTz, dayStart, keyToDateColumn } from "@/lib/timezone";
 import { splitPipe } from "@/lib/utm/parse";
 
-export type CreativePeriod = "hoje" | "7d" | "30d";
+/** ⚠️ Alias de `PeriodoNome` — mesma união do Dashboard e do Gerenciador. */
+export type CreativePeriod = PeriodoNome;
 export type CreativeSort = "roas" | "ctr" | "spend" | "sales";
 
 export interface CreativeRow {
@@ -21,12 +23,24 @@ export interface CreativeRow {
   best: boolean;
 }
 
-/** Mesma janela do gerenciador, no fuso do usuário. Ver `ads/overview.ts`. */
-function rangeStart(period: CreativePeriod, tz: string): { start: Date; startKey: string } {
-  const hoje = todayKey(tz);
-  const startKey = period === "hoje" ? hoje : addDaysToKey(hoje, -((period === "30d" ? 30 : 7) - 1));
-  return { start: dayStart(startKey, tz), startKey };
+/**
+ * Janela dos Criativos, da fonte ÚNICA (`lib/periodo.ts`).
+ *
+ * ⚠️ Isto era uma cópia do `rangeStart` do `overview.ts`, com o comentário
+ * "mesma janela do gerenciador" — que é a confissão de que eram duas cópias da
+ * mesma regra. As duas herdavam o mesmo defeito: sem ponta final.
+ */
+function janela(opts: { period: CreativePeriod; from?: string; to?: string }, tz: string) {
+  const agora = new Date();
+  const j = janelaDoPeriodo(opts.period, tz, { from: opts.from, to: opts.to }, agora);
+  return {
+    start: dayStart(j.startKey, tz),
+    end: j.endKey === dayKeyInTz(agora, tz) ? agora : dayEnd(j.endKey, tz),
+    startKey: j.startKey,
+    endKey: j.endKey,
+  };
 }
+
 
 function num(v: unknown): number {
   return typeof v === "number" ? v : Number(v ?? 0);
@@ -36,13 +50,16 @@ export async function computeCreatives(
   userId: string,
   opts: {
     period: CreativePeriod;
+    /** Apenas para `period: "custom"`. */
+    from?: string;
+    to?: string;
     sort: CreativeSort;
     /** Área de Trabalho ATIVA — só o id. Ver `lib/areas/precedencia.ts`. */
     workspaceId?: string | null;
   },
 ): Promise<CreativeRow[]> {
   const tz = await getUserTimezone(userId);
-  const { start, startKey } = rangeStart(opts.period, tz);
+  const { start, end, startKey, endKey } = janela(opts, tz);
 
   // Sem filtro de tela aqui: a área é a única fonte de recorte da aba Criativos.
   const mapa = await carregarMapaDeAreas(userId);
@@ -61,7 +78,10 @@ export async function computeCreatives(
       },
     }),
     prisma.dailyAdMetric.findMany({
-      where: { date: { gte: keyToDateColumn(startKey) }, ad: { adAccount: { userId, ...contaWhere } } },
+      where: {
+        date: { gte: keyToDateColumn(startKey), lte: keyToDateColumn(endKey) },
+        ad: { adAccount: { userId, ...contaWhere } },
+      },
       select: { adId: true, spend: true, impressions: true, clicks: true },
     }),
     // Vendas aprovadas no período; atribuídas ao anúncio por utm_content → nome.
@@ -69,7 +89,7 @@ export async function computeCreatives(
       where: {
         userId,
         status: "APROVADA",
-        timestamp: { gte: start },
+        timestamp: { gte: start, lte: end },
       },
       select: { value: true, product: true, webhookId: true, apiCredentialId: true, click: { select: { utmContent: true, utmCampaign: true, workspaceId: true } } },
     }),

@@ -1,4 +1,5 @@
 import { sx } from "@/lib/sx";
+import { FiltroPeriodo } from "../ui/FiltroPeriodo";
 import { Icone } from "../ui/Icone";
 import { Select } from "../ui/Select";
 import { ImageSlot } from "../ImageSlot";
@@ -8,20 +9,15 @@ export function CreativesView({ v }: { v: TraffikView }) {
   return (
     <div style={sx("display:flex;flex-direction:column;gap:var(--space-4)")}>
       <div style={sx("display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap")}>
-        <div style={sx("display:flex;flex-direction:column;gap:3px")}>
-          <span style={sx("font-size:10px;text-transform:uppercase;letter-spacing:.08em;opacity:.5")}>Período</span>
-          <Select
-            label=""
-            minWidth={150}
-            value={v.creativesPeriod}
-            onChange={v.setCreativesPeriod}
-            options={[
-              { value: "hoje", label: "Hoje" },
-              { value: "7d", label: "Últimos 7 dias" },
-              { value: "30d", label: "Últimos 30 dias" },
-            ]}
-          />
-        </div>
+        {/* O `FiltroPeriodo` já desenha o próprio rótulo "Período". */}
+        <FiltroPeriodo
+          minWidth={150}
+          periodo={v.creativesPeriod}
+          from={v.creativesFrom}
+          to={v.creativesTo}
+          timezone={v.timezone}
+          onChange={v.setCreativesPeriod}
+        />
         <div style={sx("display:flex;flex-direction:column;gap:3px")}>
           <span style={sx("font-size:10px;text-transform:uppercase;letter-spacing:.08em;opacity:.5")}>Ordenar por</span>
           <Select

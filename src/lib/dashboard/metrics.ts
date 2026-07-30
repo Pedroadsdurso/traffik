@@ -8,15 +8,22 @@ import {
   dayKeyInTz,
   dayKeyRange,
   dayStart,
-  daysBetweenKeys,
   hourInTz,
   keyToDateColumn,
-  todayKey,
   zonedToUtc,
 } from "@/lib/timezone";
+import { janelaAnterior, janelaDoPeriodo, type PeriodoNome } from "@/lib/periodo";
 import type { PaymentMethod } from "@/generated/prisma/enums";
 
-export type DashPeriod = "hoje" | "7d" | "30d" | "custom";
+/**
+ * ⚠️ Alias de `PeriodoNome`, que vive em `lib/periodo.ts`.
+ *
+ * Era uma união própria com 4 valores (`hoje | 7d | 30d | custom`). Enquanto o
+ * Dashboard era a única tela com filtro de data isso passava; com o Gerenciador
+ * e os Criativos usando o mesmo seletor, duas uniões diferentes significariam
+ * "Mês passado" existir numa tela e não na outra.
+ */
+export type DashPeriod = PeriodoNome;
 
 export interface DashboardFilters {
   period: DashPeriod;
@@ -125,61 +132,34 @@ interface Range {
 
 function resolveRange(f: DashboardFilters, tz: string): Range {
   const agora = new Date();
-  const hoje = todayKey(tz);
+  const hoje = dayKeyInTz(agora, tz);
 
-  if (f.period === "custom" && f.from) {
-    const startKey = f.from;
-    // `to` inclusivo até 23:59:59.999 do fuso do usuário. Antes era
-    // `new Date("2026-07-25")` = meia-noite UTC, então um período de UM dia
-    // (from === to) resultava numa janela de duração ZERO e o dashboard vinha
-    // vazio — e um período normal perdia o último dia inteiro.
-    const endKey = f.to ?? f.from;
-    const dias = Math.max(1, daysBetweenKeys(startKey, endKey) + 1);
-    const start = dayStart(startKey, tz);
-    return {
-      start,
-      end: dayEnd(endKey, tz),
-      startKey,
-      endKey,
-      granularity: "day",
-      prevStart: dayStart(addDaysToKey(startKey, -dias), tz),
-      prevEnd: dayEnd(addDaysToKey(startKey, -1), tz),
-    };
-  }
+  // A janela em CHAVES DE DIA vem de `lib/periodo.ts` — a mesma função que o
+  // seletor da interface e o Gerenciador usam. O que sobra aqui é só o que é
+  // específico do Dashboard: granularidade e janela de comparação.
+  const j = janelaDoPeriodo(f.period, tz, { from: f.from, to: f.to }, agora);
+  const ant = janelaAnterior(j);
 
-  if (f.period === "hoje") {
-    const start = dayStart(hoje, tz);
-    // Ontem, do começo do dia até o mesmo ponto do dia em que estamos agora —
-    // comparar o dia parcial contra um dia inteiro faria "Hoje" parecer sempre
-    // pior de manhã.
-    const ontem = addDaysToKey(hoje, -1);
-    const prevStart = dayStart(ontem, tz);
-    return {
-      start,
-      end: agora,
-      startKey: hoje,
-      endKey: hoje,
-      granularity: "hour",
-      prevStart,
-      prevEnd: new Date(prevStart.getTime() + (agora.getTime() - start.getTime())),
-    };
-  }
+  const start = dayStart(j.startKey, tz);
+  const terminaHoje = j.endKey === hoje;
 
-  // "Últimos 7/30 dias" = 7/30 dias de CALENDÁRIO terminando hoje, alinhados à
-  // meia-noite do usuário. Antes era um deslocamento cru de `n × 86400000` a
-  // partir de agora, que caía no meio de um dia e produzia um bucket parcial a
-  // mais na ponta — a origem do `+ 1` que o `buildChart` precisava ter.
-  const dias = f.period === "30d" ? 30 : 7;
-  const startKey = addDaysToKey(hoje, -(dias - 1));
-  return {
-    start: dayStart(startKey, tz),
-    end: agora,
-    startKey,
-    endKey: hoje,
-    granularity: "day",
-    prevStart: dayStart(addDaysToKey(startKey, -dias), tz),
-    prevEnd: dayEnd(addDaysToKey(startKey, -1), tz),
-  };
+  // Janela que termina HOJE fecha em "agora", não às 23:59: o dia está em curso,
+  // e fechar no fim do dia criaria buckets de horas que ainda não aconteceram.
+  const end = terminaHoje ? agora : dayEnd(j.endKey, tz);
+
+  // Hora a hora só quando a janela é de UM dia. Isso agora vale também para
+  // "Ontem", que ganha o detalhamento por hora de graça.
+  const granularity: "hour" | "day" = j.startKey === j.endKey ? "hour" : "day";
+
+  const prevStart = dayStart(ant.startKey, tz);
+  // ⚠️ "Hoje" compara contra ONTEM ATÉ O MESMO HORÁRIO. Comparar um dia parcial
+  // contra um dia inteiro faria "Hoje" parecer sempre pior de manhã.
+  const prevEnd =
+    terminaHoje && granularity === "hour"
+      ? new Date(prevStart.getTime() + (agora.getTime() - start.getTime()))
+      : dayEnd(ant.endKey, tz);
+
+  return { start, end, startKey: j.startKey, endKey: j.endKey, granularity, prevStart, prevEnd };
 }
 
 function num(v: unknown): number {
@@ -742,8 +722,19 @@ function buildChart(
     cpa: spend.map((sp, i) => div(sp, vendasPorBucket[i] ?? 0)),
   };
 
-  const periodLabel =
-    { hoje: "Hoje · por hora", "7d": "Últimos 7 dias", "30d": "Últimos 30 dias", custom: "Período personalizado" }[period];
+  // ⚠️ `Record<PeriodoNome, string>` e não um objeto solto: o mapa solto deixava
+  // `periodLabel` virar `undefined` em silêncio ao entrar um período novo. Com o
+  // Record, o compilador exige a entrada — foi ele que pegou os três que faltavam.
+  const ROTULO_GRAFICO: Record<PeriodoNome, string> = {
+    hoje: "Hoje · por hora",
+    ontem: "Ontem · por hora",
+    "7d": "Últimos 7 dias",
+    "30d": "Últimos 30 dias",
+    mesAtual: "Este mês",
+    mesPassado: "Mês passado",
+    custom: "Período personalizado",
+  };
+  const periodLabel = ROTULO_GRAFICO[period];
 
   return { labels: buckets.map((b) => b.label), revenue, spend, periodLabel, granularity, sparklines };
 }

@@ -1,11 +1,19 @@
 import { carregarMapaDeAreas } from "@/lib/areas/atribuicao";
 import { getUserTimezone } from "@/lib/userTimezone";
 import { prisma } from "@/lib/prisma";
-import { addDaysToKey, dayStart, keyToDateColumn, todayKey } from "@/lib/timezone";
+import { janelaDoPeriodo, type PeriodoNome } from "@/lib/periodo";
+import { dayEnd, dayKeyInTz, dayStart, keyToDateColumn } from "@/lib/timezone";
 import { splitPipe } from "@/lib/utm/parse";
 
 export interface AdsFilters {
-  period: "hoje" | "7d" | "30d";
+  /**
+   * ⚠️ Os 7 períodos de `lib/periodo.ts`, não os 3 de antes. O Gerenciador tinha
+   * só Hoje/7d/30d; agora usa o mesmo seletor do Dashboard.
+   */
+  period: PeriodoNome;
+  /** Apenas para `period: "custom"`. */
+  from?: string;
+  to?: string;
   account: string; // "todas" ou AdAccount.id
   status: string; // "todos" | "ativo" | "pausado"
   search: string;
@@ -81,10 +89,25 @@ export interface AdsOverview {
  * `Sale.timestamp`) e a chave do dia (para `DailyAdMetric.date`, que é
  * `@db.Date` e não pode ser comparada com um instante).
  */
-function rangeStart(period: AdsFilters["period"], tz: string): { start: Date; startKey: string } {
-  const hoje = todayKey(tz);
-  const startKey = period === "hoje" ? hoje : addDaysToKey(hoje, -((period === "30d" ? 30 : 7) - 1));
-  return { start: dayStart(startKey, tz), startKey };
+/**
+ * Janela do Gerenciador, da fonte ÚNICA (`lib/periodo.ts`).
+ *
+ * 🔴 **Agora tem as DUAS pontas.** O `rangeStart` que existia aqui devolvia só o
+ * início e todo filtro era `timestamp >= start`, ou seja "do início até agora".
+ * Isso funcionava porque os únicos períodos eram Hoje/7d/30d, que terminam hoje.
+ * Com "Ontem" e "Mês passado" no seletor, aquilo traria **a janela escolhida mais
+ * tudo o que veio depois** — "Mês passado" incluindo o mês atual.
+ */
+function janela(filters: AdsFilters, tz: string) {
+  const agora = new Date();
+  const j = janelaDoPeriodo(filters.period, tz, { from: filters.from, to: filters.to }, agora);
+  return {
+    start: dayStart(j.startKey, tz),
+    // Janela que termina hoje fecha em "agora"; no passado, no fim do dia.
+    end: j.endKey === dayKeyInTz(agora, tz) ? agora : dayEnd(j.endKey, tz),
+    startKey: j.startKey,
+    endKey: j.endKey,
+  };
 }
 
 function num(v: unknown): number {
@@ -94,7 +117,7 @@ function num(v: unknown): number {
 
 export async function computeAdsOverview(userId: string, filters: AdsFilters): Promise<AdsOverview> {
   const tz = await getUserTimezone(userId);
-  const { start, startKey } = rangeStart(filters.period, tz);
+  const { start, end, startKey, endKey } = janela(filters, tz);
 
   // Área ∩ filtro da tela. `null` = sem filtro.
   // Pertinência de área — ver `lib/areas/precedencia.ts`.
@@ -138,7 +161,10 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
       },
     }),
     prisma.dailyAdMetric.findMany({
-      where: { date: { gte: keyToDateColumn(startKey) }, ad: { adAccount: { userId, ...accountWhere } } },
+      where: {
+        date: { gte: keyToDateColumn(startKey), lte: keyToDateColumn(endKey) },
+        ad: { adAccount: { userId, ...accountWhere } },
+      },
       select: { adId: true, spend: true, impressions: true, clicks: true },
     }),
     // TODAS as vendas do período (qualquer status). As aprovadas viram
@@ -147,14 +173,14 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
     prisma.sale.findMany({
       where: {
         userId,
-        timestamp: { gte: start },
+        timestamp: { gte: start, lte: end },
       },
       select: { value: true, status: true, product: true, webhookId: true, apiCredentialId: true, click: { select: { utmCampaign: true, utmContent: true, workspaceId: true } } },
     }),
     // Cliques rastreados por NÓS, atribuídos por UTM. Chegam ao banco no
     // instante do clique (via `t.js`), sem depender do Facebook.
     prisma.click.findMany({
-      where: { userId, timestamp: { gte: start } },
+      where: { userId, timestamp: { gte: start, lte: end } },
       select: { utmCampaign: true, utmContent: true, fbclid: true, workspaceId: true },
     }),
     // Initiate Checkout do período. O evento não carrega campanha, mas carrega
@@ -164,7 +190,7 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
       where: {
         userId,
         event: "InitiateCheckout",
-        timestamp: { gte: start },
+        timestamp: { gte: start, lte: end },
       },
       select: { id: true, fbclid: true, eventId: true, pixelConfigId: true },
     }),

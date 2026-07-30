@@ -3170,10 +3170,79 @@ as props `onSincronizar`/`sincronizando` do `AdsActionBar` — restos do botão
 `CountryMap` lia `arrasto.current` no `style` durante o render. Mudar um ref não
 redispara render, então o cursor **nunca** trocava ao arrastar. Virou estado.
 
+## 📅 Períodos: UMA fonte, três telas (30/07/2026 — Prompt C)
+
+`src/lib/periodo.ts` é a **fonte única** das janelas de data, usada pelo seletor da
+interface E pelo servidor. `src/components/dashboard/ui/FiltroPeriodo.tsx` é o
+**único** seletor de período da ferramenta.
+
+### 🔴 Havia TRÊS implementações da mesma regra — e duas estavam erradas
+
+`resolveRange` (`dashboard/metrics.ts`), `rangeStart` (`ads/overview.ts`) e outro
+`rangeStart` (`ads/creatives.ts`), este último com o comentário *"mesma janela do
+gerenciador"* — a confissão de que era cópia.
+
+**Os dois `rangeStart` devolviam só o INÍCIO** e filtravam `timestamp >= start`,
+isto é "do início até agora". Isso funcionava por acidente: os únicos períodos
+eram Hoje/7d/30d, que terminam hoje. Ao entrar "Ontem" e "Mês passado" no
+seletor, aquilo passaria a trazer **a janela escolhida mais tudo o que veio
+depois** — "Mês passado" incluindo o mês atual.
+
+**Provado contra o banco de dev** (gasto todo em julho, hoje é 30/07):
+
+| Período | Gasto retornado | |
+|---|---|---|
+| `mesPassado` (junho) | **R$ 0,00** | ✅ correto — com o código antigo daria 800 |
+| `mesAtual` (julho) | R$ 800,00 | ✅ |
+| `ontem` (29/07) | R$ 800,00 | ✅ |
+| `hoje` (30/07) | R$ 0,00 | ✅ |
+
+### O que a centralização entregou
+
+- **7 períodos** em vez de 3: Hoje · Ontem · Últimos 7 · Últimos 30 · Este mês ·
+  Mês passado · Personalizado — nas **três** telas (Dashboard, Gerenciador,
+  Criativos). O Gerenciador e os Criativos não tinham calendário nenhum.
+- **"Ontem" ganha detalhamento por HORA** de graça: a granularidade passou a ser
+  "hora quando a janela é de um dia", em vez de "hora só quando é hoje".
+- `DashPeriod` e `CreativePeriod` viraram **alias de `PeriodoNome`**. Eram três
+  uniões separadas — um período novo exigia editar três arquivos para funcionar.
+
+> ### ⛔ O período viaja como NOME, nunca como intervalo de datas
+> `?period=mesPassado`, não `?from=…&to=…`. Quem resolve a janela é o servidor,
+> com o **fuso do usuário** — que o navegador não conhece de forma confiável.
+> Resolver data no cliente foi exatamente o bug de "o hoje do calendário era o do
+> navegador". A única exceção é `custom`, que **é** um intervalo por definição.
+>
+> ⚠️ **Valide com `ehPeriodoValido`, não com uma lista escrita na rota.** As três
+> rotas tinham `["hoje","7d","30d"].includes(...)` — uma lista local fica para trás
+> a cada período novo e o valor cai no fallback **em silêncio**.
+>
+> ⚠️ **O relógio de `janelaDoPeriodo` é injetável (`agora`).** Não é luxo de teste:
+> trocar `Date.now` de fora **não funciona**, porque `new Date()` lê o relógio
+> interno direto — foi assim que 8 asserções minhas falharam antes de eu perceber
+> que o teste estava errado, não o código.
+>
+> ⚠️ **Aritmética de mês é por STRING.** Nada de `new Date(ano, mes-1, 1)`: o
+> construtor trabalha no fuso do PROCESSO, que na Vercel é UTC. O último dia do mês
+> passado é `primeiroDoMesAtual − 1 dia` em chave de dia.
+
+**`npm run test:periodo` — 33 asserções**, com `TZ=UTC` forçado (o fuso da
+Vercel): virada de ano num fuso +14, fevereiro bissexto, o mesmo instante dando
+dias diferentes em fusos diferentes, `custom` invertido, e querystring adulterada.
+
+### Botão "Atualizar" (C1) — já existia; faltava a idade do dado
+
+Posição, spinner, `disabled` durante a atualização, ausência de reload e mensagem
+de erro **já estavam feitos**. O que faltava era o **"Atualizado há Xs"**: o
+`syncLabel` existia no estado e só era exibido no Gerenciador — no Dashboard, que
+é onde fica o botão, não havia como saber se o número é de agora ou de 20 minutos
+atrás. Ele desaparece enquanto sincroniza, porque aí quem informa é o botão.
+
 ### Comandos
 
 ```bash
 npm run test:areas       # 26 asserções, atribuição por área (backup de produção)
+npm run test:periodo     # 33 asserções, janelas de período (puro, TZ=UTC)
 npm run db:onde          # em qual banco o .env aponta
 npm run script:onde      # onde falta reinstalar o script de UTM
 npm run backup -- --url '<connection string>'   # SEMPRE com --url

@@ -4,15 +4,16 @@ import type { NextRequest } from "next/server";
 import { auth } from "@/auth";
 import { computeDashboard, type DashPeriod, type DashboardFilters } from "@/lib/dashboard/metrics";
 import { autoSyncSeNecessario, estadoSync } from "@/lib/facebook/autoSync";
+import { ehPeriodoValido } from "@/lib/periodo";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session?.user?.id) return Response.json({ error: "Não autenticado." }, { status: 401 });
 
   const sp = req.nextUrl.searchParams;
-  const period = (["hoje", "7d", "30d", "custom"].includes(sp.get("period") ?? "")
-    ? sp.get("period")
-    : "7d") as DashPeriod;
+  // Valida pela fonte única (`lib/periodo.ts`), não por lista local.
+  const bruto = sp.get("period");
+  const period: DashPeriod = ehPeriodoValido(bruto) ? bruto : "hoje";
 
   const filters: DashboardFilters = {
     // Só o ID da área viaja. A posse é validada no servidor (`areaValida`), e a

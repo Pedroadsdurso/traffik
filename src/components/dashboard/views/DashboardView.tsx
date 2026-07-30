@@ -1,73 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-
 import { sx } from "@/lib/sx";
 import { DashboardGrid } from "../DashboardGrid";
 import { BannerPendencias } from "../ui/BannerPendencias";
-import { DateRangePicker, formatarIntervalo } from "../ui/DateRangePicker";
+import { FiltroPeriodo } from "../ui/FiltroPeriodo";
 import { Icone } from "../ui/Icone";
 import { Select } from "../ui/Select";
 import { useDashboardLayout } from "../useDashboardLayout";
 import type { TraffikView } from "../useTraffikState";
-
-const PERIODOS = [
-  { value: "hoje", label: "Hoje" },
-  { value: "7d", label: "Últimos 7 dias" },
-  { value: "30d", label: "Últimos 30 dias" },
-  { value: "custom", label: "Personalizado" },
-];
-
-/** Seletor de período: o valor "Personalizado" abre o calendário de intervalo. */
-function FiltroPeriodo({ v }: { v: TraffikView }) {
-  const [aberto, setAberto] = useState(false);
-  const raizRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!aberto) return;
-    function onDown(e: MouseEvent) {
-      if (!raizRef.current?.contains(e.target as Node)) setAberto(false);
-    }
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [aberto]);
-
-  // Quando há intervalo escolhido, o rótulo mostra as datas em vez de "Personalizado".
-  const opcoes = PERIODOS.map((p) =>
-    p.value === "custom" && v.dashPeriod === "custom" && v.dashFrom
-      ? { ...p, label: formatarIntervalo({ from: v.dashFrom, to: v.dashTo ?? v.dashFrom }) }
-      : p,
-  );
-
-  return (
-    <div ref={raizRef} style={sx("position:relative")}>
-      <Select
-        label="Período"
-        value={v.dashPeriod}
-        options={opcoes}
-        minWidth={170}
-        onChange={(val) => {
-          if (val === "custom") {
-            setAberto(true);
-            return;
-          }
-          v.setDashPeriod(val as typeof v.dashPeriod);
-        }}
-      />
-      {aberto && (
-        <DateRangePicker
-          timezone={v.timezone}
-          value={v.dashFrom ? { from: v.dashFrom, to: v.dashTo ?? v.dashFrom } : null}
-          onCancel={() => setAberto(false)}
-          onApply={(r) => {
-            v.setDashRange(r.from, r.to);
-            setAberto(false);
-          }}
-        />
-      )}
-    </div>
-  );
-}
 
 export function DashboardView({ v }: { v: TraffikView }) {
   // O estado do grid vive aqui porque os controles de edição ficam no container
@@ -82,7 +22,13 @@ export function DashboardView({ v }: { v: TraffikView }) {
 
       <div className="tk-filtros">
         <div style={sx("display:flex;gap:var(--space-3);flex-wrap:wrap;align-items:flex-end")}>
-          <FiltroPeriodo v={v} />
+          <FiltroPeriodo
+              periodo={v.dashPeriod}
+              from={v.dashFrom}
+              to={v.dashTo}
+              timezone={v.timezone}
+              onChange={v.setDashPeriod}
+            />
           <Select
             label="Conta de anúncio"
             value={v.dashAccount}
@@ -115,6 +61,16 @@ export function DashboardView({ v }: { v: TraffikView }) {
               title="Clique para dispensar"
               style={sx("font-size:12px;color:var(--color-text-muted);background:var(--color-surface-2);border:1px solid var(--color-border);border-radius:999px;padding:4px 11px;cursor:pointer;max-width:520px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap")}>
               {v.syncManualMsg}
+            </span>
+          )}
+          {/* Idade do dado. Existia no estado (`syncLabel`) e só era mostrado no
+              Gerenciador — no Dashboard, que é onde fica o botão de atualizar, não
+              havia como saber se o número na tela é de agora ou de 20 minutos
+              atrás. Sai de cena enquanto sincroniza, porque aí quem informa é o
+              próprio botão. */}
+          {!grid.editing && !v.syncManualBusy && !v.dashLoading && v.syncLabel && (
+            <span className="text-muted" style={sx("font-size:11.5px;white-space:nowrap")}>
+              {v.syncLabel}
             </span>
           )}
           {!grid.editing && (

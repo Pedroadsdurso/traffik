@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 
 import { combinaStatus } from "@/lib/ads/status";
 import { sx } from "@/lib/sx";
+import { FiltroPeriodo } from "../ui/FiltroPeriodo";
 import { Icone, type NomeIcone } from "../ui/Icone";
 import { Select } from "../ui/Select";
 import { AdsActionBar, type Acao, type AlvoSelecionado, type Nivel } from "./ads/AdsActionBar";
@@ -268,16 +269,16 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
             { value: "arquivado", label: "Arquivados" },
           ]}
         />
-        <Select
+        {/* Antes eram três opções e nenhum calendário. Agora é o MESMO seletor
+            do Dashboard e dos Criativos — 7 períodos e intervalo personalizado. */}
+        <FiltroPeriodo
           label=""
           minWidth={150}
-          value={v.adsPeriod}
+          periodo={v.adsPeriod}
+          from={v.adsFrom}
+          to={v.adsTo}
+          timezone={v.timezone}
           onChange={v.setAdsPeriod}
-          options={[
-            { value: "hoje", label: "Hoje" },
-            { value: "7d", label: "Últimos 7 dias" },
-            { value: "30d", label: "Últimos 30 dias" },
-          ]}
         />
         <Select
           label=""
