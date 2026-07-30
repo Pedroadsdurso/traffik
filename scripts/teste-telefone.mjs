@@ -21,6 +21,19 @@ function eq(nome, obtido, esperado) {
 
 const BR = "5511987654321";
 
+// ── FORMATO REAL DA KIRVANO ────────────────────────────────────
+// Confirmado pelo usuário em 30/07/2026, de venda real: "+55 (33) 98875-6674".
+// DDI 55 + DDD 33 (Governador Valadares/MG) + celular de 9 dígitos.
+//
+// ⚠️ O `+` inicial declara que o número JÁ é internacional, então ele cai no
+// caminho mais seguro da função — nenhuma inferência de DDI acontece. Os dois
+// casos seguintes exercitam o MESMO número sem o `+` e sem o DDI, que são os
+// caminhos que dependem da desambiguação por comprimento.
+console.log("\n\x1b[1mFormato REAL da Kirvano (confirmado)\x1b[0m");
+eq("+55 (33) 98875-6674 — como a Kirvano envia", e164("+55 (33) 98875-6674"), "5533988756674");
+eq("o mesmo número sem o +", e164("55 (33) 98875-6674"), "5533988756674");
+eq("e sem o DDI", e164("(33) 98875-6674"), "5533988756674");
+
 console.log("\n\x1b[1mBrasil — sem DDI\x1b[0m");
 eq("celular com DDD (11 dígitos)", e164("11987654321"), BR);
 eq("fixo com DDD (10 dígitos)", e164("1132165498"), "551132165498");

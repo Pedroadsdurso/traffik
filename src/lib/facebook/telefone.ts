@@ -28,11 +28,19 @@
  * 55 + número de 9 dígitos — porque este último não existe: número nacional
  * brasileiro tem no mínimo 10 dígitos.
  *
- * ## ⚠️ Não foi validado contra payload real da Kirvano
+ * ## ✅ Validado contra o formato REAL da Kirvano
  *
- * O banco de desenvolvimento não tem `WebhookLog` nem `Sale.buyerPhone` gravado,
- * então os formatos abaixo vêm da especificação brasileira, não de amostra. **Ao
- * receber a primeira venda real, confira o formato** e acrescente ao teste.
+ * O usuário confirmou, de venda real (30/07/2026), que a Kirvano envia
+ * **`+55 (33) 98875-6674`** — com `+`, DDI, DDD entre parênteses e traço.
+ *
+ * Esse formato cai no caminho mais seguro da função: o `+` inicial **declara**
+ * que o número já é internacional, então os dígitos são usados como estão
+ * (`5533988756674`) e nenhuma inferência de DDI acontece. O teste cobre também o
+ * mesmo número **sem o `+`** e **sem o DDI**, que são os caminhos que dependem da
+ * desambiguação por comprimento.
+ *
+ * ⚠️ Se aparecer OUTRO gateway com formato diferente, acrescente ao teste antes
+ * de mexer na função.
  */
 
 /** DDI dos países que o produto encontra na prática. Brasil é o padrão. */

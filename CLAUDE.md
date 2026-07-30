@@ -3372,9 +3372,12 @@ e público semelhante.
 ⚠️ `55987654321` é **DDD 55 + celular**, não DDI — número nacional brasileiro tem
 no mínimo 10 dígitos.
 
-⚠️ **NÃO validado contra payload real da Kirvano**: o banco de dev não tem
-`WebhookLog` nem `Sale.buyerPhone`. Os formatos vêm da especificação. **Ao
-receber a primeira venda real com telefone, confira e acrescente ao teste.**
+✅ **Validado contra o formato REAL da Kirvano**, confirmado pelo usuário em
+30/07/2026 de venda real: **`+55 (33) 98875-6674`**. O `+` inicial declara que o
+número já é internacional, então os dígitos são usados como estão
+(`5533988756674`) sem inferir DDI. O teste cobre também o mesmo número **sem o
+`+`** e **sem o DDI**, que são os caminhos que dependem da desambiguação por
+comprimento.
 
 **O que a CAPI envia hoje** (auditado): `email`, `phone` e `country` com
 **SHA-256** ✅; `client_ip_address` e `client_user_agent` em texto claro —
