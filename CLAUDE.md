@@ -2848,6 +2848,84 @@ o seletor da sidebar já mostra a área ativa em toda tela.
   schema sem uso** — só saem depois que a produção rodar este código (dois
   deploys).
 
+## 🚦 COMECE AQUI — estado em 30/07/2026 e a fila da próxima sessão
+
+Tudo abaixo já está **em produção** (último deploy: `3bc1cda`). Sem commit local
+pendente e sem migration pendente.
+
+### ⚠️ Fila, em ordem — só faltam DUAS coisas da padronização visual
+
+**1. Aproveitamento do espaço (Problema 4 do usuário).** Quatro telas têm um card
+pequeno no canto e o resto vazio: **Integrações › Webhooks, Integrações › Pixel,
+Integrações › UTMs e Taxas e Despesas**. Reorganizar para usar a largura, sem
+esticar componente nem deixar buraco.
+
+> ⚠️ Este é o **único item que não é substituição** — precisa de olho no
+> resultado, não de regex. As 4 telas usam `grid auto-fit minmax(360px,1fr)`.
+
+**2. ~25 SVGs inline legados → `ui/Icone`.** Eles ainda estão em `viewBox="0 0 256 256"`
+com `strokeWidth` de 16 a 20, enquanto o `Icone` novo padronizou **24×24 e traço
+1,75**. Estão em `Sidebar`, `Header`, `AdsTable`, `EditDashboardDrawer`,
+`BlockContent`, `chartKit` e `FeesView`. Cabe junto do item 1 — mexe nos mesmos
+arquivos.
+
+### O que NÃO está pendente (não refaça)
+
+| Item | Situação |
+|---|---|
+| Microcópia | ✅ ~30 textos + tooltips. `lib/explicacoes.ts` é o catálogo — **confira antes de "adicionar tooltip"**, ele é mais completo do que parece |
+| Selects e checkboxes nativos | ✅ **zero**, fora de 2 exceções documentadas (mês/ano do `DateRangePicker`, `test-checkout`) |
+| Emojis | ✅ trocados por `ui/Icone` (`lucide-react`). Emoji de **bandeira** no `CountryMap` fica — ali é bandeira, não ícone |
+| Scripts expostos | ✅ UTMs e Pixel em gaveta |
+| Bloco 8 (Regras) | ✅ completo, menos import/export (fora de propósito) |
+| Áreas de Trabalho | ✅ sessões 1–4 + exclusão com escolha |
+
+### 🔴 Cinco regras que custaram caro — não reabra
+
+1. **`NULL` não significa a mesma coisa em toda coluna.** Ver a tabela na seção
+   própria. Em `AutomationRule` e `Expense`, nulo **amplia escopo**.
+2. **Campo de formulário mora na VIEW, nunca no `useTraffikState`.** Cada tecla
+   ali re-renderiza o dashboard inteiro.
+3. **Não devolva `onClose` às dependências do efeito de `useOverlay`.** Era a
+   causa do campo perder o foco a cada tecla, em toda gaveta e modal.
+4. **`useTraffikState` sincroniza as props do servidor por efeito.** O
+   inicializador de `useState` só roda na montagem — sem o efeito, trocar de área
+   mostrava a integração da área ANTERIOR.
+5. **Helper consumido pela UI não pode morar em módulo que importa Prisma.**
+   `FeesView` é client component; o import arrastou o driver `pg` (`dns`, `fs`)
+   para o bundle e quebrou o build. Ver `lib/areas/taxas.ts`.
+
+### Comandos
+
+```bash
+npm run test:areas       # 26 asserções, atribuição por área (backup de produção)
+npm run db:onde          # em qual banco o .env aponta
+npm run script:onde      # onde falta reinstalar o script de UTM
+npm run backup -- --url '<connection string>'   # SEMPRE com --url
+```
+
+### ⚠️ Deploy — a ordem importa quando há migration
+
+**Migration na produção PRIMEIRO, push depois.** O código novo faz `SELECT` das
+colunas novas; deployar antes derruba o dashboard inteiro. O oposto é seguro: o
+build antigo ignora coluna que não conhece.
+
+O usuário roda os comandos de produção — as credenciais **não** existem em
+arquivo local, de propósito.
+
+### Pendências abertas (não são bugs)
+
+- **Nav morto no `useTraffikState`** (`navAnalise`, `pageTitle`, `activeTab`,
+  `fbTabs`…), o gerador de link/snippet antigo (`utmUrl`, `snippetText`) e o
+  `ruleForm` com ~37 handlers, órfão desde que a `RulesView` foi reescrita.
+- **`Workspace.accountIds` / `webhookIds` / `pixelConfigIds` / `products`** —
+  mortos, mantidos pela regra dos dois deploys.
+- **`DashboardLayout.workspaceId` nullable** — o NOT NULL entra num 2º deploy.
+- **Nenhuma escrita real contra a Graph API foi exercida.** O teste seguro
+  combinado: regra de PAUSAR numa campanha **já pausada**, condição `Gasto ≥ 0`.
+  O log deve dizer `✓ <campanha> — PAUSAR (já pausada)` sem alterar nada.
+- **`WebhookLog` sem retenção**, e logs sem dono não aparecem na UI.
+
 ## 🎨 Marca e logos
 
 Arquivos em `public/logos/` (webp, vindos do designer):
