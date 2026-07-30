@@ -3817,66 +3817,66 @@ escuro — o número existe para o usuário julgar se o filtro exagera ou falha.
 
 > ### ⚠️ Fica no TOPO do funil, não no rodapé — ver o caso confirmado abaixo
 
-## 🔴 CASO CONFIRMADO para o Prompt J (responsividade por tamanho de bloco)
+## ✅ RESOLVIDO: rodapé do funil invisível — e a causa é GENÉRICA
 
-**Não é hipótese. Foi observado no navegador em 30/07/2026.**
+**Medido e corrigido em 30/07/2026.** O resumo do gargalo existia há semanas e
+**nunca tinha sido visto por ninguém**. Junto com ele estavam invisíveis a
+pílula de perda entre etapas (`−5 · 100,0%`) e os valores absolutos sob cada
+etapa.
 
-O **rodapé do bloco "Funil de conversão" é cortado na altura PADRÃO do grid**
-(`h: 7`, confirmado contra o layout salvo — não era um bloco encolhido). O que
-não aparece:
+### A causa: item de flex nasce com `min-height:auto`
 
-| Elemento | Existe desde |
-|---|---|
-| Resumo do gargalo ("Maior perda: entre X e Y…", caixa âmbar) | semanas |
-| Legenda "Percentual sobre a maior etapa" + ⓘ do método | semanas |
-| Contagem de robôs removidos | 30/07/2026 — **movida para o topo por causa disto** |
+Um item de flex **não encolhe abaixo do próprio conteúdo** a menos que se diga
+`min-height:0`. O div que envolve rótulos+gráfico no `Funnel` tinha `flex:1` e
+nada mais, então media **422px dentro de um espaço de 338px** e empurrava o
+resumo 122px para fora do card — que tem `overflow:hidden` de propósito.
 
-> ⚠️ **O usuário nunca viu o resumo do gargalo.** Ele foi implementado, testado
-> logicamente e documentado como entregue — e está invisível desde então. É o
-> tipo de falha que nenhum teste de tipo, lint ou build pega: o elemento existe
-> no DOM, o `find` o localiza, e a tela não o mostra.
+```
+card (376px, overflow:hidden)
+└─ raiz do Funnel (338px)
+   ├─ div rótulos+gráfico   flex:1  min-height:auto  →  422px  ⛔ não cede
+   └─ resumo do gargalo     36px    →  empurrado para fora
+```
 
-### O que foi apurado, e o que NÃO foi
+**A correção é uma linha:** `min-height:0` nesse div. Mais `min-height:200px`
+(era 230) na raiz, porque no menor tamanho que o grid permite (`minH: 5` = card
+de 264px) sobram 226px e 230 estourava por 4px.
 
-**Confirmado:** o elemento está no DOM e não é visível; o bloco está na altura
-padrão; `Bloco` usa `overflow:hidden` de propósito (barra de rolagem em card é
-sintoma de conteúdo que não coube — quem não cabe deve encolher, ver
-`useDensidade`).
-
-**NÃO confirmado — a causa.** `h: 7` = `7×40 + 6×16` = **376 px**, e o conteúdo
-do funil soma ~225 px. **As contas não fecham**, então há um fator não
-identificado, provavelmente na cadeia `.card` → `flex` → `height:100%` do SVG.
-
-> ### ⛔ NÃO "conserte" aumentando o `minH` do bloco
-> Foi a saída óbvia considerada e recusada: `minH` maior faz o
-> `react-grid-layout` **empurrar blocos já salvos**, refluindo o layout de quem
-> já tem um — inclusive o arranjo padrão transcrito coordenada por coordenada.
-> E trataria o sintoma sem saber se a causa é altura.
+> ### ⛔ NÃO era problema de altura do bloco
+> A saída óbvia — aumentar o `minH` do funil — teria sido **errada duas vezes**:
+> empurraria layouts já salvos, e o bloco tinha espaço de sobra (376px para
+> ~370px de conteúdo). O conteúdo é que se recusava a caber.
 >
-> **Meça as alturas reais no navegador antes de mexer.** Com a causa conhecida
-> o conserto provavelmente é uma linha; sem ela, é adivinhação num bloco que o
-> usuário aprovou manualmente.
+> **Meça antes de redimensionar.** Foi a medição no navegador que mostrou os
+> 422px; a aritmética sozinha dizia que cabia.
 
-### A lição que vale para o Prompt J inteiro
+### Auditoria: os outros 22 blocos estão limpos
 
-**Elemento que só aparece em certas condições (gargalo, aviso, estado de erro)
-precisa ser verificado NA TELA, não só no DOM.** `tsc`, `lint` e `build` passam
-com ele invisível. Ao revisar os outros blocos, procure especificamente por
-rodapés, resumos e legendas condicionais — é onde este defeito se esconde.
+Verificado empiricamente — cada card medido por `scrollHeight > clientHeight`
+e por descendente com base além da base do card:
 
-> Um aviso que existe no DOM e não aparece é pior que nenhum aviso, porque
-> ninguém descobre que está faltando.
+| Tamanho | Blocos com conteúdo cortado |
+|---|---|
+| Tamanho real do layout padrão | **0 de 23** |
+| Menor tamanho que o grid permite (264px) | **0 de 23** |
+| 208px (abaixo do mínimo, inalcançável pelo usuário) | 2 — Funil e Vendas por país |
 
-> ⚠️ A contagem **não passa pelo escopo de área**: clique de robô raramente tem
-> `utm_campaign` atribuível, então filtrá-lo por área o esconderia justamente de
-> quem precisa auditá-lo. É diagnóstico da conta, não métrica de operação.
+> ⚠️ **O limite desta auditoria:** bloco em estado vazio renderiza pouco e não
+> tem como transbordar. O defeito do funil só apareceu **com dado que produzisse
+> gargalo**. Então "0 de 23" significa *"nenhum bloco transborda com os dados
+> que existiam no banco de dev"*, não *"nenhum bloco jamais transborda"*.
+>
+> **Elemento condicional é onde este defeito mora**: resumo, aviso, estado de
+> erro, rodapé — coisas que só aparecem em certas combinações de dados. `tsc`,
+> `lint` e `build` passam com eles invisíveis, e o `find` do navegador os
+> encontra no DOM. **Só ver na tela prova.**
 
-**Testado:** `npm run test:bots` — **35 asserções** com user agents **reais** do
-backup de produção, metade delas provando que humano **não** vira bot
-(Instagram `pt_BR`, `FBCR/VIVO`, WebView, Chrome, Safari, Edge). Mais a
-classificação na ingestão verificada ponta a ponta contra o dev server, o
-reclassificador (9 de 24 semeados, idempotente na 2ª passada) e a contagem
-aparecendo no funil no navegador.
+### O que fica para o Prompt J
+
+O bloco de 208px mostra que Funil e Vendas por país estourariam **se** o mínimo
+do grid baixasse. Se o Prompt J permitir blocos menores, estes dois são os
+primeiros a revisar — e a regra a aplicar é a mesma: **todo item de flex que
+precise ceder espaço leva `min-height:0`**.
 
 ## 🔴 ACHADO: o navegador embutido do app da Meta falseia a geolocalização
 

@@ -102,9 +102,20 @@ export function Funnel({
   const pctFmt = (v: number) => `${v.toFixed(1).replace(".", ",")}%`;
   const num = (v: number) => v.toLocaleString("pt-BR");
 
+  // ⚠️ `min-height:200px` na raiz, não 230. No MENOR tamanho que o grid permite
+  // (`minH: 5` = card de 264px) sobram 226px para ela — 230 estourava por 4px.
+  // Não cortava nada, mas deixava o card com `scrollHeight` maior que a caixa,
+  // que é o estado em que qualquer conteúdo novo passa a sumir em silêncio.
   return (
-    <div style={sx("display:flex;flex-direction:column;flex:1;min-height:230px")}>
-      <div ref={boxRef} style={sx("position:relative;display:flex;flex-direction:column;flex:1;padding:var(--space-2) var(--space-1) 0")}>
+    <div style={sx("display:flex;flex-direction:column;flex:1;min-height:200px")}>
+      {/* ⚠️ `min-height:0` é OBRIGATÓRIO, não enfeite.
+          Item de flex nasce com `min-height:auto`, que o impede de encolher
+          abaixo do conteúdo. Sem esta declaração este div media 422px dentro de
+          um espaço de 338 e empurrava o resumo do gargalo 122px para fora do
+          card — que tem `overflow:hidden`. O resumo existia no DOM e NUNCA foi
+          visto por ninguém desde que foi implementado.
+          Medido no navegador em 30/07/2026; ver a seção do Prompt J. */}
+      <div ref={boxRef} style={sx("position:relative;display:flex;flex-direction:column;flex:1;min-height:0;padding:var(--space-2) var(--space-1) 0")}>
         {/* Robôs removidos — conferência do filtro.
             ⚠️ Fica no TOPO, não no rodapé. O rodapé deste bloco é **cortado**
             na altura padrão do grid (o resumo do gargalo e a legenda "Percentual
