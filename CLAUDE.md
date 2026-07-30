@@ -3815,12 +3815,55 @@ O funil mostra **"N acessos de robô removidos"**, com o detalhamento por motivo
 no `title`. Sem isso, "removemos os bots" seria uma afirmação a aceitar no
 escuro — o número existe para o usuário julgar se o filtro exagera ou falha.
 
-> ### ⚠️ Fica no TOPO do funil, não no rodapé
-> **O rodapé deste bloco é cortado na altura padrão do grid.** Descoberto ao
-> verificar no navegador: o texto existia no DOM e não aparecia na tela. O
-> resumo do gargalo e a legenda "Percentual sobre a maior etapa" **já sofriam
-> disso** — é condição preexistente, não introduzida aqui.
+> ### ⚠️ Fica no TOPO do funil, não no rodapé — ver o caso confirmado abaixo
+
+## 🔴 CASO CONFIRMADO para o Prompt J (responsividade por tamanho de bloco)
+
+**Não é hipótese. Foi observado no navegador em 30/07/2026.**
+
+O **rodapé do bloco "Funil de conversão" é cortado na altura PADRÃO do grid**
+(`h: 7`, confirmado contra o layout salvo — não era um bloco encolhido). O que
+não aparece:
+
+| Elemento | Existe desde |
+|---|---|
+| Resumo do gargalo ("Maior perda: entre X e Y…", caixa âmbar) | semanas |
+| Legenda "Percentual sobre a maior etapa" + ⓘ do método | semanas |
+| Contagem de robôs removidos | 30/07/2026 — **movida para o topo por causa disto** |
+
+> ⚠️ **O usuário nunca viu o resumo do gargalo.** Ele foi implementado, testado
+> logicamente e documentado como entregue — e está invisível desde então. É o
+> tipo de falha que nenhum teste de tipo, lint ou build pega: o elemento existe
+> no DOM, o `find` o localiza, e a tela não o mostra.
+
+### O que foi apurado, e o que NÃO foi
+
+**Confirmado:** o elemento está no DOM e não é visível; o bloco está na altura
+padrão; `Bloco` usa `overflow:hidden` de propósito (barra de rolagem em card é
+sintoma de conteúdo que não coube — quem não cabe deve encolher, ver
+`useDensidade`).
+
+**NÃO confirmado — a causa.** `h: 7` = `7×40 + 6×16` = **376 px**, e o conteúdo
+do funil soma ~225 px. **As contas não fecham**, então há um fator não
+identificado, provavelmente na cadeia `.card` → `flex` → `height:100%` do SVG.
+
+> ### ⛔ NÃO "conserte" aumentando o `minH` do bloco
+> Foi a saída óbvia considerada e recusada: `minH` maior faz o
+> `react-grid-layout` **empurrar blocos já salvos**, refluindo o layout de quem
+> já tem um — inclusive o arranjo padrão transcrito coordenada por coordenada.
+> E trataria o sintoma sem saber se a causa é altura.
 >
+> **Meça as alturas reais no navegador antes de mexer.** Com a causa conhecida
+> o conserto provavelmente é uma linha; sem ela, é adivinhação num bloco que o
+> usuário aprovou manualmente.
+
+### A lição que vale para o Prompt J inteiro
+
+**Elemento que só aparece em certas condições (gargalo, aviso, estado de erro)
+precisa ser verificado NA TELA, não só no DOM.** `tsc`, `lint` e `build` passam
+com ele invisível. Ao revisar os outros blocos, procure especificamente por
+rodapés, resumos e legendas condicionais — é onde este defeito se esconde.
+
 > Um aviso que existe no DOM e não aparece é pior que nenhum aviso, porque
 > ninguém descobre que está faltando.
 
