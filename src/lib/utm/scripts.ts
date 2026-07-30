@@ -60,6 +60,10 @@ export function utmScript(accountId: string, apiBase: string, workspaceId?: stri
     if(sessionStorage.getItem(SESSION)){decorate();return;}
     var payload=merge(data,{account:ACCOUNT,url:location.href,referrer:document.referrer||null});
     if(WS)payload.ws=WS;
+    // Fuso do navegador: sinal GEOGRAFICO direto, mais forte que o idioma.
+    // Em try/catch porque Intl pode faltar em navegador muito antigo, e um
+    // erro aqui pararia o rastreamento inteiro por causa de um campo opcional.
+    try{payload.tz=Intl.DateTimeFormat().resolvedOptions().timeZone||null;}catch(e){}
     var ep=API+"/api/track/click";
     function done(id){if(id){data.click_id=id;writeCookie(COOKIE,JSON.stringify(data),DAYS);window.traffik.data=data;}sessionStorage.setItem(SESSION,"1");decorate();}
     if(typeof fetch==="function"){

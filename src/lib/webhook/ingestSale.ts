@@ -36,7 +36,7 @@ export async function ingestSale(
   fallbackIp: string | null,
 ): Promise<IngestResult> {
   const match = await matchClick(ctx.userId, data.clickId, data.ip ?? fallbackIp);
-  const country = paisDaVenda(data, match);
+  const { pais: country, fonte: countrySource } = paisDaVenda(data, match);
 
   const saleData = {
     userId: ctx.userId,
@@ -52,6 +52,7 @@ export async function ingestSale(
     buyerName: data.buyerName,
     buyerPhone: data.buyerPhone,
     country,
+    countrySource,
     matchMethod: match.method,
     clickId: match.clickId,
     approvedAt: data.status === "APROVADA" ? new Date() : null,
@@ -111,13 +112,16 @@ export async function ingestSale(
  * | 3 | País do clique casado | o visitante falou direto conosco naquele momento |
  * | 4 | `country` do payload cru | último recurso: não casa no mapa, mas aparece no ranking em vez de sumir |
  */
-function paisDaVenda(data: NormalizedSale, match: ClickMatch): string | null {
-  return (
-    normalizarPais(data.country) ??
-    paisDoIp(data.ip) ??
-    normalizarPais(match.country) ??
-    data.country
-  );
+function paisDaVenda(data: NormalizedSale, match: ClickMatch): { pais: string | null; fonte: string | null } {
+  const doPayload = normalizarPais(data.country);
+  if (doPayload) return { pais: doPayload, fonte: "payload" };
+  const doIp = paisDoIp(data.ip);
+  if (doIp) return { pais: doIp, fonte: "ip" };
+  const doClique = normalizarPais(match.country);
+  if (doClique) return { pais: doClique, fonte: "clique" };
+  // ⚠️ Texto livre do gateway ("Brasil"): não casa no mapa, mas aparece no
+  // ranking em vez de sumir. A fonte diz que é fraco.
+  return { pais: data.country, fonte: data.country ? "payload_cru" : null };
 }
 
 /**
@@ -184,7 +188,7 @@ async function upsertMonotonico(
       ...(match.clickId ? { clickId: match.clickId, matchMethod: match.method } : {}),
       // Idem para o país: o evento de "gerada" pode chegar sem clique casado e o
       // de "paga" já com ele. Sobrescrever com `null` apagaria o país descoberto.
-      ...(country ? { country } : {}),
+      ...(country ? { country, countrySource: saleData.countrySource } : {}),
       rawPayload: rawPayload as object,
     },
   });

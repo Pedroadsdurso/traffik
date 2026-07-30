@@ -2,6 +2,8 @@ import type { NextRequest } from "next/server";
 import { ipDaRequisicao } from "@/lib/geo/clientIp";
 import { normalizarPais, resolverPais } from "@/lib/geo/pais";
 import { classificarUserAgent } from "@/lib/bots/classificar";
+import { resolverPaisDoClique } from "@/lib/geo/desempate";
+import { splitPipe } from "@/lib/utm/parse";
 
 import { prisma } from "@/lib/prisma";
 
@@ -27,6 +29,33 @@ function str(v: unknown, max = 2048): string | null {
   const t = v.trim();
   if (!t) return null;
   return t.slice(0, max);
+}
+
+/**
+ * Países da segmentação da campanha do clique, pela união dos conjuntos dela.
+ *
+ * ⚠️ **União, não interseção.** Se um conjunto roda BR e outro roda MX, a
+ * campanha alcança os dois — e um visitante de qualquer um deles é legítimo.
+ * Interseção devolveria vazio e o desempate nunca dispararia.
+ *
+ * Casa por **id do Facebook** primeiro (formato `Nome|id` do Bloco 11) e cai no
+ * nome quando o clique é antigo. Devolve `[]` quando nada casa: sem segmentação
+ * conhecida, não há contradição possível.
+ */
+async function segmentacaoDaCampanha(userId: string, utmCampaign: string): Promise<string[]> {
+  const { name, id } = splitPipe(utmCampaign);
+  const where = id
+    ? { fbCampaignId: id, adAccount: { userId } }
+    : name
+      ? { name, adAccount: { userId } }
+      : null;
+  if (!where) return [];
+
+  const conjuntos = await prisma.adSet.findMany({
+    where: { campaign: { is: where } },
+    select: { geoCountries: true },
+  });
+  return [...new Set(conjuntos.flatMap((c) => c.geoCountries))];
 }
 
 export async function POST(req: NextRequest) {
@@ -69,10 +98,28 @@ export async function POST(req: NextRequest) {
   // Por isso o header da plataforma e o IP da conexão são dele — o oposto do
   // webhook, onde quem conecta é o servidor do gateway.
   const ip = ipDaRequisicao(req);
+  const acceptLanguage = str(req.headers.get("accept-language"), 191);
+  const utmCampaign = str(body.utm_campaign, 191);
+
   // ⚠️ O servidor vence o `country` do corpo: o corpo vem do navegador e é
   // forjável. Hoje nenhum script envia esse campo, mas a ordem tem de estar
   // certa antes de algum passar a enviar.
-  const country = resolverPais((n) => req.headers.get(n), ip) ?? normalizarPais(str(body.country, 8));
+  const doHeaderOuIp = resolverPais((n) => req.headers.get(n), ip) ?? normalizarPais(str(body.country, 8));
+
+  // Segmentação geográfica da campanha que trouxe este clique. É o que o
+  // ANUNCIANTE configurou — a única fonte aqui que não é inferência nossa.
+  //
+  // ⚠️ Só consulta quando há campanha E há país do IP: sem os dois não existe
+  // contradição possível, e esta é uma rota de escrita no caminho quente.
+  const paisesDaCampanha =
+    utmCampaign && doHeaderOuIp ? await segmentacaoDaCampanha(user.id, utmCampaign) : [];
+
+  const { pais: country, fonte: countrySource } = resolverPaisDoClique({
+    paisDoIp: doHeaderOuIp,
+    paisesDaCampanha,
+    userAgent: req.headers.get("user-agent"),
+    acceptLanguage,
+  });
 
   // ⚠️ MARCA, não bloqueia: a linha é gravada de qualquer forma e as métricas é
   // que excluem `bot: true`. Recusar aqui apagaria um cliente sem rastro se a
@@ -97,6 +144,12 @@ export async function POST(req: NextRequest) {
       url: str(body.url),
       referrer: str(body.referrer),
       country,
+      countrySource,
+      acceptLanguage,
+      // Fuso do navegador. Sinal GEOGRÁFICO direto (`America/Sao_Paulo`), mais
+      // forte que o locale — coletado agora porque não dá para voltar no tempo.
+      // Só chega de quem reinstalar o script; ainda não é usado no desempate.
+      timezone: str(body.tz ?? body.timezone, 64),
       ip,
       userAgent,
     },

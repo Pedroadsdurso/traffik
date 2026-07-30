@@ -103,6 +103,40 @@ interface FbAdSet {
   optimization_goal?: string;
   bid_amount?: string;
   campaign_id?: string;
+  targeting?: { geo_locations?: FbGeoLocations };
+}
+
+/**
+ * `targeting.geo_locations` da Meta.
+ *
+ * ⚠️ **Não basta ler `countries`.** Campanha segmentada por cidade ou por
+ * região não preenche `countries` — o país vem DENTRO de cada item. Ler só
+ * `countries` faria toda campanha segmentada por cidade parecer mundial, que é
+ * exatamente o caso em que o desempate mais importa (anúncio local).
+ */
+interface FbGeoLocations {
+  countries?: string[];
+  country_groups?: string[];
+  regions?: { country?: string }[];
+  cities?: { country?: string }[];
+  geo_markets?: { country?: string }[];
+  zips?: { country?: string }[];
+  places?: { country?: string }[];
+}
+
+/** Todos os países citados numa segmentação, venham de onde vierem. */
+function paisesDaSegmentacao(geo: FbGeoLocations | undefined): string[] {
+  if (!geo) return [];
+  const out = new Set<string>();
+  for (const c of geo.countries ?? []) if (c) out.add(c.toUpperCase());
+  for (const chave of ["regions", "cities", "geo_markets", "zips", "places"] as const) {
+    for (const item of geo[chave] ?? []) if (item?.country) out.add(item.country.toUpperCase());
+  }
+  // ⚠️ `country_groups` (ex.: "worldwide", "europe") NÃO é expandido de
+  // propósito: expandir "europe" para 44 países tornaria a interseção tão larga
+  // que nunca sobraria um país só — desempate que nunca dispara é pior que
+  // desempate ausente, porque parece que está funcionando.
+  return [...out];
 }
 interface FbCreative {
   id?: string;
@@ -212,7 +246,11 @@ async function syncAccount(
   const adSets = await graphAll<FbAdSet>(
     `${act}/adsets`,
     {
-      fields: "id,name,status,daily_budget,lifetime_budget,optimization_goal,bid_amount,campaign_id",
+      // `targeting{geo_locations}` é CAMPO NUMA CHAMADA QUE JÁ ACONTECE — custo
+      // zero de rate limit. Consultar sob demanda seria uma requisição por
+      // clique, dentro de uma rota que hoje só escreve no banco.
+      fields:
+        "id,name,status,daily_budget,lifetime_budget,optimization_goal,bid_amount,campaign_id,targeting{geo_locations}",
       effective_status: STATUS_SINCRONIZADOS,
     },
     accessToken,
@@ -230,6 +268,7 @@ async function syncAccount(
         lifetimeBudget: budget(a.lifetime_budget),
         optimizationGoal: a.optimization_goal ?? null,
         bidAmount: budget(a.bid_amount),
+        geoCountries: paisesDaSegmentacao(a.targeting?.geo_locations),
         campaignId,
       },
       create: {
@@ -241,6 +280,7 @@ async function syncAccount(
         lifetimeBudget: budget(a.lifetime_budget),
         optimizationGoal: a.optimization_goal ?? null,
         bidAmount: budget(a.bid_amount),
+        geoCountries: paisesDaSegmentacao(a.targeting?.geo_locations),
         campaignId,
       },
       select: { id: true },

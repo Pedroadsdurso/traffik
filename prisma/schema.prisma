@@ -354,6 +354,15 @@ model AdSet {
   /// Bid cap (`bid_amount` da Meta), em reais.
   bidAmount        Decimal?     @db.Decimal(14, 2)
   optimizationGoal String?
+  /// Países da segmentação geográfica (`targeting.geo_locations`), ISO-2.
+  ///
+  /// É o que o ANUNCIANTE configurou — não uma inferência nossa. Serve para
+  /// desempatar o país de um clique quando o IP contradiz a campanha que o
+  /// trouxe (ver `lib/geo/desempate.ts`).
+  ///
+  /// ⚠️ VAZIO = campanha mundial **ou** segmentação ainda não sincronizada. Nos
+  /// dois casos não desempata: lista vazia vale para todos.
+  geoCountries     String[]     @default([])
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
@@ -469,6 +478,18 @@ model Click {
   /// Qual padrão casou. Existe para o usuário auditar se o filtro exagera.
   botMotivo   String?
 
+  /// De ONDE veio o `country`: ip · carrier · locale · idioma · campanha ·
+  /// header · incerto. Sem isto não há como auditar a geolocalização nem como a
+  /// tela indicar que um país é estimativa.
+  countrySource  String?
+  /// `Accept-Language` da requisição. Mais rico que o locale do user agent
+  /// (traz lista com pesos). Funciona com o script JÁ instalado.
+  acceptLanguage String?
+  /// Fuso do navegador (`Intl.DateTimeFormat().resolvedOptions().timeZone`).
+  /// Sinal GEOGRÁFICO direto, não linguístico. Só chega de quem reinstalar o
+  /// script — coletado agora porque não dá para voltar no tempo.
+  timezone       String?
+
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   sales  Sale[]
@@ -508,6 +529,8 @@ model Sale {
   buyerName     String?
   buyerPhone    String?
   country       String?
+  /// De onde veio o `country` da venda: payload · ip · clique · payload_cru.
+  countrySource String?
   /// Como o clique de origem foi encontrado: "direct" | "ip" | "none".
   matchMethod   String?
   rawPayload    Json?

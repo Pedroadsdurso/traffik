@@ -2870,8 +2870,15 @@ seções próprias.
 ✅ **Passo 5 (marcação de bot) FEITO** — tem **migration**, então o deploy é
 `migrate deploy` → `npm run bot:reclassificar --aplicar` → `push`, nessa ordem.
 
-**Próxima sessão: passo 6** — correção do navegador embutido de app
-(`targeting.geo_locations` + `countrySource`). É o último bloqueio do hash do IP.
+✅ **Passo 6 FEITO** — desempate pela segmentação da campanha + `countrySource`.
+Tem **migration**: `migrate deploy` → `push`, nessa ordem (sem script no meio).
+
+⚠️ **Confirme no primeiro sync que `AdSet.geoCountries` vem preenchido.** Se
+vier vazio para todos, o desempate fica **inerte em silêncio** — o mesmo estado
+em que a base de países ficou antes do passo 1.
+
+**Próxima sessão: passo 7** (hash do IP + limpeza dos `rawPayload`) — agora
+DESBLOQUEADO, e irreversível. Ou a varredura de elementos condicionais.
 
 Fora isso: **faxina de código morto** (lista em "Pendências abertas") e o
 **import/export do Bloco 8**, que ficou de fora de propósito. O lint está em
@@ -3593,8 +3600,8 @@ ALLOW_PROD_WRITES=EU_QUERO_MESMO_ESCREVER_EM_PRODUCAO \
 | 3 | **IPv6 na base** + cobertura mundial do mapa | ✅ feito nesta sessão |
 | 4 | Rodar o backfill de novo (recupera as vendas IPv6) | ✅ **aplicado — 237 cliques · 15 vendas** |
 | 5 | Marcação de bot (`Click.bot`) | ✅ **feito — tem MIGRATION, ver ordem de deploy** |
-| 6 | Correção do navegador embutido de app | ⏳ proposta pronta e decidida, não implementada |
-| 7 | **Hash do IP + limpeza dos `rawPayload`** | 🔒 **BLOQUEADO até o 6** |
+| 6 | Correção do navegador embutido de app | ✅ **feito — tem MIGRATION** |
+| 7 | **Hash do IP + limpeza dos `rawPayload`** | 🔓 **DESBLOQUEADO** — ver o checklist |
 
 > ### 🔴🔴 O HASH DO IP É O ÚLTIMO PASSO, E DEPENDE DE TODOS OS ANTERIORES
 >
@@ -3609,8 +3616,10 @@ ALLOW_PROD_WRITES=EU_QUERO_MESMO_ESCREVER_EM_PRODUCAO \
 > **Antes do passo 7, confirme que estão resolvidos:**
 > - [ ] Backfill rodado **depois** do IPv6, com a contagem conferida
 > - [x] Bot marcado ✅ (usa `userAgent`, que o hash **não** apaga)
-> - [ ] Navegador de app resolvido — **depende do `userAgent`, e a proposta usa
->       o IP para decidir se o visitante está num datacenter de rede social**
+> - [x] Navegador de app resolvido ✅ — e a solução escolhida **não usa o IP**
+>       para detectar datacenter, então o hash deixou de ter essa dependência.
+>       Se tivéssemos ido pela base de ASN, o passo 7 ficaria bloqueado para
+>       sempre: comparar com faixas exige o IP legível.
 >
 > **E exige backup imediatamente antes:**
 > ```bash
@@ -3871,6 +3880,20 @@ e por descendente com base além da base do card:
 > `lint` e `build` passam com eles invisíveis, e o `find` do navegador os
 > encontra no DOM. **Só ver na tela prova.**
 
+### ⚠️ Limitação conhecida desta auditoria — está na FILA
+
+O "0 de 23" prova que **não há transbordo naquele estado de dados**, não que não
+haja em nenhum. O defeito do funil só apareceu **com dado suficiente para gerar
+gargalo**, e o banco de dev tem 8 vendas.
+
+**Sessão de varredura de verdade (na fila, junto do Prompt J):** semear dados que
+ativem **cada caminho condicional** — estados de erro, avisos, rodapés, badges,
+chips — e conferir **cada um na tela**. É a única forma de fechar esta classe.
+
+Onde procurar: qualquer coisa que só renderize sob condição. `tsc`, `lint` e
+`build` passam com o elemento invisível, e o `find` do navegador o encontra no
+DOM. **Só ver na tela prova.**
+
 ### O que fica para o Prompt J
 
 O bloco de 208px mostra que Funil e Vendas por país estourariam **se** o mínimo
@@ -3928,109 +3951,119 @@ O globo de "Vendas por país" **não está contaminado**.
 qualquer análise de *visitas* por país está inflando US/IE e subnotificando o
 país real.
 
-### Proposta (a implementar no passo 6)
+### ✅ RESOLVIDO no passo 6 (30/07/2026) — pela SEGMENTAÇÃO, não por datacenter
 
-**Gravar a FONTE do país junto com o país** — `Click.countrySource` /
-`Sale.countrySource`, com valores `payload` · `ip` · `carrier` · `locale` ·
-`clique` · `header`. Sem isso não há como auditar nem como a tela dizer "isto é
-estimativa". É a parte mais importante da proposta.
+**Migration `20260730200000_geo_desempate`** — `AdSet.geoCountries`,
+`Click.countrySource`, `Click.acceptLanguage`, `Click.timezone`,
+`Sale.countrySource`. Tudo aditivo, tudo com default.
 
-**Desempate só quando o IP cai em datacenter conhecido de rede social** — nunca
-sobrescrevendo IP residencial legítimo. Um americano de verdade comprando pelo
-Instagram continua `US`.
-
-Sinais, em ordem de confiança:
-
-| Sinal | Força | Ressalva |
-|---|---|---|
-| `FBCR/<operadora>` | **forte** | operadora é geográfica por natureza. Só 8 dos 29 casos tinham |
-| Idioma do `Accept-Language` da requisição | média | **não é coletado hoje** — ver abaixo |
-| `pt_BR` no user agent | **fraca** | é o idioma do aparelho. Brasileiro fora mantém `pt_BR`; celular em inglês no Brasil mostra `en_US` |
-
-> ### 💡 Fonte melhor que carrier e locale, que não estava em consideração
-> **O `utm_campaign` já diz o país da campanha.** O clique veio de um anúncio da
-> Meta cujo id está no UTM (Bloco 11) — e a segmentação geográfica daquela
-> campanha é buscável na Graph API. Para tráfego pago, que é o caso de uso
-> inteiro deste produto, isso é **mais confiável que qualquer heurística de UA**:
-> é o que o próprio anunciante configurou.
+> ### ⛔ NÃO detectamos datacenter. Decisão do usuário, e o motivo não foi custo.
+> A alternativa era manter uma base de faixas de IP da Meta (ASN). Descartada:
 >
-> Duas outras, mais baratas:
-> - **`Accept-Language` da requisição** — mais rico que o locale do UA (traz
->   lista com pesos, ex. `pt-BR,pt;q=0.9,en;q=0.8`). **Não é coletado hoje**;
->   coletar é uma linha no `/api/track/click`.
-> - **Fuso horário do navegador** (`Intl.DateTimeFormat().resolvedOptions()`) —
->   `America/Sao_Paulo` é sinal geográfico direto e o script já roda no cliente.
->   Custa um campo no payload do `t.js`.
-
-### 🎯 `targeting.geo_locations` — a fonte decidida (respostas de 30/07/2026)
-
-**(a) A Graph API expõe, e é barata.** `targeting` é um campo do **AdSet**, e o
-`syncAdSets` já faz `GET /{account}/adsets` com `fields=…`. Acrescentar
-`targeting{geo_locations}` à lista **não é uma chamada nova** — é um campo a mais
-numa requisição que já acontece. **Custo de rate limit: zero.**
-
-> ⚠️ **É do AdSet, não da Campaign.** Campanha com 3 conjuntos pode ter 3
-> segmentações diferentes. A união dos conjuntos é o país possível da campanha.
+> **A segmentação é o que o anunciante CONFIGUROU, não uma inferência.** Se a
+> campanha só roda BR e MX e o IP diz US, o IP está errado **independente do
+> motivo** — datacenter, VPN, proxy corporativo ou base desatualizada. A
+> detecção de datacenter resolveria *um* motivo; a segmentação resolve todos.
 >
-> ⚠️ `geo_locations` tem várias formas: `countries: ["BR"]`, `country_groups`,
-> `regions`, `cities` (com `country` dentro), `geo_markets`, `zips`. E existe
-> `excluded_geo_locations`. Ler só `countries` perde a campanha segmentada por
-> cidade — que é comum. **Colete o conjunto de países de todas as formas.**
-
-**(b) Sim, o desempate parcial é a melhor parte da ideia.** A segmentação
-raramente dá o país sozinha, mas **elimina candidatos**, e é aí que o sinal fraco
-vira forte:
-
-| Situação | Conclusão |
-|---|---|
-| Segmenta 1 país | **O país É esse.** Nada mais precisa entrar |
-| IP diz `US`, campanha roda `BR`+`MX` | `US` está **errado com certeza**. Escolha entre BR e MX pelo carrier/locale — que agora decide entre 2, não entre 195 |
-| IP diz `BR`, campanha roda `BR`+`MX` | IP **compatível** → mantém `BR`, sem heurística nenhuma |
-| Sem campanha (orgânico/direto) | Sem desempate. Cai no IP |
-
-O ganho é justamente esse: **`pt_BR` é fraco como afirmação e forte como
-desempate.** Entre "BR ou MX", `pt_BR` decide bem; entre 195 países, não.
-
-**(c) Sincronizar junto com a estrutura, não sob demanda.** Três razões:
-
-1. É **campo na chamada que já existe** — sob demanda seria uma requisição nova
-   por clique, e cliques chegam a dezenas por minuto.
-2. O clique é gravado **no instante em que acontece**; consultar a Graph API
-   dentro do `/api/track/click` colocaria uma chamada externa no caminho de uma
-   rota que hoje só escreve no banco.
-3. A segmentação muda raramente — é ato humano, como criar campanha. É
-   exatamente o critério do ciclo `COMPLETO` (3 min) vs. `METRICAS` (20s).
-
-Precisa de **migration**: `AdSet.geoCountries String[]`. Aditiva.
-
-> ⚠️ **Anúncio sem conjunto sincronizado não tem desempate.** O `utm_content`
-> leva o id do anúncio, e é preciso subir até o AdSet — que só existe se o ciclo
-> completo já rodou. Para tráfego recém-criado, cai no IP.
-
-### 📥 Coletar agora, usar depois: `Accept-Language` e fuso do navegador
-
-Aprovados como **dado barato de coletar hoje**. Nenhum dos dois existe ainda:
-
-- **`Accept-Language`** — header já presente em toda requisição do `/api/track/click`.
-  Mais rico que o locale do UA: traz lista com pesos (`pt-BR,pt;q=0.9,en;q=0.8`).
-  Custa **uma linha** e uma coluna.
-- **Fuso do navegador** — `Intl.DateTimeFormat().resolvedOptions().timeZone` no
-  `t.js`. `America/Sao_Paulo` é sinal **geográfico direto**, não linguístico —
-  mais forte que o locale, e não sofre do problema do brasileiro morando fora.
-
-> ⚠️ Mexer no `t.js` significa **snippet reinstalado** para valer (regra
-> permanente: nenhum identificador emitido muda de significado, mas campo novo
-> só chega de quem reinstalar). O `Accept-Language` não tem esse custo — é
-> header, funciona com o script já instalado. **Faça os dois, sabendo que um
-> começa a valer na hora e o outro conforme os clientes reinstalarem.**
-
-> ### 🔴 A SOLUÇÃO DEPENDE DO IP — por isso vem ANTES do hash
-> Decidir "este visitante está num datacenter da Meta" exige **comparar o IP com
-> as faixas ASN da Meta**. Depois do passo 7 o IP vira hash e essa comparação
-> deixa de ser possível — para o histórico, para sempre.
+> E o caso que a detecção protegeria — IP residencial legítimo sobrescrito — não
+> existe: um IP residencial legítimo **não contradiz** a segmentação da própria
+> campanha que trouxe aquele visitante.
 >
-> Se o passo 7 rodar antes do 6, a correção fica limitada ao tráfego futuro e os
-> cliques já gravados ficam com o país errado, sem recurso.
+> ⚠️ **Efeito colateral decisivo:** o hash do IP (passo 7) deixou de depender
+> disto. Pela base de ASN, o passo 7 ficaria bloqueado **para sempre** —
+> comparar IP com faixas exige o IP legível.
+
+### Cada sinal produz um CONJUNTO, nunca uma afirmação
+
+Nenhum sinal nomeia um país sozinho. Cada um devolve os países possíveis, que
+são **intersectados com a segmentação**. Só resolve quando sobra exatamente um.
+
+Isso importa porque operadora não é global: **"Claro" opera em BR, AR, CL, CO,
+PE** e mais. Dizer `CLARO → BR` seria chutar. Mas `CLARO ∩ {BR, MX}` = `{BR}`
+resolve com honestidade, e `CLARO ∩ {BR, AR}` **não resolve** — e aí a resposta
+certa é incerto.
+
+| # | Sinal | Força | Ressalva |
+|---|---|---|---|
+| 1 | Segmentação com **um país só** | máxima | não precisa de mais nada |
+| 2 | `FBCR/<operadora>` | forte | quase sempre multipaís |
+| 3 | `Accept-Language` | média | header com pesos — vale para o script JÁ instalado |
+| 4 | locale do user agent (`pt_BR`) | fraca | é o idioma do APARELHO |
+
+> ### ⛔ Sem contradição, NADA disso roda
+> Campanha mundial (lista vazia) ou IP compatível com a segmentação → devolve o
+> país do IP e pronto. Não há por que adivinhar quando a medida é coerente. Um
+> **americano real** comprando pelo Instagram numa campanha que roda US continua
+> `US`.
+
+> ### ⛔ Nada resolveu = INCERTO. O país do IP NÃO volta.
+> Quando o IP contradiz a campanha ele é **sabidamente errado** — devolvê-lo
+> produziria um número plausível e falso no mapa. `null` vira "Não identificado"
+> na tela, que é uma afirmação verdadeira.
+
+### Custo na Graph API: ZERO chamadas a mais
+
+`targeting{geo_locations}` é **campo do AdSet**, e `syncAdSets` já faz
+`GET /{account}/adsets?fields=…`. É um campo a mais numa requisição que já
+acontece. Sob demanda seria uma requisição por clique, dentro de uma rota que
+hoje só escreve no banco — e cliques chegam às dezenas por minuto.
+
+> ⚠️ **Não basta ler `countries`.** Campanha segmentada por cidade ou região não
+> preenche `countries` — o país vem DENTRO de cada item (`cities[].country`).
+> Ler só `countries` faria toda campanha local parecer mundial, que é exatamente
+> o caso em que o desempate mais importa.
+>
+> ⚠️ **`country_groups` NÃO é expandido** de propósito. Expandir "europe" para 44
+> países tornaria a interseção tão larga que nunca sobraria um país só —
+> desempate que nunca dispara é pior que desempate ausente, porque parece que
+> está funcionando.
+>
+> ⚠️ **União dos conjuntos, não interseção.** Se um conjunto roda BR e outro MX,
+> a campanha alcança os dois. Interseção devolveria vazio e nada desempataria.
+
+### `countrySource` — a procedência de cada país
+
+`ip · campanha · carrier · idioma · locale · header · incerto` no clique;
+`payload · ip · clique · payload_cru` na venda. Sem isso não há como auditar nem
+como a tela dizer "isto é estimativa".
+
+**O ranking já usa:** país cuja fonte não é `payload` nem `ip` conta como
+**estimada** e ganha o chip âmbar. Medida é `payload`/`ip`; o resto é inferência.
+
+### Sinais coletados agora, usados depois
+
+- **`Accept-Language`** — já em uso no desempate. É header, então **vale para o
+  script já instalado**, sem reinstalação.
+- **`Click.timezone`** — `Intl.DateTimeFormat().resolvedOptions().timeZone`.
+  Sinal **geográfico direto** (`America/Sao_Paulo`), mais forte que o locale, e
+  **ainda não usado**: converter fuso→país exige uma tabela de ~400 zonas, e uma
+  tabela parcial funcionaria para alguns países e não para outros — pior que
+  nenhuma, num produto mundial. Coletado agora porque não dá para voltar no
+  tempo. **Só chega de quem reinstalar o script.**
+
+> ⚠️ O `tz` vai dentro de `try/catch` no `t.js`: `Intl` pode faltar em navegador
+> antigo, e um erro ali pararia o rastreamento inteiro por um campo opcional.
+
+**Testado:** `npm run test:desempate` — **27 asserções** com os user agents reais
+dos 29 cliques que resolviam errado. Cobre: sem contradição o IP vence;
+americano real não é sobrescrito; campanha de um país decide sozinha; carrier,
+idioma e locale na ordem certa; **operadora multipaís não decide sozinha**; e
+nada-resolve devolve `incerto` sem trazer o IP de volta.
+
+### ⚠️ Não feito no passo 6
+
+- **Backfill do `countrySource` histórico.** Cliques e vendas já gravados ficam
+  com a coluna NULA — não dá para reconstruir a procedência de uma decisão já
+  tomada. O ranking trata NULO como "não estimada", que é o comportamento antigo.
+- **Reprocessar cliques antigos com a segmentação.** Exigiria refazer a resolução
+  de 237 cliques com dados de campanha que só existirão após o próximo sync
+  completo. Avaliar depois de `geoCountries` estar populado.
+- **🔴 Nenhuma resposta REAL da Graph API foi observada.** O campo `targeting`
+  entrou numa chamada de leitura já existente, mas o formato real não foi visto.
+  **Confirme no primeiro sync que `geoCountries` vem preenchido** — se vier vazio
+  para todos os conjuntos, o desempate fica **inerte em silêncio**, exatamente
+  como a base de países ficou antes do passo 1.
+
 
 ### 📌 Decisões registradas
 
@@ -4070,6 +4103,7 @@ npm run geo:atualizar    # regenera a base (mensal) — commitar a saída
 npm run geo:backfill     # país do histórico. SIMULA; --aplicar escreve
 npm run test:bots        # 35 asserções, classificação de robô (puro)
 npm run bot:reclassificar # reavalia Click.bot pelo userAgent. SIMULA; --aplicar escreve
+npm run test:desempate   # 27 asserções, país quando o IP contradiz a campanha
 npm run test:ip          # 27 asserções, IP atrás de proxy (Vercel, VPS, Cloudflare)
 npm run test:telefone    # 25 asserções, E.164 antes do hash da CAPI
 npm run db:onde          # em qual banco o .env aponta

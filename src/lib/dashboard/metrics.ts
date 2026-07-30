@@ -249,6 +249,7 @@ async function windowAggregate(
         buyerName: true,
         buyerEmail: true, // identifica comprador único para o ARPU
         country: true, // "Vendas por país" (Bloco 5)
+        countrySource: true, // procedência, para a tela marcar estimativa
         // O resolvedor de área precisa destes três para aplicar a precedência.
         webhookId: true,
         apiCredentialId: true,
@@ -605,7 +606,11 @@ function summarize(w: Window) {
     const cur = paisMap.get(code) ?? { sales: 0, revenue: 0, estimadas: 0 };
     cur.sales += 1;
     cur.revenue += num(s.value);
-    if (!proprio && doClique) cur.estimadas += 1;
+    // Estimada = herdou o país do CLIQUE (gateway sem IP do comprador), ou o
+    // próprio clique teve o país inferido em vez de medido. `payload` e `ip`
+    // são medida; o resto é inferência e a tela precisa dizer isso.
+    const inferida = s.countrySource != null && !["payload", "ip"].includes(s.countrySource);
+    if ((!proprio && doClique) || inferida) cur.estimadas += 1;
     paisMap.set(code, cur);
   }
   const byCountry = [...paisMap.entries()]
