@@ -2848,6 +2848,39 @@ o seletor da sidebar já mostra a área ativa em toda tela.
   schema sem uso** — só saem depois que a produção rodar este código (dois
   deploys).
 
+## ⛔ PROCEDIMENTO OBRIGATÓRIO: passar no build não prova que está EM USO
+
+**Três casos na mesma sessão (30/07/2026), todos "entregues" e todos inertes:**
+
+| O que | Estado real | Como foi descoberto |
+|---|---|---|
+| Base de países IP→país | pronta, testada, commitada — **consultada por ninguém** | por acaso, uma sessão depois |
+| Resumo do gargalo do funil | no DOM, **invisível** desde que foi escrito | ao conferir outra coisa na tela |
+| `/api/cron/manutencao` | rota completa, **nunca agendada** — rodou zero vezes | ao ir criar uma rota que já existia |
+| Consulta da purga de IP | escrita e testada por função pura — **nunca executada contra linha nenhuma** | o usuário perguntou |
+
+O denominador comum: **`tsc`, `lint`, `build` e os testes passam com a coisa
+desligada.** Nenhuma dessas ferramentas pergunta "alguém chama isto?".
+
+### Antes de reportar QUALQUER coisa como entregue, verifique que está sendo EXERCIDA
+
+| Tipo | A pergunta | Como responder |
+|---|---|---|
+| Função nova | **quem importa?** | `grep` pelo nome fora do próprio arquivo e do teste |
+| Rota de API | **quem chama?** | `grep` pelo caminho; se for cron, **está no `.github/workflows/cron.yml`?** |
+| Elemento de tela | **aparece?** | ver **na tela**, não no `find` do DOM — ver o caso do funil |
+| Coluna nova | **quem lê e quem escreve?** | os dois lados; só escrever é dado morto |
+| Consulta de manutenção | **rodou contra linha de verdade?** | semear no dev o estado que ela deve encontrar |
+| Campo novo da Graph API | **veio preenchido?** | sonda que mostra a resposta CRUA |
+
+> ### 🔴 "Compila e tem teste" ≠ "está funcionando no sistema"
+> Teste de função pura prova que a função está certa. **Não prova que ela é
+> chamada**, nem que a consulta que a usa acha as linhas certas, nem que o
+> resultado chega à tela.
+>
+> Ao criar rota de cron, **agende no mesmo commit**. Ao criar consulta de
+> manutenção, **rode contra linhas semeadas no dev** antes de dizer que funciona.
+
 ## 🚦 COMECE AQUI — estado em 30/07/2026 e a fila da próxima sessão
 
 Tudo até `3bc1cda` está **em produção**. **A padronização visual terminou** — os
@@ -4025,7 +4058,18 @@ Log de sucesso é redundante; log de falha é o produto. E as falhas sem dono
 `RECEBIDO` que nunca fechou = processamento estourou no meio; tratado como
 `ERRO`.
 
-**Teste de regressão do match — `npm run test:match`, 12 asserções:**
+**Teste de regressão — `npm run test:match`, 20 asserções.** O bloco 5 executa
+**a própria consulta da purga** contra linhas semeadas com data no passado:
+clique de 10 dias vira hash, de 2 dias fica intacto, já anonimizado não é
+re-hasheado, 2ª passada não mexe em nada, **o país não é tocado**, o purgado é
+recusado pela CAPI e ainda casa no match.
+
+> ⚠️ Esse bloco foi acrescentado depois de o usuário perguntar se a purga tinha
+> sido testada de verdade. **Não tinha** — só a função pura e o `matchClick`. A
+> consulta nunca havia rodado contra linha nenhuma, e a simulação em produção dá
+> 0 porque todos os cliques estão dentro da retenção. Ver o PROCEDIMENTO no topo.
+
+Os quatro casos exigidos:
 
 1. Clique com IP conhecido → venda com o mesmo IP, **sem `click_id`** →
    `matchMethod === "ip"` e o `clickId` certo
@@ -4341,7 +4385,7 @@ npm run geo:backfill     # país do histórico. SIMULA; --aplicar escreve
 npm run test:bots        # 35 asserções, classificação de robô (puro)
 npm run bot:reclassificar # reavalia Click.bot pelo userAgent. SIMULA; --aplicar escreve
 npm run test:desempate   # 27 asserções, país quando o IP contradiz a campanha
-npm run test:match       # 12 asserções, match por IP sobrevive à purga (banco de DEV)
+npm run test:match       # 20 asserções, purga + match por IP (banco de DEV)
 npm run ip:simular -- --url '<conn>'   # o que a purga faria. NUNCA escreve
 npm run geo:sonda -- --url '<conn>'   # a segmentacao esta chegando? (so leitura)
 npm run test:ip          # 27 asserções, IP atrás de proxy (Vercel, VPS, Cloudflare)

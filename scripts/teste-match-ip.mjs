@@ -23,7 +23,7 @@
  */
 import "dotenv/config";
 import pg from "pg";
-import { anonimizarIp, candidatosDeIp, podeIrParaCapi } from "@/lib/geo/anonimizarIp";
+import { RETENCAO_DIAS, anonimizarIp, candidatosDeIp, podeIrParaCapi } from "@/lib/geo/anonimizarIp";
 import { exigirBancoDeDesenvolvimento } from "./guard-db.mjs";
 
 exigirBancoDeDesenvolvimento({ script: "teste-match-ip" });
@@ -55,15 +55,47 @@ function eq(nome, obtido, esperado) {
  * a REGRA (casar por `in` dos candidatos, dentro da janela, sem robô) funciona
  * contra o banco de verdade.
  */
-async function casar(userId, ip) {
+async function casar(userId, ip, { horas = 12 } = {}) {
   const { rows } = await cliente.query(
     `SELECT "id" FROM "Click"
       WHERE "userId" = $1 AND "ip" = ANY($2::text[]) AND "bot" = false
-        AND "timestamp" >= now() - interval '12 hours'
+        AND "timestamp" >= now() - ($3 || ' hours')::interval
       ORDER BY "timestamp" DESC LIMIT 1`,
-    [userId, candidatosDeIp(ip)],
+    [userId, candidatosDeIp(ip), String(horas)],
   );
   return rows[0]?.id ?? null;
+}
+
+/**
+ * A MESMA consulta que `/api/cron/manutencao` executa na purga.
+ *
+ * ⚠️ Duplicada de propósito, como todo o resto deste arquivo. Restrita ao
+ * `userId` do teste — nunca varre a tabela inteira.
+ */
+async function purgar(userId) {
+  const { rows } = await cliente.query(
+    `SELECT "id", "ip" FROM "Click"
+      WHERE "userId" = $1 AND "ip" IS NOT NULL AND "ip" NOT LIKE 'iph.v1.%'
+        AND "timestamp" < now() - ($2 || ' days')::interval`,
+    [userId, String(RETENCAO_DIAS)],
+  );
+  for (const r of rows) {
+    await cliente.query(`UPDATE "Click" SET "ip" = $1 WHERE "id" = $2`, [anonimizarIp(r.ip), r.id]);
+  }
+  return rows.length;
+}
+
+async function lerIps(ids) {
+  const { rows } = await cliente.query(`SELECT "id", "ip" FROM "Click" WHERE "id" = ANY($1::text[])`, [ids]);
+  return Object.fromEntries(rows.map((r) => [r.id, r.ip]));
+}
+
+async function contarPais(userId) {
+  const { rows } = await cliente.query(
+    `SELECT count(*)::int AS n FROM "Click" WHERE "userId" = $1 AND "country" IS NOT NULL`,
+    [userId],
+  );
+  return rows[0].n;
 }
 
 const criados = [];
@@ -109,7 +141,34 @@ async function main() {
   eq("o valor gravado não passa na guarda da CAPI", podeIrParaCapi(r4[0].ip), false);
   eq("um IP em claro passaria", podeIrParaCapi(IP), true);
 
-  console.log("\n\x1b[1m5. Bordas\x1b[0m");
+  console.log("\n\x1b[1m5. 🔴 A PURGA em si — a consulta que o cron executa\x1b[0m");
+  // ⚠️ Este bloco existe porque a Fase B quase foi entregue sem ele. Os outros
+  // casos testam `anonimizarIp()` como função pura e o `matchClick`; a CONSULTA
+  // da purga — achar os vencidos e atualizar — nunca tinha rodado contra linha
+  // nenhuma. "Compila e tem teste" não é "está sendo exercido".
+  {
+    const IP_VELHO = "8.8.8.8";
+    const jaAnon = anonimizarIp("200.160.2.3");
+    const velho = await criarClique(userId, IP_VELHO, { horasAtras: 24 * 10 });
+    const dentro = await criarClique(userId, "201.6.0.1", { horasAtras: 24 * 2 });
+    const anon = await criarClique(userId, jaAnon, { horasAtras: 24 * 20 });
+    await cliente.query(`UPDATE "Click" SET country = 'US' WHERE id = $1`, [velho]);
+
+    const paisAntes = await contarPais(userId);
+    await purgar(userId);
+    const dep = await lerIps([velho, dentro, anon]);
+
+    eq("clique de 10 dias foi anonimizado com o hash certo", dep[velho], anonimizarIp(IP_VELHO));
+    eq("clique de 2 dias ficou INTACTO (dentro da retenção)", dep[dentro], "201.6.0.1");
+    eq("já anonimizado não foi re-hasheado", dep[anon], jaAnon);
+    eq("2ª passada não mexe em mais nada (idempotente)", await purgar(userId), 0);
+    eq("o país NUNCA é tocado pela purga", await contarPais(userId), paisAntes);
+    eq("o purgado não vai para a CAPI", podeIrParaCapi(dep[velho]), false);
+    eq("o de dentro da janela vai", podeIrParaCapi(dep[dentro]), true);
+    eq("e o purgado ainda CASA no match", await casar(userId, IP_VELHO, { horas: 24 * 30 }), velho);
+  }
+
+  console.log("\n\x1b[1m6. Bordas\x1b[0m");
   const cBot = await criarClique(userId, OUTRO, { bot: true });
   eq("clique de robô não casa (robô não compra)", await casar(userId, OUTRO), null);
   await cliente.query(`DELETE FROM "Click" WHERE id = $1`, [cBot]);
