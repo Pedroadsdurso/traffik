@@ -455,6 +455,20 @@ model Click {
   country     String?
   timestamp   DateTime @default(now())
 
+  /// Este clique veio de um robô (crawler, navegador automatizado, ferramenta
+  /// HTTP)? Decidido SÓ pelo `userAgent` — ver `lib/bots/classificar.ts`.
+  ///
+  /// ⚠️ O clique é MARCADO, nunca bloqueado: a linha é sempre gravada. Um falso
+  /// positivo que apagasse a linha sumiria com um cliente sem deixar rastro;
+  /// marcado, ele se corrige com `npm run bot:reclassificar`.
+  ///
+  /// ⛔ País e IP de datacenter NÃO são critério. Neste produto 55,6% do tráfego
+  /// humano vem do navegador embutido do Instagram/Facebook, que sai pela
+  /// infraestrutura da Meta — ali, IP de datacenter é sinal de usuário REAL.
+  bot         Boolean  @default(false)
+  /// Qual padrão casou. Existe para o usuário auditar se o filtro exagera.
+  botMotivo   String?
+
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   sales  Sale[]
@@ -478,6 +492,7 @@ model Click {
   @@index([fbclid])
   @@index([ip])
   @@index([workspaceId])
+  @@index([userId, bot, timestamp])
 }
 
 model Sale {

@@ -180,7 +180,8 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
     // Cliques rastreados por NÓS, atribuídos por UTM. Chegam ao banco no
     // instante do clique (via `t.js`), sem depender do Facebook.
     prisma.click.findMany({
-      where: { userId, timestamp: { gte: start, lte: end } },
+      // ⚠️ `bot: false` — alimenta a coluna "Cliq. atr.", que é métrica.
+      where: { userId, timestamp: { gte: start, lte: end }, bot: false },
       select: { utmCampaign: true, utmContent: true, fbclid: true, workspaceId: true },
     }),
     // Initiate Checkout do período. O evento não carrega campanha, mas carrega
@@ -233,7 +234,8 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
   const fbclids = [...icPorFbclid.keys()];
   const cliquesDoIc = fbclids.length
     ? await prisma.click.findMany({
-        where: { userId, fbclid: { in: fbclids } },
+        // Bot não chega a Initiate Checkout, mas se chegasse contaminaria o CPI.
+        where: { userId, fbclid: { in: fbclids }, bot: false },
         select: { fbclid: true, utmCampaign: true, utmContent: true },
       })
     : [];

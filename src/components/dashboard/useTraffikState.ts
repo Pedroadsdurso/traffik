@@ -1339,6 +1339,12 @@ export function useTraffikState(
       { chaveInfo: "iniciadas", label: "Vendas iniciadas", curto: "Vendas Inic.", value: d?.funnel.iniciadas ?? 0, fonte: "Gateway — todos os status" },
       { chaveInfo: "aprovadas", label: "Vendas aprovadas", curto: "Vendas Apr.", value: d?.funnel.vendas ?? 0, fonte: "Gateway — status APROVADA" },
     ],
+    /**
+     * Robôs já EXCLUÍDOS das métricas, por motivo. A tela mostra para o usuário
+     * poder conferir se o filtro exagera ou falha — sem isso, "removemos os
+     * bots" seria uma afirmação que ele teria de aceitar no escuro.
+     */
+    bots: d?.bots ?? [],
     sparklines: d?.chart.sparklines ?? {},
     /**
      * Botão "Atualizar" do Dashboard — **ponto único de sincronização manual**.

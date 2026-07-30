@@ -51,6 +51,7 @@ import {
   Wallet,
   X,
   Zap,
+  Bot,
   type LucideIcon,
 } from "lucide-react";
 
@@ -96,6 +97,8 @@ import { sx } from "@/lib/sx";
  */
 const MAPA = {
   aviso: AlertTriangle,
+  /** Acesso automatizado — a contagem de bot removido do funil. */
+  robo: Bot,
   info: Info,
   bussola: Compass,
   automacao: Settings2,

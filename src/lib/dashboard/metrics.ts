@@ -101,6 +101,12 @@ export interface DashboardData {
   sources: { name: string; total: number }[];
   payments: { name: string; total: number; count: number }[];
   funnel: { cliques: number; visitas: number; checkouts: number; iniciadas: number; vendas: number };
+  /**
+   * Cliques classificados como robô no período, por motivo. **Já estão FORA de
+   * `funnel.visitas` e de todas as métricas** — vai para a tela só para o
+   * usuário poder conferir se o filtro exagera ou falha.
+   */
+  bots: { motivo: string; total: number }[];
   /** Vendas aprovadas por país (ISO-2), ordenado por faturamento — Bloco 5. */
   /** `code: ""` = não identificado. Nunca é descartado — ver `paisMap`. */
   byCountry: { code: string; sales: number; revenue: number; estimadas: number }[];
@@ -225,7 +231,7 @@ async function windowAggregate(
   // (coluna `@db.Date`, um dia de calendário) tem de ser filtrada.
   const startKey = dayKeyInTz(start, tz);
   const endKey = dayKeyInTz(end, tz);
-  const [sales, clicks, metrics, expenses, pixelEvents, initiateCheckouts] = await Promise.all([
+  const [sales, clicks, botsPorMotivo, metrics, expenses, pixelEvents, initiateCheckouts] = await Promise.all([
     prisma.sale.findMany({
       where: {
         userId,
@@ -254,10 +260,27 @@ async function windowAggregate(
       where: {
         userId,
         timestamp: { gte: start, lte: end },
+        // ⚠️ Bot FORA de toda métrica. Eram 16,5% dos cliques em produção,
+        // inflando "Visita na página" no funil e diluindo toda taxa de
+        // conversão calculada a partir dela. A linha continua no banco.
+        bot: false,
         ...(fontes ? { utmSource: { in: fontes } } : {}),
       },
       select: { id: true, utmSource: true, utmCampaign: true, fbclid: true, timestamp: true, workspaceId: true },
       orderBy: { timestamp: "desc" },
+    }),
+    // Contagem de bot do MESMO período e recorte. Existe para o usuário poder
+    // auditar se o filtro exagera ou falha — sem isso, "removemos os bots" é
+    // uma afirmação que ele teria de aceitar no escuro.
+    prisma.click.groupBy({
+      by: ["botMotivo"],
+      where: {
+        userId,
+        timestamp: { gte: start, lte: end },
+        bot: true,
+        ...(fontes ? { utmSource: { in: fontes } } : {}),
+      },
+      _count: { _all: true },
     }),
     prisma.dailyAdMetric.findMany({
       where: {
@@ -362,6 +385,10 @@ async function windowAggregate(
   return {
     sales: salesEscopo, clicks: clicksEscopo, metrics, expenses, pixelEvents: pixelEventsEscopo,
     initiateCheckouts: checkoutsDistintos,
+    // ⚠️ NÃO passa pelo escopo de área: um clique de robô raramente tem
+    // `utm_campaign` atribuível, então filtrá-lo por área o esconderia justamente
+    // de quem precisa auditá-lo. É diagnóstico da conta, não métrica de operação.
+    bots: botsPorMotivo.map((b) => ({ motivo: b.botMotivo ?? "Robô", total: b._count._all })),
     janela: { start, end, startKey, endKey, tz },
   };
 }
@@ -426,6 +453,7 @@ export async function computeDashboard(userId: string, filters: DashboardFilters
     sources: summary.sources,
     payments: summary.payments,
     funnel: summary.funnel,
+    bots: current.bots,
     byCountry: summary.byCountry,
     approval: summary.approval,
     byHour: summary.byHour,

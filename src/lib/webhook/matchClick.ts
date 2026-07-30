@@ -36,7 +36,10 @@ export async function matchClick(
 
   if (ip) {
     const click = await prisma.click.findFirst({
-      where: { userId, ip, timestamp: { gte: new Date(Date.now() - IP_WINDOW_MS) } },
+      // ⚠️ Robô não compra. Casar uma venda com um clique de crawler faria a
+      // venda herdar o país do datacenter dele — e o match por IP é justamente
+      // o caminho mais frouxo, onde isso aconteceria em silêncio.
+      where: { userId, ip, bot: false, timestamp: { gte: new Date(Date.now() - IP_WINDOW_MS) } },
       orderBy: { timestamp: "desc" },
       select: { id: true, country: true },
     });

@@ -43,7 +43,16 @@ const BASE = 8;
  * percentual, marcada no desenho e resumida em texto no rodapé. Entre as etapas
  * aparece a perda ("−195 · 88,6%") sem precisar de hover.
  */
-export function Funnel({ etapas, ticketMedio = 0 }: { etapas: EtapaEntrada[]; ticketMedio?: number }) {
+export function Funnel({
+  etapas,
+  ticketMedio = 0,
+  bots = [],
+}: {
+  etapas: EtapaEntrada[];
+  ticketMedio?: number;
+  /** Robôs JÁ EXCLUÍDOS de "Visita na página". Só para conferência. */
+  bots?: { motivo: string; total: number }[];
+}) {
   const pronto = useEntrada();
   const [tip, setTip] = useState<{ x: number; y: number; i: number } | null>(null);
   /**
@@ -55,6 +64,7 @@ export function Funnel({ etapas, ticketMedio = 0 }: { etapas: EtapaEntrada[]; ti
   const { ref: boxRef, no: boxNo, largura } = useTamanho<HTMLDivElement>();
 
   const { etapas: calc, gargalo } = calcularFunil(etapas, ticketMedio);
+  const totalBots = bots.reduce((a, b) => a + b.total, 0);
   const n = calc.length;
 
   if (n === 0 || calc.every((e) => e.value === 0)) {
@@ -95,6 +105,33 @@ export function Funnel({ etapas, ticketMedio = 0 }: { etapas: EtapaEntrada[]; ti
   return (
     <div style={sx("display:flex;flex-direction:column;flex:1;min-height:230px")}>
       <div ref={boxRef} style={sx("position:relative;display:flex;flex-direction:column;flex:1;padding:var(--space-2) var(--space-1) 0")}>
+        {/* Robôs removidos — conferência do filtro.
+            ⚠️ Fica no TOPO, não no rodapé. O rodapé deste bloco é **cortado**
+            na altura padrão do grid (o resumo do gargalo e a legenda "Percentual
+            sobre a maior etapa" já sofriam disso). Um aviso que existe no DOM e
+            não aparece na tela é pior que não ter aviso, porque ninguém descobre.
+            ⚠️ Fica no funil, e não num card próprio, porque a etapa que eles
+            inflavam é "Visita na página": o número e a ressalva têm de ser
+            lidos juntos. */}
+        {totalBots > 0 && (
+          <div
+            style={sx("display:flex;align-items:center;justify-content:flex-end;gap:5px;font-size:10.5px;margin-bottom:2px")}
+            title={[
+              "Cliques de robô removidos das métricas neste período:",
+              ...bots.map((b) => `• ${b.total} — ${b.motivo}`),
+              "",
+              "A classificação usa SOMENTE o user agent. País e IP nunca são",
+              "critério: quem compra pelo navegador do Instagram aparece num",
+              "servidor da Meta e é uma pessoa real.",
+            ].join("\n")}
+          >
+            <Icone nome="robo" tamanho={11} cor="suave" />
+            <span className="text-muted">
+              {num(totalBots)} {totalBots === 1 ? "acesso de robô removido" : "acessos de robô removidos"}
+            </span>
+          </div>
+        )}
+
         {/* Rótulos das etapas */}
         <div style={sx(`display:grid;grid-template-columns:repeat(${n},1fr);text-align:center;gap:4px`)}>
           {calc.map((e) => (
@@ -217,6 +254,7 @@ export function Funnel({ etapas, ticketMedio = 0 }: { etapas: EtapaEntrada[]; ti
           />
         )}
       </div>
+
 
       {/* Explicação do método de cálculo, ao lado do resumo. */}
       {!gargalo && (

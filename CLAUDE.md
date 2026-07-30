@@ -2867,7 +2867,11 @@ irreversível): a marcação de bot e o **navegador embutido do app da Meta**, q
 responde por **55,6% do tráfego humano** e falseia o país do clique. Ver as
 seções próprias.
 
-**Próxima sessão: marcação de bot (passo 5)** — tem migration.
+✅ **Passo 5 (marcação de bot) FEITO** — tem **migration**, então o deploy é
+`migrate deploy` → `npm run bot:reclassificar --aplicar` → `push`, nessa ordem.
+
+**Próxima sessão: passo 6** — correção do navegador embutido de app
+(`targeting.geo_locations` + `countrySource`). É o último bloqueio do hash do IP.
 
 Fora isso: **faxina de código morto** (lista em "Pendências abertas") e o
 **import/export do Bloco 8**, que ficou de fora de propósito. O lint está em
@@ -3588,9 +3592,9 @@ ALLOW_PROD_WRITES=EU_QUERO_MESMO_ESCREVER_EM_PRODUCAO \
 | 2 | Backfill IPv4 do histórico | ✅ script pronto · **usuário rodou** |
 | 3 | **IPv6 na base** + cobertura mundial do mapa | ✅ feito nesta sessão |
 | 4 | Rodar o backfill de novo (recupera as vendas IPv6) | ✅ **aplicado — 237 cliques · 15 vendas** |
-| 5 | Marcação de bot (`Click.bot`) — tem migration | ⏳ **PRÓXIMA SESSÃO** |
+| 5 | Marcação de bot (`Click.bot`) | ✅ **feito — tem MIGRATION, ver ordem de deploy** |
 | 6 | Correção do navegador embutido de app | ⏳ proposta pronta e decidida, não implementada |
-| 7 | **Hash do IP + limpeza dos `rawPayload`** | 🔒 **BLOQUEADO até 5 e 6** |
+| 7 | **Hash do IP + limpeza dos `rawPayload`** | 🔒 **BLOQUEADO até o 6** |
 
 > ### 🔴🔴 O HASH DO IP É O ÚLTIMO PASSO, E DEPENDE DE TODOS OS ANTERIORES
 >
@@ -3604,8 +3608,7 @@ ALLOW_PROD_WRITES=EU_QUERO_MESMO_ESCREVER_EM_PRODUCAO \
 >
 > **Antes do passo 7, confirme que estão resolvidos:**
 > - [ ] Backfill rodado **depois** do IPv6, com a contagem conferida
-> - [ ] Bot marcado (usa `userAgent`, que o hash **não** apaga — mas a
->       classificação retroativa precisa do dado de antes)
+> - [x] Bot marcado ✅ (usa `userAgent`, que o hash **não** apaga)
 > - [ ] Navegador de app resolvido — **depende do `userAgent`, e a proposta usa
 >       o IP para decidir se o visitante está num datacenter de rede social**
 >
@@ -3730,6 +3733,107 @@ o mapa não sabe desenhar. Paridade atual: **252 no mapa · 252 na base**.
 - **País sem posição no mapa é MARCADO no ranking, nunca omitido** — chip "sem
   posição no mapa" com explicação no `title`. É a mesma regra do "Não
   identificado": o que some em silêncio é o que o usuário está procurando.
+
+## 🤖 Marcação de bot (30/07/2026, passo 5) — MARCA, nunca bloqueia
+
+**Migration `20260730180000_click_bot`** — `Click.bot` (`DEFAULT false`),
+`Click.botMotivo`, e o índice `(userId, bot, timestamp)`. Aditiva.
+
+> ### 🔴 ORDEM DE DEPLOY: migration → `bot:reclassificar` → push
+> 1. `npx prisma migrate deploy` na produção
+> 2. **`npm run bot:reclassificar -- --url '<conn>' --aplicar`**
+> 3. `git push`
+>
+> ⚠️ **O passo 2 não é opcional.** A coluna nasce com `DEFAULT false`, então
+> todo clique histórico nasce "não é bot" — errado para ~16,5% deles. Sem a
+> reclassificação, a contagem na tela fica **zerada** e parece que o filtro não
+> funciona, enquanto o funil segue inflado.
+
+### ⛔ Marca, não bloqueia — e por quê
+
+O `/api/track/click` **continua gravando tudo**. Só as métricas excluem
+`bot: true`.
+
+Bloquear significaria **não gravar**, e aí um falso positivo apaga um cliente
+**sem deixar rastro** — não há como descobrir depois nem desfazer. Marcado, o
+erro se corrige: `npm run bot:reclassificar` reavalia **todo** o histórico com a
+lista nova, porque o `userAgent` continua no banco. É isso que torna a lista de
+padrões editável sem medo.
+
+### ⛔ PAÍS NUNCA É CRITÉRIO. IP DE DATACENTER TAMBÉM NÃO.
+
+A suspeita inicial era de que os 90 cliques de US+IE fossem crawler — a Irlanda
+é o datacenter europeu da Meta. A decomposição mostrou **37 bots e 53 pessoas
+reais**, e as 2 únicas vendas que casaram com um clique vieram justamente dali.
+
+**Neste produto, IP de datacenter da Meta é evidência de usuário REAL de rede
+social** — 55,6% do tráfego humano vem do navegador embutido do app. Quase o
+oposto de bot.
+
+> ⚠️ Isso continua valendo quando a detecção de datacenter existir (passo 6):
+> ela serve para corrigir o **país**, nunca para classificar bot.
+
+**O único critério é o `userAgent`.**
+
+### A lista de padrões
+
+`lib/bots/classificar.ts` → `PADROES`, uma lista de `{ re, motivo }` lida de cima
+para baixo. Acrescentar é **uma linha** + rodar o reclassificador.
+
+> ### ⚠️ A ORDEM importa
+> O crawler da Meta se anuncia **dentro** de um user agent de navegador comum
+> (`Mozilla/5.0 (…) Chrome/145 (compatible; meta-externalads/1.1 …)`), então
+> precisa ser testado antes de qualquer regra genérica.
+
+> ### ⚠️ Conservador de propósito
+> Um bot que escapa infla a contagem em alguns por cento. **Um humano marcado
+> como bot some das métricas e leva a decisão de mídia junto.** Na dúvida, fora.
+>
+> - **User agent AUSENTE não é bot.** Extensão de privacidade e configuração
+>   corporativa suprimem o header.
+> - **WebView (`; wv)`) não é bot** — é o padrão do app do Instagram no Android.
+> - `\bbot\b` tem limites de palavra: sem eles, "Abbott" num nome de aparelho
+>   viraria robô.
+> - **`\brobot\b` é padrão SEPARADO**: o `\b` de `bot` **não** casa dentro de
+>   "Robot" (o `o` anterior é caractere de palavra). Um teste com
+>   `SomeCompany Robot/1.0` passava batido — foi assim que a lacuna apareceu.
+
+### Onde o bot é excluído — e onde NÃO é
+
+| Consulta | Exclui bot? | Por quê |
+|---|---|---|
+| `metrics.ts` — cliques do funil e do feed | ✅ | é métrica |
+| `ads/overview.ts` — "Cliq. atr." e IC | ✅ | é métrica |
+| `matchClick` — casar venda por IP | ✅ | robô não compra; a venda herdaria o país do datacenter dele |
+| `diagnostics.ts` — "script de UTM detectado" | ❌ | a pergunta é *"o script está instalado?"*. Um crawler que disparou o script **prova** que sim |
+| `utm.ts` — cliques carimbados por área | ❌ | idem: é sobre instalação, não sobre tráfego |
+| `areas/exclusao.ts` | ❌ | atribuição e exclusão precisam ver **todas** as linhas |
+
+### Conferência na tela (exigência do usuário)
+
+O funil mostra **"N acessos de robô removidos"**, com o detalhamento por motivo
+no `title`. Sem isso, "removemos os bots" seria uma afirmação a aceitar no
+escuro — o número existe para o usuário julgar se o filtro exagera ou falha.
+
+> ### ⚠️ Fica no TOPO do funil, não no rodapé
+> **O rodapé deste bloco é cortado na altura padrão do grid.** Descoberto ao
+> verificar no navegador: o texto existia no DOM e não aparecia na tela. O
+> resumo do gargalo e a legenda "Percentual sobre a maior etapa" **já sofriam
+> disso** — é condição preexistente, não introduzida aqui.
+>
+> Um aviso que existe no DOM e não aparece é pior que nenhum aviso, porque
+> ninguém descobre que está faltando.
+
+> ⚠️ A contagem **não passa pelo escopo de área**: clique de robô raramente tem
+> `utm_campaign` atribuível, então filtrá-lo por área o esconderia justamente de
+> quem precisa auditá-lo. É diagnóstico da conta, não métrica de operação.
+
+**Testado:** `npm run test:bots` — **35 asserções** com user agents **reais** do
+backup de produção, metade delas provando que humano **não** vira bot
+(Instagram `pt_BR`, `FBCR/VIVO`, WebView, Chrome, Safari, Edge). Mais a
+classificação na ingestão verificada ponta a ponta contra o dev server, o
+reclassificador (9 de 24 semeados, idempotente na 2ª passada) e a contagem
+aparecendo no funil no navegador.
 
 ## 🔴 ACHADO: o navegador embutido do app da Meta falseia a geolocalização
 
@@ -3921,6 +4025,8 @@ npm run test:financeiro  # 33 asserções, líquido/lucro/ROI e cores (puro)
 npm run test:pais        # 30 asserções, IP -> país pela base local
 npm run geo:atualizar    # regenera a base (mensal) — commitar a saída
 npm run geo:backfill     # país do histórico. SIMULA; --aplicar escreve
+npm run test:bots        # 35 asserções, classificação de robô (puro)
+npm run bot:reclassificar # reavalia Click.bot pelo userAgent. SIMULA; --aplicar escreve
 npm run test:ip          # 27 asserções, IP atrás de proxy (Vercel, VPS, Cloudflare)
 npm run test:telefone    # 25 asserções, E.164 antes do hash da CAPI
 npm run db:onde          # em qual banco o .env aponta

@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { ipDaRequisicao } from "@/lib/geo/clientIp";
 import { normalizarPais, resolverPais } from "@/lib/geo/pais";
+import { classificarUserAgent } from "@/lib/bots/classificar";
 
 import { prisma } from "@/lib/prisma";
 
@@ -73,9 +74,17 @@ export async function POST(req: NextRequest) {
   // certa antes de algum passar a enviar.
   const country = resolverPais((n) => req.headers.get(n), ip) ?? normalizarPais(str(body.country, 8));
 
+  // ⚠️ MARCA, não bloqueia: a linha é gravada de qualquer forma e as métricas é
+  // que excluem `bot: true`. Recusar aqui apagaria um cliente sem rastro se a
+  // classificação errasse — e a lista de padrões é heurística, não certeza.
+  const userAgent = str(req.headers.get("user-agent"), 512);
+  const robo = classificarUserAgent(userAgent);
+
   const click = await prisma.click.create({
     data: {
       userId: user.id,
+      bot: robo.bot,
+      botMotivo: robo.motivo,
       workspaceId: ws?.id ?? null,
       utmSource: str(body.utm_source, 191),
       utmMedium: str(body.utm_medium, 191),
@@ -89,7 +98,7 @@ export async function POST(req: NextRequest) {
       referrer: str(body.referrer),
       country,
       ip,
-      userAgent: str(req.headers.get("user-agent"), 512),
+      userAgent,
     },
     select: { clickId: true },
   });

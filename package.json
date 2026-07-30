@@ -16,6 +16,8 @@
     "test:areas": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-atribuicao-areas.mjs",
     "geo:atualizar": "node scripts/gen-ip-country.mjs",
     "geo:backfill": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/backfill-pais.mjs",
+    "bot:reclassificar": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/reclassificar-bots.mjs",
+    "test:bots": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-bots.mjs",
     "test:telefone": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-telefone.mjs",
     "test:pais": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-pais.mjs",
     "test:ip": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-ip.mjs",
