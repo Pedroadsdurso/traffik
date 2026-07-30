@@ -5,6 +5,7 @@ import { useState } from "react";
 import { brl, brl0, pct } from "@/lib/format";
 import { derivar, somar, type LinhaBase } from "@/lib/ads/metrics";
 import { sx } from "@/lib/sx";
+import { Icone } from "../../ui/Icone";
 import { InfoTip } from "../../ui/InfoTip";
 import { METRICAS } from "@/lib/explicacoes";
 
@@ -293,7 +294,7 @@ export function AdsTable({
                   </td>
                   <td className="fixa fixa-3">
                     <div style={sx("display:flex;align-items:center;gap:6px;min-width:0")}>
-                      {fixadas.has(l.id) && <span title="Fixada no topo" aria-hidden>📌</span>}
+                      {fixadas.has(l.id) && <span title="Fixada no topo" aria-hidden><Icone nome="fixado" tamanho={13} cor="marca" /></span>}
                       <div style={sx("min-width:0")}>
                         <div style={sx("overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px")}>{l.nome}</div>
                         {l.sub && <div className="text-muted" style={sx("font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap")}>{l.sub}</div>}

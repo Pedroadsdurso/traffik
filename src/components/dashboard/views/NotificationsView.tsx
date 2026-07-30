@@ -1,4 +1,5 @@
 import { sx } from "@/lib/sx";
+import { Icone } from "../ui/Icone";
 import { Select } from "../ui/Select";
 import type { TraffikView } from "../useTraffikState";
 
@@ -32,7 +33,7 @@ export function NotificationsView({ v }: { v: TraffikView }) {
           <Row label="Nome do dashboard" on={n.showDashboardName} onToggle={v.toggleShowDashboard} />
           <div style={sx("padding:var(--space-3);border-radius:var(--radius-md);background:var(--color-bg);font-size:13px")}>
             <div className="text-muted" style={sx("font-size:11px;margin-bottom:4px")}>Prévia do alerta</div>
-            <span>💰 {n.preview}</span>
+            <span><Icone nome="dinheiro" tamanho={16} cor="ok" /> {n.preview}</span>
           </div>
         </div>
       </div>

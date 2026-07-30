@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { getPendenciasDaArea, type PendenciasDTO } from "@/lib/actions/diagnostics";
 import { sx } from "@/lib/sx";
+import { Icone } from "./Icone";
 
 /**
  * Banner de pendências da Área de Trabalho ativa.
@@ -83,7 +84,7 @@ export function BannerPendencias({ workspaceId }: { workspaceId: string | null }
           `border-left:3px solid ${AMBAR};background:color-mix(in srgb, ${AMBAR} 7%, var(--color-surface))`,
       )}
     >
-      <span aria-hidden style={sx("font-size:17px;line-height:1.2")}>🧭</span>
+      <Icone nome="bussola" tamanho={18} cor="aviso" />
 
       <div style={sx("min-width:0;flex:1")}>
         <div style={sx("font-size:14px;font-weight:600")}>

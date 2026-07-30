@@ -6,6 +6,7 @@ import { setMyTimezone } from "@/lib/actions/profile";
 import { CONFIG } from "@/lib/explicacoes";
 import { faltamTaxas } from "@/lib/areas/taxas";
 import { sx } from "@/lib/sx";
+import { Icone } from "../ui/Icone";
 import { Select } from "../ui/Select";
 import { Checkbox } from "../ui/Checkbox";
 import { InfoTip } from "../ui/InfoTip";
@@ -141,7 +142,7 @@ export function FeesView({ v }: { v: TraffikView }) {
               "border-left:3px solid #f59e0b;background:color-mix(in srgb, #f59e0b 7%, var(--color-surface))",
           )}
         >
-          <span aria-hidden style={sx("font-size:16px;line-height:1.2")}>⚠️</span>
+          <Icone nome="aviso" tamanho={17} cor="aviso" />
           <div style={sx("font-size:13px;line-height:1.55")}>
             <strong>
               Esta área não tem {faltando.join(" nem ")} cadastrad{faltando.length > 1 ? "os" : "o"}.

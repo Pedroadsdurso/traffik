@@ -15,6 +15,7 @@ import {
 } from "@/lib/actions/rules";
 import { brl, elapsed, plural } from "@/lib/format";
 import { sx } from "@/lib/sx";
+import { Icone } from "../ui/Icone";
 import { Drawer } from "../ui/Drawer";
 import { Modal } from "../ui/Modal";
 import { RASCUNHO_REGRA, RuleDrawer, deRegra, paraInput, type RascunhoRegra } from "./rules/RuleDrawer";
@@ -130,7 +131,7 @@ export function RulesView({ workspaceId }: { workspaceId: string | null }) {
           className="card"
           style={sx("display:flex;flex-direction:column;align-items:center;gap:12px;padding:var(--space-6) var(--space-4);text-align:center")}
         >
-          <span aria-hidden style={sx("font-size:30px")}>⚙️</span>
+          <Icone nome="automacao" tamanho={34} cor="marca" />
           <div>
             <div className="card-title">Nenhuma regra ainda</div>
             <p className="card-body" style={sx("margin:6px auto 0;max-width:46ch")}>
@@ -251,7 +252,7 @@ function CardRegra({
 
       {aumentaSemTeto && (
         <div style={sx(`display:flex;gap:8px;align-items:flex-start;font-size:12px;color:${AMARELO}`)}>
-          <span aria-hidden>⚠️</span>
+          <Icone nome="aviso" tamanho={15} cor="aviso" />
           <span>
             Aumento <strong>sem teto de orçamento</strong> — o motor recusa esta ação por segurança.
             Edite a regra e informe o teto para ela voltar a agir.

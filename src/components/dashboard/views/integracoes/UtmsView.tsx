@@ -7,6 +7,7 @@ import { getPublicAppUrl } from "@/lib/appUrl";
 import { backRedirectScript, utmScript } from "@/lib/utm/scripts";
 import { CONFIG } from "@/lib/explicacoes";
 import { sx } from "@/lib/sx";
+import { Icone, type NomeIcone } from "../../ui/Icone";
 import { Drawer } from "../../ui/Drawer";
 import { InfoTip } from "../../ui/InfoTip";
 import { LogoGateway } from "../../ui/LogoGateway";
@@ -130,7 +131,7 @@ function CartaoScript({
 }: {
   titulo: string;
   descricao: string;
-  icone: string;
+  icone: NomeIcone;
   aviso?: React.ReactNode;
   children: React.ReactNode;
 }) {
@@ -142,7 +143,7 @@ function CartaoScript({
       )}
     >
       <div style={sx("display:flex;gap:10px;align-items:flex-start")}>
-        <span aria-hidden style={sx("font-size:19px;line-height:1.1")}>{icone}</span>
+        <Icone nome={icone} tamanho={20} cor="marca" />
         <div style={sx("min-width:0;flex:1")}>
           <div style={sx("font-size:14px;font-weight:600")}>{titulo}</div>
           <div className="text-muted" style={sx("font-size:12.5px;line-height:1.5;margin-top:2px")}>
@@ -188,7 +189,7 @@ function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
               "background:color-mix(in srgb, #f59e0b 12%, transparent);border:1px solid color-mix(in srgb, #f59e0b 45%, transparent)",
           )}
         >
-          <span aria-hidden style={sx("font-size:15px;line-height:1.2")}>⚠️</span>
+          <Icone nome="aviso" tamanho={16} cor="aviso" />
           <div style={sx("font-size:13px;line-height:1.55")}>
             <strong>Esta área ainda está no script antigo.</strong> Nenhuma visita chegou
             marcada com ela até agora.
@@ -201,7 +202,7 @@ function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
       )}
 
       <CartaoScript
-        icone="🔗"
+        icone="link"
         titulo="Rastreamento de visitas"
         descricao="Identifica de qual anúncio cada visitante veio e leva essa informação até o checkout. É o que faz suas vendas aparecerem ligadas à campanha certa."
         aviso={
@@ -230,7 +231,7 @@ function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
           rastreamento até lá, para a visita não perder a origem do anúncio no
           caminho. O texto anterior prometia o redirecionamento e estava errado. */}
       <CartaoScript
-        icone="↩️"
+        icone="voltar"
         titulo="Rastreamento da página de back redirect"
         descricao="Se você usa uma página de back redirect, instale este script nela também. Sem ele, quem passa por ali perde a origem do anúncio e a venda deixa de ser atribuída à campanha."
       >
@@ -248,7 +249,7 @@ function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
         onClose={() => setGaveta(null)}
       >
         <div style={sx("display:flex;gap:10px;align-items:flex-start")}>
-          <span aria-hidden style={sx("font-size:15px")}>📍</span>
+          <Icone nome="local" tamanho={16} cor="marca" />
           <div style={sx("font-size:13px;line-height:1.55")}>
             <strong>Onde colar:</strong> no seu site, no campo de código do cabeçalho — o que
             costuma se chamar “Header” ou “antes de <code>&lt;/head&gt;</code>”.

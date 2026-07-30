@@ -20,6 +20,7 @@ import { brl, palavra } from "@/lib/format";
 import { getPendenciasDasAreas, type PendenciasDTO } from "@/lib/actions/diagnostics";
 import { CONFIG } from "@/lib/explicacoes";
 import { sx } from "@/lib/sx";
+import { Icone } from "../ui/Icone";
 import { ExcluirAreaDialog } from "./areas/ExcluirAreaDialog";
 import { Drawer } from "../ui/Drawer";
 import { InfoTip, type ConteudoInfo } from "../ui/InfoTip";
@@ -578,7 +579,7 @@ function AreaDrawer({
               "background:var(--color-bg);border:1px solid var(--color-divider)",
           )}
         >
-          <span aria-hidden style={sx("font-size:15px;line-height:1.2")}>🧭</span>
+          <Icone nome="bussola" tamanho={17} cor="marca" />
           <div style={sx("font-size:13px;line-height:1.6")}>
             <strong>A área nasce vazia — e é assim mesmo.</strong>
             <div className="text-muted" style={sx("margin-top:5px")}>
