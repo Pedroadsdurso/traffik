@@ -14,6 +14,7 @@
     "restore": "node scripts/restore-db.mjs",
     "db:onde": "node scripts/onde-estou.mjs",
     "test:areas": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-atribuicao-areas.mjs",
+    "test:telefone": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-telefone.mjs",
     "test:ip": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-ip.mjs",
     "test:financeiro": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-financeiro.mjs",
     "test:periodo": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-periodo.mjs",

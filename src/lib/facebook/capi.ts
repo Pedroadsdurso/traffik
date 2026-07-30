@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { GRAPH_URL } from "@/lib/facebook/graph";
+import { normalizarTelefoneE164 } from "@/lib/facebook/telefone";
 
 /** Normaliza + faz hash SHA-256 (exigido pela Conversions API para PII). */
 function hash(value: string | null | undefined): string | undefined {
@@ -48,7 +49,10 @@ export function sendPurchaseEvent(input: PurchaseEventInput): Promise<{ ok: bool
 export async function sendServerEvent(input: ServerEventInput): Promise<{ ok: boolean; error?: string }> {
   const userData: Record<string, unknown> = {};
   const em = hash(input.email);
-  const ph = hash(input.phone?.replace(/\D/g, ""));
+  // ⚠️ E.164 ANTES do hash. `replace(/\D/g,"")` só tirava a pontuação e deixava
+  // o número sem DDI — o hash resultante não casava com o da Meta, e o telefone
+  // virava um sinal de correspondência perdido em toda venda.
+  const ph = hash(normalizarTelefoneE164(input.phone, input.country));
   const country = hash(input.country);
   if (em) userData.em = [em];
   if (ph) userData.ph = [ph];

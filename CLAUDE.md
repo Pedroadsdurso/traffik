@@ -3303,12 +3303,92 @@ Taxas ganhou dois cards para cadastrá-los.
 sobre a própria forma de pagamento, desconto ausente valendo zero **e** denunciado,
 ROI `null` com custo zero (não `0`), piso de −1,00x, valor fixo, e as 6 regras de cor.
 
+## 🌐 IP do visitante e `PROXIES_CONFIAVEIS` (30/07/2026)
+
+`src/lib/geo/clientIp.ts` é a **única** função que decide o IP do visitante.
+Havia **três** cópias (`/api/track/click`, `/api/pixel/event`,
+`webhook/ingestSale`), todas com `x-forwarded-for.split(",")[0]`.
+
+> ### 🔴 `split(",")[0]` é confiar no CLIENTE
+> `X-Forwarded-For` é um header comum: qualquer um manda
+> `X-Forwarded-For: 8.8.8.8`. O proxy **acrescenta** o IP real ao **FIM** da
+> cadeia — o começo é o que o cliente inventou.
+>
+> ```
+> X-Forwarded-For: <mentira>, <real>, <proxy1>, <proxy2>
+>                   ↑ nunca               ↑ N proxies nossos
+> ```
+>
+> Conta-se da **direita**, pulando `PROXIES_CONFIAVEIS`.
+>
+> ⚠️ E numa VPS atrás de nginx **sem** XFF, o IP visto é `127.0.0.1` — todo
+> visitante viraria "não identificado", e o sintoma só apareceria depois da
+> migração, com tráfego real já perdido.
+
+### Qual valor usar
+
+| Ambiente | `PROXIES_CONFIAVEIS` |
+|---|---|
+| Vercel | **1** (a borda acrescenta um salto) |
+| VPS + nginx/Caddy | **1** (com `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for`) |
+| Cloudflare + nginx | **2** — mas o `cf-connecting-ip` já resolve sozinho |
+| Sem proxy nenhum | **0** |
+
+**Não deduza: use `GET /api/diagnostico/ip`** (exige sessão). Ele mostra o que
+cada valor produziria com os headers daquela requisição; a linha cujo IP for o
+seu é a configuração certa.
+
+> ⚠️ A rota **não adivinha sozinha**, de propósito. A heurística óbvia — contar
+> IPs privados no fim da cadeia — funciona na VPS e **falha na Vercel**, onde a
+> borda tem IP público. Palpite que acerta num ambiente e erra no outro é pior
+> que nenhum.
+>
+> ⚠️ **Errar para MAIS aceita IP forjado. Errar para MENOS grava o IP do
+> proxy** e todo visitante vira o mesmo endereço.
+
+**`npm run test:ip` — 27 asserções**: Vercel, VPS+nginx (XFF e X-Real-IP),
+Cloudflare+nginx, conexão direta, tentativas de forjar, IPv4 com porta, IPv6 com
+colchetes, CGNAT, `unknown`, e `PROXIES_CONFIAVEIS=2`.
+
+## 📞 Telefone em E.164 antes do hash da CAPI
+
+`capi.ts` fazia `phone.replace(/\D/g, "")` — tirava a pontuação e **deixava o
+número sem DDI**. `(11) 98765-4321` virava `11987654321`, enquanto a Meta espera
+`5511987654321`. O SHA-256 dos dois é diferente, então **o telefone nunca casava
+com ninguém**: um sinal de correspondência perdido em toda venda.
+
+Não é privacidade — é **qualidade de match**, que alimenta otimização de campanha
+e público semelhante.
+
+`lib/facebook/telefone.ts` desambigua por COMPRIMENTO, porque no Brasil o DDI
+(`55`) colide com um DDD válido (55, Santa Maria/RS):
+
+| Dígitos | Leitura |
+|---|---|
+| 10 | DDD + fixo → prefixa `55` |
+| 11 | DDD + celular → prefixa `55` |
+| 12–13 começando em 55 | já tem DDI |
+
+⚠️ `55987654321` é **DDD 55 + celular**, não DDI — número nacional brasileiro tem
+no mínimo 10 dígitos.
+
+⚠️ **NÃO validado contra payload real da Kirvano**: o banco de dev não tem
+`WebhookLog` nem `Sale.buyerPhone`. Os formatos vêm da especificação. **Ao
+receber a primeira venda real com telefone, confira e acrescente ao teste.**
+
+**O que a CAPI envia hoje** (auditado): `email`, `phone` e `country` com
+**SHA-256** ✅; `client_ip_address` e `client_user_agent` em texto claro —
+**exigência da Meta**, que recusa esses dois hasheados. Nome do comprador **não
+é enviado**.
+
 ### Comandos
 
 ```bash
 npm run test:areas       # 26 asserções, atribuição por área (backup de produção)
 npm run test:periodo     # 33 asserções, janelas de período (puro, TZ=UTC)
 npm run test:financeiro  # 33 asserções, líquido/lucro/ROI e cores (puro)
+npm run test:ip          # 27 asserções, IP atrás de proxy (Vercel, VPS, Cloudflare)
+npm run test:telefone    # 25 asserções, E.164 antes do hash da CAPI
 npm run db:onde          # em qual banco o .env aponta
 npm run script:onde      # onde falta reinstalar o script de UTM
 npm run backup -- --url '<connection string>'   # SEMPRE com --url
