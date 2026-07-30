@@ -3417,8 +3417,31 @@ comprimento.
   real, em vez de deduzir.
 - Pasta `lib/geo/` criada, pronta para receber a base.
 
+### ✅ Pronto (continuação)
+- **`npm run geo:atualizar`** → `scripts/gen-ip-country.mjs` baixa o
+  `user-country-ipv4.csv` (**PDDL-1.0**, sem conta) e gera
+  `lib/geo/ipCountryData.ts`: **290.457 faixas · 251 países · 1,4 MB binários**
+  em base64. **COMMITADO**, como `worldPaths.ts` e `public/*.js`.
+- **`lib/geo/pais.ts`** — `resolverPais(header, ip)`. Busca binária, ~19
+  comparações, sem I/O e sem rede.
+- **`npm run test:pais`** — 30 asserções com IPs reais (US, AU, BR).
+
+> ⚠️ **Cobertura CONTÍNUA**: os buracos do espaço IPv4 (blocos reservados) são
+> entradas explícitas apontando para "desconhecido". Por isso o fim de uma faixa
+> é o início da próxima e bastam **5 bytes** por entrada, em vez de 9. Sem isso,
+> um IP num bloco reservado herdaria o país da faixa anterior — pior que
+> responder "não identificado".
+>
+> ⚠️ **IPv4 apenas.** IPv6 devolve `null`, tratado como não identificado, nunca
+> como um país errado.
+>
+> ⚠️ **Atualização mensal**: rodar `npm run geo:atualizar`, conferir o resumo
+> (nº de faixas e países) e commitar a saída.
+
 ### ⏳ Falta, NESTA ORDEM
-1. Gerador da base **`user-country`** (`ip-location-db`, **PDDL-1.0**, sem conta).
+1. ✅ ~~Gerador da base~~ — **mas a base ainda NÃO é consultada por ninguém.**
+   Falta chamar `resolverPais()` no `/api/track/click` e no webhook, e gravar em
+   `Click.country` / `Sale.country`. (`ip-location-db`, **PDDL-1.0**, sem conta).
    `user-country-ipv4.csv`, formato `start_ip,end_ip,país`, **sem cabeçalho**.
    Converter em array binário ordenado (~1,2 MB) e **commitar**, como
    `worldPaths.ts` e `public/*.js` já fazem. Busca binária em memória.
@@ -3457,6 +3480,8 @@ deixou de usar WHOIS de RIR porque as AUPs proíbem mapeamento geográfico.
 npm run test:areas       # 26 asserções, atribuição por área (backup de produção)
 npm run test:periodo     # 33 asserções, janelas de período (puro, TZ=UTC)
 npm run test:financeiro  # 33 asserções, líquido/lucro/ROI e cores (puro)
+npm run test:pais        # 30 asserções, IP -> país pela base local
+npm run geo:atualizar    # regenera a base (mensal) — commitar a saída
 npm run test:ip          # 27 asserções, IP atrás de proxy (Vercel, VPS, Cloudflare)
 npm run test:telefone    # 25 asserções, E.164 antes do hash da CAPI
 npm run db:onde          # em qual banco o .env aponta
