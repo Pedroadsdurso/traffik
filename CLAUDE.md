@@ -2848,6 +2848,101 @@ o seletor da sidebar já mostra a área ativa em toda tela.
   schema sem uso** — só saem depois que a produção rodar este código (dois
   deploys).
 
+## 📋 FILA DE TRABALHO PENDENTE
+
+Para referência direta: *"vamos para o item 3d"*. Ordem de prioridade definida
+pelo usuário em 30/07/2026.
+
+> ⚠️ **Os itens 3b e 3c foram VERIFICADOS no código e já estão feitos** — a fila
+> original vinha de um levantamento antigo. Ver as notas em cada um. Confira
+> antes de executar qualquer item desta lista: esta fila também envelhece.
+
+### 1. CAKTO + arquitetura universal de gateways — **PRÓXIMO**
+
+Segundo gateway, com a camada de parsers que suporta muitos outros depois.
+**Destrava o item 2.**
+
+> ### 🔴 Restrição que vale desde já
+> **O reprocessamento PRECISA preservar `country`/`countrySource` quando já não
+> são nulos.** `ingestSale` recalcula `paisDaVenda` a cada ingestão e a 2ª fonte
+> é o IP do payload — reprocessar com o IP removido (item 2) faria o país
+> recalculado **piorar**, caindo para o país do clique ou para o texto cru.
+>
+> Sem essa regra, a primeira correção de parser que rodar degrada
+> geolocalização que já estava certa.
+
+Hoje só a **Kirvano** tem parser dedicado (`parseKirvano.ts`), mais o
+`normalizeSale` genérico. Ver "REQUISITO DE TODA INTEGRAÇÃO DE GATEWAY NOVA" —
+a pergunta obrigatória é **se o gateway manda o IP do comprador no payload**.
+
+### 2. FASE A — limpeza do IP nos payloads — **ADIADA**
+
+**Pré-condição: a arquitetura de parsers do item 1 estar estável**, e não haver
+mais nada a reprocessar. O payload cru é a única fonte para refazer uma venda
+com um parser corrigido.
+
+**Versão preferida: remover só o campo de IP**, preservando o resto. Substituir
+o valor (`"ip": "[ip removido]"`), **não apagar a chave** — apagá-la muda a forma
+do payload e faz depurar contra um formato que nunca chegou. Detalhes completos
+na seção "🔐 Passo 7".
+
+### 3. FILA DE UX — nunca executada, ~5 sessões
+
+**(a) Microcópia** — textos com termo técnico ou plural entre parênteses.
+
+> ⚠️ **A lista de ~52 reescritas NÃO existe no repositório.** Procurei: o que
+> está documentado são os ~30 textos **já reescritos** (grupos 1 e 2) e os
+> grupos 3 e 4, que viraram tooltips em `lib/explicacoes.ts`. **O levantamento
+> precisa ser refeito**, não recuperado.
+>
+> Ao refazer: `lib/explicacoes.ts` é mais completo do que parece — confira antes
+> de "adicionar tooltip". E vale a regra permanente: **simplifique jargão de
+> PROGRAMAÇÃO, nunca de TRÁFEGO.** ROAS, CPA, CBO, pixel e gateway são o
+> vocabulário nativo do usuário.
+
+**(b) Scripts e snippets em gaveta** — ✅ **JÁ FEITO.** Verificado: `UtmsView`,
+`PixelView` e `WebhooksView` usam `Drawer`/`CampoCopiavel`. A URL do webhook
+visível já é a exceção prevista.
+
+**(c) Padronização de controles** — ✅ **JÁ FEITO.** Verificado no código:
+
+| | Alegado na fila | Real |
+|---|---|---|
+| `<select>` nativos | ~22 em 8 arquivos | **0**, fora das 2 exceções documentadas (mês/ano do `DateRangePicker`, `test-checkout`) |
+| Checkboxes nativos | 7 | **0** (a única ocorrência é um comentário) |
+| Ícones `0 0 256 256` | dois sistemas | **0** — `Icon.tsx` foi deletado; a única ocorrência é um comentário histórico |
+
+**(d) PROMPT J — responsividade em duas dimensões** (viewport e container).
+Inclui os dois casos confirmados:
+- Rodapé do funil — ✅ **resolvido** (`min-height:0`; a causa é genérica, ver a
+  seção própria)
+- ⏳ **Varredura de elementos condicionais** — semear dados que ativem **cada**
+  caminho (estados de erro, avisos, rodapés, badges, chips) e conferir **cada um
+  na tela**. A auditoria feita deu "0 de 23", mas só prova que não há transbordo
+  **naquele estado de dados**.
+
+**(e) Espaço mal aproveitado nas abas** — Webhooks, UTMs, Áreas, Regras.
+
+> ⚠️ Webhooks e UTMs foram refeitas em 30/07/2026 (ver "Aproveitamento do espaço
+> nas 4 telas"). **Confira o estado atual antes de reabrir** — o que sobra
+> provavelmente é Áreas e Regras.
+
+**(f) Camada didática** — estados vazios que ensinam, indicador de progresso de
+configuração, tooltips ⓘ nas métricas.
+
+### 4. RAMOS NUNCA EXERCIDOS — mapeado, sem ação
+
+`cities`, `regions` e `country_groups` em `paisesDaSegmentacao` (`sync.ts`).
+Cobertos por asserção e **nunca rodaram contra resposta real da Graph API** — a
+sonda de 30/07/2026 mostrou 12 conjuntos, todos pelo caminho simples
+(`countries`), zero dos outros três.
+
+Aparecem quando o usuário criar campanha segmentada por cidade/região, ou usar
+grupo de países. **`country_groups` é o mais arriscado**: não é expandido de
+propósito, então uma campanha "Europa" produz lista vazia e simplesmente não
+desempata — comportamento correto, mas silencioso.
+
+
 ## ⛔ PROCEDIMENTO OBRIGATÓRIO: passar no build não prova que está EM USO
 
 **Três casos na mesma sessão (30/07/2026), todos "entregues" e todos inertes:**
@@ -2910,7 +3005,11 @@ Tem **migration**: `migrate deploy` → `push`, nessa ordem (sem script no meio)
 vier vazio para todos, o desempate fica **inerte em silêncio** — o mesmo estado
 em que a base de países ficou antes do passo 1.
 
-**A seguir, nesta ordem:**
+**A fila completa está em "📋 FILA DE TRABALHO PENDENTE"** — referência por
+item (*"vamos para o 3d"*). O próximo é o **item 1: Cakto + arquitetura
+universal de gateways**.
+
+**Concluído nesta sessão, nesta ordem:**
 1. Aguardar o sync e rodar **`npm run geo:sonda`** — obrigatória, prova se o
    desempate está ativo ou inerte.
 2. **Fase B** do passo 7: purga progressiva do `Click.ip` (7 dias) + retenção do
