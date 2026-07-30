@@ -2877,8 +2877,17 @@ Tem **migration**: `migrate deploy` → `push`, nessa ordem (sem script no meio)
 vier vazio para todos, o desempate fica **inerte em silêncio** — o mesmo estado
 em que a base de países ficou antes do passo 1.
 
-**Próxima sessão: passo 7** (hash do IP + limpeza dos `rawPayload`) — agora
-DESBLOQUEADO, e irreversível. Ou a varredura de elementos condicionais.
+**A seguir, nesta ordem:**
+1. Aguardar o sync e rodar **`npm run geo:sonda`** — obrigatória, prova se o
+   desempate está ativo ou inerte.
+2. **Fase B** do passo 7: purga progressiva do `Click.ip` (7 dias) + retenção do
+   `WebhookLog`. Aprovada, nada escrito ainda.
+3. **Fase A ADIADA** — limpar o IP dos payloads só depois da arquitetura de
+   parsers estar estável, e na versão que remove **só o IP**.
+
+⚠️ **O plano original do passo 7 estava errado** e a investigação salvou: hashear
+o `Click.ip` quebraria o `client_ip_address` da CAPI **em silêncio**, degradando
+a otimização de campanha com dinheiro real. Ver a seção "🔐 Passo 7".
 
 Fora isso: **faxina de código morto** (lista em "Pendências abertas") e o
 **import/export do Bloco 8**, que ficou de fora de propósito. O lint está em
@@ -3601,7 +3610,8 @@ ALLOW_PROD_WRITES=EU_QUERO_MESMO_ESCREVER_EM_PRODUCAO \
 | 4 | Rodar o backfill de novo (recupera as vendas IPv6) | ✅ **aplicado — 237 cliques · 15 vendas** |
 | 5 | Marcação de bot (`Click.bot`) | ✅ **feito — tem MIGRATION, ver ordem de deploy** |
 | 6 | Correção do navegador embutido de app | ✅ **feito — tem MIGRATION** |
-| 7 | **Hash do IP + limpeza dos `rawPayload`** | 🔓 **DESBLOQUEADO** — ver o checklist |
+| 7B | **Purga progressiva do `Click.ip`** + retenção do `WebhookLog` | 🔓 aprovado, aguardando a sonda |
+| 7A | **Limpeza do IP nos payloads** | ⏸️ **ADIADO** — depende da arquitetura de parsers |
 
 > ### 🔴🔴 O HASH DO IP É O ÚLTIMO PASSO, E DEPENDE DE TODOS OS ANTERIORES
 >
@@ -3900,6 +3910,166 @@ O bloco de 208px mostra que Funil e Vendas por país estourariam **se** o mínim
 do grid baixasse. Se o Prompt J permitir blocos menores, estes dois são os
 primeiros a revisar — e a regra a aplicar é a mesma: **todo item de flex que
 precise ceder espaço leva `min-height:0`**.
+
+## 🔐 Passo 7 — anonimização do IP: DUAS FASES, e a ordem inverteu
+
+Decidido em 30/07/2026, **nada implementado ainda**. O plano original ("hashear o
+IP e limpar os payloads") não sobreviveu à investigação: hashear o `Click.ip`
+quebraria a CAPI, e limpar os payloads mataria o reprocessamento de vendas.
+
+### 🔴 O achado que mudou o plano: `Click.ip` alimenta a CAPI EM TEXTO CLARO
+
+`dispatchPixel.ts` passa `sale.click?.ip` para `capi.ts`, que faz
+`userData.client_ip_address = input.clientIp` — **sem hash, de propósito**: a
+Meta **recusa** `client_ip_address` e `client_user_agent` hasheados. São os dois
+únicos campos que vão em claro.
+
+Hashear o `Click.ip` faria toda venda enviar um hash onde a Meta espera um IP.
+Ela **não rejeita a chamada** — degrada em silêncio a qualidade de
+correspondência de todo `Purchase`, que é o sinal que alimenta a otimização das
+campanhas. **Dinheiro real, sem erro, sem log.**
+
+> ⚠️ **São TRÊS consumidores de `Click.ip`, não um.** Um levantamento que só
+> olhasse o `matchClick` teria concluído que o hash era seguro.
+>
+> | Consumidor | Uso | Sobrevive ao hash? |
+> |---|---|---|
+> | `matchClick` | igualdade no `where` | ✅ se os dois lados forem hasheados |
+> | `dispatchPixel` → CAPI | valor literal enviado à Meta | 🔴 **não** |
+> | `/api/pixel/event` → CAPI | usa `ipDaRequisicao(req)`, não o banco | ✅ não afetado |
+
+### A decisão: purga PROGRESSIVA (opção 3 de 3)
+
+Descartadas: **(1)** não hashear nada (privacidade fica parcial) e **(2)** hashear
+e aceitar perder a CAPI.
+
+> **Contra a (2), o argumento do usuário:** trocaria um ganho invisível
+> (privacidade que ninguém audita) por uma perda invisível (otimização
+> degradando sem erro). Duas coisas que ninguém mede, uma delas custando
+> dinheiro.
+>
+> **A favor da (3):** os dois usos do IP têm **PRAZO**. Passado ele, o IP em
+> claro não serve para nada — só fica guardado.
+
+### FASE B — purga progressiva (aprovada, a implementar)
+
+**Retenção: 7 dias.** Três prazos se somam e o maior manda:
+
+| Prazo | Duração |
+|---|---|
+| Match por IP (`IP_WINDOW_MS`) | 12 h |
+| Atribuição da Meta | **7 dias por clique** (padrão) + 1 dia por visualização |
+| IP residencial continuar sendo da mesma pessoa | dias (rotação de IP dinâmico) |
+
+> ⚠️ A janela da Meta é **configurável por conjunto** (`attribution_spec`), e as
+> janelas de 28 dias foram removidas em 2021. **Melhoria futura registrada:**
+> derivar a retenção da maior janela configurada nos conjuntos, em vez de fixar
+> 7 dias — o campo vem do mesmo `GET /adsets` que já fazemos. Decisão do
+> usuário: **não vale o trabalho antes de haver volume.**
+
+**Cron: `/api/cron/manutencao`, diário e novo.** Não pendura nos três existentes
+(`sync-facebook`, `run-rules`, `reports`) — eles têm ritmo e modo de falha
+próprios. E aproveita para fechar a dívida da retenção do `WebhookLog`.
+
+**Duas guardas, dois propósitos:**
+
+| Guarda | Onde | Para quê |
+|---|---|---|
+| Prefixo no valor (padrão do `trkenc.v1.`) | script de purga | **idempotência** — não re-hashear |
+| `ehIpValido()` | `capi.ts` | **a CAPI só envia o que PARECE um IP** |
+
+> ⚠️ O `ehIpValido` é a guarda que importa: um SHA-256 tem 64 hexadecimais e
+> nunca passa nela. Protege contra o hash **e** contra qualquer outro lixo que
+> apareça no campo.
+
+**Venda que chega depois da purga do clique dela:** o match por IP não é
+afetado (janela de 12 h × retenção de 7 dias — nem é exercido). O match direto
+por `click_id` **não tem limite de tempo**, então essa venda perde o
+`client_ip_address` na CAPI.
+
+> ⚠️ **Isso é o comportamento CORRETO, não um custo aceito.** Um IP de 7+ dias
+> provavelmente já não é daquela pessoa. Enviá-lo não seria sinal fraco, seria
+> sinal **errado**, apontando para outro assinante. **Omitir é melhor que mentir.**
+
+**Retenção do `WebhookLog` — diferenciada:**
+
+| Status | Retenção | Por quê |
+|---|---|---|
+| `PROCESSADO` | 30 dias | o payload **já está duplicado** em `Sale.rawPayload` |
+| `REJEITADO` · `ERRO` · `RECEBIDO` órfão | **90 dias** | é a **única cópia**, e são os que se depura |
+
+Log de sucesso é redundante; log de falha é o produto. E as falhas sem dono
+(chave inválida, token desconhecido) **nem aparecem na interface** — depurar
+"meu gateway manda e não chega" com o suporte do gateway leva semanas.
+`RECEBIDO` que nunca fechou = processamento estourou no meio; tratado como
+`ERRO`.
+
+**Teste de regressão do match — 4 casos, todos exigidos:**
+
+1. Clique com IP conhecido → venda com o mesmo IP, **sem `click_id`** →
+   `matchMethod === "ip"` e o `clickId` certo
+2. IP diferente → `matchMethod === "none"`
+3. **Clique já purgado (IP em hash)** → venda com IP em claro → **o match ainda
+   casa**, porque os dois lados passam pela mesma função
+4. E o par do 3: a CAPI daquela venda **omite** `client_ip_address`
+
+> ⚠️ **O caso 2 é o que dá valor ao teste.** Sem ele, um `where` quebrado que
+> casasse com qualquer clique passaria despercebido.
+
+### FASE A — limpeza do IP nos payloads: ⏸️ ADIADA
+
+> ### ⛔ PRÉ-CONDIÇÃO: a arquitetura de parsers de gateway estar ESTÁVEL
+> O usuário está integrando a **Cakto** e depois muitos outros gateways, com uma
+> arquitetura universal de parsers construída em cima dos payloads guardados.
+>
+> **Se um parser tiver bug e for preciso reprocessar as vendas com a correção, o
+> payload cru é a ÚNICA fonte.** Limpar antes disso queima essa ponte.
+>
+> Só depois de a arquitetura estar estável e não haver mais nada a reprocessar.
+
+**E na versão cirúrgica, não na total.** Remover **apenas o campo de IP** de
+dentro do payload atende a privacidade sem perder o reprocessamento. Duas
+escolhas de projeto separam funcionar de sabotar:
+
+- **Substituir o valor, não apagar a chave** (`"ip": "[ip removido]"`). Um parser
+  testado contra payload histórico pode assumir que a chave existe; apagá-la
+  muda a **forma** do payload e faz depurar contra um formato que nunca chegou.
+- **Achar por chave conhecida + varredura por valor.** A lista de chaves sai do
+  `normalizeSale` (fonte única), mas gateway novo usa nome novo e o IP escaparia
+  em silêncio. A varredura pega o desconhecido; a simulação **lista as chaves
+  onde encontrou**, e é assim que o nome que a Cakto usa entra na lista.
+
+> ⚠️ **A varredura por valor tem de ser só de IPv4.** O `ehIpValido` aceita IPv6
+> por uma regra frouxa (`[0-9a-f:]+` com um `::`), e **`"10:30"` passa nela** —
+> um horário no payload viraria "IP removido".
+
+### 🔴 Restrição para a arquitetura de parsers — vale JÁ, não depois
+
+`ingestSale` recalcula `paisDaVenda` a cada ingestão, e a **2ª fonte é o IP do
+payload**. Reprocessar uma venda com o IP removido faria o país recalculado
+**piorar** — cairia para o país do clique ou para o texto cru.
+
+**O reprocessamento PRECISA preservar `country`/`countrySource` quando já não
+são nulos.** Isso independe da Fase A: sem essa regra, um reprocessamento
+"inofensivo" degrada geolocalização já resolvida.
+
+### Checklist antes de autorizar qualquer escrita
+
+| | Item | Estado |
+|---|---|---|
+| ✅ | País resolvido nas rotas | feito |
+| ✅ | Backfill do país aplicado | 237 cliques · 15 vendas |
+| ✅ | IPv6 na base | feito |
+| ✅ | Bots marcados | 39 de 237 |
+| ⏳ | **Desempate comprovado pela `geo:sonda`** | a fazer |
+| ⏳ | Backup imediatamente antes | `npm run backup -- --url '<conn>'` |
+| ⏳ | Simulação antes do `--aplicar` | com os números conferíveis abaixo |
+
+**A simulação tem de mostrar:** quantos `Click.ip` seriam hasheados (e quantos
+já estão), quantos `Sale.rawPayload` e `WebhookLog.payloadRaw` contêm IP e **em
+quais chaves**, e a **contagem de `Click.country`/`Sale.country` não-nulos antes
+e depois — que tem de ser idêntica.** País já resolvido não pode ser tocado.
+
 
 ## 🔴 ACHADO: o navegador embutido do app da Meta falseia a geolocalização
 
