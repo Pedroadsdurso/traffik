@@ -2848,6 +2848,103 @@ o seletor da sidebar já mostra a área ativa em toda tela.
   schema sem uso** — só saem depois que a produção rodar este código (dois
   deploys).
 
+## 🔌 ARQUITETURA UNIVERSAL DE GATEWAYS (30/07/2026 — etapa 1 de 8)
+
+`src/lib/gateways/` é a camada por onde passa **toda** venda que entra na
+ferramenta, venha de qual gateway vier.
+
+```
+lib/gateways/
+  contrato.ts        VendaNormalizada, Capacidades, GatewayDef  ← LEIA PRIMEIRO
+  campos.ts          pick/toStr/toNumber/comoLista/fbclidDoFbc
+  registro.ts        REGISTRO — um gateway = uma entrada
+  autenticar.ts      estratégias plugáveis (segredo, HMAC)
+  receber.ts         receptor único: log → auth → parse → ingestão
+  parsers/{kirvano,generico}.ts
+```
+
+### ⛔ Como adicionar um gateway novo — o roteiro completo
+
+1. **`parsers/<nome>.ts`** — uma função `parse(payload) → { vendas: [] }`.
+2. **Uma entrada em `REGISTRO`** — auth, capacidades, URL, campos, instalação.
+3. **`public/logos/<nome>.webp`.**
+4. **Um payload de exemplo** em `exemplos`, para o testador.
+
+**Nada mais.** Nem rota, nem `ingestSale`, nem métrica, nem tela. Se um gateway
+novo exigir mexer em qualquer um desses, a arquitetura regrediu — o critério não
+é "o código está bonito", é **quantos arquivos eu toco**.
+
+> ⚠️ **NÃO crie rota para gateway novo.** `/api/webhook/sale/{token}` é o
+> receptor universal: o token identifica o webhook, o webhook diz a plataforma, o
+> registro diz o resto. A rota `/api/webhook/kirvano?id=` existe **só** porque
+> aquela URL já está colada no painel do usuário — é alias de 3 linhas, e é a
+> única exceção que jamais deve ganhar companhia.
+
+### As 3 regras do contrato — as três já custaram caro em outro lugar
+
+| | Regra | O que ela evita |
+|---|---|---|
+| 1 | **Ausência é `null`, nunca `0`** | `taxaGateway: 0` afirma "não cobrou"; `null` diz "não sabemos" e cai na taxa cadastrada. Colapsar as duas faz o líquido aparecer maior que a realidade, plausível e falso |
+| 2 | **Reprocessar nunca degrada dado derivado** | `country`/`countrySource` e `clickId`/`matchMethod` só podem ser sobrescritos por fonte **igual ou mais forte**. Reprocessar com o IP já purgado pioraria o país já resolvido |
+| 3 | **`parse` devolve sempre uma LISTA** | order bump e upsell existem em quase todo gateway; quem assume "1 payload = 1 venda" quebra em silêncio, com faturamento certo e contagem inflada |
+
+> ⚠️ A **regra 2 está declarada no contrato mas ainda não implementada** — é a
+> etapa 2. Hoje o `ingestSale` tem uma versão parcial (`...(country ? {} : {})`)
+> que protege contra apagar com `null`, e **não** contra sobrescrever com fonte
+> mais fraca.
+
+### 🎛️ Capacidades são DADO, não `if`
+
+Gateways diferem no que entregam, e a diferença é declarada ao lado do parser:
+`ipDoComprador`, `fbc`, `fbp`, `utms`, `taxasCalculadas`, `comissoes`,
+`telefone`, `agrupaItens`, `reentregaEventos`.
+
+É o que permite a tela avisar **antes** — "este gateway não informa o endereço do
+comprador, então o país destas vendas é estimado" — em vez de o usuário descobrir
+olhando um mapa errado. Um `if (plataforma === "CAKTO")` na ingestão é exatamente
+o que faz o décimo gateway custar caro.
+
+> ⚠️ **As capacidades da Kirvano foram medidas nos 64 payloads REAIS**, não lidas
+> na documentação — e duas contrariaram a suposição: ela **manda `fee` e o bloco
+> `fiscal`** (36 de 46 eventos) e **manda `cookies.fbp`** (45 de 46). Os dois
+> estavam sendo descartados pelo parser. Ela **não** manda `fbc`.
+
+### Prova de paridade — `npm run test:gateways`
+
+`scripts/fixtures/parsers-esperado.json` congela a saída do código ANTIGO sobre
+**167 payloads reais de produção** (115 `WebhookLog` + 26 `Sale.rawPayload`). O
+teste compara a camada nova contra ele: 31 asserções, 0 falhas.
+
+> ⛔ **Nunca regenere o snapshot para "fazer o teste passar".** Ele existe para
+> recusar isso. `snapshot-parsers.mjs` exige `--aceitar` escrito no comando, pela
+> mesma razão do `ALLOW_PROD_WRITES`: atalho curto vira hábito.
+
+E `npm run test:receptor` prova que a camada está **sendo exercida**, não só
+compilando: 13 asserções em HTTP real contra o dev server (banco de DEV, limpeza
+por id no fim). Ver o PROCEDIMENTO OBRIGATÓRIO — `tsc`, `lint` e `build` passam
+com a coisa desligada.
+
+### ⏱️ Orçamento de 5 segundos
+
+A Cakto considera **falha de entrega** acima de 5 s. Medido: **~318 ms** aquecido
+no caminho de recusa (2 idas ao banco), ~700 ms no caminho completo.
+
+> ⚠️ A folga existe porque a CAPI do Facebook e as notificações rodam no
+> `after()` do Next 16. **Chamada HTTP nova no caminho síncrono** devolve dois
+> problemas de uma vez: estoura o orçamento do gateway e segura conexão do pool,
+> alongando a janela de disputa entre eventos concorrentes.
+
+### O que a etapa 1 **não** fez
+
+Etapas 2 a 8, na ordem acordada: precedência de fonte (2) · `pedidoId`+`itemTipo`
+e contagem por pedido (3) · `taxaGateway`+`coproducao` (4) · match por `fbc` e
+DDI só com país medido (5) · parser da Cakto + testador (6) · tela montada do
+registro (7) · esta documentação (8, feita agora).
+
+A `WebhooksView` ainda tem o array `GATEWAYS` local, duplicando o registro — sai
+na etapa 7. Enquanto isso, **o registro é a fonte de verdade do servidor** e o
+array só decide o que aparece no modal.
+
 ## 📋 FILA DE TRABALHO PENDENTE
 
 Para referência direta: *"vamos para o item 3d"*. Ordem de prioridade definida

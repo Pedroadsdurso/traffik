@@ -9,7 +9,7 @@ import { registrarCheckoutDoGateway } from "@/lib/webhook/checkoutEvent";
 import { dispatchSaleNotification } from "@/lib/webhook/dispatchNotification";
 import { dispatchPurchaseEvents } from "@/lib/webhook/dispatchPixel";
 import { matchClick, type ClickMatch } from "@/lib/webhook/matchClick";
-import type { NormalizedSale } from "@/lib/webhook/normalizeSale";
+import type { VendaNormalizada } from "@/lib/gateways/contrato";
 
 export interface IngestContext {
   userId: string;
@@ -25,32 +25,39 @@ export interface IngestResult {
 
 /**
  * Pipeline única de ingestão de venda, compartilhada por todos os canais de
- * entrada (webhook Kirvano, webhook genérico por token, API por chave):
- * casa o clique, faz upsert idempotente da venda por `externalId`, atualiza
- * os contadores do webhook e dispara Pixel/CAPI + notificação.
+ * entrada: casa o clique, faz upsert idempotente da venda por `externalId` e
+ * dispara Pixel/CAPI + notificação.
+ *
+ * ⚠️ Ela recebe **uma venda já normalizada** e não sabe de qual gateway veio —
+ * é o que garante que o décimo gateway não a faça mudar. Quem traduz payload em
+ * `VendaNormalizada` é o parser; quem orquestra é `lib/gateways/receber.ts`.
+ *
+ * ⚠️ O contador do webhook (`eventCount`/`lastEventAt`) saiu daqui para o
+ * receptor: com order bump um payload vira N vendas, e incrementar por venda
+ * faria "43 vendas recebidas" contar itens em vez de eventos recebidos.
  */
 export async function ingestSale(
   ctx: IngestContext,
-  data: NormalizedSale,
+  data: VendaNormalizada,
   rawPayload: unknown,
   fallbackIp: string | null,
 ): Promise<IngestResult> {
-  const match = await matchClick(ctx.userId, data.clickId, data.ip ?? fallbackIp);
+  const match = await matchClick(ctx.userId, data.clickId, data.ipDoComprador ?? fallbackIp);
   const { pais: country, fonte: countrySource } = paisDaVenda(data, match);
 
   const saleData = {
     userId: ctx.userId,
     webhookId: ctx.webhookId ?? null,
     externalId: data.externalId,
-    value: data.value,
-    currency: data.currency,
-    product: data.product,
-    productId: data.productId,
+    value: data.valor,
+    currency: data.moeda,
+    product: data.produto,
+    productId: data.produtoId,
     status: data.status,
-    paymentMethod: data.paymentMethod,
-    buyerEmail: data.buyerEmail,
-    buyerName: data.buyerName,
-    buyerPhone: data.buyerPhone,
+    paymentMethod: data.formaDePagamento,
+    buyerEmail: data.email,
+    buyerName: data.nome,
+    buyerPhone: data.telefone,
     country,
     countrySource,
     matchMethod: match.method,
@@ -63,13 +70,6 @@ export async function ingestSale(
     data.externalId != null
       ? await upsertMonotonico(ctx.userId, data.externalId, saleData, match, rawPayload, country)
       : await prisma.sale.create({ data: saleData, select: { id: true, status: true, matchMethod: true } });
-
-  if (ctx.webhookId) {
-    await prisma.webhook.update({
-      where: { id: ctx.webhookId },
-      data: { eventCount: { increment: 1 }, lastEventAt: new Date() },
-    });
-  }
 
   // Efeitos colaterais saem do caminho da resposta (`after` do Next 16): a CAPI
   // é uma chamada HTTP ao Facebook e estava sendo aguardada DENTRO do request,
@@ -112,16 +112,16 @@ export async function ingestSale(
  * | 3 | País do clique casado | o visitante falou direto conosco naquele momento |
  * | 4 | `country` do payload cru | último recurso: não casa no mapa, mas aparece no ranking em vez de sumir |
  */
-function paisDaVenda(data: NormalizedSale, match: ClickMatch): { pais: string | null; fonte: string | null } {
-  const doPayload = normalizarPais(data.country);
+function paisDaVenda(data: VendaNormalizada, match: ClickMatch): { pais: string | null; fonte: string | null } {
+  const doPayload = normalizarPais(data.pais);
   if (doPayload) return { pais: doPayload, fonte: "payload" };
-  const doIp = paisDoIp(data.ip);
+  const doIp = paisDoIp(data.ipDoComprador);
   if (doIp) return { pais: doIp, fonte: "ip" };
   const doClique = normalizarPais(match.country);
   if (doClique) return { pais: doClique, fonte: "clique" };
   // ⚠️ Texto livre do gateway ("Brasil"): não casa no mapa, mas aparece no
   // ranking em vez de sumir. A fonte diz que é fraco.
-  return { pais: data.country, fonte: data.country ? "payload_cru" : null };
+  return { pais: data.pais, fonte: data.pais ? "payload_cru" : null };
 }
 
 /**

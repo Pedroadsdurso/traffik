@@ -5,7 +5,7 @@ import { getAppUrl } from "@/lib/appUrl";
 import { getLastWorkspaceId } from "@/lib/actions/workspaces";
 import { escopoDeConfig } from "@/lib/areas/escopoConfig";
 import { prisma } from "@/lib/prisma";
-import type { WebhookPlatform } from "@/generated/prisma/enums";
+import { gatewayDoWebhook, gatewayValido, REGISTRO } from "@/lib/gateways/registro";
 
 export interface WebhookRowDTO {
   id: string;
@@ -19,19 +19,18 @@ export interface WebhookRowDTO {
   hasSecret: boolean;
 }
 
-const PLATFORMS: WebhookPlatform[] = ["KIRVANO", "HOTMART", "KIWIFY", "CUSTOM"];
-
-/** Monta a URL pública conforme a plataforma. */
-function webhookUrl(platform: WebhookPlatform, token: string): string {
-  const base = getAppUrl();
-  if (platform === "KIRVANO") return `${base}/api/webhook/kirvano?id=${token}`;
-  return `${base}/api/webhook/sale/${token}`;
-}
-
+/**
+ * A URL pública vem do REGISTRO, não de um `if` por plataforma.
+ *
+ * ⚠️ A Kirvano tem uma URL própria (`/api/webhook/kirvano?id=`) por motivo
+ * histórico: ela já está colada no painel do gateway e nenhum identificador já
+ * emitido pode mudar de significado. Gateway novo cai no caminho universal —
+ * e é o registro que sabe disso, não esta função.
+ */
 function toDTO(w: {
   id: string;
   name: string;
-  platform: WebhookPlatform;
+  platform: string;
   token: string;
   active: boolean;
   eventCount: number;
@@ -42,7 +41,7 @@ function toDTO(w: {
     name: w.name,
     platform: w.platform,
     token: w.token,
-    url: webhookUrl(w.platform, w.token),
+    url: gatewayDoWebhook(w.platform).urlDoWebhook(w.token, getAppUrl()),
     active: w.active,
     eventCount: w.eventCount,
     hasSecret: Boolean(w.secret),
@@ -88,16 +87,34 @@ export async function createWebhook(input: {
   // Nasce vinculado à área em que foi criado — é o que faz "a área é a
   // ferramenta inteira" valer também para o que se cadastra dentro dela.
   const escopo = await escopoDeConfig(userId, input.workspaceId ?? (await getLastWorkspaceId()));
-  const platform = (PLATFORMS.includes(input.platform as WebhookPlatform)
-    ? input.platform
-    : "CUSTOM") as WebhookPlatform;
-  const name =
-    input.name?.trim() ||
-    `Webhook ${platform.charAt(0) + platform.slice(1).toLowerCase()}`;
+  // ⛔ ESTA É A PORTA que impõe o domínio de `Webhook.platform`. Um id fora do
+  // registro cairia num gateway inexistente e a venda seria recusada — em
+  // silêncio, do ponto de vista de quem colou a URL no painel do gateway.
+  //
+  // ⚠️ Gateway `ativo: false` (Hotmart, Kiwify) tem entrada no registro para que
+  // linhas antigas continuem funcionando, mas NÃO pode ser criado: a tela mostra
+  // "em breve" e o servidor recusa, porque server action é endpoint público e o
+  // bloqueio da tela é conveniência.
+  const escolhido = input.platform?.toUpperCase() ?? "";
+  const platform = gatewayValido(escolhido) && REGISTRO[escolhido].ativo ? escolhido : "CUSTOM";
+  const name = input.name?.trim() || `Webhook ${REGISTRO[platform].nome}`;
   const secret = input.secret?.trim() || null;
 
   const created = await prisma.webhook.create({
-    data: { userId, platform, name, secret, workspaceId: escopo.areaId || null },
+    // ⚠️ O cast some quando `Webhook.platform` virar `String` (decisão aprovada,
+    // migration ainda não rodada). Hoje a coluna é um enum do Postgres, e é
+    // justamente essa restrição que faz cada gateway novo custar uma migration.
+    //
+    // Ele é seguro porque `platform` acabou de passar por `gatewayValido()`: o
+    // valor sempre existe no registro. É o único ponto do código que assume o
+    // enum — de propósito, para a troca ser de uma linha.
+    data: {
+      userId,
+      platform: platform as Parameters<typeof prisma.webhook.create>[0]["data"]["platform"],
+      name,
+      secret,
+      workspaceId: escopo.areaId || null,
+    },
   });
   return toDTO(created);
 }

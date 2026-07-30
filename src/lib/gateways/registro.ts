@@ -1,0 +1,195 @@
+import type { Capacidades, GatewayDef } from "./contrato";
+import { parseGenerico } from "./parsers/generico";
+import { parseKirvano } from "./parsers/kirvano";
+
+/**
+ * # O REGISTRO DE GATEWAYS — fonte única
+ *
+ * Tudo o que a Traffik sabe sobre um gateway está aqui: como autenticar, como
+ * ler o payload, o que ele consegue entregar, que URL o usuário cola no painel
+ * dele e o que a tela mostra.
+ *
+ * ## Como adicionar um gateway novo
+ *
+ * 1. `src/lib/gateways/parsers/<nome>.ts` — a função `parse`.
+ * 2. Uma entrada neste objeto.
+ * 3. `public/logos/<nome>.webp`.
+ * 4. Um payload de exemplo em `exemplos`, para o testador da aba Testes.
+ *
+ * **Nada mais.** Nem rota, nem `ingestSale`, nem métrica, nem tela. Se um
+ * gateway novo exigir mexer em qualquer um desses, a arquitetura regrediu — o
+ * critério não é "o código está bonito", é "quantos arquivos eu toco".
+ *
+ * ⚠️ `Webhook.platform` é uma String cujo domínio é ESTE objeto. Quem valida é
+ * `gatewayValido()`, chamado por `createWebhook` — ver a nota de portas de
+ * escrita no fim do arquivo.
+ */
+
+/** Capacidades de quem não declara nada: assumimos o mínimo. */
+const NADA: Capacidades = {
+  ipDoComprador: false,
+  fbc: false,
+  fbp: false,
+  utms: false,
+  taxasCalculadas: false,
+  comissoes: false,
+  telefone: "nenhum",
+  agrupaItens: false,
+  reentregaEventos: false,
+};
+
+export const REGISTRO: Record<string, GatewayDef> = {
+  // ─────────────────────────────── Kirvano ───────────────────────────────
+  KIRVANO: {
+    id: "KIRVANO",
+    nome: "Kirvano",
+    ativo: true,
+    // ⚠️ URL LEGADA, e ela não pode mudar. Já está colada no painel do gateway
+    // do usuário. Regra permanente do projeto: nenhum identificador já emitido
+    // muda de significado. Gateway novo usa o caminho universal (abaixo).
+    urlDoWebhook: (token, base) => `${base}/api/webhook/kirvano?id=${token}`,
+    auth: {
+      tipo: "segredo",
+      exigir: true,
+      geradoPorNos: false,
+      onde: [
+        { header: "security-token" },
+        { header: "x-security-token" },
+        { corpo: "token" },
+        { corpo: "security_token" },
+      ],
+    },
+    parse: parseKirvano,
+    capacidades: {
+      // ✅ Confirmado em 45 de 46 payloads reais de produção (30/07/2026).
+      ipDoComprador: true,
+      // Verificado nos 64 payloads: nenhum traz `fbc`. Traz `cookies.fbp`.
+      fbc: false,
+      fbp: true,
+      utms: true,
+      // ✅ Confirmado: `fee` e o bloco `fiscal` em 36 dos 46 eventos.
+      taxasCalculadas: true,
+      comissoes: true,
+      // Real: "5588982268006" (com DDI) e "+55 (33) 98875-6674" — ver telefone.ts.
+      telefone: "nacional",
+      agrupaItens: false,
+      // ✅ Observada em produção: dois `PIX_GENERATED` do mesmo pedido no mesmo dia.
+      reentregaEventos: true,
+    },
+    campos: [
+      { chave: "nome", rotulo: "Nome (opcional)", obrigatorio: false },
+      {
+        chave: "secret",
+        rotulo: "Token de segurança da Kirvano",
+        ajuda:
+          "Gere o token dentro do painel da Kirvano (você define o texto e escolhe os eventos). " +
+          "Nós conferimos cada venda com esse token.",
+        obrigatorio: true,
+      },
+    ],
+    instalacao: [
+      { titulo: "No painel da Kirvano, abra Webhooks", texto: "Crie um webhook novo e escolha os eventos de venda." },
+      { titulo: "Copie a URL abaixo", texto: "Cole no campo de endereço do webhook. Ela é única e identifica a sua conta." },
+      { titulo: "Copie o token que a Kirvano gerar", texto: "Cole aqui em cima. Sem ele, as vendas são recusadas." },
+    ],
+  },
+
+  // ─────────────────────────────── Custom ───────────────────────────────
+  CUSTOM: {
+    id: "CUSTOM",
+    nome: "Sistema próprio",
+    ativo: true,
+    urlDoWebhook: (token, base) => `${base}/api/webhook/sale/${token}`,
+    auth: {
+      tipo: "segredo",
+      // A própria URL é o segredo — quem envia é um sistema do usuário, sem
+      // painel onde cadastrar token. Se ele configurar um, passa a ser exigido.
+      exigir: false,
+      geradoPorNos: false,
+      onde: [
+        { header: "security-token" },
+        { header: "x-security-token" },
+        { corpo: "token" },
+        { corpo: "security_token" },
+      ],
+    },
+    parse: parseGenerico,
+    capacidades: { ...NADA, telefone: "nacional" },
+    campos: [
+      { chave: "nome", rotulo: "Nome (opcional)", obrigatorio: false },
+      {
+        chave: "secret",
+        rotulo: "Chave de segurança (opcional)",
+        ajuda: "Se preencher, exigiremos esta chave em cada venda enviada.",
+        obrigatorio: false,
+      },
+    ],
+    instalacao: [
+      { titulo: "Copie a URL abaixo", texto: "Envie as vendas do seu sistema para este endereço." },
+    ],
+  },
+
+  // ───────────── Cadastrados, sem parser dedicado (ver aviso) ─────────────
+  //
+  // ⚠️ Estão aqui porque `Webhook.platform` já aceita estes valores e podem
+  // EXISTIR linhas com eles no banco. Sem a entrada, um webhook antigo cairia
+  // num gateway inexistente e a venda seria recusada — em silêncio, do ponto de
+  // vista do usuário. Usam o parser genérico, que é o que a rota já fazia com
+  // eles hoje. `ativo: false` só impede criar novos.
+  HOTMART: {
+    id: "HOTMART",
+    nome: "Hotmart",
+    ativo: false,
+    urlDoWebhook: (token, base) => `${base}/api/webhook/sale/${token}`,
+    auth: { tipo: "segredo", exigir: false, geradoPorNos: false, onde: [{ header: "x-hotmart-hottok" }] },
+    parse: parseGenerico,
+    capacidades: NADA,
+    campos: [],
+    instalacao: [],
+  },
+  KIWIFY: {
+    id: "KIWIFY",
+    nome: "Kiwify",
+    ativo: false,
+    urlDoWebhook: (token, base) => `${base}/api/webhook/sale/${token}`,
+    auth: { tipo: "segredo", exigir: false, geradoPorNos: false, onde: [{ corpo: "signature" }] },
+    parse: parseGenerico,
+    capacidades: NADA,
+    campos: [],
+    instalacao: [],
+  },
+};
+
+/** Gateway pelo id, ou `null`. Nunca lança — id vem do banco e de requisição. */
+export function gatewayPorId(id: string | null | undefined): GatewayDef | null {
+  return (id && REGISTRO[id.toUpperCase()]) || null;
+}
+
+/**
+ * O gateway de um webhook, com queda para `CUSTOM`.
+ *
+ * ⚠️ Cair no genérico é DELIBERADO e é o comportamento de hoje: a rota fazia
+ * `platform === "KIRVANO" ? parseKirvano : normalizeSale`, ou seja, tudo que não
+ * fosse Kirvano ia para o genérico. Recusar a venda de um webhook com plataforma
+ * desconhecida perderia dinheiro real para proteger uma invariante de tipo.
+ */
+export function gatewayDoWebhook(platform: string | null | undefined): GatewayDef {
+  return gatewayPorId(platform) ?? REGISTRO.CUSTOM;
+}
+
+/** Ids válidos para gravar em `Webhook.platform`. */
+export function gatewayValido(id: string): boolean {
+  return Object.hasOwn(REGISTRO, id.toUpperCase());
+}
+
+/** Os que o usuário pode escolher na tela, na ordem de exibição. */
+export function gatewaysParaEscolher(): GatewayDef[] {
+  return Object.values(REGISTRO)
+    .filter((g) => g.id !== "CUSTOM")
+    .sort((a, b) => Number(b.ativo) - Number(a.ativo) || a.nome.localeCompare(b.nome));
+}
+
+/** Rótulo legível de uma plataforma, inclusive uma que saiu do registro. */
+export function rotuloDoGateway(id: string): string {
+  return gatewayPorId(id)?.nome ?? id;
+}
