@@ -3303,6 +3303,99 @@ foi exercitado com os 4 exemplos, incluindo o evento desconhecido — o aviso
 aparece — e com um payload adulterado, onde o âmbar pegou `buyer_ip_address` e
 `cliente_fbc`.
 
+## 🟩 OnyxPag — o terceiro gateway (31/07/2026)
+
+Custou o que o critério de aceite exige: **um parser, uma entrada no registro,
+uma logo e um arquivo de exemplos.** Zero rota, zero mudança em `ingestSale`,
+métricas ou lógica de venda. (A única linha fora disso foi um texto da gaveta —
+ver o fim desta seção.)
+
+Documentação: https://doc.onyxpag.com
+
+| | Kirvano | Cakto | **OnyxPag** |
+|---|---|---|---|
+| Segredo no webhook | header | corpo | 🔴 **nenhum** |
+| IP do comprador | manda | não | não |
+| `fbc`/`fbp` | só `fbp` | os dois | 🔴 **nenhum** |
+| UTMs de volta | sim | sim | 🔴 não documentado |
+| Taxa calculada | `fee` | `fees` | ✅ `fee_amount` |
+| Valor | `"R$ 197,00"` | número | `"25.90"` (**ponto** decimal) |
+| Order bump | em `products[]` | linhas separadas | `items[]` de 1 transação |
+
+### 🔴 O primeiro gateway SEM segredo — e por que `exigir: false` aqui é certo
+
+A doc é explícita: *"No additional HTTP headers (signatures, tokens, or secrets)
+are specified for webhook validation"*. O webhook nem é cadastrado em painel —
+o endereço vai no campo `postbackUrl` de **cada cobrança criada**.
+
+Exigir segredo recusaria **100% das entregas dela**. Isso não é falhar fechado,
+é não integrar. É o **segundo** caso de `exigir: false` (o primeiro é `CUSTOM`),
+e a mitigação é a mesma: **a URL é a credencial**, então ela só aparece na
+gaveta com botão de copiar, nunca na listagem — e um passo de instalação em
+âmbar manda tratá-la como senha.
+
+`onde` continua listando header e corpo: se a OnyxPag passar a assinar, ou se o
+usuário puser um segredo, ele passa a ser **exigido**.
+
+### 🔴 Primeiro gateway sem NENHUMA via de atribuição
+
+Sem `click_id`, sem `fbc` e sem IP, não há o que casar com o clique: a venda
+entra sem campanha, sem criativo e sem país. O `tracking` que a API aceita na
+**criação** da cobrança (`utm_*`, `sck`, `client_reference_id`) **não aparece no
+payload do webhook documentado**.
+
+O parser procura esses campos **defensivamente** em `data.tracking` e
+`data.metadata` — se a doc estiver incompleta, a atribuição funciona sozinha. As
+capacidades foram declaradas conforme a documentação (`utms: false`), e quem
+decide é um payload REAL no testador.
+
+> ⚠️ **`transaction.expired` → `EXPIRADA`, não `CANCELADA`.** Terminal impediria
+> o `transaction.paid` de um PIX gerado de novo de sobrescrever, e a venda paga
+> sumiria do faturamento. Mesma razão do PIX vencido da Kirvano.
+
+> ⚠️ **`"25.90"` tem PONTO decimal**, ao contrário do `"R$ 197,00"` da Kirvano.
+> `toNumber` lê os dois; a armadilha seria um parser de vírgula caseiro, que
+> leria isso como **2590**.
+
+> ⚠️ **UMA venda por transação — não dividimos `items[]`.** Dividir seria
+> possível (há `unit_price` e `quantity`), e não fazemos por duas razões: não há
+> id por item, então o `externalId` viria do índice e uma reentrega em ordem
+> diferente **duplicaria faturamento em silêncio**; e `amount` é o total
+> autoritativo, que a soma dos itens pode não fechar. Mesma escolha da Kirvano,
+> mesmo custo aceito: **order bump aparece no valor, não em "Vendas por
+> produto"**.
+
+**Testado:** `npm run test:onyxpag` — 38 asserções, **zero campos em âmbar** nos
+5 exemplos. `npm run test:gateways` (45 asserções de paridade dos parsers
+antigos) continua passando. **Conferido na tela**: a OnyxPag aparece na grade com
+a logo, os 4 passos de instalação e o campo de chave como opcional.
+
+> ⚠️ **Os exemplos são da DOCUMENTAÇÃO, e só o primeiro é literal** — a doc mostra
+> um payload só. Passar no teste não substitui rodar um payload REAL no testador,
+> e aqui há suspeita concreta de doc incompleta (o `tracking`).
+
+### A logo precisou virar quadrada
+
+`onyx-logo-light.png` é um wordmark **3,24:1 com fundo branco opaco**. O
+`LogoGateway` renderiza num quadrado de 34px com `objectFit: contain` — contida,
+ela viraria uma tarja de 10px de altura com o texto ilegível. Foi recomposta
+numa tela **256×256 com o mesmo fundo branco** que a arte já traz, que é o que o
+`overflow:hidden` arredonda (igual à da Kirvano).
+
+> Regra para a próxima: **wordmark largo tem de ser quadrado antes de virar
+> `.webp`**. Só logo já quadrada pode ir direto.
+
+### O único arquivo fora do roteiro
+
+O subtítulo da gaveta tinha **dois** fluxos (`geradoPorNos` ou não) e a OnyxPag é
+um **terceiro**: sem chave nenhuma. Ela caía no texto *"informe a chave de
+segurança gerada no painel dele"* — mandando o usuário procurar uma chave que
+não existe. Agora são três ramos, derivados de `auth.geradoPorNos` e
+`auth.exigir`.
+
+> Não é falha da arquitetura: é o registro ganhando uma combinação que a tela
+> ainda não sabia descrever. Mas conta como arquivo tocado, e por isso está aqui.
+
 ### O que a etapa 1 **não** fez
 
 Etapas 2 a 8, na ordem acordada: precedência de fonte (2) · `pedidoId`+`itemTipo`
@@ -5123,6 +5216,7 @@ Nenhuma migration foi necessária: `Sale.country` nulo + `Click.country` present
 |---|---|---|
 | **Kirvano** | ✅ sim (`customer.ip`) | 30/07/2026, 15 vendas reais |
 | **Cakto** | 🔴 **não** — capacidade declarada `ipDoComprador: false` | 31/07/2026, **PIX real pago**. É o primeiro gateway cuja geografia depende do clique |
+| **OnyxPag** | 🔴 **não** — e também não manda `fbc`, `fbp` nem `click_id` | 31/07/2026, pela documentação. Sem nenhuma via de atribuição: a venda entra sem campanha e sem país |
 | Hotmart | ❓ não integrado | — |
 | Kiwify | ❓ não integrado | — |
 | Cartpanda | ❓ não integrado | — |
@@ -5923,6 +6017,7 @@ npm run geo:backfill     # país do histórico. SIMULA; --aplicar escreve
 npm run test:bots        # 35 asserções, classificação de robô (puro)
 npm run bot:reclassificar # reavalia Click.bot pelo userAgent. SIMULA; --aplicar escreve
 npm run test:desempate   # 27 asserções, país quando o IP contradiz a campanha
+npm run test:onyxpag     # 38 asserções, parser + testador da OnyxPag (puro)
 npm run test:veiculacao  # 40 asserções, status configurado × veiculação (puro)
 npm run test:analise-regra   # 32 asserções, avisos estáticos de condição (puro)
 npm run test:previa-regra    # 30 asserções, prévia da regra (banco de DEV)

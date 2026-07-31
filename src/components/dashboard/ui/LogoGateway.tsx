@@ -12,6 +12,7 @@ import { sx } from "@/lib/sx";
 const LOGOS: Record<string, string> = {
   KIRVANO: "/logos/kirvano.webp",
   CAKTO: "/logos/cakto.webp",
+  ONYXPAG: "/logos/onyxpag.webp",
   HOTMART: "/logos/hotmart.webp",
   CARTPANDA: "/logos/cartpanda.webp",
   KIWIFY: "/logos/kiwify.webp",

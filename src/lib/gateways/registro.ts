@@ -1,6 +1,8 @@
 import type { Capacidades, GatewayDef } from "./contrato";
 import { EXEMPLOS_CAKTO } from "./exemplos/cakto";
+import { EXEMPLOS_ONYXPAG } from "./exemplos/onyxpag";
 import { parseCakto } from "./parsers/cakto";
+import { parseOnyxPag } from "./parsers/onyxpag";
 import { parseGenerico } from "./parsers/generico";
 import { parseKirvano } from "./parsers/kirvano";
 
@@ -166,6 +168,99 @@ export const REGISTRO: Record<string, GatewayDef> = {
       },
     ],
     exemplos: EXEMPLOS_CAKTO,
+  },
+
+  // ─────────────────────────────── OnyxPag ───────────────────────────────
+  ONYXPAG: {
+    id: "ONYXPAG",
+    nome: "OnyxPag",
+    ativo: true,
+    urlDoWebhook: (token, base) => `${base}/api/webhook/sale/${token}`,
+    auth: {
+      tipo: "segredo",
+      // 🔴 `exigir: false` — a OnyxPag NÃO envia segredo nenhum. A doc dela é
+      // explícita: "No additional HTTP headers (signatures, tokens, or secrets)
+      // are specified for webhook validation". O webhook é configurado passando
+      // `postbackUrl` na criação da cobrança; não existe painel onde cadastrar
+      // um token.
+      //
+      // ⚠️ Isso torna a URL a credencial, e é o SEGUNDO caso do projeto (o
+      // primeiro é `CUSTOM`). Não é buraco esquecido: exigir segredo aqui
+      // recusaria 100% das entregas dela, o que não é falhar fechado — é não
+      // integrar. A mitigação é tratar a URL como segredo: ela só aparece na
+      // gaveta, com botão de copiar, nunca na listagem.
+      //
+      // Se um dia eles passarem a assinar, ou se o usuário puser um segredo, os
+      // lugares abaixo já são conferidos — e aí ele passa a ser EXIGIDO.
+      exigir: false,
+      geradoPorNos: false,
+      onde: [
+        { header: "x-webhook-secret" },
+        { header: "x-signature" },
+        { header: "signature" },
+        { corpo: "secret" },
+        { corpo: "token" },
+      ],
+    },
+    parse: parseOnyxPag,
+    capacidades: {
+      // 🔴 Nem IP nem país do comprador — o país destas vendas vem do clique.
+      ipDoComprador: false,
+      // 🔴 Primeiro gateway sem NENHUMA via de atribuição no payload: sem
+      // `fbc`, sem `click_id` e sem IP, não há o que casar com a visita.
+      fbc: false,
+      fbp: false,
+      // A API aceita `tracking` na CRIAÇÃO da cobrança, mas o payload do
+      // webhook documentado NÃO os devolve. Declarado `false` até um payload
+      // real provar o contrário — o parser já os lê defensivamente.
+      utms: false,
+      taxasCalculadas: true, // `fee_amount`
+      comissoes: false, // `split` existe na criação, não volta no webhook
+      telefone: "nacional", // "11999999999", sem DDI
+      // `items[]` são linhas de UMA transação, não vendas separadas.
+      agrupaItens: false,
+      // A doc recomenda "implementing retry logic for temporary failures" —
+      // tratamos como reentrega. A idempotência já é garantida pelo upsert.
+      reentregaEventos: true,
+    },
+    campos: [
+      { chave: "nome", rotulo: "Nome (opcional)", obrigatorio: false },
+      {
+        chave: "secret",
+        rotulo: "Chave de segurança (opcional)",
+        ajuda:
+          "A OnyxPag não envia chave. Só preencha se você mesmo acrescentar uma — nesse caso ela passa a ser exigida.",
+        obrigatorio: false,
+      },
+    ],
+    instalacao: [
+      {
+        titulo: "Copie o endereço abaixo",
+        texto: "É ele que a OnyxPag vai chamar a cada mudança de status da cobrança.",
+      },
+      {
+        titulo: "Informe o endereço no campo `postbackUrl`",
+        texto:
+          "Na OnyxPag o webhook não é cadastrado num painel: o endereço vai junto de cada cobrança criada, " +
+          "no campo `postbackUrl`. Quem monta seu checkout precisa incluí-lo.",
+      },
+      {
+        titulo: "Trate este endereço como uma senha",
+        texto:
+          "A OnyxPag não envia chave de segurança junto das vendas, então quem tiver o endereço consegue " +
+          "registrar venda na sua conta. Não publique e não mande em grupo.",
+        atencao: true,
+      },
+      {
+        titulo: "As vendas não vão ligar sozinhas ao anúncio",
+        texto:
+          "Ela não devolve o clique nem os códigos de campanha junto da venda. O faturamento fica exato, " +
+          "mas a venda não é atribuída à campanha e o país aparece estimado. Se quem monta seu checkout " +
+          "conseguir repassar o `click_id` no campo `metadata`, a atribuição volta a funcionar.",
+        atencao: true,
+      },
+    ],
+    exemplos: EXEMPLOS_ONYXPAG,
   },
 
   // ─────────────────────────────── Custom ───────────────────────────────

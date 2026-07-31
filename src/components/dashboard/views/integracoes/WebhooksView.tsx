@@ -300,12 +300,16 @@ function WebhookModal({ v }: { v: TraffikView }) {
       descricao={
         editing
           ? "A URL abaixo é a que você cola no painel do gateway."
-          : def?.auth.tipo === "segredo" && def.auth.geradoPorNos
-            // ⚠️ Também vem do registro: na Cakto NÓS geramos a chave, na
-            // Kirvano o usuário cola a dele. Descrever um fluxo só deixaria
-            // metade dos gateways com a instrução errada.
+          : // ⚠️ TRÊS fluxos, e vêm do registro: na Cakto NÓS geramos a chave;
+            // na Kirvano o usuário cola a dele; na OnyxPag **não existe chave**
+            // — o endereço é a credencial. Descrever um fluxo só deixaria os
+            // outros dois com a instrução errada, e o pior é o terceiro: mandar
+            // o usuário procurar no painel do gateway uma chave que não existe.
+            def?.auth.tipo === "segredo" && def.auth.geradoPorNos
             ? "Escolha o gateway, copie a chave que geramos e siga os passos."
-            : "Escolha o gateway e informe a chave de segurança gerada no painel dele."
+            : def?.auth.tipo === "segredo" && !def.auth.exigir
+              ? "Escolha o gateway e copie o endereço. Este gateway não usa chave de segurança."
+              : "Escolha o gateway e informe a chave de segurança gerada no painel dele."
       }
       rodape={
         <>
