@@ -41,13 +41,32 @@
  * |---|---|---|---|
  * | 1 | Segmentação com **um país só** | máxima | não precisa de mais nada |
  * | 2 | `FBCR/<operadora>` | forte | operadora é geográfica por natureza |
- * | 3 | `Accept-Language` | média | header da requisição, com pesos |
- * | 4 | locale do user agent (`pt_BR`) | fraca | é o idioma do APARELHO |
+ * | 3 | **Fuso horário do navegador** | forte | diz ONDE a pessoa está, não que idioma ela fala |
+ * | 4 | `Accept-Language` | média | header da requisição, com pesos |
+ * | 5 | locale do user agent (`pt_BR`) | fraca | é o idioma do APARELHO |
+ *
+ * ⚠️ **O fuso vem ANTES do idioma de propósito.** Os dois são configuração do
+ * aparelho, mas medem coisas diferentes: um brasileiro morando em Portugal
+ * mantém `pt_BR` no idioma e tem `Europe/Lisbon` no relógio. O fuso acompanha
+ * **onde a pessoa está**, que é exatamente a pergunta. O idioma acompanha de
+ * onde ela veio.
  *
  * ⚠️ O locale é o mais fraco de propósito: brasileiro morando fora mantém
  * `pt_BR`, e celular configurado em inglês no Brasil mostra `en_US`. Ele só é
  * consultado quando os anteriores não resolveram, e mesmo assim precisa
  * sobreviver à interseção.
+ *
+ * ## ⚠️ `es-419` devolve `null`, e isso está certo
+ *
+ * `es-419` é o espanhol "da América Latina" — o `419` é um código de **grupo de
+ * região** (M.49), não um país. `regiaoDoLocale` exige duas LETRAS, então ele
+ * não casa e nenhum candidato é produzido. É o mesmo tratamento dado a
+ * `country_groups` na segmentação da campanha: expandir "LATAM" para 20 países
+ * tornaria a interseção tão larga que nunca sobraria um só — um desempate que
+ * nunca dispara é pior que desempate ausente, porque parece estar funcionando.
+ *
+ * Na prática ele não custa nada: `es-419` é comum em Android da região, mas
+ * quem manda `es-419` quase sempre manda também o fuso, que resolve melhor.
  */
 
 /** De onde veio o país. Vai para `Click.countrySource` e para a tela. */
@@ -55,6 +74,7 @@ export type FontePais =
   | "ip"
   | "campanha"
   | "carrier"
+  | "fuso"
   | "idioma"
   | "locale"
   | "header"
@@ -72,6 +92,8 @@ export interface SinaisDoClique {
   paisesDaCampanha: readonly string[];
   userAgent?: string | null;
   acceptLanguage?: string | null;
+  /** `Intl.DateTimeFormat().resolvedOptions().timeZone` — `America/Lima`. */
+  timezone?: string | null;
 }
 
 /**
@@ -95,10 +117,21 @@ const OPERADORAS: Record<string, readonly string[]> = {
   // América Latina — quase todas multipaís.
   CLARO: ["BR", "AR", "CL", "CO", "PE", "EC", "UY", "PY", "GT", "SV", "HN", "NI", "CR", "PA", "DO"],
   MOVISTAR: ["AR", "CL", "CO", "PE", "EC", "UY", "VE", "MX", "ES"],
+  // A Telefónica é a dona da marca Movistar; o `FBCR/` às vezes traz a razão
+  // social em vez da marca comercial. Mesmo conjunto, para não perder o sinal.
+  TELEFONICA: ["AR", "CL", "CO", "PE", "EC", "UY", "VE", "MX", "ES"],
   TELCEL: ["MX"],
   ENTEL: ["CL", "PE", "BO"],
   TIGO: ["CO", "PY", "BO", "GT", "SV", "HN", "NI"],
   PERSONAL: ["AR", "PY"],
+  WOM: ["CL", "CO"],
+  BITEL: ["PE"],
+  ANTEL: ["UY"],
+  DIGITEL: ["VE"],
+  MOVILNET: ["VE"],
+  // A AT&T opera no México e nos EUA. Ambígua sozinha — e é justamente por isso
+  // que ela entra como CONJUNTO: numa campanha que roda só MX, resolve.
+  ATT: ["MX", "US"],
   // Europa.
   MEO: ["PT"],
   NOS: ["PT"],
@@ -139,14 +172,114 @@ export function regioesDoAcceptLanguage(v: string | null | undefined): string[] 
 
 /** Operadora declarada em `FBCR/` no user agent do app da Meta. */
 export function operadoraDoUserAgent(ua: string | null | undefined): string | null {
-  const m = /FBCR\/([A-Za-z0-9 _.-]+)/.exec(ua ?? "");
+  // ⚠️ O `&` faz parte do nome de operadora ("AT&T"). Sem ele na classe, a
+  // captura parava em "AT" e o casamento falhava em silêncio — pego pelo teste.
+  const m = /FBCR\/([A-Za-z0-9 &_.-]+)/.exec(ua ?? "");
   if (!m) return null;
   // "VIVO", "vivo br", "Claro_BR" → chave canônica.
   const bruto = m[1]!.trim().toUpperCase().replace(/[_.-]/g, " ");
   for (const nome of Object.keys(OPERADORAS)) {
     if (bruto === nome || bruto.startsWith(nome + " ") || bruto.includes(" " + nome)) return nome;
   }
-  return null;
+  // ⚠️ Segunda passada sem pontuação nenhuma: a AT&T chega como `AT&T` e o `&`
+  // não é separador, então ela não casaria com a chave `ATT` acima. Compactar
+  // resolve sem afrouxar o casamento das outras (a comparação segue sendo por
+  // igualdade ou por limite de palavra na 1ª passada).
+  const compacto = bruto.replace(/[^A-Z0-9]/g, "");
+  return Object.keys(OPERADORAS).find((nome) => compacto === nome) ?? null;
+}
+
+/**
+ * Fuso IANA → país.
+ *
+ * ## Por que uma tabela PARCIAL é segura aqui
+ *
+ * A objeção histórica a usar o fuso era que converter zona→país exigiria as
+ * ~400 zonas IANA, e que uma tabela incompleta funcionaria para alguns países e
+ * não para outros. **Isso vale para quem usa o fuso como AFIRMAÇÃO.** Aqui ele
+ * é um conjunto candidato que ainda precisa sobreviver à interseção com a
+ * segmentação da campanha — exatamente como a operadora.
+ *
+ * Zona ausente da tabela produz **nenhum candidato** e o resolvedor cai para o
+ * sinal seguinte. Ou seja: o pior caso de uma entrada faltando é o
+ * comportamento que já existia antes desta tabela. Acrescentar é uma linha.
+ *
+ * ⚠️ **Nunca mapeie uma zona para mais de um país.** Zona IANA é definida
+ * justamente por ter história de offset única dentro de um país; se aparecer um
+ * caso ambíguo, ele deve ficar de FORA da tabela, não virar um palpite.
+ */
+const PAIS_DO_FUSO: Record<string, string> = {
+  // ── Brasil ──
+  "america/sao_paulo": "BR", "america/bahia": "BR", "america/fortaleza": "BR",
+  "america/recife": "BR", "america/belem": "BR", "america/manaus": "BR",
+  "america/cuiaba": "BR", "america/campo_grande": "BR", "america/porto_velho": "BR",
+  "america/rio_branco": "BR", "america/boa_vista": "BR", "america/santarem": "BR",
+  "america/maceio": "BR", "america/araguaina": "BR", "america/eirunepe": "BR",
+  "america/noronha": "BR",
+  // ── Hispano-América ──
+  "america/santiago": "CL", "america/punta_arenas": "CL", "pacific/easter": "CL",
+  "america/lima": "PE",
+  "america/bogota": "CO",
+  "america/caracas": "VE",
+  "america/guayaquil": "EC", "pacific/galapagos": "EC",
+  "america/la_paz": "BO",
+  "america/asuncion": "PY",
+  "america/montevideo": "UY",
+  "america/mexico_city": "MX", "america/cancun": "MX", "america/merida": "MX",
+  "america/monterrey": "MX", "america/matamoros": "MX", "america/chihuahua": "MX",
+  "america/hermosillo": "MX", "america/mazatlan": "MX", "america/tijuana": "MX",
+  "america/ojinaga": "MX", "america/bahia_banderas": "MX",
+  "america/panama": "PA", "america/costa_rica": "CR", "america/guatemala": "GT",
+  "america/el_salvador": "SV", "america/tegucigalpa": "HN", "america/managua": "NI",
+  "america/santo_domingo": "DO", "america/havana": "CU", "america/puerto_rico": "PR",
+  "america/port-au-prince": "HT", "america/jamaica": "JM",
+  // ── América do Norte ──
+  "america/new_york": "US", "america/chicago": "US", "america/denver": "US",
+  "america/los_angeles": "US", "america/phoenix": "US", "america/anchorage": "US",
+  "america/detroit": "US", "america/boise": "US", "america/juneau": "US",
+  "pacific/honolulu": "US",
+  "america/toronto": "CA", "america/vancouver": "CA", "america/edmonton": "CA",
+  "america/winnipeg": "CA", "america/halifax": "CA", "america/st_johns": "CA",
+  "america/regina": "CA",
+  // ── Europa ──
+  "europe/lisbon": "PT", "atlantic/madeira": "PT", "atlantic/azores": "PT",
+  "europe/madrid": "ES", "atlantic/canary": "ES", "africa/ceuta": "ES",
+  "europe/rome": "IT", "europe/paris": "FR", "europe/berlin": "DE",
+  "europe/london": "GB", "europe/dublin": "IE", "europe/amsterdam": "NL",
+  "europe/brussels": "BE", "europe/zurich": "CH", "europe/vienna": "AT",
+  "europe/warsaw": "PL", "europe/bucharest": "RO", "europe/athens": "GR",
+  "europe/stockholm": "SE", "europe/oslo": "NO", "europe/copenhagen": "DK",
+  "europe/helsinki": "FI", "europe/prague": "CZ", "europe/budapest": "HU",
+  "europe/moscow": "RU", "europe/kyiv": "UA", "europe/kiev": "UA",
+  // ── Resto do mundo, os de maior tráfego ──
+  "asia/tokyo": "JP", "asia/shanghai": "CN", "asia/kolkata": "IN",
+  "asia/calcutta": "IN", "asia/seoul": "KR", "asia/manila": "PH",
+  "asia/jakarta": "ID", "asia/bangkok": "TH", "asia/dubai": "AE",
+  "asia/jerusalem": "IL", "australia/sydney": "AU", "australia/melbourne": "AU",
+  "africa/lagos": "NG", "africa/johannesburg": "ZA", "africa/cairo": "EG",
+  "africa/nairobi": "KE", "africa/casablanca": "MA", "africa/luanda": "AO",
+  "africa/maputo": "MZ",
+};
+
+/**
+ * Zonas cujo país se decide pelo PREFIXO — a IANA agrupa as subdivisões de um
+ * mesmo país sob um segundo nível (`America/Argentina/Cordoba`), e listar as 12
+ * argentinas uma a uma envelheceria a cada revisão do banco de dados de fusos.
+ */
+const PREFIXO_DO_FUSO: readonly (readonly [string, string])[] = [
+  ["america/argentina/", "AR"],
+  ["america/indiana/", "US"],
+  ["america/kentucky/", "US"],
+  ["america/north_dakota/", "US"],
+];
+
+/** `America/Lima` → `PE`. `null` quando a zona não está na tabela. */
+export function paisDoFuso(tz: string | null | undefined): string | null {
+  const k = (tz ?? "").trim().toLowerCase().replace(/\\/g, "/");
+  if (!k) return null;
+  if (PAIS_DO_FUSO[k]) return PAIS_DO_FUSO[k]!;
+  const pref = PREFIXO_DO_FUSO.find(([p]) => k.startsWith(p));
+  return pref ? pref[1] : null;
 }
 
 /** Locale embutido no user agent do app da Meta (`FBLC/pt_BR`) ou do Instagram. */
@@ -208,12 +341,19 @@ export function resolverPaisDoClique(s: SinaisDoClique): Resolucao {
     if (cand.length === 1) return { pais: cand[0]!, fonte: "carrier" };
   }
 
-  // 3. Accept-Language — na ordem de preferência declarada pelo navegador.
+  // 3. Fuso do navegador — sinal GEOGRÁFICO, ao contrário dos dois seguintes,
+  //    que são linguísticos. Vem antes do idioma porque mede onde a pessoa
+  //    ESTÁ, e não de onde ela veio. Zona fora da tabela devolve null e o
+  //    resolvedor segue — a tabela parcial nunca piora o resultado.
+  const fuso = paisDoFuso(s.timezone);
+  if (fuso && campanha.includes(fuso)) return { pais: fuso, fonte: "fuso" };
+
+  // 4. Accept-Language — na ordem de preferência declarada pelo navegador.
   for (const r of regioesDoAcceptLanguage(s.acceptLanguage)) {
     if (campanha.includes(r)) return { pais: r, fonte: "idioma" };
   }
 
-  // 4. Locale do user agent — o mais fraco: é o idioma do APARELHO.
+  // 5. Locale do user agent — o mais fraco: é o idioma do APARELHO.
   const loc = regiaoDoLocale(localeDoUserAgent(s.userAgent));
   if (loc && campanha.includes(loc)) return { pais: loc, fonte: "locale" };
 

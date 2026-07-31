@@ -114,11 +114,17 @@ export async function POST(req: NextRequest) {
   const paisesDaCampanha =
     utmCampaign && doHeaderOuIp ? await segmentacaoDaCampanha(user.id, utmCampaign) : [];
 
+  // Fuso do navegador (`Intl…timeZone`). Sinal geográfico direto e, desde a
+  // ativação do desempate, o 3º da ordem — antes do idioma, porque diz onde a
+  // pessoa está em vez de que língua ela fala.
+  const timezone = str(body.tz ?? body.timezone, 64);
+
   const { pais: country, fonte: countrySource } = resolverPaisDoClique({
     paisDoIp: doHeaderOuIp,
     paisesDaCampanha,
     userAgent: req.headers.get("user-agent"),
     acceptLanguage,
+    timezone,
   });
 
   // ⚠️ MARCA, não bloqueia: a linha é gravada de qualquer forma e as métricas é
@@ -146,10 +152,9 @@ export async function POST(req: NextRequest) {
       country,
       countrySource,
       acceptLanguage,
-      // Fuso do navegador. Sinal GEOGRÁFICO direto (`America/Sao_Paulo`), mais
-      // forte que o locale — coletado agora porque não dá para voltar no tempo.
-      // Só chega de quem reinstalar o script; ainda não é usado no desempate.
-      timezone: str(body.tz ?? body.timezone, 64),
+      // ⚠️ Só chega de quem REINSTALOU o script — clique antigo tem a coluna
+      // nula, e aí o desempate simplesmente pula este sinal.
+      timezone,
       ip,
       userAgent,
     },

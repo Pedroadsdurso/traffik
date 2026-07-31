@@ -7,6 +7,7 @@
 import {
   localeDoUserAgent,
   operadoraDoUserAgent,
+  paisDoFuso,
   regiaoDoLocale,
   regioesDoAcceptLanguage,
   resolverPaisDoClique,
@@ -147,6 +148,129 @@ eq(
     acceptLanguage: "es-MX",
   }).fonte,
   "carrier",
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FUSO HORÁRIO como sinal (31/07/2026) e as operadoras LATAM que faltavam.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const UA_ATT = "[FBAN/FB4A;FBAV/570.0.0.24.72;FBLC/es_MX;FBCR/AT&T;FBMF/motorola]";
+const UA_WOM = "[FBAN/FB4A;FBAV/570.0.0.24.72;FBLC/es_CL;FBCR/WOM;FBMF/xiaomi]";
+const UA_BITEL = "[FBAN/FB4A;FBAV/570.0.0.24.72;FBLC/es_PE;FBCR/BITEL;FBMF/samsung]";
+const UA_TELEFONICA = "[FBAN/FB4A;FBAV/570.0.0.24.72;FBLC/es_AR;FBCR/TELEFONICA;FBMF/samsung]";
+
+console.log("\n\x1b[1mFuso IANA → país\x1b[0m");
+eq("America/Lima", paisDoFuso("America/Lima"), "PE");
+eq("America/Bogota", paisDoFuso("America/Bogota"), "CO");
+eq("America/Sao_Paulo", paisDoFuso("America/Sao_Paulo"), "BR");
+eq("prefixo America/Argentina/*", paisDoFuso("America/Argentina/Cordoba"), "AR");
+eq("prefixo America/Indiana/*", paisDoFuso("America/Indiana/Knox"), "US");
+eq("caixa não importa", paisDoFuso("america/LIMA"), "PE");
+eq("zona fora da tabela → null (cai para o sinal seguinte)", paisDoFuso("Antarctica/Troll"), null);
+eq("zona ausente", paisDoFuso(null), null);
+eq("string vazia", paisDoFuso("  "), null);
+
+console.log("\n\x1b[1mOperadoras que faltavam\x1b[0m");
+eq("WOM", operadoraDoUserAgent(UA_WOM), "WOM");
+eq("BITEL", operadoraDoUserAgent(UA_BITEL), "BITEL");
+eq("TELEFONICA (razão social da Movistar)", operadoraDoUserAgent(UA_TELEFONICA), "TELEFONICA");
+// ⚠️ O `&` não é separador, então "AT&T" só casa na 2ª passada, que compacta.
+eq("AT&T casa apesar do &", operadoraDoUserAgent(UA_ATT), "ATT");
+eq(
+  "AT&T é MX+US — resolve só quando a campanha desfaz a ambiguidade",
+  resolverPaisDoClique({ paisDoIp: "IE", paisesDaCampanha: ["MX", "BR"], userAgent: UA_ATT }),
+  { pais: "MX", fonte: "carrier" },
+);
+eq(
+  "AT&T em campanha MX+US NÃO resolve pelo carrier",
+  resolverPaisDoClique({ paisDoIp: "IE", paisesDaCampanha: ["MX", "US"], userAgent: UA_ATT }).fonte,
+  "locale", // cai para o FBLC/es_MX
+);
+
+console.log("\n\x1b[1mO fuso desempatando LATAM\x1b[0m");
+eq(
+  "campanha AR+PE+CO, IP dos EUA, relógio em Lima → PE",
+  resolverPaisDoClique({
+    paisDoIp: "US",
+    paisesDaCampanha: ["AR", "PE", "CO"],
+    userAgent: UA_CHROME,
+    timezone: "America/Lima",
+  }),
+  { pais: "PE", fonte: "fuso" },
+);
+eq(
+  "brasileiro em Portugal: fuso VENCE o idioma (pt_BR)",
+  resolverPaisDoClique({
+    paisDoIp: "US",
+    paisesDaCampanha: ["BR", "PT"],
+    userAgent: UA_INSTA_BR, // locale pt_BR
+    acceptLanguage: "pt-BR,pt;q=0.9",
+    timezone: "Europe/Lisbon",
+  }),
+  { pais: "PT", fonte: "fuso" },
+);
+eq(
+  "operadora VENCE o fuso (rede é mais difícil de divergir que relógio)",
+  resolverPaisDoClique({
+    paisDoIp: "US",
+    paisesDaCampanha: ["BR", "MX"],
+    userAgent: UA_VIVO,
+    timezone: "America/Mexico_City",
+  }).fonte,
+  "carrier",
+);
+eq(
+  "país único continua vencendo tudo, inclusive o fuso",
+  resolverPaisDoClique({
+    paisDoIp: "US",
+    paisesDaCampanha: ["PE"],
+    timezone: "America/Bogota",
+  }),
+  { pais: "PE", fonte: "campanha" },
+);
+eq(
+  "fuso FORA da campanha não resolve — cai para o idioma",
+  resolverPaisDoClique({
+    paisDoIp: "US",
+    paisesDaCampanha: ["AR", "CO"],
+    timezone: "America/Lima", // PE não está na campanha
+    acceptLanguage: "es-CO",
+  }),
+  { pais: "CO", fonte: "idioma" },
+);
+eq(
+  "zona desconhecida não atrapalha — segue para o idioma",
+  resolverPaisDoClique({
+    paisDoIp: "US",
+    paisesDaCampanha: ["AR", "CO"],
+    timezone: "Antarctica/Troll",
+    acceptLanguage: "es-AR",
+  }),
+  { pais: "AR", fonte: "idioma" },
+);
+eq(
+  "sem fuso, sem idioma e sem locale → incerto (o IP errado NÃO volta)",
+  resolverPaisDoClique({
+    paisDoIp: "US",
+    paisesDaCampanha: ["AR", "CO"],
+    userAgent: UA_CHROME,
+    timezone: null,
+  }),
+  { pais: null, fonte: "incerto" },
+);
+
+console.log("\n\x1b[1mes-419: grupo de região, não país\x1b[0m");
+eq("regiaoDoLocale('es-419')", regiaoDoLocale("es-419"), null);
+eq("Accept-Language 'es-419' não produz região", regioesDoAcceptLanguage("es-419,es;q=0.9"), []);
+eq(
+  "es-419 não desempata, mas o fuso junto resolve",
+  resolverPaisDoClique({
+    paisDoIp: "US",
+    paisesDaCampanha: ["PE", "CO"],
+    acceptLanguage: "es-419,es;q=0.9",
+    timezone: "America/Bogota",
+  }),
+  { pais: "CO", fonte: "fuso" },
 );
 
 console.log(
