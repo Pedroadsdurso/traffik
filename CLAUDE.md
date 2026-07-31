@@ -4843,7 +4843,66 @@ desligada.** Nenhuma dessas ferramentas pergunta "alguém chama isto?".
 > Ao criar rota de cron, **agende no mesmo commit**. Ao criar consulta de
 > manutenção, **rode contra linhas semeadas no dev** antes de dizer que funciona.
 
-## 🚦 COMECE AQUI — estado em 30/07/2026 e a fila da próxima sessão
+## 🚦 COMECE AQUI — fechamento da sessão de 31/07/2026
+
+Tudo commitado e no `origin/main` até **`42f60a6`**. As migrations
+`20260731030000_sale_platform`, `…040000_pixel_event_dedup` e
+`…050000_pixel_event_owners` estão **aplicadas em produção**.
+
+### 📌 Estado do PIXEL — o assunto que dominou a sessão
+
+**Confirmado em produção pelo usuário: 1 venda real, o Gerenciador de Anúncios
+marcando 2.** A Meta vinha contando cada conversão duas vezes e otimizando as
+campanhas com sinal inflado. Três coisas foram feitas:
+
+| | O quê |
+|---|---|
+| **`eventId` determinístico** | era `nome + Date.now() + Math.random()` — id novo a cada chamada, dedup impossível por construção. Hoje deriva de pixel + evento + página + visitante + janela de 10s (FNV-1a) |
+| **Espelho no `fbq`** | 🔴 o código **nunca tocava em `fbq`**. Mandávamos `event_id` à CAPI e nunca dizíamos ao pixel do navegador para usar o mesmo. **Tornar o id determinístico sozinho NÃO consertaria** — dedup exige que a mesma parte dispare os dois lados |
+| **Seletor de dono por evento** | `lib/pixel/donos.ts`, consultado pelos TRÊS caminhos de envio. Padrão **Traffik em tudo** |
+
+> ### 🔴 A KIRVANO NÃO TEM CAPI PRÓPRIA — verificado no Gerenciador de Eventos
+> Aparece **uma única** integração de API de Conversões, e ela é a nossa. Só o
+> pixel de navegador dela dispara.
+>
+> **Então ela não pode ser dona de evento nenhum.** Delegar o Purchase a ela
+> trocaria um envio server-side por um de navegador, e perderia as três coisas
+> que importam: resistência a ad blocker, disparo só em venda **aprovada** (o
+> dela dispara na página de obrigado, antes de o PIX ser pago) e o `user_data`
+> que montamos (`fbc`/`fbp` reais, e-mail e telefone com hash).
+>
+> ⚠️ **O `eid` do gateway NÃO é derivável.** É um UUID gerado no navegador dele
+> (`InitiateCheckout-ff7d1800-…`) e **não aparece em campo nenhum do webhook** —
+> verificado nos 167 payloads reais, onde `sale_id` e `checkout_id` são códigos
+> de 8 caracteres. Por isso a ausência de duplicata vem de **partição** (um dono
+> por evento), nunca de coordenação.
+
+⚠️ **O snippet vive no HTML do cliente.** A correção só chega por reinstalação.
+
+### ⚠️ O QUE O USUÁRIO AINDA PRECISA VERIFICAR
+
+| | Item | Por que ficou assim |
+|---|---|---|
+| ⚠️ | **A gaveta do Pixel na tela** | o bloco "Quem envia cada evento" passou em `tsc`/`lint`/`build` e **não foi exercitado em navegador** |
+| ⚠️ | **A dedup no Testar Eventos da Meta** | precisa de tráfego real. O alvo: **um** evento com "Navegador e Servidor" juntos, não dois separados |
+| ⚠️ | **O globo** | conferido pelo usuário e corrigido em `47e2523`; vale reconferir zoom máximo e marcador cruzando a borda |
+
+### 📋 A FILA
+
+1. **Item 2 — cópia dos UTMs para `Sale`.** Mesma classe do `Sale.platform`:
+   hoje a campanha de uma venda só existe via `sale.click.utmCampaign`, e
+   `clickId` é `SetNull`. A janela de backfill **não está fechando** (nada apaga
+   `Click` automaticamente), então é barato e não urgente.
+2. **Fila de UX reauditada** — 3a corrigido, 3b/3c já feitos, **3d e 3f
+   pendentes**, 3e a verificar. Ver a reauditoria de 31/07.
+3. Dívidas antigas: nav morto no `useTraffikState`, `EditDashboardDrawer`
+   inalcançável, import/export do Bloco 8.
+
+> ⚠️ **A sessão de 31/07 passou de US$ 490 em uso de API.** Ela cobriu segurança
+> de credenciais, `Sale.platform`, limpeza de dado de teste em produção, o globo,
+> o desempate por fuso e o pixel inteiro. Comece a próxima com contexto limpo.
+
+## 🚦 (histórico) estado em 30/07/2026
 
 Tudo até `3bc1cda` está **em produção**. **A padronização visual terminou** — os
 dois itens que faltavam (aproveitamento do espaço das 4 telas + os SVGs legados)
