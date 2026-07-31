@@ -39,7 +39,9 @@
     "test:veiculacao": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-veiculacao.mjs",
     "ads:sonda": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/sonda-veiculacao.mjs",
     "test:veiculacao:e2e": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-veiculacao-e2e.mjs",
-    "regras:auditar": "node scripts/auditar-regras.mjs"
+    "regras:auditar": "node scripts/auditar-regras.mjs",
+    "test:analise-regra": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-analise-regra.mjs",
+    "test:previa-regra": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-previa-regra.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

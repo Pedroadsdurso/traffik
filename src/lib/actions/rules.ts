@@ -1,6 +1,6 @@
 "use server";
 
-import { runUserRules } from "@/lib/rules/engine";
+import { previewRule, runUserRules, type RulePreviewEntity } from "@/lib/rules/engine";
 
 import { auth } from "@/auth";
 import { getLastWorkspaceId } from "@/lib/actions/workspaces";
@@ -290,4 +290,49 @@ export async function deleteRule(id: string): Promise<{ id: string }> {
 export async function runRulesNow(): Promise<{ evaluated: number; acted: number }> {
   const userId = await requireUserId();
   return runUserRules(userId);
+}
+
+/**
+ * Prévia da regra: **em quantas entidades esta condição bate AGORA?**
+ *
+ * ⚠️ **NÃO age.** Chama `previewRule`, que reusa `loadEntities` +
+ * `conditionsMet` do motor e para antes do caminho de ação — nada de
+ * `setEntityStatus`, `updateDailyBudget`, log ou `lastRunAt`.
+ *
+ * Recebe o RASCUNHO, não um id: o ponto é conferir a condição **antes de
+ * salvar**, que é quando o erro ainda é barato. Uma regra ainda não existe no
+ * banco nesse momento.
+ *
+ * O `userId` vem da sessão, nunca do cliente — senão dava para espiar o escopo
+ * de outra conta mandando um rascunho qualquer.
+ */
+export async function previewRuleConditions(
+  input: CreateRuleInput,
+): Promise<{ total: number; bateram: number; nivel: RuleLevel; entidades: RulePreviewEntity[] }> {
+  const userId = await requireUserId();
+  const preview = await previewRule({
+    // `id` só é usado na contagem do limite diário, que a prévia não faz.
+    id: "preview",
+    userId,
+    targetProduct: input.targetProduct?.trim() || null,
+    adAccountIds: input.adAccountIds ?? [],
+    workspaceId: input.workspaceId ?? null,
+    level: input.level,
+    nameFilter: input.nameFilter?.trim() || null,
+    action: input.action,
+    actionParams: input.actionParams ?? null,
+    conditions: input.conditions,
+    calcPeriod: input.calcPeriod,
+    frequencyMin: input.frequencyMin,
+    dailyRunLimit: input.dailyRunLimit,
+    maxBudget: input.maxBudget ?? null,
+    windowStartHour: input.windowStartHour ?? null,
+    windowEndHour: input.windowEndHour ?? null,
+  });
+  return {
+    total: preview.total,
+    bateram: preview.bateram,
+    nivel: preview.nivel,
+    entidades: preview.entidades,
+  };
 }

@@ -312,6 +312,82 @@ async function loadEntities(rule: RuleRow, start: Date, startKey: string) {
   return entities;
 }
 
+/** Uma entidade na prévia: o que a regra veria, com os valores reais. */
+export interface RulePreviewEntity {
+  nome: string;
+  status: string;
+  bateu: boolean;
+  valores: Record<string, number>;
+}
+
+export interface RulePreview {
+  /** Entidades no escopo (contas ∩ área, sem arquivadas/excluídas). */
+  total: number;
+  /** Quantas satisfazem as condições AGORA. */
+  bateram: number;
+  /** Amostra, as que bateram primeiro. Truncada — ver `total`/`bateram`. */
+  entidades: RulePreviewEntity[];
+  nivel: RuleLevel;
+}
+
+/**
+ * # Prévia: "esta condição bate em quantas, AGORA?"
+ *
+ * Nasceu do ensaio a seco que disparou: o usuário digitou `gasto ≤ 999999`
+ * onde queria `gasto ≥ 999999`, a condição ficou sempre verdadeira e a regra
+ * executou. As duas são **visualmente idênticas** e nada no produto as
+ * distinguia até rodar.
+ *
+ * > ### ⛔ Contar, nunca adivinhar
+ * > A alternativa tentadora era um aviso do tipo *"999999 provavelmente pega
+ * > tudo"*. Isso é chute com cara de garantia: depende de conhecer a faixa
+ * > plausível de cada métrica, erra nos dois sentidos, e aviso que às vezes
+ * > mente treina o usuário a ignorar. Aqui a resposta é o número real.
+ *
+ * > ### 🔴 REUSA `loadEntities` + `conditionsMet` — NUNCA uma segunda cópia
+ * > A prévia é uma **promessa do que o motor vai fazer**. Uma segunda
+ * > implementação divergiria da primeira, e aí a prévia passaria a prometer uma
+ * > coisa enquanto o motor faz outra — pior que não ter prévia, porque cria
+ * > confiança falsa em algo que mexe em orçamento real.
+ *
+ * ⚠️ **NÃO age.** Não chama `setEntityStatus` nem `updateDailyBudget`, não
+ * grava log e não mexe em `lastRunAt`. É o Passo 0 do plano da Graph API virado
+ * funcionalidade, sem o risco que fez o Passo 0 disparar.
+ *
+ * ⚠️ **Também NÃO aplica janela nem limite diário.** A pergunta aqui é sobre a
+ * CONDIÇÃO ("bate em quem?"), não sobre "rodaria neste minuto?". Misturar as
+ * duas faria a prévia responder "0" às 3h da manhã por causa da janela, e o
+ * usuário concluiria que a condição está errada.
+ */
+export async function previewRule(rule: RuleRow, limite = 12): Promise<RulePreview> {
+  const conds = (Array.isArray(rule.conditions) ? rule.conditions : []) as RuleCondition[];
+  const tz = await getUserTimezone(rule.userId);
+  const { start, startKey } = calcStart(rule.calcPeriod, tz);
+  const entities = await loadEntities(rule, start, startKey);
+
+  const avaliadas = entities.map((e) => ({
+    nome: e.name,
+    status: e.status,
+    bateu: conditionsMet(conds, e.metrics),
+    valores: Object.fromEntries(
+      // Via `metricValue`, como no log: `cpa`, `roas` e `ctr` são DERIVADAS e
+      // não existem como chave em `EntityMetrics`.
+      conds.map((c) => [c.metrica, metricValue(e.metrics, c.metrica)]),
+    ),
+  }));
+
+  const bateram = avaliadas.filter((e) => e.bateu);
+  return {
+    total: avaliadas.length,
+    bateram: bateram.length,
+    // As que bateram primeiro: são as que a regra tocaria. Se nenhuma bateu,
+    // mostra o que ela avaliou — senão a tela fica muda justamente quando o
+    // usuário precisa entender por que não bateu.
+    entidades: (bateram.length ? bateram : avaliadas).slice(0, limite),
+    nivel: rule.level,
+  };
+}
+
 const LEVEL_TO_TYPE: Record<RuleLevel, "campaign" | "adset" | "ad"> = {
   CAMPAIGN: "campaign",
   ADSET: "adset",

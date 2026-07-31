@@ -215,6 +215,7 @@ export function RulesView({ workspaceId }: { workspaceId: string | null }) {
           contas={contas}
           salvando={salvando}
           erro={erro}
+          workspaceId={workspaceId}
           onSalvar={salvar}
           onFechar={() => {
             setRascunho(null);

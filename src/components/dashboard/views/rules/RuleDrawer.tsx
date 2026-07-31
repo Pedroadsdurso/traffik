@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 
-import type { CreateRuleInput, RuleDTO } from "@/lib/actions/rules";
-import type { RuleCondition } from "@/lib/rules/engine";
+import { previewRuleConditions, type CreateRuleInput, type RuleDTO } from "@/lib/actions/rules";
+import { analisarCondicoes } from "@/lib/rules/analise";
+import type { RuleCondition, RulePreviewEntity } from "@/lib/rules/engine";
 import { METRICAS as AJUDA } from "@/lib/explicacoes";
 import { brl } from "@/lib/format";
 import { sx } from "@/lib/sx";
@@ -75,6 +76,16 @@ const FREQUENCIAS = [
 const HORAS = [{ value: "", label: "Qualquer hora" }].concat(
   Array.from({ length: 24 }, (_, h) => ({ value: String(h), label: `${String(h).padStart(2, "0")}:00` })),
 );
+
+/** " campanha" / " campanhas" conforme o nível e a quantidade. */
+function nivelPlural(level: string, n: number): string {
+  const nome = level === "ADSET" ? "conjunto" : level === "AD" ? "anúncio" : "campanha";
+  return ` ${nome}${n === 1 ? "" : "s"}`;
+}
+/** Sufixo de gênero para "Nenhum(a)". */
+function nivelSufixo(level: string): string {
+  return level === "CAMPAIGN" ? "a campanha" : level === "ADSET" ? " conjunto" : " anúncio";
+}
 
 export interface RascunhoRegra {
   id: string | null;
@@ -222,6 +233,7 @@ export function RuleDrawer({
   contas,
   salvando,
   erro,
+  workspaceId,
   onSalvar,
   onFechar,
 }: {
@@ -232,12 +244,48 @@ export function RuleDrawer({
   contas: { id: string; label: string; detalhe?: string }[];
   salvando: boolean;
   erro: string | null;
+  /** Área ativa — a prévia precisa dela para escopar igual ao motor. */
+  workspaceId: string | null;
   onSalvar: () => void;
   onFechar: () => void;
 }) {
   const d = rascunho;
   const patch = (p: Partial<RascunhoRegra>) => setRascunho({ ...d, ...p });
   const [confirmando, setConfirmando] = useState(false);
+
+  // ── Prévia: "esta condição bate em quantas, agora?" ──────────────────────
+  //
+  // Nasceu do ensaio a seco que disparou: `gasto ≤ 999999` é visualmente
+  // idêntica a `gasto ≥ 999999`, e nada distinguia as duas até a regra rodar.
+  const [previa, setPrevia] = useState<
+    { chave: string; total: number; bateram: number; entidades: RulePreviewEntity[] } | null
+  >(null);
+  const [testando, setTestando] = useState(false);
+  const [erroPrevia, setErroPrevia] = useState<string | null>(null);
+
+  /**
+   * Tudo que muda o resultado da prévia. Mexer em qualquer um destes torna o
+   * número anterior MENTIRA — e um número velho ao lado de uma condição nova é
+   * pior que nenhum número, porque parece confirmação.
+   */
+  const chavePrevia = JSON.stringify([d.condicoes, d.level, d.contas, d.calcPeriod, d.produtos]);
+  const previaAtual = previa && previa.chave === chavePrevia ? previa : null;
+
+  /** Avisos demonstráveis sem dado nenhum. Ver `lib/rules/analise.ts`. */
+  const avisos = analisarCondicoes(d.condicoes);
+
+  const testarCondicao = async () => {
+    setTestando(true);
+    setErroPrevia(null);
+    try {
+      const r = await previewRuleConditions(paraInput(d, workspaceId));
+      setPrevia({ chave: chavePrevia, total: r.total, bateram: r.bateram, entidades: r.entidades });
+    } catch (e) {
+      setErroPrevia(e instanceof Error ? e.message : "Não foi possível testar agora.");
+    } finally {
+      setTestando(false);
+    }
+  };
 
   const mexeOrcamento = d.acao === "aumentar" || d.acao === "diminuir" || d.acao === "definir";
   const exigeTeto = d.acao === "aumentar";
@@ -396,6 +444,115 @@ export function RuleDrawer({
           >
             + Adicionar condição
           </button>
+
+          {/* ── Avisos ESTÁTICOS ──────────────────────────────────────────
+              Só o que é demonstrável pela própria condição: contradição e o
+              piso das métricas. Nada de heurística de "número grande demais" —
+              quem responde "isso pega tudo?" é a prévia, contando. */}
+          {avisos.map((a, i) => (
+            <p
+              key={i}
+              style={sx(
+                `margin:2px 0 0;font-size:12px;line-height:1.45;color:${
+                  a.gravidade === "impossivel" ? "#f87171" : "#fbbf24"
+                }`,
+              )}
+            >
+              {a.gravidade === "impossivel" ? "✕" : "⚠"} {a.texto}
+            </p>
+          ))}
+
+          {/* ── Prévia ────────────────────────────────────────────────────
+              Roda a MESMA avaliação do motor (`loadEntities` + `conditionsMet`)
+              e para antes do caminho de ação. Ver `previewRule`. */}
+          <div style={sx("display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px")}>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              style={sx("align-self:flex-start;font-size:12px")}
+              onClick={testarCondicao}
+              disabled={testando || !condicoesValidas}
+            >
+              {testando ? "Testando…" : "Testar condição"}
+            </button>
+            <span className="text-muted" style={sx("font-size:11.5px")}>
+              Conta em quantas bate agora. Não altera nada no Facebook.
+            </span>
+          </div>
+
+          {erroPrevia && (
+            <p style={sx("margin:0;font-size:12px;color:#f87171")}>{erroPrevia}</p>
+          )}
+
+          {previaAtual && (
+            <div
+              style={sx(
+                "border:1px solid var(--color-border);border-radius:var(--radius-2, 8px);" +
+                  "padding:10px 12px;display:flex;flex-direction:column;gap:6px",
+              )}
+            >
+              <div style={sx("font-size:13px;font-weight:600")}>
+                {previaAtual.total === 0 ? (
+                  <span style={sx("color:#fbbf24")}>
+                    ⚠ Nenhum{nivelSufixo(d.level)} no escopo — a regra não teria o que avaliar.
+                  </span>
+                ) : (
+                  <span
+                    style={sx(
+                      previaAtual.bateram === previaAtual.total
+                        ? "color:#fbbf24"
+                        : previaAtual.bateram === 0
+                          ? "color:var(--color-text)"
+                          : "",
+                    )}
+                  >
+                    Bate em {previaAtual.bateram} de {previaAtual.total}
+                    {nivelPlural(d.level, previaAtual.total)} agora
+                  </span>
+                )}
+              </div>
+
+              {/* ⚠️ Este é o aviso que teria evitado o disparo acidental: a
+                  condição sempre-verdadeira aparece como "N de N". */}
+              {previaAtual.total > 0 && previaAtual.bateram === previaAtual.total && (
+                <p className="text-muted" style={sx("margin:0;font-size:11.5px;line-height:1.45")}>
+                  A condição bate em <strong>tudo</strong> que está no escopo. Se a ideia era
+                  filtrar, confira o operador.
+                </p>
+              )}
+
+              {/* Quais, não só quantas — para você reconhecer se são as que
+                  esperava. Sem os nomes, "3 de 12" não é conferível. */}
+              {previaAtual.entidades.length > 0 && (
+                <ul style={sx("margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:3px")}>
+                  {previaAtual.entidades.map((e, i) => (
+                    <li key={i} style={sx("display:flex;gap:8px;align-items:baseline;font-size:12px")}>
+                      <span style={sx(`color:${e.bateu ? "#4ade80" : "var(--color-neutral-500)"};width:11px`)}>
+                        {e.bateu ? "✓" : "·"}
+                      </span>
+                      <span style={sx("flex:1 1 140px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap")}>
+                        {e.nome}
+                      </span>
+                      <span className="text-muted" style={sx("font-size:11px;font-variant-numeric:tabular-nums")}>
+                        {Object.entries(e.valores)
+                          .map(([k, v]) => `${k} ${v.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}`)
+                          .join(" · ")}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {previaAtual.bateram > previaAtual.entidades.length && (
+                <p className="text-muted" style={sx("margin:0;font-size:11px")}>
+                  … e mais {previaAtual.bateram - previaAtual.entidades.length}.
+                </p>
+              )}
+              <p className="text-muted" style={sx("margin:0;font-size:11px;line-height:1.4")}>
+                Arquivados e excluídos ficam de fora do escopo, como no motor. A janela de
+                horário e o limite diário não entram nesta conta.
+              </p>
+            </div>
+          )}
         </div>
       </Campo>
 

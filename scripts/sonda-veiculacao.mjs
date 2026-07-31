@@ -106,6 +106,14 @@ async function main() {
 
   /** valor cru → { total, porNivel, divergentes } */
   const vistos = new Map();
+  /**
+   * O que a Meta diz do `status` CONFIGURADO de cada objeto, por nível.
+   *
+   * Serve para cruzar com o que está no NOSSO banco. É a pergunta que o
+   * acidente do ensaio a seco levantou: uma regra decide pelo status local, e
+   * status local errado faz a regra agir onde não deveria.
+   */
+  const statusDaMeta = { campaigns: new Map(), adsets: new Map(), ads: new Map() };
   let semCampo = 0;
   let totalObjetos = 0;
   let exemplo = null;
@@ -145,6 +153,7 @@ async function main() {
 
       for (const o of lista) {
         totalObjetos++;
+        statusDaMeta[n.aresta].set(o.id, { nome: o.name, status: o.status, efetivo: o.effective_status });
         const cru = o.effective_status;
         if (!cru) {
           semCampo++;
@@ -179,6 +188,44 @@ async function main() {
     console.log(`   ${String(e.total).padStart(4)}  ${cru.padEnd(22)} ${marca}  ${C.d}[${[...e.niveis].join(", ")}]${C.x}${div}`);
   }
   if (semCampo) console.log(`   ${C.r}${semCampo} objeto(s) vieram SEM o campo.${C.x}`);
+
+  // ── 3b. NOSSO status × o da Meta ────────────────────────────────────────
+  //
+  // 🔴 O motor de regras decide pelo status do NOSSO banco (`e.status`), não
+  // pelo da Meta. Se o nosso disser ACTIVE e lá estiver PAUSED, uma regra de
+  // pausar dispara uma requisição desnecessária; uma de ATIVAR faria o
+  // contrário, ligando o que o usuário desligou. Vale a checagem toda vez.
+  console.log(`\n${C.b}3b. Status no NOSSO banco × status na Meta${C.x}`);
+  const COLUNA_FB = { campaigns: "fbCampaignId", adsets: "fbAdSetId", ads: "fbAdId" };
+  let divergenciasStatus = 0;
+  for (const n of NIVEIS) {
+    const daMeta = statusDaMeta[n.aresta];
+    if (!daMeta.size) continue;
+    const { rows } = await cliente.query(
+      `SELECT "${COLUNA_FB[n.aresta]}" AS fb, "name", status::text AS status
+         FROM "${n.tabela}" WHERE "${COLUNA_FB[n.aresta]}" = ANY($1)`,
+      [[...daMeta.keys()]],
+    );
+    const noBanco = new Map(rows.map((r) => [r.fb, r]));
+    for (const [fbId, m] of daMeta) {
+      const b = noBanco.get(fbId);
+      if (!b) {
+        console.log(`   ${C.a}○ ${n.rotulo}: "${m.nome}" existe na Meta e NÃO no nosso banco${C.x} ${C.d}(${fbId})${C.x}`);
+        continue;
+      }
+      if (b.status !== m.status) {
+        divergenciasStatus++;
+        console.log(`   ${C.r}✗ ${n.rotulo}: "${m.nome}"${C.x}`);
+        console.log(`       nosso banco: ${C.b}${b.status}${C.x}   ·   Meta: ${C.b}${m.status}${C.x}   ${C.d}(veiculação: ${m.efetivo ?? "—"})${C.x}`);
+      }
+    }
+  }
+  if (!divergenciasStatus) {
+    console.log(`   ${C.v}✓ Nenhuma divergência — o sync está fiel ao status configurado na Meta.${C.x}`);
+  } else {
+    console.log(`   ${C.r}${divergenciasStatus} divergência(s).${C.x} O motor de regras decide pelo NOSSO status.`);
+    console.log(`   ${C.d}Rode uma sincronização completa e repita: se persistir, é bug do sync.${C.x}`);
+  }
 
   // ── 4. Diagnóstico ──────────────────────────────────────────────────────
   console.log(`\n${C.b}4. Configurado ATIVO e NÃO entregando${C.x}`);

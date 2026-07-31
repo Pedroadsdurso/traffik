@@ -3455,7 +3455,29 @@ condição sempre-verdadeira teria ligado o que estivesse parado.
 > ensaio a seco — é uma execução com um passo a mais. Ver "Prévia da regra" na
 > fila.
 
-### ⚠️ `affected: 1` NÃO significa que houve escrita na Meta
+### ✅ A REQUISIÇÃO SAIU — escrita do motor EXERCIDA em produção
+
+O log fechou a questão:
+
+```
+✓ EXECUTOU  PAUSAR → Nova campanha de Engajamento
+```
+
+**Sem `"já pausada"`.** Ou seja: o motor não pegou o desvio, chamou
+`setEntityStatus`, e a Meta aceitou (o `graphPost` lança em qualquer resposta
+com `error` ou fora de 2xx — se tivesse falhado, a mensagem estaria no log).
+
+**Isto encerra a pendência mais antiga do projeto.** O caminho da REGRA —
+avaliar condição, escolher entidade, agir sozinha e registrar — está exercido
+**por execução real em produção**, não por leitura de código. Foi por acidente,
+com consequência nula, e mesmo assim é a prova que faltava.
+
+> ⚠️ **A prova é do caminho de PAUSAR.** `AJUSTAR_ORCAMENTO` pela regra, e em
+> especial o **clamp no teto**, continuam sem execução real — as duas guardas do
+> teto agem ANTES da chamada, então elas seguem provadas, mas o valor travado no
+> teto nunca chegou à Meta por essa via.
+
+### ⚠️ Mas `affected: 1` sozinho NÃO provaria isso
 
 O laço de PAUSAR tem uma saída antecipada:
 
@@ -3733,7 +3755,80 @@ a elas. O mesmo de conjuntos para anúncios.
 
 **(b) `effective_status`** → ✅ feito. Ver "Status de VEICULAÇÃO" abaixo.
 
-### 0b. PRÉVIA DA REGRA — nasceu do ensaio que disparou (31/07/2026)
+### 0b. PRÉVIA DA REGRA → ✅ FEITO (31/07/2026)
+
+Ver "Testar condição" abaixo. O que segue é o desenho, mantido porque explica
+**o que foi recusado** e por quê.
+
+#### Como ficou
+
+| Peça | Onde |
+|---|---|
+| `previewRule(rule)` | `lib/rules/engine.ts` — reusa `loadEntities` + `conditionsMet` |
+| `analisarCondicoes(conds)` | `lib/rules/analise.ts` — puro, sem dado nenhum |
+| `previewRuleConditions(input)` | `lib/actions/rules.ts` — recebe o RASCUNHO, não um id |
+| Botão "Testar condição" | `views/rules/RuleDrawer.tsx`, dentro do bloco Condições |
+
+> ### 🔴 A prévia REUSA o motor — nunca uma segunda implementação
+> Ela é uma **promessa do que o motor vai fazer**. Uma segunda cópia da
+> avaliação divergiria da primeira, e a prévia passaria a prometer uma coisa
+> enquanto o motor faz outra — pior que não ter prévia, porque cria confiança
+> falsa em algo que mexe em orçamento real.
+>
+> `previewRule` para **antes** do caminho de ação: não chama `setEntityStatus`
+> nem `updateDailyBudget`, não grava log, não mexe em `lastRunAt`.
+
+> ⚠️ **A prévia NÃO aplica janela de horário nem limite diário**, de propósito.
+> A pergunta é sobre a CONDIÇÃO ("bate em quem?"), não sobre "rodaria neste
+> minuto?". Misturar as duas faria a prévia responder "0" às 3h da manhã por
+> causa da janela, e o usuário concluiria que a condição está errada.
+
+> ⚠️ **O resultado é descartado quando o rascunho muda.** `chavePrevia` cobre
+> condições, nível, contas, período e produtos. Número velho ao lado de condição
+> nova é pior que número nenhum — parece confirmação.
+
+> ⚠️ **Quando nada bate, ela lista o que foi AVALIADO** (com "·" em vez de "✓").
+> Uma tela muda justamente quando o usuário precisa entender *por que* não bateu
+> seria o pior momento para ficar calada.
+
+#### O que a análise estática pode e não pode afirmar
+
+`lib/rules/analise.ts` só emite o que é demonstrável **por álgebra**:
+
+1. **Contradição** — `Gasto > 100 E Gasto < 50` nunca é verdadeira.
+2. **Piso das métricas** — `cpa`, `roas`, `ctr`, `gasto` e `vendas` são todas
+   ≥ 0 por construção em `metricValue`, então `gasto ≥ 0` é sempre verdadeira e
+   `gasto < 0` nunca é.
+
+> ### ⛔ `gasto ≤ 999999` NÃO gera aviso estático — e isso é a decisão, não uma falha
+> Provar que "999999 é grande" exigiria conhecer a faixa plausível de cada
+> métrica. Erraria nos dois sentidos, e **um aviso que às vezes mente treina o
+> usuário a ignorar todos os avisos** — inclusive os dois acima, que são certos.
+>
+> Quem responde "isso pega tudo?" é a PRÉVIA, contando: ela mostra
+> **"Bate em 2 de 2"** em âmbar, com a frase *"a condição bate em tudo que está
+> no escopo; se a ideia era filtrar, confira o operador"*. Contar em vez de
+> adivinhar é a regra deste módulo.
+>
+> ⚠️ **ROI está fora da lista de propósito**: ele pode ser negativo (o piso é
+> −1). Não é métrica de regra hoje; se entrar, o piso dele **não é 0**.
+
+**Testado:** `npm run test:analise-regra` (32 asserções puras, várias delas
+provando o que o módulo **se recusa** a afirmar) + `npm run test:previa-regra`
+(16 asserções contra o banco de DEV: escopo igual ao do motor, arquivada fora,
+o caso `≤ 999999` × `≥ 999999`, e **nada muda no banco depois de rodar**).
+**Conferido na tela** com os dois operadores: `≤ 999999` → "Bate em 2 de 2" em
+âmbar com o aviso; `≥ 999999` → "Bate em 0 de 2" em cor neutra, listando as duas
+avaliadas com o gasto real.
+
+> 🐛 **O primeiro `teste-analise-regra.mjs` deu 29 falsos negativos**: o helper
+> `eq` comparava com `===` e quase toda asserção devolve um ARRAY, então
+> comparava identidade de referência — "obtido" e "esperado" saíam idênticos na
+> tela e o teste falhava. O módulo estava certo desde o início. Hoje o helper
+> compara por `JSON.stringify`. **Teste que falha imprimindo dois valores iguais
+> é bug do teste, não do código.**
+
+#### Desenho original (mantido para referência)
 
 A condição `gasto ≤ 999999` (pega tudo) é **visualmente idêntica** a
 `gasto ≥ 999999` (não pega nada), e nada no produto distingue as duas até a
@@ -5492,6 +5587,9 @@ npm run test:bots        # 35 asserções, classificação de robô (puro)
 npm run bot:reclassificar # reavalia Click.bot pelo userAgent. SIMULA; --aplicar escreve
 npm run test:desempate   # 27 asserções, país quando o IP contradiz a campanha
 npm run test:veiculacao  # 40 asserções, status configurado × veiculação (puro)
+npm run test:analise-regra   # 32 asserções, avisos estáticos de condição (puro)
+npm run test:previa-regra    # 16 asserções, prévia da regra (banco de DEV)
+npm run regras:auditar -- --url '<conn>'  # o que as regras fariam e o que já fizeram
 npm run test:veiculacao:e2e            # 13 asserções, o campo CHEGA em computeAdsOverview (banco de DEV)
 npm run ads:sonda -- --url '<conn>'    # quais effective_status a Meta devolve (só leitura)
 npm run test:match       # 20 asserções, purga + match por IP (banco de DEV)
