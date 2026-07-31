@@ -2867,8 +2867,30 @@ lib/gateways/
 
 1. **`parsers/<nome>.ts`** — uma função `parse(payload) → { vendas: [] }`.
 2. **Uma entrada em `REGISTRO`** — auth, capacidades, URL, campos, instalação.
-3. **`public/logos/<nome>.webp`.**
+3. **`public/logos/<nome>.webp`** (e a chave em `ui/LogoGateway`).
 4. **Um payload de exemplo** em `exemplos`, para o testador.
+5. **Rodar o payload real no testador** (Integrações › Testes) e conferir que
+   **não sobrou nada em âmbar**.
+
+> ### 🔴 O passo 5 não é opcional — é onde o parser errado se denuncia
+> O testador tem três estados por campo, e o terceiro é a razão de ele existir:
+>
+> | Estado | Significa |
+> |---|---|
+> | **lido** (verde) | o parser extraiu o valor |
+> | **o gateway não enviou** (cinza) | não há nada parecido no payload |
+> | 🔴 **está no payload e não foi lido** (âmbar) | o dado VEIO, com outro nome, e o parser o descartou |
+>
+> Campo vazio parece igual nos dois últimos casos. Sem o âmbar, um gateway que
+> manda o IP como `buyer_ip_address` (em vez de `customer.ip`) passaria como
+> "não envia IP" — e a geolocalização de todas as vendas dele viraria estimativa
+> sem ninguém saber por quê.
+>
+> **Âmbar sobrando = parser incompleto.** Corrija antes de conectar em produção.
+>
+> ⚠️ Confira também o bloco "O que este gateway entrega": *"veio, mas não estava
+> previsto"* é sempre erro do **registro** — a capacidade declarada está mentindo
+> para o usuário na tela.
 
 **Nada mais.** Nem rota, nem `ingestSale`, nem métrica, nem tela. Se um gateway
 novo exigir mexer em qualquer um desses, a arquitetura regrediu — o critério não
@@ -3220,6 +3242,59 @@ Medido nas 26 vendas reais de produção (semeadas no dev):
 
 `npm run test:correspondencia` — 8 asserções, interceptando o `fetch` para ler o
 `user_data` que iria à Meta. Sem rede e sem banco.
+
+### Etapas 6 e 7 — Cakto e a tela montada do registro
+
+**A Cakto custou exatamente:** um parser, uma entrada no registro, uma logo e um
+arquivo de exemplos. Zero rota, zero mudança em `ingestSale`, métricas ou lógica
+de venda. É o critério de aceite, verificado na prática.
+
+| | Kirvano | Cakto |
+|---|---|---|
+| Order bump | dentro de `products[]`, uma venda só | **entradas separadas**, id próprio |
+| `data` | objeto | **objeto OU array** (individual × agrupado) |
+| IP do comprador | manda | 🔴 **não manda** |
+| `fbc`/`fbp` | só `fbp` | **os dois** |
+| Segredo | usuário cria lá e cola aqui | **nós geramos**, ele cola lá |
+| Nomes de evento | inglês | **mistura idiomas** (`pix_gerado` × `purchase_approved`) |
+
+A mistura de idiomas é a prova de que o mapa tem de ser **por plataforma**: não
+existe regra geral que traduza `pix_gerado` e `purchase_approved` ao mesmo tempo.
+
+> ### ⚠️ `initiate_checkout` e `checkout_abandonment` caem os dois em ABANDONADA
+> A diferença entre "começou" e "desistiu" não muda o que a venda **é**: um
+> carrinho sem pagamento. O que eles precisam fazer — alimentar o funil — vem de
+> `gerouCheckout`, não do status. Distinguir os dois na tela depois é **estado
+> novo**, não remendo.
+
+> ### ⚠️ `subscription_created` lê o campo `status`, e isso é deliberado
+> A documentação não diz se criar a assinatura implica cobrança aprovada. Mapear
+> para APROVADA **inventaria faturamento**; para PENDENTE **esconderia venda
+> paga**. Ele está numa lista de "conhecidos porém ambíguos" — o que evita o
+> falso alarme de "evento desconhecido" sem fingir que sabemos a resposta.
+
+> ### ⛔ `commissions[]`: só `producer` conhecido → `coproducao` fica NULL
+> `0` afirmaria "não há coprodução" e o líquido apareceria MAIOR que a realidade.
+> Um tipo diferente entra na lista **e vira aviso** — é assim que a estrutura
+> real vai ser descoberta quando aparecer.
+
+**A tela é montada do registro** (etapa 7): rótulos, campos, passos de instalação
+e o subtítulo da gaveta. A `WebhooksView` tinha uma lista local que **já
+divergia** — a Cakto existia no backend com parser e capacidades, e não aparecia
+na tela porque ninguém lembrou de acrescentá-la em dois lugares.
+
+> ### 🔑 Gateway cuja chave NÓS geramos precisa MOSTRÁ-LA
+> `campos[].gerado: true` faz a gaveta gerar um uuid na hora e exibi-lo num campo
+> copiável. Sem isso a chave era gerada, salva e nunca mostrada — e o webhook
+> ficava **impossível de configurar do outro lado**, porque a Cakto exige o
+> `secret` no corpo.
+
+**Verificado na tela** (dev, `dev@exemplo.dev`): a gaveta abre com a Cakto
+primeiro, chave gerada com botão Copiar, os 4 passos de instalação e os dois
+passos de atenção em âmbar (disparo AGRUPADO e localização estimada). O testador
+foi exercitado com os 4 exemplos, incluindo o evento desconhecido — o aviso
+aparece — e com um payload adulterado, onde o âmbar pegou `buyer_ip_address` e
+`cliente_fbc`.
 
 ### O que a etapa 1 **não** fez
 

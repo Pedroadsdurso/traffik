@@ -1,5 +1,5 @@
 import { plural } from "@/lib/format";
-import { gatewaysParaEscolher } from "@/lib/gateways/registro";
+import { gatewayPorId, gatewaysParaEscolher } from "@/lib/gateways/registro";
 import { sx } from "@/lib/sx";
 import { CampoCopiavel, Drawer } from "../../ui/Drawer";
 import { LogoGateway } from "../../ui/LogoGateway";
@@ -289,6 +289,7 @@ function WebhookModal({ v }: { v: TraffikView }) {
   const editing = Boolean(v.webhookEditId);
   const filtered = GATEWAYS.filter((g) => g.name.toLowerCase().includes(v.webhookGatewaySearch.toLowerCase()));
   const selected = GATEWAYS.find((g) => g.id === v.webhookGateway);
+  const def = gatewayPorId(v.webhookGateway);
   const emEdicao = editing ? v.webhooks.find((w) => w.id === v.webhookEditId) : null;
 
   return (
@@ -299,13 +300,18 @@ function WebhookModal({ v }: { v: TraffikView }) {
       descricao={
         editing
           ? "A URL abaixo é a que você cola no painel do gateway."
-          : "Escolha o gateway e informe o token de segurança gerado no painel dele."
+          : def?.auth.tipo === "segredo" && def.auth.geradoPorNos
+            // ⚠️ Também vem do registro: na Cakto NÓS geramos a chave, na
+            // Kirvano o usuário cola a dele. Descrever um fluxo só deixaria
+            // metade dos gateways com a instrução errada.
+            ? "Escolha o gateway, copie a chave que geramos e siga os passos."
+            : "Escolha o gateway e informe a chave de segurança gerada no painel dele."
       }
       rodape={
         <>
           <button className="btn btn-secondary" type="button" onClick={v.closeWebhookModal}>Cancelar</button>
           <button className="btn btn-primary" type="button" onClick={v.saveWebhook}
-            disabled={v.webhookBusy || !selected?.enabled || (!editing && !v.kirvanoToken.trim())}>
+            disabled={v.webhookBusy || !selected?.enabled || (!editing && !v.gatewaySecret.trim())}>
             {v.webhookBusy ? "Salvando…" : editing ? "Salvar" : "Adicionar"}
           </button>
         </>
@@ -337,32 +343,81 @@ function WebhookModal({ v }: { v: TraffikView }) {
         </>
       )}
 
-      {selected?.enabled && (
+      {/**
+       * ⛔ TUDO daqui para baixo vem do REGISTRO. Nada de rótulo escrito para um
+       * gateway específico — era assim antes ("Token de segurança da Kirvano",
+       * "Cole aqui o token gerado no painel da Kirvano"), e é justamente o que
+       * faria o décimo gateway exigir tela nova.
+       */}
+      {def?.ativo && (
         <>
-          <div className="field">
-            <label>Nome (opcional)</label>
-            <input className="input" value={v.kirvanoName} onChange={v.onKirvanoName}
-              placeholder={`Ex.: ${selected.name} — Método Foco`} />
-          </div>
-          <div className="field">
-            <label>Token de segurança da {selected.name}</label>
-            <input className="input" value={v.kirvanoToken} onChange={v.onKirvanoToken}
-              placeholder={editing ? "Deixe em branco para manter o atual" : "Cole aqui o token gerado no painel da Kirvano"} />
-            <p className="text-muted" style={sx("font-size:11.5px;margin:5px 0 0;line-height:1.5")}>
-              Gere o token dentro do painel da {selected.name} (você define o texto e escolhe os eventos).
-              Nós validamos cada evento com esse token e geramos uma URL única para você colar lá.
-            </p>
-          </div>
-        </>
-      )}
+          {def.campos.map((campo) =>
+            campo.chave === "nome" ? (
+              <div className="field" key={campo.chave}>
+                <label>{campo.rotulo}</label>
+                <input className="input" value={v.gatewayName} onChange={v.onGatewayName}
+                  placeholder={`Ex.: ${def.nome} — Método Foco`} />
+              </div>
+            ) : campo.gerado ? (
+              /**
+               * 🔑 A chave é NOSSA, e o usuário precisa dela para configurar o
+               * gateway (a Cakto exige o `secret` no corpo). Sem este bloco ela
+               * era gerada, salva e nunca mostrada — o webhook ficava impossível
+               * de configurar do outro lado.
+               */
+              <CampoCopiavel
+                key={campo.chave}
+                label={campo.rotulo}
+                valor={v.gatewaySecret}
+                dica={campo.ajuda}
+              />
+            ) : (
+              <div className="field" key={campo.chave}>
+                <label>{campo.rotulo}</label>
+                <input className="input" value={v.gatewaySecret} onChange={v.onGatewaySecret}
+                  placeholder={editing ? "Deixe em branco para manter a atual" : campo.rotulo} />
+                {campo.ajuda && (
+                  <p className="text-muted" style={sx("font-size:11.5px;margin:5px 0 0;line-height:1.5")}>
+                    {campo.ajuda}
+                  </p>
+                )}
+              </div>
+            ),
+          )}
 
-      {/* Só na edição a URL é revelada. */}
-      {emEdicao && (
-        <CampoCopiavel
-          label="URL do webhook"
-          valor={emEdicao.url}
-          dica="Cole esta URL no campo de webhook do painel do gateway. Ela é única e identifica a sua conta."
-        />
+          {/* A URL aparece já na criação quando NÓS geramos a chave: os dois
+              valores são colados juntos no painel do gateway. */}
+          {emEdicao ? (
+            <CampoCopiavel
+              label="Endereço do webhook"
+              valor={emEdicao.url}
+              dica="Cole no campo de webhook do painel do gateway. É único e identifica a sua conta."
+            />
+          ) : (
+            def.campos.some((c) => c.gerado) && (
+              <p className="text-muted" style={sx("font-size:11.5px;margin:0;line-height:1.5")}>
+                O endereço para colar na {def.nome} aparece assim que você adicionar — ele depende do
+                identificador que criamos agora.
+              </p>
+            )
+          )}
+
+          {def.instalacao.length > 0 && (
+            <div style={sx("border-top:1px solid var(--color-divider);padding-top:var(--space-3)")}>
+              <div className="card-kicker" style={sx("margin-bottom:6px")}>Como configurar na {def.nome}</div>
+              <ol style={sx("margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px")}>
+                {def.instalacao.map((passo) => (
+                  <li key={passo.titulo} style={sx("font-size:12.5px;line-height:1.55")}>
+                    <strong style={sx(passo.atencao ? "color:var(--color-warning,#fbbf24)" : "")}>
+                      {passo.titulo}
+                    </strong>
+                    <span className="text-muted" style={sx("display:block")}>{passo.texto}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </>
       )}
 
       {v.webhookError && (

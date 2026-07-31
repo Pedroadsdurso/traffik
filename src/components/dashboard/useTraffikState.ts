@@ -13,7 +13,14 @@ import {
 } from "@/lib/actions/facebook";
 import type { PixelConfigDTO } from "@/lib/actions/pixels";
 import { corFinanceira } from "@/lib/financeiro";
-import { rotuloDoGateway } from "@/lib/gateways/registro";
+import { gatewayPorId, gatewaysParaEscolher, rotuloDoGateway } from "@/lib/gateways/registro";
+
+/** Primeiro gateway ATIVO do registro — nada de nome cravado aqui. */
+const gatewayInicial = () => gatewaysParaEscolher().find((g) => g.ativo)?.id ?? "CUSTOM";
+
+/** Chave gerada por nós, quando o gateway exige (Cakto). Vazio nos demais. */
+const segredoInicial = (g: string) =>
+  gatewayPorId(g)?.campos.some((c) => c.gerado) ? crypto.randomUUID() : "";
 import type { PeriodoNome } from "@/lib/periodo";
 import type { NomeIcone } from "./ui/Icone";
 import {
@@ -172,8 +179,8 @@ interface State {
   webhookGatewaySearch: string;
   webhookGateway: string;
   webhookEditId: string | null;
-  kirvanoToken: string;
-  kirvanoName: string;
+  gatewaySecret: string;
+  gatewayName: string;
   webhookError: string | null;
   // Credenciais de API (bloco direito)
   apiCredentials: ApiCredentialDTO[];
@@ -303,10 +310,10 @@ function initialState(
     copiedWebhookId: null,
     webhookModalOpen: false,
     webhookGatewaySearch: "",
-    webhookGateway: "KIRVANO",
+    webhookGateway: gatewayInicial(),
     webhookEditId: null,
-    kirvanoToken: "",
-    kirvanoName: "",
+    gatewaySecret: "",
+    gatewayName: "",
     webhookError: null,
     apiCredentials: initialApiCredentials,
     credModalOpen: false,
@@ -1608,23 +1615,35 @@ export function useTraffikState(
     webhookGatewaySearch: s.webhookGatewaySearch,
     webhookGateway: s.webhookGateway,
     webhookEditId: s.webhookEditId,
-    kirvanoToken: s.kirvanoToken,
-    kirvanoName: s.kirvanoName,
+    gatewaySecret: s.gatewaySecret,
+    gatewayName: s.gatewayName,
     webhookError: s.webhookError,
     openWebhookModal: () =>
-      set({ webhookModalOpen: true, webhookEditId: null, webhookGateway: "KIRVANO", webhookGatewaySearch: "", kirvanoToken: "", kirvanoName: "", webhookError: null }),
+      set({
+        webhookModalOpen: true, webhookEditId: null, webhookGateway: gatewayInicial(), webhookGatewaySearch: "",
+        // Gateway cuja chave nós geramos já abre com ela pronta para copiar.
+        gatewaySecret: segredoInicial(gatewayInicial()),
+        gatewayName: "", webhookError: null,
+      }),
     openEditWebhook: (w: WebhookRowDTO) =>
-      set({ webhookModalOpen: true, webhookEditId: w.id, webhookGateway: w.platform, kirvanoToken: "", kirvanoName: w.name, webhookError: null }),
+      set({ webhookModalOpen: true, webhookEditId: w.id, webhookGateway: w.platform, gatewaySecret: "", gatewayName: w.name, webhookError: null }),
     closeWebhookModal: () => set({ webhookModalOpen: false }),
     onWebhookGatewaySearch: (e: React.ChangeEvent<HTMLInputElement>) => set({ webhookGatewaySearch: e.target.value }),
-    selectWebhookGateway: (g: string) => set({ webhookGateway: g }),
-    onKirvanoToken: (e: React.ChangeEvent<HTMLInputElement>) => set({ kirvanoToken: e.target.value }),
-    onKirvanoName: (e: React.ChangeEvent<HTMLInputElement>) => set({ kirvanoName: e.target.value }),
+    selectWebhookGateway: (g: string) =>
+      set({
+        webhookGateway: g,
+        // ⚠️ Gateway cuja chave NÓS geramos (Cakto) já nasce com ela preenchida:
+        // o usuário precisa copiá-la para o painel do gateway, e um campo vazio
+        // ali seria um beco — não há o que digitar.
+        gatewaySecret: segredoInicial(g),
+      }),
+    onGatewaySecret: (e: React.ChangeEvent<HTMLInputElement>) => set({ gatewaySecret: e.target.value }),
+    onGatewayName: (e: React.ChangeEvent<HTMLInputElement>) => set({ gatewayName: e.target.value }),
     saveWebhook: async () => {
       set({ webhookBusy: true, webhookError: null });
       try {
         if (s.webhookEditId) {
-          const updated = await updateWebhook({ id: s.webhookEditId, name: s.kirvanoName, secret: s.kirvanoToken });
+          const updated = await updateWebhook({ id: s.webhookEditId, name: s.gatewayName, secret: s.gatewaySecret });
           setS((st) => ({
             ...st,
             webhooks: st.webhooks.map((w) => (w.id === updated.id ? updated : w)),
@@ -1632,7 +1651,7 @@ export function useTraffikState(
             webhookModalOpen: false,
           }));
         } else {
-          const created = await createWebhook({ platform: s.webhookGateway, name: s.kirvanoName, secret: s.kirvanoToken });
+          const created = await createWebhook({ platform: s.webhookGateway, name: s.gatewayName, secret: s.gatewaySecret });
           setS((st) => ({ ...st, webhooks: [...st.webhooks, created], webhookBusy: false, webhookModalOpen: false }));
         }
       } catch {
