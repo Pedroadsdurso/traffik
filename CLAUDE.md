@@ -2422,9 +2422,12 @@ avalia; **aumento sem teto recusado antes de chamar a Meta**; **já no teto pula
 orçamento intacto no banco; limite diário 0 bloqueia; `runUserRules` avalia e
 grava log.
 
-> ⚠️ **O MOTOR DE REGRAS nunca agiu de verdade contra a Graph API.** As duas
-> guardas do teto agem ANTES da chamada, então foram provadas; o **clamp NO teto**
-> continua sem execução real.
+> ⚠️ **O motor rodou em produção pela primeira vez em 31/07/2026** — por
+> acidente, com o operador da condição invertido. Ele avaliou, selecionou a
+> entidade certa (escopo correto, arquivadas fora) e chegou ao caminho de
+> PAUSAR. **Se a requisição HTTP chegou a sair depende do ramo "já pausada"**;
+> ver "O ENSAIO A SECO DISPAROU". As duas guardas do teto agem ANTES da chamada,
+> então seguem provadas; o **clamp NO teto** continua sem execução real.
 >
 > ⚠️ Não confunda com `updateDailyBudget`, que **já foi exercido** — pela caneta
 > inline, por uso real do usuário. O que falta é o caminho da REGRA: avaliar
@@ -3431,6 +3434,75 @@ recém-criada, que é justamente quando se quer ver o que ela faz.
 mostrou **"Nenhuma entidade satisfez as condições (1 avaliadas)"**, listando só a
 pausada. Antes da correção seriam 2.
 
+## 🧪 O ENSAIO A SECO DISPAROU — operador invertido (31/07/2026)
+
+O usuário criou a regra do Passo 0 com **`gasto ≤ 999999`** em vez de `≥`. A
+condição, que deveria ser impossível, ficou **sempre verdadeira**. A regra
+executou.
+
+**Consequência real: nenhuma.** A ação escolhida era **PAUSAR** e a campanha
+alcançada já estava pausada. A recomendação de usar Pausar em vez de Ativar
+funcionou exatamente como defesa em profundidade — com `ATIVAR`, a mesma
+condição sempre-verdadeira teria ligado o que estivesse parado.
+
+> ### 🔴 A LIÇÃO NÃO É "o usuário errou o operador"
+> É que **a única barreira que segurou foi a ação escolhida**, e não a condição.
+> A condição era o mecanismo de segurança do ensaio, e ela falhou em silêncio:
+> nada na tela, no motor ou no log distingue `≤ 999999` (pega tudo) de
+> `≥ 999999` (não pega nada). As duas parecem idênticas até rodar.
+>
+> Um ensaio a seco cuja segurança depende de digitar o operador certo não é um
+> ensaio a seco — é uma execução com um passo a mais. Ver "Prévia da regra" na
+> fila.
+
+### ⚠️ `affected: 1` NÃO significa que houve escrita na Meta
+
+O laço de PAUSAR tem uma saída antecipada:
+
+```js
+if (e.status !== "ACTIVE") {
+  applied.push({ name: e.name, action: "PAUSAR", ok: true, error: "já pausada" });
+  continue;   // ← NÃO chama setEntityStatus. Nenhuma requisição sai.
+}
+await setEntityStatus(e.fbId, "PAUSED", e.token);
+```
+
+E `affected = applied.filter(a => a.ok).length` — o desvio empurra **`ok: true`**.
+Então uma entidade "afetada" pode ser uma entidade em que **nada foi feito**.
+
+**Como saber qual dos dois aconteceu**, no `details.aplicado` do log:
+
+| No log | Significa |
+|---|---|
+| `{ ok: true, error: "já pausada" }` | 🟡 **nenhuma requisição saiu.** O motor parou uma linha antes do `fetch` |
+| `{ ok: true }`, sem `error` | ✅ **a requisição SAIU e a Meta aceitou** |
+| `{ ok: false, error: "<mensagem>" }` | ❌ a Meta recusou; a mensagem é a dela |
+
+`npm run regras:auditar` já separa os dois: imprime `✓ EXECUTOU` só no segundo
+caso, e `· já pausada` no primeiro.
+
+> ⚠️ **O ramo depende do status LOCAL**, não do status real no Facebook. Se o
+> nosso banco dissesse `ACTIVE` e a campanha estivesse pausada lá, a requisição
+> teria saído mesmo assim (e a Meta a aceitaria, por ser idempotente).
+
+> ⚠️ **Não guardamos a resposta da Meta.** `graphPost` **lança** quando
+> `!res.ok` ou quando vem `error`, e o `catch` do motor põe a mensagem no log —
+> então erro fica registrado, mas o corpo de uma resposta de SUCESSO é
+> descartado. "Sucesso" aqui quer dizer "HTTP 2xx sem objeto `error`", nada mais
+> específico que isso.
+
+### ✅ ESCOPO CONFIRMADO EM PRODUÇÃO — com execução real
+
+O log trouxe **1 entidade avaliada**, não 13. A conta CA 1 MARIA tem 12
+campanhas arquivadas, e **nenhuma delas entrou**. É a confirmação de que o
+`semApagados` do commit `cc8fdec` está valendo no build que a produção roda —
+agora por execução real, não por leitura de código.
+
+> Vale registrar como a evidência apareceu: **a regra que provou o escopo é a
+> mesma que disparou por engano.** Um ensaio que se comportasse exatamente como
+> planejado teria provado a mesma coisa; foi o acidente que deu peso à prova,
+> porque exercitou o caminho inteiro em vez de parar na avaliação.
+
 ## ✍️ ESCRITA NA GRAPH API: o que já foi exercido (31/07/2026)
 
 > ### ⛔ A documentação afirmava, em QUATRO lugares, que nenhuma escrita real
@@ -3453,7 +3525,7 @@ pausada. Antes da correção seriam 2.
 | **`Lead`/`AddToCart`/`IC` na CAPI** | `/api/pixel/event` | ✅ **automático, pelo script instalado** |
 | Teste de pixel | `/api/pixel/test` | ✅ |
 | Criar campanha | `/api/ads/campaign` | ❌ nunca |
-| **Regras agindo sozinhas** | `rules/engine.ts` | ❌ **nunca** |
+| **Regras agindo sozinhas** | `rules/engine.ts` | ⚠️ **avaliou, escolheu a entidade e chegou ao caminho de ação em produção (31/07/2026, por acidente).** Se a requisição chegou a SAIR depende do ramo "já pausada" — ver a seção do ensaio acima |
 | **Clamp NO teto de orçamento** | `rules/engine.ts` | ❌ **nunca** |
 | Ações em massa | `/api/ads/bulk` | ❌ nunca |
 | Duplicar | `/copies` | ❌ nunca |
@@ -3660,6 +3732,36 @@ a elas. O mesmo de conjuntos para anúncios.
 > sem ordem de deploy e sem risco em produção.
 
 **(b) `effective_status`** → ✅ feito. Ver "Status de VEICULAÇÃO" abaixo.
+
+### 0b. PRÉVIA DA REGRA — nasceu do ensaio que disparou (31/07/2026)
+
+A condição `gasto ≤ 999999` (pega tudo) é **visualmente idêntica** a
+`gasto ≥ 999999` (não pega nada), e nada no produto distingue as duas até a
+regra rodar. Ver "O ENSAIO A SECO DISPAROU".
+
+> ### ⛔ NÃO implemente isto como heurística de "condição trivial"
+> A tentação óbvia é um aviso do tipo *"`≤ 999999` provavelmente pega tudo"*.
+> Isso é chute com cara de garantia: depende de saber a faixa plausível de cada
+> métrica, erra nos dois sentidos, e um aviso que às vezes mente treina o
+> usuário a ignorá-lo — o mesmo defeito do aviso âmbar que aparece sempre.
+>
+> **A resposta certa não é adivinhar, é CONTAR:** um botão *"Testar condição"*
+> na gaveta que roda a avaliação sem agir e responde
+> **"bate em N de M campanhas agora"**. Com `≤ 999999` teria dito "1 de 1", e o
+> erro seria visível antes de salvar.
+>
+> Ele **reusa `loadEntities` + `conditionsMet`** — a mesma avaliação do motor,
+> nunca uma segunda cópia (o motor divergiria da prévia, e a prévia é justamente
+> a promessa do que ele vai fazer). O caminho de ação fica de fora: prévia não
+> chama `setEntityStatus` nem `updateDailyBudget`.
+>
+> É o Passo 0 do plano da Graph API virando **funcionalidade** em vez de
+> procedimento manual — e é o que teria evitado o disparo acidental.
+
+**Complemento barato, este sim determinístico:** contradição entre condições
+(`gasto > 100 E gasto < 50` nunca bate) e limite inferior conhecido (toda
+métrica é ≥ 0, então `métrica ≥ 0` é sempre verdadeira e `métrica < 0` nunca é).
+Esses dois são demonstráveis sem dado nenhum, ao contrário de "999999 é muito".
 
 ### 1. CAKTO + arquitetura universal de gateways — **PRÓXIMO**
 
@@ -3927,9 +4029,10 @@ Fora isso: **faxina de código morto** (lista em "Pendências abertas") e o
 **import/export do Bloco 8**, que ficou de fora de propósito. O lint está em
 zero e não há item de padronização visual pendente.
 
-⚠️ **O motor de regras, as ações em massa e o duplicar nunca foram exercidos** —
-segue sendo a verificação mais importante em aberto. Pausar e alterar orçamento
-**já foram**, por uso real. Ver "Escrita na Graph API: o que já foi exercido".
+⚠️ **As ações em massa e o duplicar nunca foram exercidos.** Pausar e alterar
+orçamento já foram, por uso real; o **motor de regras** rodou em produção em
+31/07/2026, com escopo confirmado. Ver "Escrita na Graph API" e "O ENSAIO A SECO
+DISPAROU".
 
 ### O que NÃO está pendente (não refaça)
 
@@ -5421,9 +5524,11 @@ arquivo local, de propósito.
 - **`Workspace.accountIds` / `webhookIds` / `pixelConfigIds` / `products`** —
   mortos, mantidos pela regra dos dois deploys.
 - **`DashboardLayout.workspaceId` nullable** — o NOT NULL entra num 2º deploy.
-- **O MOTOR DE REGRAS, as ações em massa e o duplicar nunca foram exercidos.**
-  Pausar e alterar orçamento **já foram**, por uso real do usuário. Ver "Escrita
-  na Graph API: o que já foi exercido" para o inventário e o plano de validação.
+- **As ações em massa e o duplicar nunca foram exercidos.** Pausar e alterar
+  orçamento **já foram**, por uso real. O **motor de regras** rodou em produção
+  em 31/07/2026 (por acidente, operador invertido) e teve o escopo confirmado —
+  mas o último centímetro, a requisição HTTP, depende do ramo "já pausada". Ver
+  "Escrita na Graph API" e "O ENSAIO A SECO DISPAROU".
 - **`WebhookLog` sem retenção**, e logs sem dono não aparecem na UI.
 
 ## 🎨 Marca e logos
