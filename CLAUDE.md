@@ -4843,18 +4843,34 @@ desligada.** Nenhuma dessas ferramentas pergunta "alguém chama isto?".
 > Ao criar rota de cron, **agende no mesmo commit**. Ao criar consulta de
 > manutenção, **rode contra linhas semeadas no dev** antes de dizer que funciona.
 
-## 🚦 COMECE AQUI — sessão de 31/07/2026 (3ª parte)
+## 🚦 COMECE AQUI — sessão de 31/07/2026 (3ª parte) — TUDO EM PRODUÇÃO
 
-**Três itens fechados**, todos verificados. Tudo na árvore de trabalho, **SEM
-COMMIT** — aguardando o teste do usuário.
+**Três itens fechados e no ar** (commit `9c97a25`), migrations aplicadas antes do
+push, produção sondada 6× sem `500`. **E a dedup do pixel foi confirmada do lado
+da Meta** — a última prova que faltava do trabalho da 2ª parte.
 
-> 🔴 **DUAS MIGRATIONS PENDENTES: `20260731070000_pixel_event_detectores` e
-> `20260731080000_sale_utms`.** Ordem obrigatória: `npx prisma migrate deploy` na
-> produção **e só então** `git push`. As duas são aditivas (uma coluna nullable e
-> seis colunas nullable, sem default, sem backfill, sem constraint), então o build
-> antigo continua funcionando — mas o código novo faz `SELECT` delas.
+| | Item | Estado |
+|---|---|---|
+| 1 | Aviso de snippet defasado na gaveta do Pixel | ✅ em produção, conferido na tela |
+| 2 | Leitor da coluna `espelho` (aba Testes) | ✅ em produção, conferido na tela |
+| 3 | UTMs copiadas para `Sale` + backfill | ✅ em produção; **backfill ainda não rodado** |
+| — | Dedup confirmada no Gerenciador de Eventos da Meta | ✅ entrada única, "API de Conversões e navegador" |
+
+> ⏳ **Único passo pendente, e não é urgente:** `npm run backfill:utms` (simula
+> por padrão). Nada apaga `Click` automaticamente, então a janela dele **não está
+> fechando** — ao contrário da do `backfill:platform`, que perde história a cada
+> gateway removido.
 >
-> Depois do deploy: **`npm run backfill:utms`** (simula por padrão).
+> ```powershell
+> npm run backup -- --url '<conn>'          # sempre antes
+> npm run backfill:utms -- --url '<conn>'   # SIMULA
+> ```
+
+> ⚠️ **O aviso de snippet vai dizer "versão anterior" em produção, e está certo:**
+> os snippets instalados hoje não sabem reportar a assinatura. Some quando o
+> usuário regerar e reinstalar. Pelo mesmo motivo, boa parte do histórico do card
+> de espelho aparece como "não informado" — o que interessa é o que entra daqui
+> para frente.
 
 ### 1. ✅ Aviso de snippet defasado na gaveta do Pixel
 
@@ -5023,10 +5039,15 @@ falta cópia.
 
 ### 📋 A FILA
 
-1. **Reauditoria da fila de UX** (o usuário adiou de propósito: precisa de
-   reapuração antes de executar, e as telas criadas desde então — gaveta da
-   Cakto, nova campanha, drill-down, coluna de veiculação, testar condição, dono
-   do pixel, e agora estas duas — **não foram auditadas** quanto à linguagem).
+1. **FILA DE UX — o próximo trabalho, com REAUDITORIA ANTES de executar.**
+   Decisão do usuário: ela é grande demais para dividir sessão, e a lista
+   envelhece (3b e 3c já estavam feitos quando a fila dizia que não). As telas
+   criadas desde a última apuração — gaveta da Cakto, nova campanha, drill-down,
+   coluna de veiculação, testar condição, dono do pixel, e agora o aviso de
+   snippet e o card de espelho — **nunca foram auditadas** quanto à linguagem.
+   Devolver com FEITO / PARCIAL / NÃO FEITO e uma recomendação de ordem.
+   ⚠️ Vale a regra permanente: **simplifique jargão de PROGRAMAÇÃO, nunca de
+   TRÁFEGO**, e confira `lib/explicacoes.ts` antes de "adicionar tooltip".
 2. **Evento de TESTE da Cakto conta como venda real** — bloqueado até o usuário
    reativar a Cakto (precisa do payload real).
 3. Import/export do Bloco 8; faxina do nav morto no `useTraffikState` +
@@ -5034,10 +5055,53 @@ falta cópia.
 
 ### O que o usuário ainda deve
 
-- Exercitar o **AddToCart** (único evento do script nunca exercitado).
-- Confirmar no **Gerenciador de Eventos da Meta** que o `InitiateCheckout`
-  aparece numa linha só, marcada **"Navegador e Servidor"**. Duas linhas
-  separadas = a Meta não juntou.
+Nada. ✅ **A dedup foi confirmada do lado da Meta** — ver a seção abaixo. Os dois
+itens que estavam aqui saíram: um foi verificado, o outro não se aplica ao funil.
+
+## ✅✅ DEDUP CONFIRMADA NO GERENCIADOR DE EVENTOS DA META (31/07/2026)
+
+**O usuário confirmou: o `InitiateCheckout` aparece como *"enviado por API de
+Conversões e navegador"*, numa entrada ÚNICA.**
+
+Isto fecha o ciclo que começou com **"1 venda real, o Gerenciador de Anúncios
+marcando 2"**. A Meta estava contando cada conversão duas vezes e otimizando as
+campanhas com sinal inflado — dinheiro real, sem erro e sem log em lugar nenhum.
+
+> ### 🔴 A EVIDÊNCIA É DO LADO DA META, e é isso que a torna conclusiva
+> Tudo que tínhamos até aqui provava o NOSSO lado: o `eid` no formato
+> `InitiateCheckout-90whss` só sai do nosso `eid()`, o único ponto que chama
+> `fbq('track', …, {eventID})` é o `espelhar()`, e o par não pode divergir por
+> construção (o `track()` calcula o id UMA vez e entrega a mesma variável ao
+> espelho e ao payload).
+>
+> **Nada disso prova que a META juntou os dois.** Só o Gerenciador de Eventos
+> responde isso, e a resposta é binária: uma entrada marcada "API de Conversões e
+> navegador" = juntou; duas entradas separadas = não juntou. Foi a segunda ponta
+> que faltava, e ela não tinha substituto do nosso lado.
+>
+> ⚠️ **Não confunda com o `sent: 1` da nossa resposta.** Ele diz que a CAPI
+> aceitou o evento, não que ela o casou com o do navegador. Era exatamente essa
+> confusão que mantinha o bug invisível: a nossa CAPI respondia `sent: 1` o tempo
+> todo enquanto a Meta contava dois.
+
+### Estado final, evento a evento
+
+| Evento | Situação |
+|---|---|
+| ✅ `PageView` | 1 requisição `/tr`, **sem `eid`**, dono é o pixel da página. Sem duplicação — é a partição funcionando, não coordenação |
+| ✅ `InitiateCheckout` | espelho disparando, **dedup confirmada na Meta** |
+| ⬜ `Lead` | toggle desligado; o usuário não tem formulário no funil atual |
+| ➖ `AddToCart` | **não se aplica** — checkout hospedado pelo gateway, sem carrinho |
+
+> ⚠️ **`AddToCart` saiu da lista de pendências, mas o detector dele continua sem
+> nunca ter rodado.** A heurística é fixa (regex de "carrinho"/"comprar" no texto
+> ou na classe) e nunca foi exercitada contra uma página real. Não é dívida deste
+> usuário — o funil dele não tem carrinho —, mas **é dívida do produto**: no dia
+> em que alguém com carrinho ligar o toggle, essa regex será exercitada pela
+> primeira vez em produção.
+>
+> ⚠️ O mesmo vale para `Lead`, em menor grau: o caminho existe e passa nos testes
+> em DOM falso (`npm run test:espelho`), mas nunca disparou num formulário real.
 
 ---
 
@@ -5207,8 +5271,8 @@ campanhas com sinal inflado. Três coisas foram feitas:
 
 | | Item | Por que ficou assim |
 |---|---|---|
-| ⚠️ | **A dedup no Gerenciador de Eventos da Meta** | é a última prova que falta. Alvo: `InitiateCheckout` numa linha só, marcada **"Navegador e Servidor"** — duas linhas separadas significa que a Meta não juntou |
-| ⚠️ | **`AddToCart`** | o único evento do script ainda não exercitado. O detector é heurística fixa (texto/classe com "carrinho"/"comprar") |
+| ✅ | ~~**A dedup no Gerenciador de Eventos da Meta**~~ | **CONFIRMADA em 31/07/2026** — entrada única, "API de Conversões e navegador". Ver a seção da 3ª parte |
+| ➖ | **`AddToCart`** | **não se aplica** ao funil do usuário (checkout hospedado, sem carrinho). O detector — heurística fixa de "carrinho"/"comprar" — segue sem nunca ter rodado numa página real |
 | ⚠️ | **O bloco "Quem envia cada evento" com 4 opções** | a gaveta foi aberta (o toggle de Lead foi conferido), mas o bloco reescrito nesta sessão **não foi olhado na tela** |
 | ⚠️ | **O globo** | corrigido em `47e2523`; vale reconferir zoom máximo e marcador cruzando a borda |
 
@@ -7284,7 +7348,7 @@ Registradas de propósito — **não são bugs esquecidos**, são decisões toma
 | # | Dívida | Por quê / risco |
 |---|--------|-----------------|
 | 0 | ~~**`PixelEvent.espelho` sem leitor**~~ e ~~**detector congelado sem aviso**~~ ✅ **RESOLVIDOS em 31/07/2026 (3ª parte)** — card na aba Testes e aviso na gaveta do Pixel. | Fica só a confirmação no Gerenciador de Eventos da Meta, que é do usuário. |
-| 1 | ~~**Dedup parcial dos eventos de pixel.**~~ ✅ **RESOLVIDO em 31/07/2026.** `eventId` determinístico (`057c06e`), espelho no `fbq` (`057c06e`, que **nunca rodou** até `0fa68d1`) e partição por dono do evento (`e755894`). Verificado em produção: `eid=InitiateCheckout-90whss` saindo pelo navegador com o mesmo id da CAPI. | Fica só o **detector congelado no snippet** (item 1 da fila) e a confirmação no Gerenciador de Eventos da Meta ("Navegador e Servidor" numa linha só). |
+| 1 | ~~**Dedup parcial dos eventos de pixel.**~~ ✅ **RESOLVIDO em 31/07/2026.** `eventId` determinístico (`057c06e`), espelho no `fbq` (`057c06e`, que **nunca rodou** até `0fa68d1`) e partição por dono do evento (`e755894`). Verificado em produção: `eid=InitiateCheckout-90whss` saindo pelo navegador com o mesmo id da CAPI, e **confirmado no Gerenciador de Eventos da Meta** — entrada única, "API de Conversões e navegador". | ✅ **Nada.** As duas pontas estão provadas: a nossa (o id sai igual dos dois lados) e a da Meta (ela juntou). O detector congelado saiu na 3ª parte de 31/07. |
 | 2 | **Nav morto no `useTraffikState`** (`navAnalise`, `navAuto`, `navConfig`, `pageTitle`, `activeTab`, `fbTabs`, `fbSub`) e o **gerador de link/snippet antigo** (`utmUrl`, `snippetText`). Nada é renderizado. | Sobrou do Bloco 1/11. Limpar num passo de faxina. |
 | 3 | **Atribuição por nome é ambígua** quando dois anúncios/campanhas têm o mesmo nome. | Limitação pré-existente; o id resolve para tráfego novo com os códigos do Bloco 11. O Teste de Tracking (Bloco 13) agora **avisa** quando o casamento foi por nome. |
 | 4 | **`WebhookLog` sem retenção nem paginação.** | Cresce indefinidamente. Falta cron de purga. |
