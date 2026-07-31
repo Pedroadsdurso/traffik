@@ -3568,12 +3568,31 @@ o único que nunca rodou.
 
 ### 🧪 Plano de validação do que falta
 
-> ### 🔑 A cobaia não consegue gastar, e é isso que torna o teste seguro
-> Campanha **1382496493761816** (CA 1 MARIA, engajamento, PAUSADA) é **crua: sem
-> conjunto e sem anúncio**. A Meta só entrega através de conjuntos, então ela não
-> gasta **nem se for ativada**. Risco financeiro zero, não "baixo".
+> ### 🔴🔴 A PREMISSA DA COBAIA CAIU — ela GASTOU (31/07/2026)
+> A versão anterior desta seção dizia que a campanha de engajamento era **crua
+> (sem conjunto e sem anúncio)** e por isso **não gastaria nem se fosse
+> ativada** — "risco financeiro zero, não baixo".
 >
-> ⚠️ **Isso deixa de valer no instante em que ela ganhar um conjunto.**
+> **Ela gastou R$ 0,13.** O valor apareceu no `details.avaliado` do log da regra
+> que disparou por engano. Gasto só existe com entrega, e a Meta **só entrega
+> através de conjuntos** — então ela tem conjunto e anúncio ativos, ou passou a
+> ter em algum momento. A frase escrita acima já estava falsa quando foi lida.
+>
+> **Consequências, todas do plano de validação:**
+> - o Passo 1(b) ("ativar é seguro porque não há entrega") **não vale mais**;
+> - o Passo 2 (clamp de orçamento) mexeria numa campanha que entrega de verdade;
+> - "risco financeiro zero" vira "risco real, pequeno".
+>
+> ⚠️ **A regra que fica: não confie na descrição de uma cobaia — MEÇA.**
+> `npm run conta:estrutura` responde por campanha quantos conjuntos e anúncios
+> ATIVOS ela tem e quanto gastou, e marca com `● PODE GASTAR` toda campanha
+> `ACTIVE` com conjunto e anúncio ativos. Uma campanha só é segura enquanto for
+> **crua (zero conjuntos)** — e isso é uma medição, não uma lembrança.
+>
+> ✅ **Pausada, ela volta a ser inofensiva** — campanha pausada não entrega, e o
+> Passo 1(a) (pausar o que já está pausado) continua sendo o teste mais seguro.
+> Mas o Passo 1(b) e o Passo 2 precisam de **outra** cobaia, comprovadamente
+> crua pelo `conta:estrutura`.
 
 **Passo 0 — ensaio a seco, obrigatório.** Regra com condição impossível
 (`Gasto ≥ 999999`), nível Campanha, conta CA 1 MARIA. O `details.avaliado` do log
@@ -3656,10 +3675,33 @@ segunda tela.
 | `ARCHIVED` | Arquivado | cinza |
 | `DELETED` | Excluído | cinza |
 
-> ⚠️ **Esta lista veio da DOCUMENTAÇÃO da Marketing API, não de resposta real.**
-> Nenhuma chamada à Graph API foi observada nesta sessão. Quem confirma é a
-> **`npm run ads:sonda`**, que lista os valores realmente devolvidos, marca os
-> que a Traffik ainda não traduz e avisa quando um deles **nem chega pelo sync**.
+> ### 📏 SONDA RODADA EM PRODUÇÃO (31/07/2026) — 2 dos 12 valores existem
+> O campo **vem em 39 de 39 objetos** (2 contas × 3 níveis). Mas só dois valores
+> apareceram:
+>
+> | Observado | Quantos |
+> |---|---|
+> | `ARCHIVED` | 36 |
+> | `ACTIVE` | 3 |
+>
+> **Os outros 10 mapeamentos são TRADUÇÃO NÃO EXERCIDA** — `ADSET_PAUSED`,
+> `CAMPAIGN_PAUSED`, `DISAPPROVED`, `PENDING_REVIEW`, `PREAPPROVED`,
+> `PENDING_BILLING_INFO`, `IN_PROCESS`, `WITH_ISSUES`, `PAUSED` e `DELETED`
+> nunca chegaram da API real. Eles vieram da documentação e continuam corretos
+> em teste, mas ninguém viu a Meta emitir nenhum deles nesta conta.
+>
+> ⚠️ Isso vale principalmente para o caso mais útil da coluna: **nenhuma
+> divergência foi observada** (zero objetos `ACTIVE` sem entregar). O selo âmbar
+> com ⚠ existe, está testado e **nunca apareceu com dado real**.
+>
+> ⚠️ **`PREAPPROVED` e `PENDING_BILLING_INFO` continuam FORA de
+> `STATUS_SINCRONIZADOS`**, agora com evidência: a sonda consulta com a lista
+> maior e não achou nenhum objeto nesses estados. Não há o que ganhar mexendo
+> num filtro que já derrubou o sync inteiro uma vez.
+>
+> ✅ **O sync está fiel:** o cruzamento status-local × status-da-Meta deu
+> **nenhuma divergência**. O motor de regras decide pelo status local, então
+> essa checagem vale repetir a cada sonda.
 
 > ### ⛔ Valor NOVO da Meta aparece CRU — nunca vira chute
 > A Meta acrescenta valores sem aviso. Um `default` que dissesse "não está
@@ -3727,6 +3769,62 @@ no rodapé, e Contas com "—". Dados de teste restaurados por id depois.
 - **Sem backfill**: toda linha nasce com `effectiveStatus` nulo e só o primeiro
   sync preenche. É por isso que nulo não pode alarmar.
 
+## 🔎 Drill-down no Gerenciador (31/07/2026)
+
+Marcar campanhas faz as abas **Conjuntos** e **Anúncios** mostrarem só o que
+pertence a elas; marcar conjuntos filtra **Anúncios**. A marcação **sobrevive à
+troca de aba** — sem isso o recurso não existiria.
+
+### ⛔ É a GENERALIZAÇÃO do `contasFiltro`, não um segundo mecanismo
+
+O `contasFiltro` já era exatamente isto para um nível só: reaproveitava o
+checkbox da tabela (que na aba Contas não tinha função, porque não há ação em
+massa para conta) como filtro das abas de baixo. Virou:
+
+```ts
+const [marcados, setMarcados] = useState<Record<Aba, Set<string>>>({
+  accounts: new Set(), campaigns: new Set(), adsets: new Set(), ads: new Set(),
+});
+const selecao = marcados[v.adsSub];   // ← seleção de ação em massa da aba atual
+```
+
+> **O que está marcado num nível é, ao mesmo tempo, a seleção para ação em massa
+> naquela aba e o filtro das abas abaixo dela.** São a mesma intenção do usuário
+> ("estou trabalhando nestas"), então são o mesmo dado. Um filtro de campanha
+> paralelo ao de conta divergiria do primeiro — foi assim que a contagem das
+> abas e o filtro da tabela já divergiram, mostrando "12 campanhas" com a tabela
+> vazia.
+
+> ⚠️ **A contagem das abas usa EXATAMENTE os mesmos filtros das linhas.** Com o
+> drill-down a chance de divergir dobrou: um filtro novo aplicado só nas linhas
+> produziria a mesma mentira de novo. `contar()` recebe `campaignId`/`adSetId`
+> além de `accountId`.
+
+> ⚠️ **Trocar de aba NÃO limpa a marcação.** O `setSelecao(new Set())` que havia
+> no clique da aba tornaria o drill-down impossível — a marcação É o filtro.
+
+> ⚠️ **Ação em massa limpa só o nível onde agiu.** As abas acima seguem
+> marcadas: elas são o filtro que trouxe aquelas linhas, e apagá-las tiraria o
+> usuário do contexto em que estava trabalhando.
+
+**Interseção, nunca substituição.** Vazio em qualquer nível = "todos". Conta +
+campanha + conjunto se acumulam.
+
+**A barra mostra só os níveis ACIMA do atual** — o que está marcado na própria
+aba é seleção de ação em massa, não filtro dela mesma. Cada chip diz o nível
+("campanha X", "conjunto Y"), remove individualmente, e há "Limpar seleção".
+
+> ⚠️ **O estado vazio precisou de um caso novo**: *"Nenhum conjunto pertence ao
+> que está selecionado nas abas acima."* Sem ele, a tabela vazia parece dado
+> faltando. Vem **depois** do aviso de arquivados — aquele é o surpreendente
+> (ninguém pediu por ele); este explica uma escolha do próprio usuário.
+
+**Conferido na tela** (dev, 2 contas × 2 campanhas × 2 conjuntos × 2 anúncios):
+marcar 1 campanha levou Conjuntos e Anúncios de "2 itens" para "1 item", com a
+barra nomeando a campanha; marcar o conjunto acumulou o segundo chip e manteve
+Anúncios em 1; a marcação sobreviveu a duas trocas de aba; contagem das abas e
+linhas da tabela coerentes em todos os passos.
+
 ## 📋 FILA DE TRABALHO PENDENTE
 
 Para referência direta: *"vamos para o item 3d"*. Ordem de prioridade definida
@@ -3736,11 +3834,9 @@ pelo usuário em 30/07/2026.
 > original vinha de um levantamento antigo. Ver as notas em cada um. Confira
 > antes de executar qualquer item desta lista: esta fila também envelhece.
 
-### 0. GERENCIADOR — o item (b) foi FEITO em 31/07/2026; sobrou o (a)
+### 0. GERENCIADOR — (a) e (b) FEITOS em 31/07/2026
 
-**(a) Drill-down por campanha — PENDENTE, é o próximo.** Selecionar campanhas
-(checkbox, já existe) e as abas Conjuntos e Anúncios mostrarem só o que pertence
-a elas. O mesmo de conjuntos para anúncios.
+**(a) Drill-down por campanha** → ✅ feito. Ver "Drill-down" abaixo.
 
 > ⚠️ **Interseção com o filtro de conta, nunca substituição.** Nenhuma
 > selecionada = mostra todas. A seleção sobrevive à troca de aba.
@@ -5590,6 +5686,7 @@ npm run test:veiculacao  # 40 asserções, status configurado × veiculação (p
 npm run test:analise-regra   # 32 asserções, avisos estáticos de condição (puro)
 npm run test:previa-regra    # 16 asserções, prévia da regra (banco de DEV)
 npm run regras:auditar -- --url '<conn>'  # o que as regras fariam e o que já fizeram
+npm run conta:estrutura -- --url '<conn>'  # campanha → conjuntos → anúncios: quem PODE gastar
 npm run test:veiculacao:e2e            # 13 asserções, o campo CHEGA em computeAdsOverview (banco de DEV)
 npm run ads:sonda -- --url '<conn>'    # quais effective_status a Meta devolve (só leitura)
 npm run test:match       # 20 asserções, purga + match por IP (banco de DEV)

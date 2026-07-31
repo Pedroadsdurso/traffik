@@ -15,7 +15,9 @@ import type { TraffikView } from "../useTraffikState";
 // ⚠️ `icone` guarda um NOME do mapa de `ui/Icone`, não um `path` de SVG. Era um
 // `path` em string, que é a forma pela qual a divergência de ícones volta: parece
 // dado de configuração e escapa da padronização de tamanho e traço.
-const ABAS: { key: "campaigns" | "adsets" | "ads" | "accounts"; label: string; icone: NomeIcone; nivel: Nivel | null }[] = [
+type Aba = "campaigns" | "adsets" | "ads" | "accounts";
+
+const ABAS: { key: Aba; label: string; icone: NomeIcone; nivel: Nivel | null }[] = [
   { key: "accounts", label: "Contas", icone: "contas", nivel: null },
   { key: "campaigns", label: "Campanhas", icone: "relatorio", nivel: "campaign" },
   { key: "adsets", label: "Conjuntos", icone: "conjuntos", nivel: "adset" },
@@ -31,16 +33,33 @@ function urlFacebook(nivel: Nivel, fbId: string, contaFb: string | null): string
   return `${base}/ads?act=${act}&selected_ad_ids=${fbId}`;
 }
 
+/** Ordem hierárquica. O que é marcado num nível filtra os de baixo. */
+const ORDEM: Aba[] = ["accounts", "campaigns", "adsets", "ads"];
+
 export function AdsManagerView({ v }: { v: TraffikView }) {
-  const [selecao, setSelecao] = useState<Set<string>>(new Set());
   /**
-   * Contas usadas como FILTRO das outras abas. Vazio = todas (consolidado).
+   * 🔗 MARCADOS POR NÍVEL — uma estrutura só, não duas.
    *
-   * Reaproveita o checkbox que já existe na tabela: na aba Contas ele não tinha
-   * função nenhuma (não há ação em massa para conta), então marcar ali passa a
-   * significar "filtrar por esta conta" em vez de um segundo controle na tela.
+   * O `contasFiltro` que existia aqui era exatamente isto para um nível só:
+   * reaproveitava o checkbox da tabela (que na aba Contas não tinha função,
+   * porque não há ação em massa para conta) como filtro das abas de baixo.
+   *
+   * ⚠️ **Isto é a GENERALIZAÇÃO daquilo, não um segundo mecanismo.** Um filtro
+   * de campanha paralelo ao de conta divergiria do primeiro — foi assim que a
+   * contagem das abas e o filtro da tabela já divergiram uma vez, mostrando
+   * "12 campanhas" com a tabela vazia.
+   *
+   * O que está marcado num nível é, ao mesmo tempo, a **seleção para ação em
+   * massa** naquela aba e o **filtro** das abas abaixo dela. São a mesma
+   * intenção do usuário ("estou trabalhando nestas"), então são o mesmo dado.
    */
-  const [contasFiltro, setContasFiltro] = useState<Set<string>>(new Set());
+  const [marcados, setMarcados] = useState<Record<Aba, Set<string>>>({
+    accounts: new Set(), campaigns: new Set(), adsets: new Set(), ads: new Set(),
+  });
+  /** O que está marcado na aba ATUAL — é a seleção de ação em massa. */
+  const selecao = marcados[v.adsSub];
+  const marcar = (aba: Aba, muda: (s: Set<string>) => Set<string>) =>
+    setMarcados((m) => ({ ...m, [aba]: muda(m[aba]) }));
   const [fixadas, setFixadas] = useState<Set<string>>(new Set());
   const [ordemGasto, setOrdemGasto] = useState<"desc" | "asc">("desc");
   const [busy, setBusy] = useState(false);
@@ -59,7 +78,10 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
     const filtra = (nome: string, status: string) =>
       nome.toLowerCase().includes(v.adsSearch.toLowerCase()) && combinaStatus(status, v.adsStatus);
     // Conjunto vazio = visão consolidada. Só filtra quando há conta marcada.
-    const daConta = (accountId: string) => contasFiltro.size === 0 || contasFiltro.has(accountId);
+    // Interseção, nunca substituição: vazio em qualquer nível = "todos".
+    const daConta = (accountId: string) => !marcados.accounts.size || marcados.accounts.has(accountId);
+    const daCampanha = (campaignId: string) => !marcados.campaigns.size || marcados.campaigns.has(campaignId);
+    const doConjunto = (adSetId: string) => !marcados.adsets.size || marcados.adsets.has(adSetId);
 
     let base: LinhaTabela[] = [];
     if (v.adsSub === "campaigns") {
@@ -75,7 +97,7 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
         ic: c.ic, cliquesAtribuidos: c.cliquesAtribuidos, vendasIniciadas: c.vendasIniciadas,
       }));
     } else if (v.adsSub === "adsets") {
-      base = raw.adSets.filter((a) => filtra(a.name, a.status) && daConta(a.accountId)).map((a) => ({
+      base = raw.adSets.filter((a) => filtra(a.name, a.status) && daConta(a.accountId) && daCampanha(a.campaignId)).map((a) => ({
         id: a.id, fbId: a.fbId, nome: a.name, status: a.status, effectiveStatus: a.effectiveStatus,
         sub: a.campaignName,
         orcamento: a.dailyBudget, bidCap: a.bidAmount,
@@ -86,7 +108,9 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
         ic: a.ic, cliquesAtribuidos: a.cliquesAtribuidos, vendasIniciadas: a.vendasIniciadas,
       }));
     } else if (v.adsSub === "ads") {
-      base = raw.ads.filter((a) => filtra(a.name, a.status) && daConta(a.accountId)).map((a) => ({
+      base = raw.ads
+        .filter((a) => filtra(a.name, a.status) && daConta(a.accountId) && daCampanha(a.campaignId) && doConjunto(a.adSetId))
+        .map((a) => ({
         id: a.id, fbId: a.fbId, nome: a.name, status: a.status, effectiveStatus: a.effectiveStatus,
         sub: a.campaignName,
         spend: a.spend, impressions: a.impressions, clicks: a.clicks,
@@ -106,7 +130,7 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
       }));
     }
     return base.sort((a, b) => (ordemGasto === "desc" ? b.spend - a.spend : a.spend - b.spend));
-  }, [raw, v.adsSub, v.adsSearch, v.adsStatus, ordemGasto, contasFiltro]);
+  }, [raw, v.adsSub, v.adsSearch, v.adsStatus, ordemGasto, marcados]);
 
   /**
    * Contagem da aba respeitando o filtro ativo. Usava `length` do array cru, o
@@ -136,22 +160,37 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
       (r) =>
         estaArquivado(r.status) &&
         r.name.toLowerCase().includes(v.adsSearch.toLowerCase()) &&
-        (contasFiltro.size === 0 || !r.accountId || contasFiltro.has(r.accountId)),
+        (marcados.accounts.size === 0 || !r.accountId || marcados.accounts.has(r.accountId)),
     ).length;
 
     if (escondidos > 0 && v.adsStatus !== "arquivado") {
       return `Nenhum ${nome} ativo neste período — mas ${plural(escondidos, `${nome} arquivado`, `${nome}s arquivados`)} não ${escondidos === 1 ? "aparece" : "aparecem"} com este filtro. Troque o status para "Arquivados" para ver.`;
     }
     if (v.adsSearch.trim()) return `Nenhum ${nome} com esse nome. Limpe a busca para ver todos.`;
+    // O drill-down também esvazia a tabela, e sem dizer isso o usuário procura
+    // dado faltando em vez de olhar a seleção que ele mesmo fez numa aba acima.
+    // ⚠️ Vem DEPOIS do aviso de arquivados: aquele é o surpreendente (ninguém
+    // pediu por ele); este explica uma escolha do próprio usuário.
+    if (ORDEM.slice(0, ORDEM.indexOf(v.adsSub)).some((a) => marcados[a].size > 0)) {
+      return `Nenhum ${nome} pertence ao que está selecionado nas abas acima. Limpe a seleção para ver todos.`;
+    }
     return `Nenhum ${nome} neste período. Tente outro intervalo ou outro status.`;
   })();
 
-  const contar = (rows?: { name: string; status: string; accountId?: string }[]) =>
+  /**
+   * ⚠️ A contagem da aba usa EXATAMENTE os mesmos filtros das linhas. Ela já
+   * divergiu uma vez (mostrava "12 campanhas" com a tabela vazia), e com o
+   * drill-down a chance de divergir dobra: um filtro novo aplicado só nas
+   * linhas produziria a mesma mentira de novo.
+   */
+  const contar = (rows?: { name: string; status: string; accountId?: string; campaignId?: string; adSetId?: string }[]) =>
     (rows ?? []).filter(
       (r) =>
         combinaStatus(r.status, v.adsStatus) &&
         r.name.toLowerCase().includes(v.adsSearch.toLowerCase()) &&
-        (contasFiltro.size === 0 || !r.accountId || contasFiltro.has(r.accountId)),
+        (!marcados.accounts.size || !r.accountId || marcados.accounts.has(r.accountId)) &&
+        (!marcados.campaigns.size || !r.campaignId || marcados.campaigns.has(r.campaignId)) &&
+        (!marcados.adsets.size || !r.adSetId || marcados.adsets.has(r.adSetId)),
     ).length;
 
   const selecionados: AlvoSelecionado[] = linhas
@@ -163,18 +202,10 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
       campanha: l.sub,
     }));
 
+  // O checkbox escreve sempre no nível da aba atual. Em Contas isso é só
+  // filtro; nas demais é filtro E seleção de ação em massa — a mesma marcação.
   function alternar(id: string) {
-    if (v.adsSub === "accounts") {
-      // Na aba Contas o checkbox É o filtro.
-      setContasFiltro((f) => {
-        const n = new Set(f);
-        if (n.has(id)) n.delete(id);
-        else n.add(id);
-        return n;
-      });
-      return;
-    }
-    setSelecao((s) => {
+    marcar(v.adsSub, (s) => {
       const n = new Set(s);
       if (n.has(id)) n.delete(id);
       else n.add(id);
@@ -182,11 +213,7 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
     });
   }
   function alternarTodas() {
-    if (v.adsSub === "accounts") {
-      setContasFiltro((f) => (f.size === linhas.length ? new Set() : new Set(linhas.map((l) => l.id))));
-      return;
-    }
-    setSelecao((s) => (s.size === linhas.length ? new Set() : new Set(linhas.map((l) => l.id))));
+    marcar(v.adsSub, (s) => (s.size === linhas.length ? new Set() : new Set(linhas.map((l) => l.id))));
   }
 
   async function executar(acao: Acao, valor?: number, ativar?: boolean) {
@@ -212,7 +239,10 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
             ? `✓ ${data.sucessos} item(ns) atualizados no Facebook.`
             : `${data.sucessos} ok · ${plural(falhas.length, "falhou", "falharam")}: ${falhas.map((f) => `${f.nome} (${f.erro})`).join("; ")}`,
         );
-        setSelecao(new Set());
+        // Limpa só o nível em que a ação foi feita — a marcação das abas
+        // acima é o filtro que trouxe estas linhas, e apagá-la junto tiraria o
+        // usuário do contexto em que ele estava trabalhando.
+        marcar(v.adsSub, () => new Set());
         v.refreshAds();
       }
     } catch (e) {
@@ -275,7 +305,9 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
             : contar(raw?.ads);
           return (
             <button key={a.key} type="button" role="tab" className="ads-aba" aria-selected={v.adsSub === a.key}
-              onClick={() => { v.setAdsSub(a.key); setSelecao(new Set()); }}>
+              // ⚠️ NÃO limpa a marcação: ela é o filtro das abas de baixo, e
+              // limpar ao trocar de aba tornaria o drill-down impossível.
+              onClick={() => v.setAdsSub(a.key)}>
               <span className="ads-aba-icone">
                 <Icone nome={a.icone} tamanho={17} />
               </span>
@@ -350,37 +382,50 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
         />
       )}
 
-      {/* Indicador do filtro ativo. Sem isto, sair da aba Contas e ver a lista
-          menor pareceria dado faltando, não filtro. */}
-      {contasFiltro.size > 0 && (
-        <div style={sx("display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:8px 11px;border-radius:var(--radius-md);background:color-mix(in srgb, var(--color-accent) 11%, transparent);border:1px solid color-mix(in srgb, var(--color-accent) 32%, transparent)")}>
-          <span style={sx("font-size:12px;font-weight:600")}>
-            Filtrando por {contasFiltro.size} {contasFiltro.size === 1 ? "conta" : "contas"}:
-          </span>
-          {[...contasFiltro].map((id) => {
-            const conta = raw?.accounts.find((a) => a.id === id);
-            return (
-              <span key={id}
-                style={sx("display:inline-flex;align-items:center;gap:5px;font-size:11.5px;padding:2px 4px 2px 9px;border-radius:999px;background:var(--color-surface-2);border:1px solid var(--color-border)")}>
-                {conta?.name ?? id}
-                <button type="button" aria-label={`Remover filtro ${conta?.name ?? id}`}
-                  onClick={() => setContasFiltro((f) => { const n = new Set(f); n.delete(id); return n; })}
-                  style={sx("background:none;border:0;cursor:pointer;color:var(--color-text-muted);padding:0 4px;font-size:13px;line-height:1")}>
-                  ✕
-                </button>
-              </span>
-            );
-          })}
-          <button className="btn btn-ghost" type="button" onClick={() => setContasFiltro(new Set())}
-            style={sx("margin-left:auto;font-size:11.5px;padding:3px 9px")}>
-            Limpar filtro
-          </button>
-        </div>
-      )}
+      {/* Indicador do que está filtrando ESTA aba.
+          Mostra só os níveis ACIMA do atual: o que está marcado na própria aba
+          é seleção de ação em massa, não filtro dela mesma. Sem esta barra,
+          trocar de aba e ver uma lista menor pareceria dado faltando. */}
+      {(() => {
+        const acima = ORDEM.slice(0, ORDEM.indexOf(v.adsSub)).filter((a) => marcados[a].size > 0);
+        if (!acima.length) return null;
+        const nomeDe = (aba: Aba, id: string) =>
+          (aba === "accounts" ? raw?.accounts.find((x) => x.id === id)?.name
+            : aba === "campaigns" ? raw?.campaigns.find((x) => x.id === id)?.name
+            : raw?.adSets.find((x) => x.id === id)?.name) ?? id;
+        const rotulo: Record<Aba, [string, string]> = {
+          accounts: ["conta", "contas"], campaigns: ["campanha", "campanhas"],
+          adsets: ["conjunto", "conjuntos"], ads: ["anúncio", "anúncios"],
+        };
+        return (
+          <div style={sx("display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:8px 11px;border-radius:var(--radius-md);background:color-mix(in srgb, var(--color-accent) 11%, transparent);border:1px solid color-mix(in srgb, var(--color-accent) 32%, transparent)")}>
+            <span style={sx("font-size:12px;font-weight:600")}>Mostrando só o que pertence a:</span>
+            {acima.map((aba) =>
+              [...marcados[aba]].map((id) => (
+                <span key={`${aba}:${id}`}
+                  style={sx("display:inline-flex;align-items:center;gap:5px;font-size:11.5px;padding:2px 4px 2px 9px;border-radius:999px;background:var(--color-surface-2);border:1px solid var(--color-border)")}>
+                  <span className="text-muted">{rotulo[aba][0]}</span>
+                  {nomeDe(aba, id)}
+                  <button type="button" aria-label={`Remover ${rotulo[aba][0]} ${nomeDe(aba, id)}`}
+                    onClick={() => marcar(aba, (f) => { const n = new Set(f); n.delete(id); return n; })}
+                    style={sx("background:none;border:0;cursor:pointer;color:var(--color-text-muted);padding:0 4px;font-size:13px;line-height:1")}>
+                    ✕
+                  </button>
+                </span>
+              )),
+            )}
+            <button className="btn btn-ghost" type="button"
+              onClick={() => setMarcados((m) => ({ ...m, ...Object.fromEntries(acima.map((a) => [a, new Set<string>()])) }))}
+              style={sx("margin-left:auto;font-size:11.5px;padding:3px 9px")}>
+              Limpar seleção
+            </button>
+          </div>
+        );
+      })()}
 
       <AdsTable
         linhas={linhas}
-        selecionadas={v.adsSub === "accounts" ? contasFiltro : selecao}
+        selecionadas={selecao}
         onSelecionar={alternar}
         onSelecionarTodas={alternarTodas}
         onToggleStatus={(id) => {
