@@ -50,22 +50,57 @@ export const EVENTOS_DO_PIXEL = [
 
 export type EventoDoPixel = (typeof EVENTOS_DO_PIXEL)[number];
 
-export type DonoDoEvento = "traffik" | "gateway" | "ninguem";
+export type DonoDoEvento = "traffik" | "navegador" | "gateway" | "ninguem";
 
 /** Mapa `evento → dono`, como fica em `PixelConfig.eventOwners`. */
 export type MapaDeDonos = Partial<Record<EventoDoPixel, DonoDoEvento>>;
 
-const DONOS_VALIDOS: readonly string[] = ["traffik", "gateway", "ninguem"];
+const DONOS_VALIDOS: readonly string[] = ["traffik", "navegador", "gateway", "ninguem"];
+
+/**
+ * ## 🔴 `PageView` é o único evento cujo padrão NÃO é a Traffik
+ *
+ * O código-base da Meta que o usuário cola na página termina em
+ * `fbq('track', 'PageView')`. Esse disparo:
+ *
+ * 1. acontece em **todo** carregamento, sem ninguém pedir;
+ * 2. vai **sem `event_id`** — e não há como fazê-lo ir com um, porque o código
+ *    é da Meta e não nosso;
+ * 3. portanto **não casa com a nossa CAPI de jeito nenhum**.
+ *
+ * Medido em 31/07/2026: uma visita, dois PageView na Meta. E o espelho no `fbq`
+ * **não resolve** — ele criaria um segundo evento de navegador que deduplica com
+ * a nossa CAPI, deixando o automático sozinho do mesmo jeito. Continuaria 2.
+ *
+ * Como nenhum dos dois lados consegue ceder, quem cede somos nós: com um pixel
+ * nativo na página, o dono natural do PageView é ele.
+ *
+ * > ⚠️ **Isto MUDA o comportamento de quem já tem pixel cadastrado**, e é o
+ * > objetivo: hoje essas contas contam visita em dobro. Quem não tiver pixel
+ * > nativo na página escolhe "Traffik" na gaveta e volta ao envio server-side.
+ *
+ * ⚠️ Os demais eventos continuam em `traffik`. Neles não existe segundo emissor
+ * automático — `Lead`, `AddToCart`, `InitiateCheckout` e `Purchase` só saem do
+ * navegador se alguém chamar `fbq('track', …)` explicitamente. Rebaixar o padrão
+ * deles perderia conversão em silêncio, que é o erro caro.
+ */
+const PADRAO_DO_EVENTO: Record<EventoDoPixel, DonoDoEvento> = {
+  PageView: "navegador",
+  Lead: "traffik",
+  AddToCart: "traffik",
+  InitiateCheckout: "traffik",
+  Purchase: "traffik",
+};
 
 /**
  * Lê o Json cru do banco, descartando o que não reconhece.
  *
- * ⚠️ Valor desconhecido vira **`traffik`**, nunca "não envia". O padrão de toda
- * ausência aqui é ENVIAR: deixar de mandar por causa de um dado corrompido, ou
- * de um evento novo que o mapa não conhece, é falha silenciosa — o evento some
- * da Meta e nada na tela denuncia. É o oposto da regra de autenticação (onde a
- * dúvida vira bloqueio), e de propósito: aqui o risco não é permissão indevida,
- * é perder conversão.
+ * ⚠️ Valor desconhecido cai no **padrão do evento** (`PADRAO_DO_EVENTO`), nunca
+ * numa decisão nova. Para tudo que não é `PageView` esse padrão é ENVIAR: deixar
+ * de mandar por causa de um dado corrompido, ou de um evento novo que o mapa não
+ * conhece, é falha silenciosa — o evento some da Meta e nada na tela denuncia. É
+ * o oposto da regra de autenticação (onde a dúvida vira bloqueio), e de
+ * propósito: aqui o risco não é permissão indevida, é perder conversão.
  */
 export function lerDonos(bruto: unknown): MapaDeDonos {
   const out: MapaDeDonos = {};
@@ -77,10 +112,15 @@ export function lerDonos(bruto: unknown): MapaDeDonos {
   return out;
 }
 
-/** Dono de um evento. Ausente, desconhecido ou mapa nulo → `traffik`. */
+/** Dono de um evento. Ausente, desconhecido ou mapa nulo → padrão do evento. */
 export function donoDoEvento(bruto: unknown, evento: string): DonoDoEvento {
   const mapa = lerDonos(bruto);
-  return mapa[evento as EventoDoPixel] ?? "traffik";
+  return mapa[evento as EventoDoPixel] ?? padraoDoEvento(evento);
+}
+
+/** Padrão de um evento. Evento desconhecido → `traffik` (ver `lerDonos`). */
+export function padraoDoEvento(evento: string): DonoDoEvento {
+  return PADRAO_DO_EVENTO[evento as EventoDoPixel] ?? "traffik";
 }
 
 /**
@@ -95,9 +135,34 @@ export function traffikEnvia(bruto: unknown, evento: string): boolean {
   return donoDoEvento(bruto, evento) === "traffik";
 }
 
-/** Rótulo para a tela. */
+/**
+ * Rótulo para a tela.
+ *
+ * ⚠️ "Meu gateway" cobria mal o caso do `PageView`: ali o outro emissor não é o
+ * checkout do gateway, é o **pixel que o próprio usuário instalou na própria
+ * página**. Um rótulo que aponta para o lugar errado manda o usuário procurar o
+ * problema onde ele não está.
+ */
 export const ROTULO_DONO: Record<DonoDoEvento, string> = {
   traffik: "Traffik",
-  gateway: "Meu gateway",
+  navegador: "O pixel da sua página",
+  gateway: "O checkout do gateway",
   ninguem: "Ninguém",
+};
+
+/** Uma linha explicando a consequência de cada escolha. */
+export const EXPLICACAO_DONO: Record<DonoDoEvento, string> = {
+  traffik: "Enviamos pelo servidor. Chega mesmo com bloqueador de anúncios.",
+  navegador: "O código do Facebook que já está na sua página envia. Nós só registramos.",
+  gateway: "O checkout do seu gateway envia. Nós só registramos.",
+  ninguem: "Este evento não vai para a Meta. Continua contando aqui.",
+};
+
+/**
+ * Aviso preso ao evento, não à escolha — aparece sempre, para explicar por que
+ * aquela linha tem o padrão que tem.
+ */
+export const NOTA_DO_EVENTO: Partial<Record<EventoDoPixel, string>> = {
+  PageView:
+    "O código do Facebook instalado na sua página já dispara PageView sozinho, e sem identificador — não dá para juntar o dele com o nosso. Deixando com ele, a Meta conta uma visita em vez de duas. Escolha Traffik só se você NÃO tiver o pixel do Facebook na página.",
 };

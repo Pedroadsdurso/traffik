@@ -96,32 +96,105 @@ export function pixelScript(cfg: PixelScriptConfig): string {
     return name + "-" + hash([CONFIG, name, location.href, fbclid() || "", Math.floor(Date.now() / 10000)].join("|"));
   }
 
+  function enviar(payload) {
+    try {
+      fetch(API + "/api/pixel/event", { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify(payload), keepalive: true, mode: "cors" }).catch(function () {});
+    } catch (e) {}
+  }
+  function aviso(msg) {
+    try { if (window.console && window.console.warn) window.console.warn("[Traffik Pixel] " + msg); } catch (e) {}
+  }
+  // Conta ao servidor o que aconteceu com o espelho DEPOIS que o evento já foi
+  // gravado. \`somenteEspelho\` faz a rota atualizar a linha e parar — sem gravar
+  // de novo e sem reenviar para a CAPI.
+  function relatar(event, id, estado) {
+    enviar({ pixelConfigId: CONFIG, event: event, eventId: id, espelho: estado, somenteEspelho: true });
+  }
+
   /**
-   * Espelha o evento no pixel NATIVO da Meta com o MESMO event_id.
+   * Espelho no pixel NATIVO da Meta, com o MESMO event_id.
    *
-   * ⛔ É esta função que faz a deduplicação existir. Sem ela, o pixel do
+   * ⛔ É isto que faz a deduplicação existir. Sem o espelho, o pixel do
    * navegador manda o evento com um id dele e nós mandamos pela CAPI com o
    * nosso — a Meta recebe dois eventos sem nada em comum e **conta os dois**,
    * inflando o sinal que otimiza a campanha. Dinheiro real, sem erro e sem log.
    *
-   * Só dispara quando \`fbq\` já existe na página: não instalamos o pixel nativo
-   * de ninguém, apenas nos alinhamos ao que já está lá.
+   * ### 🐛 A guarda silenciosa que custou uma sessão inteira (31/07/2026)
+   *
+   * Isto já existia como \`if (typeof fbq === "function") …\` dentro de um
+   * \`try/catch\` vazio. Quando o snippet está colado ANTES do código da Meta no
+   * \`<head>\` — e ele roda \`track("PageView")\` de forma síncrona, no parse —
+   * \`fbq\` ainda não existe: a guarda retornava, **sem log nenhum**, e o
+   * PageView era contado em dobro pela Meta desde então.
+   *
+   * Duas correções, e as duas importam:
+   *
+   * 1. **Não depender da ordem.** Sem \`fbq\`, o espelho entra numa fila e sai
+   *    assim que ele aparecer — sondagem de PASSO_MS, com teto em ESPERA_MS.
+   * 2. **Não falhar calado.** Estourou o teto: \`console.warn\` com o que fazer,
+   *    e \`espelho: "sem-fbq"\` gravado no evento. Sem isso, um \`Lead\` ou um
+   *    \`InitiateCheckout\` que parasse de espelhar seria invisível.
+   *
+   * > ### ⛔ NUNCA definir \`window.fbq\` nós mesmos para "garantir" que existe
+   * > O código-base da Meta começa com \`if (f.fbq) return;\`. Um stub nosso faria
+   * > o snippet do usuário **abortar inteiro** — o pixel dele nunca inicializaria,
+   * > e o estrago seria muito maior que o evento que queríamos espelhar.
+   * > Nós nos alinhamos ao pixel que já está lá; não instalamos o de ninguém.
    */
+  var ESPERA_MS = 10000, PASSO_MS = 200;
+  var fila = [], relogio = null, inicio = 0;
+
+  function temFbq() { return typeof window.fbq === "function"; }
+  function atirar(event, id) { window.fbq("track", event, {}, { eventID: id }); }
+  function parar() { if (relogio) { clearInterval(relogio); relogio = null; } }
+
+  function drenar() {
+    var pend = fila; fila = []; parar();
+    for (var i = 0; i < pend.length; i++) {
+      try { atirar(pend[i].e, pend[i].id); relatar(pend[i].e, pend[i].id, "adiado-ok"); }
+      catch (err) { aviso("falha ao espelhar " + pend[i].e + ": " + err); relatar(pend[i].e, pend[i].id, "erro"); }
+    }
+  }
+
+  function desistir() {
+    var pend = fila; fila = []; parar();
+    aviso(
+      "o pixel do Facebook (fbq) nao apareceu em " + (ESPERA_MS / 1000) + "s. " +
+      "Estes eventos foram so para o servidor, sem par no navegador, e a Meta pode conta-los em dobro: " +
+      pend.map(function (p) { return p.e; }).join(", ") + ". " +
+      "Confira se o codigo do Facebook esta nesta pagina — e, se estiver, cole o script da Traffik DEPOIS dele."
+    );
+    for (var i = 0; i < pend.length; i++) relatar(pend[i].e, pend[i].id, "sem-fbq");
+  }
+
+  function aguardar() {
+    if (relogio) return;
+    inicio = Date.now();
+    relogio = setInterval(function () {
+      if (temFbq()) drenar();
+      else if (Date.now() - inicio >= ESPERA_MS) desistir();
+    }, PASSO_MS);
+  }
+
   function espelhar(event, id) {
-    try {
-      if (ALHEIOS.indexOf(event) > -1) return; // o dono deste evento é outro
-      if (typeof window.fbq === "function") window.fbq("track", event, {}, { eventID: id });
-    } catch (e) {}
+    if (ALHEIOS.indexOf(event) > -1) return "alheio"; // o dono deste evento e outro
+    if (temFbq()) {
+      try { atirar(event, id); return "ok"; }
+      catch (err) { aviso("falha ao espelhar " + event + ": " + err); return "erro"; }
+    }
+    fila.push({ e: event, id: id });
+    aguardar();
+    return "adiado";
   }
 
   function track(event, extra) {
     var id = eid(event);
-    var payload = { pixelConfigId: CONFIG, event: event, eventId: id, url: location.href, fbclid: fbclid() };
+    // ⚠️ O espelho vem ANTES do payload: o estado dele viaja junto do evento, e
+    // é o que permite responder "os espelhos estao saindo?" sem abrir o console.
+    var espelho = espelhar(event, id);
+    var payload = { pixelConfigId: CONFIG, event: event, eventId: id, url: location.href, fbclid: fbclid(), espelho: espelho };
     if (extra) for (var k in extra) payload[k] = extra[k];
-    espelhar(event, id);
-    try {
-      fetch(API + "/api/pixel/event", { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify(payload), keepalive: true, mode: "cors" }).catch(function () {});
-    } catch (e) {}
+    enviar(payload);
   }
   window.traffikPixel = { track: track };
 

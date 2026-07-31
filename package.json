@@ -49,7 +49,8 @@
     "test:analise-regra": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-analise-regra.mjs",
     "test:previa-regra": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-previa-regra.mjs",
     "conta:estrutura": "node scripts/estrutura-conta.mjs",
-    "test:onyxpag": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-onyxpag.mjs"
+    "test:onyxpag": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-onyxpag.mjs",
+    "test:espelho": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-espelho-pixel.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

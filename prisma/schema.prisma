@@ -745,6 +745,15 @@ model PixelEvent {
   eventId   String?
   url       String?
   fbclid    String?
+  /// Estado do espelho no pixel nativo (`fbq`), reportado pelo script:
+  /// `ok` (saiu na hora) · `adiado` (enfileirado, aguardando o `fbq`) ·
+  /// `adiado-ok` (saiu depois da espera) · `sem-fbq` (o `fbq` nunca apareceu) ·
+  /// `erro` · `alheio` (o dono deste evento não é a Traffik).
+  ///
+  /// ⚠️ NULO = evento gravado por um script ANTERIOR a esta coluna, ou pelo
+  /// caminho server-side. Não é "falhou" — sem esta distinção, todo evento
+  /// histórico apareceria como espelho quebrado.
+  espelho   String?
   timestamp DateTime @default(now())
 
   userId        String

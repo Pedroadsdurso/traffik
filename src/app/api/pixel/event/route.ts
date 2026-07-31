@@ -31,6 +31,15 @@ const EVENT_MAP: Record<string, { capi: CapiEventName; rule: PixelEventType }> =
   InitiateCheckout: { capi: "InitiateCheckout", rule: "INITIATE_CHECKOUT" },
 };
 
+/**
+ * Estados do espelho no pixel nativo que o script sabe reportar. Valor fora
+ * desta lista vira `null` — a rota é pública, então nada que chega por ela pode
+ * ir cru para uma coluna.
+ */
+const ESPELHOS: readonly string[] = ["ok", "adiado", "adiado-ok", "sem-fbq", "erro", "alheio"];
+const lerEspelho = (v: unknown): string | null =>
+  typeof v === "string" && ESPELHOS.includes(v) ? v : null;
+
 
 /**
  * Recebe um evento do script de pixel próprio (Lead/AddToCart/InitiateCheckout)
@@ -52,6 +61,33 @@ export async function POST(req: NextRequest) {
   const isPageView = eventKey === "PageView";
   if (!configId || (!mapped && !isPageView)) return json({ error: "Parâmetros inválidos." }, 400);
 
+  const idDoEvento = typeof body.eventId === "string" ? body.eventId : null;
+  const espelho = lerEspelho(body.espelho);
+
+  /**
+   * Relato TARDIO do espelho: o evento já foi gravado numa chamada anterior, e
+   * o script só agora sabe se o `fbq` apareceu. Atualiza a coluna de
+   * diagnóstico e para.
+   *
+   * ⛔ Não grava linha nova e **não reenvia para a CAPI** — o envio server-side
+   * já aconteceu na primeira chamada. Sem este desvio, todo evento que
+   * esperasse pelo `fbq` mandaria o Purchase/Lead duas vezes para a Meta, que é
+   * exatamente o problema que este trabalho existe para resolver.
+   *
+   * Superfície: a rota é pública por desenho (roda no site do cliente), e o
+   * pior uso indevido daqui é escrever um dos seis rótulos de `ESPELHOS` numa
+   * linha cujo `eventId` o autor já conhece. É coluna de diagnóstico, não de
+   * negócio — nenhuma métrica, nenhum envio e nenhum valor dependem dela.
+   */
+  if (body.somenteEspelho === true) {
+    if (!espelho || !idDoEvento) return json({ error: "Parâmetros inválidos." }, 400);
+    const r = await prisma.pixelEvent.updateMany({
+      where: { pixelConfigId: configId, event: eventKey, eventId: idDoEvento },
+      data: { espelho },
+    });
+    return json({ ok: true, espelho, atualizados: r.count });
+  }
+
   const config = await prisma.pixelConfig.findUnique({
     where: { id: configId },
     include: {
@@ -71,8 +107,7 @@ export async function POST(req: NextRequest) {
   // Persiste o evento (Bloco 5): sem isto o funil não tem como contar o
   // "Initiate Checkout" — antes o evento só era repassado à CAPI e descartado.
   // Falhar aqui não pode impedir o envio, que é o que o usuário realmente quer.
-  const idDoEvento = typeof body.eventId === "string" ? body.eventId : null;
-
+  //
   // ⚠️ `createMany({ skipDuplicates: true })` e não `create`: com o `eventId`
   // determinístico, duas cópias do script na mesma página (ou um reenvio)
   // mandam o MESMO id, e o índice único parcial recusa a segunda. O
@@ -89,6 +124,7 @@ export async function POST(req: NextRequest) {
           eventId: idDoEvento,
           url: typeof body.url === "string" ? body.url.slice(0, 500) : null,
           fbclid: typeof body.fbclid === "string" ? body.fbclid : null,
+          espelho,
         },
       ],
       skipDuplicates: true,

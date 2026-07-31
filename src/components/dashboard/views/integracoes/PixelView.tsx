@@ -18,7 +18,15 @@ import { pixelScript } from "@/lib/pixel/script";
 import { plural } from "@/lib/format";
 import { CONFIG } from "@/lib/explicacoes";
 import { sx } from "@/lib/sx";
-import { EVENTOS_DO_PIXEL, ROTULO_DONO, type DonoDoEvento, type MapaDeDonos } from "@/lib/pixel/donos";
+import {
+  EVENTOS_DO_PIXEL,
+  EXPLICACAO_DONO,
+  NOTA_DO_EVENTO,
+  ROTULO_DONO,
+  padraoDoEvento,
+  type DonoDoEvento,
+  type MapaDeDonos,
+} from "@/lib/pixel/donos";
 import { Select } from "../../ui/Select";
 import { Icone } from "../../ui/Icone";
 import { InfoTip } from "../../ui/InfoTip";
@@ -460,36 +468,46 @@ export function PixelView() {
                 <div>
                   <span style={sx("font-weight:600;font-size:13px")}>Quem envia cada evento</span>
                   <div className="text-muted" style={sx("font-size:12px;margin-top:2px")}>
-                    Se o seu gateway também tem pixel, o mesmo evento chega duas vezes
-                    na Meta e ela conta os dois. Escolha um responsável por evento.
+                    Quando o pixel da sua página ou o checkout do seu gateway mandam o
+                    mesmo evento que nós, ele chega duas vezes na Meta e ela conta os
+                    dois. Escolha um responsável por evento.
                   </div>
                 </div>
                 {EVENTOS_DO_PIXEL.map((ev) => {
-                  const atual: DonoDoEvento = form.donos[ev] ?? "traffik";
+                  const atual: DonoDoEvento = form.donos[ev] ?? padraoDoEvento(ev);
+                  const nota = NOTA_DO_EVENTO[ev];
                   return (
-                    <div key={ev} style={sx("display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);flex-wrap:wrap")}>
-                      <span style={sx("font-size:13px")}>{ev}</span>
-                      <div style={sx("display:flex;gap:4px")}>
-                        {(["traffik", "gateway", "ninguem"] as DonoDoEvento[]).map((d) => (
-                          <button
-                            key={d}
-                            type="button"
-                            className={atual === d ? "btn btn-primary" : "btn btn-secondary"}
-                            style={sx("padding:2px 9px;font-size:11.5px")}
-                            onClick={() => setForm({ ...form, donos: { ...form.donos, [ev]: d } })}
-                          >
-                            {ROTULO_DONO[d]}
-                          </button>
-                        ))}
+                    <div key={ev} style={sx("display:flex;flex-direction:column;gap:4px;padding-bottom:var(--space-2);border-bottom:1px solid var(--color-neutral-800)")}>
+                      <div style={sx("display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);flex-wrap:wrap")}>
+                        <span style={sx("font-size:13px")}>{ev}</span>
+                        <div style={sx("display:flex;gap:4px;flex-wrap:wrap")}>
+                          {(["traffik", "navegador", "gateway", "ninguem"] as DonoDoEvento[]).map((d) => (
+                            <button
+                              key={d}
+                              type="button"
+                              className={atual === d ? "btn btn-primary" : "btn btn-secondary"}
+                              style={sx("padding:2px 9px;font-size:11.5px")}
+                              onClick={() => setForm({ ...form, donos: { ...form.donos, [ev]: d } })}
+                            >
+                              {ROTULO_DONO[d]}
+                            </button>
+                          ))}
+                        </div>
                       </div>
+                      <div className="text-muted" style={sx("font-size:11.5px")}>{EXPLICACAO_DONO[atual]}</div>
+                      {nota && (
+                        <div style={sx("font-size:11.5px;color:var(--color-warning,#fbbf24);border-left:2px solid var(--color-warning,#fbbf24);padding-left:8px")}>
+                          {nota}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
                 {Object.values(form.donos).some((d) => d === "gateway") && (
                   <div style={sx("font-size:12px;color:var(--color-warning,#fbbf24);border-left:2px solid var(--color-warning,#fbbf24);padding-left:8px")}>
-                    Só escolha &ldquo;Meu gateway&rdquo; se ele tiver API de Conversões configurada
-                    — senão o evento deixa de ser enviado pelo servidor, e passa a
-                    depender do navegador do comprador.
+                    Só escolha &ldquo;O checkout do gateway&rdquo; se ele tiver API de Conversões
+                    configurada — senão o evento deixa de ser enviado pelo servidor, e passa
+                    a depender do navegador do comprador.
                   </div>
                 )}
                 {Object.values(form.donos).some((d) => d === "ninguem") && (

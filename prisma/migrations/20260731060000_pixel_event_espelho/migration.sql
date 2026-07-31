@@ -1,0 +1,16 @@
+-- Estado do espelho no pixel nativo (`fbq`), reportado pelo script do navegador.
+--
+-- Existe porque o espelho falhava EM SILÊNCIO: a guarda `if (typeof fbq ===
+-- "function")` retornava dentro de um try/catch vazio quando o snippet estava
+-- colado antes do código da Meta no <head>. O PageView era contado em dobro
+-- desde então, e nada na ferramenta denunciava. Com a coluna, "os espelhos
+-- estão saindo?" vira consulta em vez de sessão de console.
+--
+-- ADITIVA e sem constraint: uma coluna nullable, sem default e sem backfill.
+-- Não há dado que possa violá-la, então roda em qualquer ordem e é segura para
+-- reaplicar — ao contrário da 20260731040000, que criava índice único e falhou
+-- em produção por depender do estado do dado.
+--
+-- NULO significa "não informado" (evento anterior a esta coluna, ou gravado
+-- pelo caminho server-side), NUNCA "falhou".
+ALTER TABLE "PixelEvent" ADD COLUMN "espelho" TEXT;
