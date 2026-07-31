@@ -18,6 +18,7 @@ import { pixelScript } from "@/lib/pixel/script";
 import { plural } from "@/lib/format";
 import { CONFIG } from "@/lib/explicacoes";
 import { sx } from "@/lib/sx";
+import { EVENTOS_DO_PIXEL, ROTULO_DONO, type DonoDoEvento, type MapaDeDonos } from "@/lib/pixel/donos";
 import { Select } from "../../ui/Select";
 import { Icone } from "../../ui/Icone";
 import { InfoTip } from "../../ui/InfoTip";
@@ -33,6 +34,8 @@ type Form = {
   addToCart: boolean;
   ic: { enabled: boolean; type: DetectionType; value: string };
   purchase: { enabled: boolean; sendMode: string; valueMode: string; fixedValue: string; targetProduct: string };
+  /** Quem envia cada evento para a Meta. */
+  donos: MapaDeDonos;
 };
 
 const EMPTY_FORM: Form = {
@@ -42,6 +45,8 @@ const EMPTY_FORM: Form = {
   addToCart: false,
   ic: { enabled: false, type: "clique_checkout", value: "" },
   purchase: { enabled: true, sendMode: "APENAS_APROVADAS", valueMode: "VALOR_DA_VENDA", fixedValue: "", targetProduct: "" },
+  // Vazio = tudo da Traffik. O padrão nunca é "não envia".
+  donos: {},
 };
 
 function formToInput(f: Form): PixelFormInput {
@@ -58,6 +63,7 @@ function formToInput(f: Form): PixelFormInput {
       fixedValue: f.purchase.valueMode === "VALOR_FIXO" ? parseFloat(f.purchase.fixedValue) || 0 : null,
       targetProduct: f.purchase.targetProduct || null,
     },
+    eventOwners: f.donos,
   };
 }
 
@@ -77,6 +83,7 @@ function dtoToForm(px: PixelConfigDTO): Form {
       fixedValue: pu?.fixedValue != null ? String(pu.fixedValue) : "",
       targetProduct: pu?.targetProduct ?? "",
     },
+    donos: px.eventOwners,
   };
 }
 
@@ -158,6 +165,7 @@ export function PixelView() {
     const ic = px.rules.find((r) => r.eventType === "INITIATE_CHECKOUT");
     return pixelScript({
       configId: px.id,
+      eventOwners: px.eventOwners,
       apiBase: getPublicAppUrl(),
       lead: px.rules.find((r) => r.eventType === "LEAD")?.enabled ?? false,
       addToCart: px.rules.find((r) => r.eventType === "ADD_TO_CART")?.enabled ?? false,
@@ -444,6 +452,51 @@ export function PixelView() {
                       />
                     </div>
                   </>
+                )}
+              </div>
+
+              {/* Quem envia cada evento para a Meta */}
+              <div style={sx("border:1px solid var(--color-neutral-800);border-radius:var(--radius-md);padding:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)")}>
+                <div>
+                  <span style={sx("font-weight:600;font-size:13px")}>Quem envia cada evento</span>
+                  <div className="text-muted" style={sx("font-size:12px;margin-top:2px")}>
+                    Se o seu gateway também tem pixel, o mesmo evento chega duas vezes
+                    na Meta e ela conta os dois. Escolha um responsável por evento.
+                  </div>
+                </div>
+                {EVENTOS_DO_PIXEL.map((ev) => {
+                  const atual: DonoDoEvento = form.donos[ev] ?? "traffik";
+                  return (
+                    <div key={ev} style={sx("display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);flex-wrap:wrap")}>
+                      <span style={sx("font-size:13px")}>{ev}</span>
+                      <div style={sx("display:flex;gap:4px")}>
+                        {(["traffik", "gateway", "ninguem"] as DonoDoEvento[]).map((d) => (
+                          <button
+                            key={d}
+                            type="button"
+                            className={atual === d ? "btn btn-primary" : "btn btn-secondary"}
+                            style={sx("padding:2px 9px;font-size:11.5px")}
+                            onClick={() => setForm({ ...form, donos: { ...form.donos, [ev]: d } })}
+                          >
+                            {ROTULO_DONO[d]}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+                {Object.values(form.donos).some((d) => d === "gateway") && (
+                  <div style={sx("font-size:12px;color:var(--color-warning,#fbbf24);border-left:2px solid var(--color-warning,#fbbf24);padding-left:8px")}>
+                    Só escolha &ldquo;Meu gateway&rdquo; se ele tiver API de Conversões configurada
+                    — senão o evento deixa de ser enviado pelo servidor, e passa a
+                    depender do navegador do comprador.
+                  </div>
+                )}
+                {Object.values(form.donos).some((d) => d === "ninguem") && (
+                  <div className="text-muted" style={sx("font-size:12px")}>
+                    Evento com &ldquo;Ninguém&rdquo; não vai para a Meta. Ele continua sendo
+                    registrado aqui e aparece normalmente no seu funil e no painel.
+                  </div>
                 )}
               </div>
 

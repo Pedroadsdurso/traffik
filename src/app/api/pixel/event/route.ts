@@ -4,6 +4,7 @@ import { ipDaRequisicao } from "@/lib/geo/clientIp";
 import { decryptSecretSafe } from "@/lib/crypto/secrets";
 import { sendServerEvent, type CapiEventName } from "@/lib/facebook/capi";
 import { prisma } from "@/lib/prisma";
+import { traffikEnvia } from "@/lib/pixel/donos";
 import type { PixelEventType } from "@/generated/prisma/enums";
 
 // Chamado a partir do script instalado em sites de terceiros → CORS liberado.
@@ -94,6 +95,14 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     console.error("[pixel/event] falha ao persistir evento:", e);
+  }
+
+  // 🔴 O evento JÁ FOI GRAVADO acima — o funil e o Dashboard contam do nosso
+  // banco. O dono decide só quem fala com a Meta: com o pixel do gateway
+  // mandando o mesmo evento, os dois chegariam com `event_id` diferentes e
+  // ela contaria em dobro. Ver `lib/pixel/donos.ts`.
+  if (!traffikEnvia(config.eventOwners, eventKey)) {
+    return json({ ok: true, registrado: true, enviado: false, motivo: "outro dono" });
   }
 
   const targets =

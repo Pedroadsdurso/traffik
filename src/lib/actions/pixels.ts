@@ -12,6 +12,8 @@ import type { PixelEventType, PurchaseSendMode, PurchaseValueMode } from "@/gene
  * na página de vendas. É o único modo que funciona quando o checkout é hospedado
  * pelo gateway (pay.kirvano.com), onde o cliente não consegue instalar script.
  */
+import { lerDonos, type MapaDeDonos } from "@/lib/pixel/donos";
+
 export type DetectionType = "clique_checkout" | "contem_texto" | "contem_css" | "contem_url";
 
 export interface MetaPixelDTO {
@@ -38,6 +40,13 @@ export interface PixelConfigDTO {
   enabled: boolean;
   metaPixels: MetaPixelDTO[];
   rules: EventRuleDTO[];
+  /**
+   * Quem envia cada evento para a Meta. Evento ausente = `traffik`.
+   *
+   * ⚠️ Só decide quem fala com a META. O evento continua sendo GRAVADO em
+   * qualquer caso — o funil e o Dashboard contam do nosso banco.
+   */
+  eventOwners: MapaDeDonos;
 }
 
 /** Input do formulário do popup (Bloco 12). */
@@ -56,6 +65,8 @@ export interface PixelFormInput {
     fixedValue?: number | null;
     targetProduct?: string | null;
   };
+  /** Quem envia cada evento. Omitido = mantém o que está gravado. */
+  eventOwners?: MapaDeDonos;
 }
 
 const EVENT_TYPES: PixelEventType[] = ["LEAD", "ADD_TO_CART", "INITIATE_CHECKOUT", "PURCHASE"];
@@ -72,6 +83,7 @@ function toDTO(px: {
   id: string;
   name: string;
   enabled: boolean;
+  eventOwners: unknown;
   metaPixels: { id: string; pixelId: string; nickname: string | null; accessToken: string | null }[];
   eventRules: {
     eventType: PixelEventType;
@@ -88,6 +100,7 @@ function toDTO(px: {
     id: px.id,
     name: px.name,
     enabled: px.enabled,
+    eventOwners: lerDonos(px.eventOwners),
     metaPixels: px.metaPixels.map((m) => ({
       id: m.id,
       pixelId: m.pixelId,
@@ -191,6 +204,7 @@ export async function createPixel(input: PixelFormInput): Promise<PixelConfigDTO
       name,
       provider: "META",
       workspaceId: escopo.areaId || null,
+      eventOwners: input.eventOwners ?? {},
       metaPixels: { create: metaPixels },
       eventRules: { create: rulesFromForm(input) },
     },
@@ -224,6 +238,11 @@ export async function updatePixel(id: string, input: PixelFormInput): Promise<Pi
       where: { id },
       data: {
         name: input.name?.trim() || "Meta Pixel",
+        // ⚠️ `undefined` MANTÉM o valor gravado; `{}` o zera. O formulário só
+        // manda o mapa quando o usuário mexeu nele — sem esta distinção, salvar
+        // qualquer outra coisa do pixel devolveria todos os eventos à Traffik em
+        // silêncio, que é o mesmo defeito do token apagado ao renomear.
+        eventOwners: input.eventOwners ?? undefined,
         metaPixels: { create: metaPixels },
         eventRules: { create: rulesFromForm(input) },
       },

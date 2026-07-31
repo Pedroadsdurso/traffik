@@ -795,6 +795,15 @@ model PixelConfig {
   accessToken String?
   provider    String   @default("META")
   enabled     Boolean  @default(true)
+  /// Quem envia cada evento para a Meta: `{ "Purchase": "traffik" | "gateway" | "ninguem" }`.
+  ///
+  /// 🔴 NULO = tudo da Traffik (comportamento anterior). Evento ausente do mapa
+  /// também cai em `traffik` — o padrão nunca é "não envia", porque deixar de
+  /// enviar em silêncio é o modo de falha caro aqui.
+  ///
+  /// Json em vez de coluna por evento porque `PageView` não existe no enum
+  /// `PixelEventType`, e uma FK para `PixelEventRule` o deixaria de fora.
+  eventOwners Json?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

@@ -1,6 +1,7 @@
 import { decryptSecretSafe } from "@/lib/crypto/secrets";
 import { sendPurchaseEvent } from "@/lib/facebook/capi";
 import { prisma } from "@/lib/prisma";
+import { traffikEnvia } from "@/lib/pixel/donos";
 
 /**
  * Após uma venda ser salva pelo webhook, dispara o evento Purchase para a
@@ -38,6 +39,10 @@ export async function dispatchPurchaseEvents(saleId: string): Promise<void> {
     });
 
     for (const px of pixels) {
+      // Purchase é o caso que mais dói: com o pixel do gateway disparando na
+      // página de obrigado E a nossa CAPI disparando pelo webhook, a Meta
+      // conta a conversão duas vezes e otimiza a campanha com sinal inflado.
+      if (!traffikEnvia(px.eventOwners, "Purchase")) continue;
       const rule = px.eventRules[0];
       if (!rule || !rule.enabled) continue;
       if (rule.sendMode === "APENAS_APROVADAS" && sale.status !== "APROVADA") continue;

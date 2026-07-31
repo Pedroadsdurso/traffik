@@ -1,0 +1,18 @@
+-- Quem envia cada evento para a Meta: a Traffik, o gateway, ou ninguém.
+--
+-- POR QUE: com o pixel nativo do gateway na mesma página, o MESMO evento chega
+-- à Meta por dois caminhos com `event_id` de donos diferentes — e ela conta os
+-- dois. Medido em produção: 1 venda real, o Gerenciador marcando 2.
+--
+-- A dedup por `event_id` compartilhado só funciona quando a MESMA parte dispara
+-- os dois lados. Com o gateway, isso é impossível: o `eid` dele é um UUID
+-- gerado no navegador que não aparece em nenhum campo do webhook (verificado
+-- em 167 payloads reais). Então a ausência de duplicata não pode vir de
+-- coordenação — tem de vir de PARTIÇÃO: um dono por evento.
+--
+-- Json e não coluna por evento: `PageView` não existe no enum `PixelEventType`
+-- (é o evento base, sem regra), então uma FK para `PixelEventRule` deixaria
+-- justamente ele de fora. Mesmo precedente de `PixelEventRule.detection`.
+--
+-- NULO = tudo da Traffik, que é o comportamento anterior. Aditiva.
+ALTER TABLE "PixelConfig" ADD COLUMN IF NOT EXISTS "eventOwners" JSONB;

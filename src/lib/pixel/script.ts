@@ -6,8 +6,12 @@
  * webhook), então não entra aqui.
  */
 
+import { EVENTOS_DO_PIXEL, traffikEnvia } from "./donos";
+
 export interface PixelScriptConfig {
   configId: string;
+  /** `PixelConfig.eventOwners` cru. Ausente = tudo da Traffik. */
+  eventOwners?: unknown;
   apiBase: string;
   lead: boolean;
   addToCart: boolean;
@@ -23,6 +27,18 @@ const CHECKOUT_PADRAO = ["pay.kirvano.com", "hotmart", "cartpanda", "kiwify", "m
 
 function jsStr(v: string): string {
   return v.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+/**
+ * Eventos que a Traffik NÃO envia — o espelho no `fbq` os ignora.
+ *
+ * ⚠️ Só o ESPELHO. O `track()` continua mandando o POST para nós, porque o
+ * funil e o Dashboard contam do nosso banco: escolher "meu gateway" para o
+ * InitiateCheckout não pode apagar uma etapa inteira do funil como efeito
+ * colateral invisível de uma decisão sobre pixel.
+ */
+function eventosAlheios(donos: unknown): string[] {
+  return EVENTOS_DO_PIXEL.filter((e) => !traffikEnvia(donos, e));
 }
 
 /** Lista de domínios da regra por clique; vazio cai nos padrões. */
@@ -46,6 +62,10 @@ export function pixelScript(cfg: PixelScriptConfig): string {
   var ADD_TO_CART = ${cfg.addToCart};
   var IC = ${ic.enabled ? `{ type: "${jsStr(ic.type || "")}", value: "${jsStr(ic.value || "")}" }` : "null"};
   var CHECKOUT = ${JSON.stringify(dominiosCheckout(ic))};
+  // Eventos cujo dono NÃO é a Traffik. Só afeta o espelho no pixel nativo:
+  // o POST para nós continua, porque o funil e o Dashboard contam do nosso
+  // banco e não podem perder uma etapa por causa de uma escolha de pixel.
+  var ALHEIOS = ${JSON.stringify(eventosAlheios(cfg.eventOwners))};
 
   function fbclid() {
     try {
@@ -89,6 +109,7 @@ export function pixelScript(cfg: PixelScriptConfig): string {
    */
   function espelhar(event, id) {
     try {
+      if (ALHEIOS.indexOf(event) > -1) return; // o dono deste evento é outro
       if (typeof window.fbq === "function") window.fbq("track", event, {}, { eventID: id });
     } catch (e) {}
   }
