@@ -125,7 +125,15 @@ async function processar(
     for (const venda of resultado.vendas) {
       ingeridas.push(
         await ingestSale(
-          { userId: dono.userId, webhookId: dono.webhookId ?? null },
+          {
+            userId: dono.userId,
+            webhookId: dono.webhookId ?? null,
+            apiCredentialId: dono.apiCredentialId ?? null,
+            // Procedência gravada NA VENDA, não só na FK: excluir o webhook não
+            // pode apagar de onde a venda veio. `rotuloLog` já é a plataforma
+            // ("KIRVANO") ou "API" — a mesma string do log, de propósito.
+            platform: dono.rotuloLog,
+          },
           venda,
           payload,
           ip,

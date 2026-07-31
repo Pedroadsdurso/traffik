@@ -588,6 +588,17 @@ model Sale {
   coproducao    Decimal?      @db.Decimal(14, 2)
   /// Como o clique de origem foi encontrado: "direct" | "ip" | "none".
   matchMethod   String?
+  /// Gateway de origem, gravado NA INGESTÃO — `KIRVANO`, `CAKTO`, `API`…
+  ///
+  /// 🔴 Existe porque a procedência não pode viver só na FK. `Sale.webhookId` é
+  /// `SetNull`, então excluir um webhook (trocar de gateway) apagava para sempre
+  /// a única forma de saber de onde a venda veio: `sale.webhook.platform`. A
+  /// venda sobrevivia — correto — mas ficava indistinguível de uma ingerida por
+  /// chave de API, que também nasce com `webhookId` nulo.
+  ///
+  /// ⚠️ NULO = venda anterior a esta coluna cujo webhook **já não existia** no
+  /// backfill. Não significa "sem gateway".
+  platform      String?
   rawPayload    Json?
   timestamp     DateTime      @default(now())
   approvedAt    DateTime?
@@ -614,6 +625,7 @@ model Sale {
   @@index([timestamp])
   @@index([userId, timestamp])
   @@index([userId, pedidoId])
+  @@index([userId, platform])
   @@index([status])
   @@index([buyerEmail])
 }

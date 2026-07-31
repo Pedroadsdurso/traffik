@@ -26,6 +26,16 @@ export interface IngestContext {
    * CLAUDE.md.
    */
   apiCredentialId?: string | null;
+  /**
+   * Gateway de origem (`KIRVANO`, `CAKTO`, `API`…), gravado em `Sale.platform`.
+   *
+   * 🔴 **Procedência não pode viver só na FK.** Antes disto, a única forma de
+   * saber de qual gateway uma venda veio era `sale.webhook.platform` — e como a
+   * FK é `SetNull`, excluir o webhook apagava a resposta para sempre. O
+   * receptor conhece o gateway neste exato instante; guardar aqui é o que torna
+   * o dado autossuficiente.
+   */
+  platform?: string | null;
 }
 
 export interface IngestResult {
@@ -60,6 +70,7 @@ export async function ingestSale(
     userId: ctx.userId,
     webhookId: ctx.webhookId ?? null,
     apiCredentialId: ctx.apiCredentialId ?? null,
+    platform: ctx.platform ?? null,
     externalId: data.externalId,
     // Agrupador do checkout: order bump e upsell do mesmo carrinho compartilham.
     // Faturamento soma LINHAS; conversões contam PEDIDOS. Ver `lib/pedidos.ts`.
