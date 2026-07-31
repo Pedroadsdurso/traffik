@@ -3354,6 +3354,83 @@ pedido". Dados de teste removidos depois.
 > 🔴 **Vazio que É bug:** `taxaGateway` nulo (o registro diz que ela manda
 > `fees`), ou `fbc`/`fbp` nulos num payload que os trouxe.
 
+## 🔴 O MOTOR DE REGRAS ENXERGAVA O QUE JÁ TINHA SIDO APAGADO (31/07/2026)
+
+As três consultas de entidade em `rules/engine.ts` **não filtravam status**:
+
+```js
+where: { adAccount: { userId, ...accountFilter }, ...nameFilterWhere }
+```
+
+Toda campanha, conjunto e anúncio da conta entrava no escopo — inclusive
+`ARCHIVED` e `DELETED`.
+
+| Ação | O que acontecia |
+|---|---|
+| **Pausar** | inofensivo: o laço pula quem não está `ACTIVE` ("já pausada") |
+| **Ativar** | 🔴 arquivada **não é** `ACTIVE`, então **não era pulada** — o motor chamava `setEntityStatus(ARCHIVED, "ACTIVE")` e tentava **ressuscitar o que o usuário já tinha apagado** |
+
+**O que impediu o estrago foi sorte, não desenho.** As duas regras cadastradas
+em produção são `ATIVAR`, com escopo **"todas as contas"** e condição `cpa > 50`
+— e estavam **desativadas**. Zero execuções no `AutomationRuleLog`. Ligar
+qualquer uma delas teria alcançado as 12 campanhas arquivadas da CA 1 MARIA,
+mais as das outras 5 contas.
+
+### ⛔ A variação NOVA do padrão: código ATIVO com escopo largo demais
+
+Os cinco casos anteriores do PROCEDIMENTO eram **código inerte** — pronto e não
+chamado. Este é o oposto: **chamado, funcionando, e alcançando mais do que
+deveria.**
+
+E passou em tudo. As 22 asserções do Bloco 8 provam que a regra **pausa a
+campanha certa**; nenhuma pergunta se ela **deixa de tocar no que não deveria**.
+
+> ### 🔴 REGRA QUE FICA
+> **Ao testar automação que age sobre entidades externas, teste também o que ela
+> NÃO deve tocar.** "Agiu no alvo certo" e "não agiu em mais nada" são duas
+> asserções, e a segunda é a que protege dinheiro.
+
+### A correção
+
+`semApagados = { status: { notIn: ["ARCHIVED", "DELETED"] } }` nas três consultas.
+
+> ⚠️ **`UNKNOWN` continua no escopo, de propósito.** Significa "não conseguimos
+> determinar o status", não "foi apagado". Excluí-lo faria uma regra de pausar
+> deixar de agir justamente onde há incerteza.
+
+> ### ⚠️ Este filtro é do MOTOR. NÃO o copie para as listagens.
+> `ads/overview.ts` e `facebook/sync.ts` trazem arquivados **de propósito** — o
+> gasto histórico deles é real e some do Dashboard se forem excluídos. A
+> diferença é que aqueles **LEEM** e este **AGE**.
+
+### Auditoria das outras 13 consultas de entidade — só o motor era perigoso
+
+| Onde | Traz arquivados? | Veredito |
+|---|---|---|
+| `rules/engine.ts` | trazia | 🔴 **corrigido** — é o único que AGE |
+| `ads/overview.ts` | sim | ✅ por desenho; a tela filtra no cliente |
+| `facebook/sync.ts` | sim | ✅ obrigatório: sem o `Ad` local, o insight do arquivado não tem onde encostar |
+| `areas/atribuicao.ts` | sim | ✅ correto: campanha arquivada ainda é dona das vendas históricas dela |
+| `api/ads/bulk` | resolve por id | ✅ o usuário selecionou explicitamente |
+| `api/track/click` | sim | ✅ leitura de segmentação, não age |
+| `ads/creatives.ts` | sim | ⚠️ listagem, não age — vale revisar se arquivado deveria aparecer no ranking de criativos |
+
+### ▶️ Botão "Rodar agora" na tela de Regras
+
+O único gatilho era o cron do GitHub Actions (15 min, *best-effort*, atrasa 5–20
+min em pico) ou `curl` com o `CRON_SECRET`. Nenhum serve para conferir uma regra
+recém-criada, que é justamente quando se quer ver o que ela faz.
+
+> ⚠️ **Chama o MESMO `runUserRules` do cron.** Um segundo caminho de execução
+> divergiria, e a regra passaria a agir diferente conforme quem a disparou.
+>
+> ⚠️ **Ele AGE.** Limite diário e janela de execução continuam valendo — o botão
+> não os contorna.
+
+**Verificado na tela** (dev, uma campanha PAUSED e outra ARCHIVED): o histórico
+mostrou **"Nenhuma entidade satisfez as condições (1 avaliadas)"**, listando só a
+pausada. Antes da correção seriam 2.
+
 ## ✍️ ESCRITA NA GRAPH API: o que já foi exercido (31/07/2026)
 
 > ### ⛔ A documentação afirmava, em QUATRO lugares, que nenhuma escrita real
@@ -3449,9 +3526,16 @@ pelo usuário em 30/07/2026.
 > original vinha de um levantamento antigo. Ver as notas em cada um. Confira
 > antes de executar qualquer item desta lista: esta fila também envelhece.
 
-### 0. GERENCIADOR — combinado para a PRÓXIMA sessão (31/07/2026)
+### 0. GERENCIADOR — PRÓXIMA SESSÃO, comece por aqui (31/07/2026)
 
-Adiados de propósito por custo de sessão, com contexto limpo.
+Adiados de propósito por custo de sessão. **Escolha um e entregue completo** —
+os dois juntos não cabem numa sessão.
+
+> **Qual primeiro?** O usuário decide com contexto limpo. Os fatos para decidir:
+> **(a) é o mais barato** — estado de cliente e interface, sem schema, sem sync,
+> sem migration, então sem ordem de deploy e sem risco em produção. **(b) entrega
+> mais informação** de diagnóstico, mas é migration em três tabelas + campo novo
+> no sync + tabela de mapeamento + exibição.
 
 **(a) Drill-down por campanha.** Selecionar campanhas (checkbox, já existe) e as
 abas Conjuntos e Anúncios mostrarem só o que pertence a elas. O mesmo de
@@ -3650,6 +3734,7 @@ desligada.** Nenhuma dessas ferramentas pergunta "alguém chama isto?".
 | Consulta de manutenção | **rodou contra linha de verdade?** | semear no dev o estado que ela deve encontrar |
 | Campo novo da Graph API | **veio preenchido?** | sonda que mostra a resposta CRUA |
 | **Agregação / métrica** | **o número muda com dado que exercite o caso?** | teste PONTA A PONTA que semeia o caso e lê o resultado final |
+| **Automação que AGE** | **o que ela NÃO deveria tocar está fora do escopo?** | asserção sobre o que ficou de fora, não só sobre o alvo |
 
 > ### 🔴 Métrica exige teste ponta a ponta — a função certa não basta
 > Acrescentado em 31/07/2026, depois de **três armadilhas na mesma etapa**, todas

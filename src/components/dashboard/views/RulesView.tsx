@@ -9,6 +9,7 @@ import {
   deleteRule,
   duplicateRule,
   listRules,
+  runRulesNow,
   toggleRule,
   updateRule,
   type RuleDTO,
@@ -53,6 +54,8 @@ export function RulesView({ workspaceId }: { workspaceId: string | null }) {
   const [erro, setErro] = useState<string | null>(null);
 
   const [logDe, setLogDe] = useState<RuleDTO | null>(null);
+  const [rodando, setRodando] = useState(false);
+  const [resultadoRun, setResultadoRun] = useState<string | null>(null);
   const [excluir, setExcluir] = useState<RuleDTO | null>(null);
 
   useEffect(() => {
@@ -79,6 +82,30 @@ export function RulesView({ workspaceId }: { workspaceId: string | null }) {
       vivo = false;
     };
   }, [workspaceId]);
+
+  /**
+   * ⚠️ AGE de verdade: regra ativa cuja condição bate pausa campanha e altera
+   * orçamento. Chama o MESMO `runUserRules` do cron — o limite diário e a janela
+   * de execução continuam valendo, este botão não os contorna.
+   */
+  const rodarAgora = async () => {
+    setRodando(true);
+    setResultadoRun(null);
+    try {
+      const r = await runRulesNow();
+      setResultadoRun(
+        r.evaluated === 0
+          ? "Nenhuma regra ativa para avaliar."
+          : `${plural(r.evaluated, "regra avaliada", "regras avaliadas")} · ${plural(r.acted, "agiu", "agiram", "nenhuma agiu")}`,
+      );
+      // Relê para o histórico e o "última execução" dos cards refletirem agora.
+      setRegras(await listRules(workspaceId));
+    } catch (e) {
+      setResultadoRun(e instanceof Error ? e.message : "Falha ao rodar as regras.");
+    } finally {
+      setRodando(false);
+    }
+  };
 
   const salvar = async () => {
     if (!rascunho) return;
@@ -147,7 +174,16 @@ export function RulesView({ workspaceId }: { workspaceId: string | null }) {
         </div>
       ) : (
         <>
-          <div style={sx("display:flex;justify-content:flex-end")}>
+          <div style={sx("display:flex;justify-content:flex-end;align-items:center;gap:var(--space-2)")}>
+            {resultadoRun && (
+              <span className="text-muted" style={sx("font-size:12.5px")}>{resultadoRun}</span>
+            )}
+            {/* ⚠️ Este botão AGE: regra ativa cuja condição bate pausa campanha e
+                altera orçamento de verdade. Chama o MESMO `runUserRules` do cron —
+                um segundo caminho de execução divergiria do primeiro. */}
+            <button className="btn btn-secondary" type="button" onClick={rodarAgora} disabled={rodando}>
+              {rodando ? "Rodando…" : "Rodar agora"}
+            </button>
             <button className="btn btn-primary" type="button" onClick={() => setRascunho(RASCUNHO_REGRA)}>
               Criar regra
             </button>

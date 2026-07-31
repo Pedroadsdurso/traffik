@@ -1,5 +1,7 @@
 "use server";
 
+import { runUserRules } from "@/lib/rules/engine";
+
 import { auth } from "@/auth";
 import { getLastWorkspaceId } from "@/lib/actions/workspaces";
 import { prisma } from "@/lib/prisma";
@@ -261,4 +263,31 @@ export async function deleteRule(id: string): Promise<{ id: string }> {
   if (!r) throw new Error("Regra não encontrada.");
   await prisma.automationRule.delete({ where: { id } });
   return { id };
+}
+
+/**
+ * Roda AGORA as regras ativas do usuário logado.
+ *
+ * ## Por que existe
+ *
+ * O único gatilho era o cron do GitHub Actions (a cada 15 min, *best-effort*,
+ * atrasando 5–20 min em pico) ou um `curl` com o `CRON_SECRET` na linha de
+ * comando. Nenhum dos dois serve para conferir uma regra recém-criada, que é
+ * exatamente quando se quer ver o que ela faz.
+ *
+ * ⚠️ **Não é um segundo caminho de execução.** Chama o MESMO `runUserRules` do
+ * cron — mesma avaliação, mesmas guardas, mesmo log. Um segundo caminho
+ * divergiria do primeiro, e a regra passaria a agir diferente conforme quem a
+ * disparou.
+ *
+ * ⚠️ **Ela AGE.** Regra ativa cuja condição bate pausa campanha e altera
+ * orçamento de verdade. O limite diário e a janela de execução continuam
+ * valendo — este botão não os contorna.
+ *
+ * O escopo é o usuário da sessão: `auth()` decide de quem são as regras, nunca
+ * um id vindo do cliente.
+ */
+export async function runRulesNow(): Promise<{ evaluated: number; acted: number }> {
+  const userId = await requireUserId();
+  return runUserRules(userId);
 }

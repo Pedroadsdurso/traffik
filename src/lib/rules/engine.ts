@@ -1,4 +1,5 @@
 import { getUserTimezone } from "@/lib/userTimezone";
+import type { EntityStatus } from "@/generated/prisma/enums";
 import { setEntityStatus, updateDailyBudget } from "@/lib/facebook/manage";
 import { carregarMapaDeAreas } from "@/lib/areas/atribuicao";
 import { prisma } from "@/lib/prisma";
@@ -219,9 +220,35 @@ async function loadEntities(rule: RuleRow, start: Date, startKey: string) {
 
   const nameFilterWhere = nameContains ? { name: { contains: nameContains, mode: "insensitive" as const } } : {};
 
+  /**
+   * ⛔ REGRA NÃO ENXERGA O QUE JÁ FOI APAGADO.
+   *
+   * 🔴 As três consultas abaixo NÃO filtravam status. Toda campanha, conjunto e
+   * anúncio da conta entrava no escopo — inclusive `ARCHIVED` e `DELETED`.
+   *
+   * Para **Pausar** era inofensivo: o laço pula quem não está ACTIVE. Para
+   * **Ativar** era o oposto — arquivada não é ACTIVE, então ela **não era
+   * pulada**, e o motor chamava `setEntityStatus(ARCHIVED, "ACTIVE")`. Uma
+   * regra de ativar tentaria RESSUSCITAR tudo que o usuário já tinha apagado.
+   *
+   * Medido em produção: a conta CA 1 MARIA tem 12 campanhas arquivadas, e as
+   * duas regras cadastradas são de ATIVAR, com escopo "todas as contas".
+   * Estavam desativadas — foi só isso que impediu o estrago.
+   *
+   * ⚠️ `UNKNOWN` CONTINUA no escopo, de propósito: significa que não
+   * conseguimos determinar o status, não que a entidade foi apagada. Excluí-lo
+   * faria uma regra de pausar deixar de agir justamente onde há incerteza.
+   *
+   * ⚠️ Este filtro é do MOTOR, não das listagens. `ads/overview.ts` e
+   * `facebook/sync.ts` trazem arquivados de propósito — o gasto histórico deles
+   * é real e some do Dashboard se forem excluídos. A diferença é que aqueles
+   * LEEM e este AGE.
+   */
+  const semApagados = { status: { notIn: ["ARCHIVED", "DELETED"] as EntityStatus[] } };
+
   if (rule.level === "CAMPAIGN") {
     const campaigns = await prisma.campaign.findMany({
-      where: { adAccount: { userId: rule.userId, ...accountFilter }, ...nameFilterWhere },
+      where: { adAccount: { userId: rule.userId, ...accountFilter }, ...nameFilterWhere, ...semApagados },
       select: {
         id: true, fbCampaignId: true, name: true, status: true, dailyBudget: true,
         adAccount: { select: { adProfile: { select: { accessToken: true } } } },
@@ -244,7 +271,7 @@ async function loadEntities(rule: RuleRow, start: Date, startKey: string) {
     }
   } else if (rule.level === "ADSET") {
     const adSets = await prisma.adSet.findMany({
-      where: { adAccount: { userId: rule.userId, ...accountFilter }, ...nameFilterWhere },
+      where: { adAccount: { userId: rule.userId, ...accountFilter }, ...nameFilterWhere, ...semApagados },
       select: {
         id: true, fbAdSetId: true, name: true, status: true, dailyBudget: true,
         adAccount: { select: { adProfile: { select: { accessToken: true } } } },
@@ -265,7 +292,7 @@ async function loadEntities(rule: RuleRow, start: Date, startKey: string) {
     }
   } else {
     const ads = await prisma.ad.findMany({
-      where: { adAccount: { userId: rule.userId, ...accountFilter }, ...nameFilterWhere },
+      where: { adAccount: { userId: rule.userId, ...accountFilter }, ...nameFilterWhere, ...semApagados },
       select: {
         id: true, fbAdId: true, name: true, status: true,
         adAccount: { select: { adProfile: { select: { accessToken: true } } } },
