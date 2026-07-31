@@ -14,6 +14,7 @@ import {
   type WebhookLogDTO,
 } from "@/lib/actions/diagnostics";
 import { sx } from "@/lib/sx";
+import { TestadorPayloadCard } from "./TestadorPayloadCard";
 import { Select } from "../../ui/Select";
 
 const STATUS_TAG: Record<string, { label: string; cls: string }> = {
@@ -403,6 +404,7 @@ export function TestesView() {
       <PixelTestCard />
       <WebhookLogsCard />
       <TrackingTestCard />
+      <TestadorPayloadCard />
     </div>
   );
 }

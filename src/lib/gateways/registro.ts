@@ -1,4 +1,6 @@
 import type { Capacidades, GatewayDef } from "./contrato";
+import { EXEMPLOS_CAKTO } from "./exemplos/cakto";
+import { parseCakto } from "./parsers/cakto";
 import { parseGenerico } from "./parsers/generico";
 import { parseKirvano } from "./parsers/kirvano";
 
@@ -92,6 +94,78 @@ export const REGISTRO: Record<string, GatewayDef> = {
       { titulo: "Copie a URL abaixo", texto: "Cole no campo de endereço do webhook. Ela é única e identifica a sua conta." },
       { titulo: "Copie o token que a Kirvano gerar", texto: "Cole aqui em cima. Sem ele, as vendas são recusadas." },
     ],
+  },
+
+  // ──────────────────────────────── Cakto ────────────────────────────────
+  CAKTO: {
+    id: "CAKTO",
+    nome: "Cakto",
+    ativo: true,
+    // Gateway novo usa o caminho universal — sem rota própria.
+    urlDoWebhook: (token, base) => `${base}/api/webhook/sale/${token}`,
+    auth: {
+      tipo: "segredo",
+      exigir: true,
+      // ⚠️ NÓS geramos o segredo e o usuário cola no painel da Cakto — o
+      // contrário da Kirvano, onde ele cria lá e cola aqui.
+      geradoPorNos: true,
+      // A Cakto manda o segredo DENTRO do corpo, não em header.
+      onde: [{ corpo: "secret" }],
+    },
+    parse: parseCakto,
+    capacidades: {
+      // 🔴 NÃO manda IP nem país do comprador. É o primeiro gateway em que a
+      // geografia das vendas depende do país do CLIQUE — e 55,6% do tráfego
+      // humano deste produto passa pelo navegador embutido da Meta, que resolve
+      // US/IE para brasileiros. A tela avisa por causa desta linha.
+      ipDoComprador: false,
+      // ✅ Em compensação, manda os dois cookies da Meta: via de atribuição
+      // melhor que o IP, porque identifica o clique no anúncio.
+      fbc: true,
+      fbp: true,
+      utms: true,
+      taxasCalculadas: true, // campo `fees`
+      comissoes: true, // `commissions[]`
+      telefone: "nacional", // "34999999999", sem DDI
+      agrupaItens: true, // order bump no mesmo disparo, modo agrupado
+      // ✅ Ela tem endpoints de "Reenviar Evento" e "Histórico de Eventos".
+      reentregaEventos: true,
+    },
+    campos: [
+      { chave: "nome", rotulo: "Nome (opcional)", obrigatorio: false },
+      {
+        chave: "secret",
+        rotulo: "Chave de segurança",
+        ajuda: "Geramos para você. Cole no campo `secret` ao cadastrar o webhook na Cakto.",
+        obrigatorio: true,
+        gerado: true,
+      },
+    ],
+    instalacao: [
+      {
+        titulo: "Na Cakto, abra Webhooks e crie um novo",
+        texto: "Informe um nome qualquer e escolha os produtos que devem enviar vendas.",
+      },
+      {
+        titulo: "Cole o endereço e a chave abaixo",
+        texto: "O endereço vai no campo de URL; a chave, no campo de segurança.",
+      },
+      {
+        titulo: "Escolha o tipo de disparo AGRUPADO",
+        texto:
+          "Assim uma compra com order bump chega inteira numa mensagem só, e conta como uma venda — não duas. " +
+          "O individual também funciona, mas depende de as duas mensagens chegarem.",
+        atencao: true,
+      },
+      {
+        titulo: "A localização das vendas será estimada",
+        texto:
+          "A Cakto não informa o endereço de quem comprou. O país destas vendas vem da visita ao seu site, " +
+          "então o mapa mostra uma estimativa — os valores e o total continuam exatos.",
+        atencao: true,
+      },
+    ],
+    exemplos: EXEMPLOS_CAKTO,
   },
 
   // ─────────────────────────────── Custom ───────────────────────────────

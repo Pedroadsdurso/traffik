@@ -1,5 +1,12 @@
 "use server";
 
+import {
+  analisarPayload,
+  exemploDoGateway,
+  gatewaysComExemplo,
+  type Diagnostico,
+} from "@/lib/gateways/testador";
+
 import { auth } from "@/auth";
 import { getLastWorkspaceId } from "@/lib/actions/workspaces";
 import { escopoDeConfig } from "@/lib/areas/escopoConfig";
@@ -346,4 +353,50 @@ export async function listTestablePixels(): Promise<PixelOptionDTO[]> {
   return rows
     .filter((p) => p.metaPixels.some((m) => m.accessToken) || p.accessToken)
     .map((p) => ({ id: p.id, name: p.name, metaCount: p.metaPixels.length }));
+}
+
+// ─────────────────────── Testador de payload de gateway ───────────────────────
+
+/**
+ * Analisa um payload colado contra o parser de um gateway.
+ *
+ * É como se valida uma integração **antes de ter conta no gateway**: cola-se o
+ * JSON da documentação e a resposta diz o que foi extraído, o que ficou vazio e
+ * — o que mais importa — **por quê**.
+ *
+ * ⚠️ Leitura pura: não cria venda, não toca no banco, não chama ninguém. O
+ * `auth()` está aqui porque server action é endpoint público, não porque haja
+ * dado de usuário envolvido.
+ */
+export async function testarPayloadDeGateway(input: {
+  gateway: string;
+  json: string;
+}): Promise<{ ok: true; diagnostico: Diagnostico } | { ok: false; erro: string }> {
+  await requireUserId();
+
+  const texto = input.json.trim();
+  if (!texto) return { ok: false, erro: "Cole o JSON do webhook para analisar." };
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(texto);
+  } catch (e) {
+    // A mensagem do próprio JSON.parse costuma apontar a posição do erro, que é
+    // mais útil que um "JSON inválido" genérico.
+    return { ok: false, erro: `JSON inválido: ${e instanceof Error ? e.message : "não foi possível ler"}` };
+  }
+
+  return { ok: true, diagnostico: analisarPayload(input.gateway, payload) };
+}
+
+/** Gateways que o testador oferece, com os exemplos embutidos de cada um. */
+export async function listarGatewaysDoTestador() {
+  await requireUserId();
+  return gatewaysComExemplo();
+}
+
+/** Um payload de exemplo, já formatado para colar no campo. */
+export async function carregarExemploDeGateway(gateway: string, indice: number) {
+  await requireUserId();
+  return exemploDoGateway(gateway, indice);
 }

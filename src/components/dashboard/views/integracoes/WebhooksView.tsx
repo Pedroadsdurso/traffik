@@ -1,17 +1,21 @@
 import { plural } from "@/lib/format";
+import { gatewaysParaEscolher } from "@/lib/gateways/registro";
 import { sx } from "@/lib/sx";
 import { CampoCopiavel, Drawer } from "../../ui/Drawer";
 import { LogoGateway } from "../../ui/LogoGateway";
 import { Modal } from "../../ui/Modal";
 import type { TraffikView } from "../../useTraffikState";
 
-/** Gateways suportados no modal. Arquitetura pronta para novos — só a
- *  Kirvano está habilitada por enquanto (conforme o roteiro). */
-const GATEWAYS: { id: string; name: string; enabled: boolean }[] = [
-  { id: "KIRVANO", name: "Kirvano", enabled: true },
-  { id: "HOTMART", name: "Hotmart", enabled: false },
-  { id: "KIWIFY", name: "Kiwify", enabled: false },
-];
+/**
+ * A lista vem do REGISTRO, não daqui.
+ *
+ * ⚠️ Era um array local, e ele já divergia: a Cakto existia no registro com
+ * parser, capacidades e instalação, e não aparecia na tela porque ninguém
+ * lembrou de acrescentá-la em dois lugares. É exatamente o custo que a
+ * arquitetura universal existe para eliminar — gateway novo é UMA entrada no
+ * registro, e a tela se monta sozinha.
+ */
+const GATEWAYS = gatewaysParaEscolher().map((g) => ({ id: g.id, name: g.nome, enabled: g.ativo }));
 
 /** Monograma colorido no lugar do logo do gateway. */
 

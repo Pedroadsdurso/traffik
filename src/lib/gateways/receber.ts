@@ -136,13 +136,22 @@ async function processar(
     await opts.aoConcluir?.(dono);
 
     const primeira = ingeridas[0];
+    // ⛔ Avisos do parser vão para o LOG. Evento desconhecido, comissão de tipo
+    // novo — nada disso pode virar um 200 mudo: é justamente o que o usuário
+    // precisa ver na aba Testes quando um gateway muda de formato.
+    const avisos = resultado.avisos ?? [];
+    const nota = [
+      ingeridas.length > 1 ? `${ingeridas.length} itens no mesmo pedido` : null,
+      ...avisos,
+    ].filter(Boolean).join(" · ");
+
     await finishWebhookLog(logId, {
       status: "PROCESSADO",
       // Com mais de uma venda o log aponta para a primeira. O payload cru está
       // guardado inteiro, e cada venda tem o próprio `rawPayload`.
       saleId: primeira.id,
       httpStatus: 200,
-      message: ingeridas.length > 1 ? `${ingeridas.length} itens no mesmo pedido` : undefined,
+      message: nota || undefined,
     });
 
     return Response.json({

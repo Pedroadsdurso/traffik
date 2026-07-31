@@ -13,6 +13,7 @@ import {
 } from "@/lib/actions/facebook";
 import type { PixelConfigDTO } from "@/lib/actions/pixels";
 import { corFinanceira } from "@/lib/financeiro";
+import { rotuloDoGateway } from "@/lib/gateways/registro";
 import type { PeriodoNome } from "@/lib/periodo";
 import type { NomeIcone } from "./ui/Icone";
 import {
@@ -1600,7 +1601,7 @@ export function useTraffikState(
       setTimeout(() => set({ copiedWebhookId: null }), 1500);
     },
     webhookPlatformLabel: (p: string) =>
-      ({ KIRVANO: "Kirvano", HOTMART: "Hotmart", KIWIFY: "Kiwify", CUSTOM: "Custom" })[p] ?? p,
+      rotuloDoGateway(p),
 
     // Modal "Adicionar Webhook" / editar
     webhookModalOpen: s.webhookModalOpen,
