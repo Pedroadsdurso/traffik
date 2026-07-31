@@ -146,11 +146,26 @@ não roda migrations, então `DIRECT_URL` fica só local.
 npm install
 npx prisma generate
 npx prisma migrate deploy      # aplica migrations no Supabase (usa DIRECT_URL)
-npx prisma db seed             # cria teste@traffik.io / traffik123
+npx prisma db seed             # cria teste@traffik.io (senha impressa na saída)
 npm run dev                    # http://localhost:3000
 ```
-Logins: `teste@traffik.io` / `traffik123` (vazio) · `pedrodurso8@gmail.com` /
-`24032005p` (dono; tem 1 perfil FB + 6 contas reais).
+
+**Contas:** `teste@traffik.io` (seed, vazia) · `pedrodurso8@gmail.com` (dono;
+1 perfil FB + 6 contas reais).
+
+> ### 🔴 NENHUMA SENHA NESTE ARQUIVO. Nunca mais.
+> Este bloco listava as duas em texto puro — a do seed e **a da
+> conta do dono em produção**. O `CLAUDE.md` é versionado: qualquer um com
+> acesso ao repositório tinha as duas.
+>
+> A do seed agora é **gerada aleatoriamente** e impressa uma vez (ou vem de
+> `SEED_PASSWORD`, no `.env`, que é gitignored). A do dono é dele e não pertence
+> a lugar nenhum do repositório.
+>
+> ⚠️ **A senha do dono está no histórico do git e precisa ser trocada** — o
+> `CLAUDE.md` foi commitado com ela. Reescrever o histórico não basta se o
+> repositório já foi clonado ou espelhado; a única correção real é **trocar a
+> senha**.
 
 ---
 
@@ -4160,6 +4175,265 @@ pelo usuário em 30/07/2026.
 > ⚠️ **Os itens 3b e 3c foram VERIFICADOS no código e já estão feitos** — a fila
 > original vinha de um levantamento antigo. Ver as notas em cada um. Confira
 > antes de executar qualquer item desta lista: esta fila também envelhece.
+
+### 🔴 EXCLUIR WEBHOOK ÓRFA AS VENDAS E APAGA O GATEWAY DELAS (31/07/2026)
+
+**Não apaga venda** — `Sale.webhookId` é `onDelete: SetNull` e `deleteWebhook`
+faz um `delete` seco, sem cascade. O faturamento histórico sobrevive, que é o
+comportamento certo: quem troca de gateway não pode perder o histórico.
+
+🔴 **Mas a PLATAFORMA é perdida para sempre.** `Sale` **não tem coluna
+`platform`** — a única forma de saber de qual gateway uma venda veio é
+`sale.webhook.platform`. Com o webhook excluído, a venda fica indistinguível de
+uma ingerida por chave de API (que também nasce com `webhookId` nulo).
+
+Consequências medidas no schema:
+
+| | Efeito |
+|---|---|
+| Faturamento, KPIs, funil, globo | ✅ **intactos** — nenhum filtra por `webhookId` |
+| Gateway de origem | 🔴 **perdido**, sem backfill possível |
+| Área que filtre por webhook | a venda **sai** dela e cai na Principal |
+| Venda de TESTE já ingerida | continua contando, e agora sem gateway para achá-la |
+
+> ⚠️ **`SetNull` está certo; a falta da coluna é que não.**
+
+✅ **CORRIGIDO em 31/07/2026** — migration `20260731030000_sale_platform`
+(aditiva: `Sale.platform TEXT` nullable + índice `(userId, platform)`).
+`receber.ts` passa `platform: dono.rotuloLog` para o `ingestSale`, que é a mesma
+string do `WebhookLog` — de propósito, para as duas não divergirem.
+
+`npm run backfill:platform` recupera o histórico **enquanto os webhooks
+existirem**. Simula por padrão; lista as órfãs com data, produto, valor, status
+e **id**, que é o que permite agir sobre uma linha específica.
+
+> ### ⏳ ESTE BACKFILL TEM PRAZO
+> Cada gateway que o usuário remove leva junto a procedência das vendas dele,
+> **sem segunda fonte**. Rodar cedo salva mais história. As duas vendas da Cakto
+> já se perderam assim, antes da coluna existir.
+
+### 🔴 RELATÓRIO MULTI-USUÁRIO QUE AGREGA SEM SEPARAR (31/07/2026)
+
+`origem-venda.mjs` listava as vendas órfãs **separadas por dono** e, no fim,
+calculava o impacto com um `SUM` **sem `WHERE "userId"`** — somando o banco
+inteiro. Saiu uma "distorção de 40,9% do faturamento" que **não era de conta
+nenhuma**: misturava as vendas de teste do `teste@traffik.io` (a conta do seed)
+com as do dono real.
+
+**O usuário pegou o erro antes de apagar.** O número teria justificado excluir
+dado para resolver um problema que a conta dele não tinha.
+
+> ### ⛔ A REGRA
+> **Toda métrica de diagnóstico é recortada por `userId`, e o total do banco não
+> é exibido** — ele não corresponde ao dashboard de ninguém.
+>
+> O produto inteiro filtra por usuário. Um script que não filtra **está medindo
+> outra coisa**, e o resultado é plausível o bastante para ninguém desconfiar.
+> Foi por pouco que não virou exclusão de venda.
+>
+> ⚠️ Vale para qualquer script novo: `sonda`, `auditar`, `simular`, `inspecionar`.
+> Se a saída tem um número somado, pergunte **de quem é esse número**.
+
+⚠️ **Sintoma de reconhecimento:** o relatório *separa* na listagem e *soma* no
+resumo. A listagem por dono dá a impressão de que o recorte está feito — e o
+resumo desfaz, três telas abaixo.
+
+⚠️ **Por que o erro passou, e é a parte reaproveitável:** a listagem **separava
+por dono** e o resumo somava três telas abaixo. A separação visível na exibição
+deu a impressão de que o recorte estava feito no cálculo também.
+
+> ### ⛔ Relatório que separa na EXIBIÇÃO precisa separar no CÁLCULO
+> Senão a separação vira **falsa garantia** — e é pior que não separar, porque
+> quem lê já viu a divisão na tela e não desconfia do total.
+
+### 🔴🔴 CREDENCIAL EM CÓDIGO-FONTE: a conta de seed em produção
+
+`prisma/seed.ts` criava a conta com **senha literal no código**, e a conta
+existia **no banco de produção** — foi lá que apareceram as 10 vendas de teste de
+24-25/07 (`CERT-KV-1`, `CERT-API-1`, `burst-0..4`, `race-0..2`), resíduo dos
+testes dos Blocos 10 e 13.
+
+> ### ⛔ A REGRA: credencial em código-fonte é VAZAMENTO mesmo com o isolamento correto
+> O isolamento por `userId` funcionava — a conta não via os dados do dono. E isso
+> **não resolve nada**, porque o problema não é leitura de dado:
+>
+> **O isolamento protege os DADOS; ele não impede a SESSÃO.**
+>
+> Dentro daquela sessão dá para criar webhook, conectar perfil do Facebook,
+> gerar chave de API e disparar eventos para a CAPI — no ambiente real, com
+> qualquer pessoa que tenha lido o repositório.
+>
+> ⚠️ Não avalie "vazou credencial?" perguntando *o que ela consegue ver*.
+> Pergunte *o que ela consegue fazer*.
+
+#### ⛔ COMO ISSO ENTROU — e é o que faz voltar
+
+Ninguém decidiu vazar nada. Alguém achou **útil anotar a credencial de teste na
+documentação para não esquecer** — e isso é genuinamente conveniente. Depois, no
+**mesmo formato e na mesma linha**, entrou a de produção:
+
+```
+Logins: teste@traffik.io / <senha> (vazio) · pedrodurso8@gmail.com / <senha> (dono)
+```
+
+O formato é o veículo. Uma vez que existe um lugar "onde as senhas ficam
+anotadas", a próxima senha vai para lá sem ninguém reavaliar — inclusive uma que
+abre a conta com o perfil do Facebook e 6 contas de anúncio reais.
+
+> ### 🔴 DOCUMENTAÇÃO DE PROJETO É CÓDIGO VERSIONADO
+> `CLAUDE.md`, `README`, `AGENTS.md` e comentário em migration vão no mesmo
+> commit e no mesmo clone que o `.ts`. **A regra de credencial é idêntica** — não
+> existe "é só a documentação".
+>
+> ⚠️ Credencial de TESTE não é exceção: ela é a porta de entrada do hábito. O
+> lugar de qualquer senha é o `.env` (gitignored) ou o cofre do provedor.
+>
+> ⚠️ E é por isso que as 4 menções restantes da senha antiga foram **removidas
+> deste arquivo** mesmo já estando inertes: enquanto o padrão de anotar
+> credencial na documentação existir aqui, ele será seguido de novo.
+
+**Corrigido em 31/07/2026, com DUAS travas independentes** — cada uma bastaria,
+e é por isso que as duas ficam:
+
+1. **`exigirBancoDeDesenvolvimento()` no `seed.ts`**, antes de abrir conexão.
+   É o que impede a conta de **voltar a existir** em produção. Verificado: com
+   o ref de produção na `DATABASE_URL`, `npx prisma db seed` é recusado.
+2. **Senha por `SEED_PASSWORD`**; sem ela, uma **aleatória** é gerada e impressa
+   uma vez. Não existe mais valor conhecido para vazar.
+
+O `upsert` passou a reescrever o `passwordHash` no `update` — sem isso, rodar o
+seed numa base que já tem a conta manteria a senha antiga, inclusive a
+a senha literal legada. Rodar o seed virou a forma de rotacionar.
+
+⚠️ **A correção não apaga a conta que já existe em produção.** Ela impede a
+recriação. Apagar é operação manual — ver `npm run conta:inventario`.
+
+### Auditoria de credenciais no repositório (31/07/2026)
+
+| Onde | O quê | Veredito |
+|---|---|---|
+| `prisma/seed.ts` | senha literal da conta de seed | 🔴 **era real e em produção** — corrigido |
+| `scripts/seed-dev.mjs` | `dev123456` | ⚠️ literal, mas o script **já tem** `exigirBancoDeDesenvolvimento()` — não alcança produção. Migrar para env quando conveniente |
+| `src/lib/gateways/exemplos/cakto.ts` | `secret: "f8c3de3d-…"` | ✅ valor da **documentação** da Cakto, usado só pelo testador. Não cria nada |
+| `src/generated/prisma/**` | `accessToken`, `secret` | ✅ falso positivo — são **nomes de coluna** do cliente gerado |
+| `.env*` | tudo | ✅ gitignored (`.env*`, com `!.env.example`) |
+
+> ⚠️ **Nenhuma senha de banco está versionada** — mas as do dev e da produção
+> passaram pelo chat e seguem pendentes de rotação em Supabase › Settings ›
+> Database. Isso é anterior a esta auditoria e continua aberto.
+
+### ⚠️ `teste@traffik.io` EXISTE EM PRODUÇÃO, com senha documentada
+
+Criado por `prisma/seed.ts` (com a senha literal, hoje corrigida), é a conta que `demo-data.mjs` mira.
+Ela está **no banco de produção** — foi lá que apareceram as 10 vendas de teste
+de 24-25/07 (`CERT-KV-1`, `CERT-API-1`, `burst-0..4`, `race-0..2`), resíduo dos
+testes dos Blocos 10 e 13.
+
+🔴 **A senha está escrita neste arquivo e no seed.** Qualquer um que leia o
+repositório entra na produção com ela. Os dados são de outra conta e o
+isolamento por `userId` se mantém — mas é uma sessão válida no ambiente real.
+
+**Ação recomendada:** apagar o usuário em produção (o `User` tem 15 relações
+`Cascade`, então leva junto vendas, cliques, eventos, webhooks e pixels dele) ou
+trocar a senha. **Rodar `prisma db seed` contra produção recria a conta.**
+
+### ⛔ REGRA PERMANENTE: excluir configuração não pode apagar a PROCEDÊNCIA
+
+Já existia a metade fácil da regra — *exclusão de configuração nunca destrói
+dado de negócio* —, e ela estava sendo cumprida: `SetNull` em vez de `Cascade`.
+Faltava a outra metade:
+
+> **Guardar só a FK para a configuração deixa o dado órfão de CONTEXTO quando
+> ela some.** O dado sobrevive e deixa de significar alguma coisa.
+>
+> Todo atributo que responde *"de onde isto veio?"* tem de ser **copiado para a
+> linha no momento em que ela nasce**, não derivado por `join` na hora da
+> leitura. O `join` é conveniência; a cópia é o registro.
+
+**Auditoria das 15 relações `SetNull` do schema — um segundo caso, e é grave:**
+
+| Relação | Procedência em risco | Veredito |
+|---|---|---|
+| `Sale.webhookId` | gateway de origem | ✅ **corrigido** (`Sale.platform`) |
+| `Sale.apiCredentialId` | veio por chave de API | ✅ coberto — o backfill grava `platform: "API"` |
+| 🔴 **`Sale.clickId`** | **campanha, criativo, fonte, UTMs** | ⚠️ **ABERTO** |
+| `AdAccount.adProfileId` | perfil do Facebook | tolerável: a conta guarda `act_id` e nome próprios |
+| `Notification.saleId` | venda que gerou o aviso | tolerável: a notificação carrega o texto |
+| `*.workspaceId` (9×) | área | não é procedência — área é recorte, e é reatribuível |
+
+> ### 🔴 `Sale` NÃO guarda cópia dos UTMs
+> A campanha de uma venda é `sale.click.utmCampaign` — não existe
+> `Sale.utmCampaign`. Como `clickId` é `SetNull`, **apagar o clique faz a venda
+> perder a campanha para sempre**, mantendo o dinheiro. É exatamente o mesmo
+> defeito do gateway, num campo que vale mais: é dele que saem ROAS, CPA e a
+> atribuição por área.
+>
+> Hoje o único caminho que apaga clique é "apagar dados" na exclusão de área
+> (atrás de duas travas), então o risco é baixo — mas é a **mesma classe**, e a
+> correção é a mesma: copiar `utmSource`/`utmCampaign`/`utmContent` para a
+> `Sale` na ingestão. **Não implementado; decisão do usuário pendente.**
+
+### 🧪 PASSO OBRIGATÓRIO ao adicionar gateway: como ele sinaliza EVENTO DE TESTE
+
+Acrescentado ao roteiro de 5 passos de `lib/gateways/` como **passo 0**, porque
+tem de ser respondido **antes** de conectar em produção:
+
+> **Descubra como o gateway marca um evento de teste, e declare isso no
+> registro.** Se não houver sinal, **avise o usuário de que todo teste de
+> webhook dele vai contar como venda real** — no faturamento, no CPA, no funil e
+> no globo.
+
+Não é hipótese: a Cakto ingeriu `Produto Teste / R$ 90,00` como venda, e a linha
+**ainda conta**, agora sem gateway para achá-la (foi removida antes da coluna
+`platform` existir). Um gateway novo repete isso por omissão.
+
+⚠️ **O sinal tem de ser ESTRUTURAL** (`test: true`, ambiente declarado, id
+reservado) — **nunca o nome do produto**. Detectar "Produto Teste" apagaria a
+venda real de quem chame o produto assim.
+
+### 🧪 Evento de TESTE da Cakto conta como venda real — PENDENTE
+
+O webhook de teste da Cakto ingeriu `Produto Teste / R$ 90,00` e a linha
+**conta no dashboard como venda**. Não há noção de "evento de teste" em lugar
+nenhum do contrato de gateways.
+
+**Bloqueado por falta do payload real.** Suspeita forte: ela reenvia o exemplo
+da documentação verbatim — `exemplos/cakto.ts` tem `product.name: "Produto
+Teste"` e `amount: 90`, que batem com o observado. **Não detectar por nome de
+produto** (apagaria venda real de quem chame o produto assim); o sinal tem de
+ser estrutural.
+
+⚠️ **Enquanto isto não for resolvido, todo teste de webhook na Cakto vira
+faturamento.** O usuário removeu a Cakto em 31/07/2026, então a investigação só
+retoma quando ele reativar:
+
+```bash
+npm run venda:inspecionar -- --url '<conn>' --gateway CAKTO --n 5
+```
+
+### 🔌 Vias de atribuição por gateway — decisão de 31/07/2026
+
+> ### ⛔ CAMPANHA precisa de CERTEZA. PAÍS precisa só de PLAUSIBILIDADE.
+> Tratar as duas com o mesmo mecanismo faz pagar o preço da certeza para
+> resolver a segunda. Errar a campanha move dinheiro entre campanhas e envenena
+> a otimização; errar o país move um ponto no globo.
+
+| Uso | Via aprovada |
+|---|---|
+| **Atribuição (campanha)** | **A** (parâmetro ecoado pelo gateway, uma linha no `REGISTRO`) + **B** (`fbc`/`fbp`, já pronto) |
+| **País, e só país** | **D** (beacon de checkout com `click_id`, casado por proximidade de tempo + produto) — **com `countrySource` próprio**, para a confiança ficar registrada |
+| Recusadas | **C** (e-mail pré-checkout: a maioria dos funis não coleta) |
+
+| Gateway | `click_id` ecoado (A) | `fbc`/`fbp` (B) | IP do comprador |
+|---|---|---|---|
+| **Kirvano** | `src` ✅ | só `fbp` | ✅ `customer.ip` |
+| **Cakto** | `sck` ✅ | ✅ os dois | ❌ |
+| **OnyxPag** | 🔴 `tracking` **não volta** no webhook documentado | ❌ nenhum | ❌ |
+
+> ### 🔴 A OnyxPag não tem via de atribuição NENHUMA
+> A, B e E falham nela por desenho. Venda dela entra **sem campanha, sem
+> criativo e sem país**, dependendo só do fallback. **A interface precisa
+> avisar** — a capacidade já está declarada no registro, falta a tela ler.
 
 ### 0. GERENCIADOR — (a) e (b) FEITOS em 31/07/2026
 
