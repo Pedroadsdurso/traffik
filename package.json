@@ -36,6 +36,7 @@
     "venda:origem": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/origem-venda.mjs",
     "conta:inventario": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/inventario-conta.mjs",
     "conta:apagar": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/apagar-conta.mjs",
+    "pixel:duplicatas": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/limpar-duplicatas-pixel.mjs",
     "venda:apagar": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/apagar-venda.mjs",
     "backfill:taxas": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/backfill-taxas.mjs",
     "test:correspondencia": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-correspondencia.mjs",

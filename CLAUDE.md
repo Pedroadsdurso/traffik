@@ -4337,6 +4337,57 @@ isolamento por `userId` se mantém — mas é uma sessão válida no ambiente re
 `Cascade`, então leva junto vendas, cliques, eventos, webhooks e pixels dele) ou
 trocar a senha. **Rodar `prisma db seed` contra produção recria a conta.**
 
+### 🔴 MIGRATION QUE CRIA CONSTRAINT TEM DE FAZER O DADO SATISFAZÊ-LA
+
+**31/07/2026 — `20260731040000_pixel_event_dedup` falhou em produção** com
+`23505 — could not create unique index`, duplicata
+`(…, PageView, PageView-nblqy2)`.
+
+A causa imediata foi a ordem invertida (push antes da migration). Mas a lição
+**não** é "siga a ordem":
+
+> Uma migration que exige que o mundo já esteja num certo estado é **dependente
+> de ordem** — e ordem se inverte. Deploy corre em paralelo com quem roda o
+> comando, um retry acontece, alguém aplica na sequência errada. Se a única
+> defesa é disciplina humana, ela falha eventualmente.
+>
+> **A migration tem de ser autossuficiente:** se cria constraint, ela mesma
+> remove o que a viola, no mesmo arquivo e na mesma transação. Aí ela funciona
+> em qualquer ordem, e rodar de novo é seguro.
+
+⚠️ **Neste caso a janela era estreita e mesmo assim foi atingida.** O índice era
+criável enquanto todo `eventId` fosse aleatório (não colidem nunca). Bastou o
+código determinístico subir primeiro para a duplicata nascer — em minutos.
+
+#### Respondendo às duas alternativas consideradas
+
+| Alternativa | Veredito |
+|---|---|
+| **Migration limpa antes de criar o índice** | ✅ **é a correta.** `DELETE … USING` mantendo a linha mais antiga, e só então `CREATE UNIQUE INDEX` |
+| Código fazer upsert tolerando a ausência da constraint | ❌ não era o problema. `createMany({ skipDuplicates: true })` **já** funciona sem o índice — sem ele apenas não deduplica, o que é degradação, não falha. O código estava certo; a migration é que não era |
+
+#### Estado durante a falha, para a próxima vez
+
+`CREATE UNIQUE INDEX` roda dentro da transação da migration, então a falha faz
+**rollback completo**: o índice não existe, nenhuma coluna mudou, nenhum dado
+foi tocado. O bloqueio é **só de contabilidade** — a linha em
+`_prisma_migrations` com `finished_at` nulo. O schema fica íntegro.
+
+#### ⚠️ Por que a `040000` NÃO foi retrofitada
+
+Ela **já tinha sido aplicada com sucesso no banco de desenvolvimento**. Editar
+um arquivo de migration já aplicado muda o checksum que o Prisma guarda, e o
+`migrate deploy` seguinte passa a recusar com *"migration modified after being
+applied"*. Corrigir o passado quebraria o dev para consertar a produção.
+
+A saída foi **`npm run pixel:duplicatas`** (simula por padrão; mantém a linha
+mais antiga de cada grupo, desempate por `id` para ser determinístico), seguido
+de `migrate resolve --rolled-back` e nova aplicação.
+
+**Exercitado no dev derrubando o índice, semeando 3+2 duplicatas e limpando:**
+3 removidas de 3 previstas, 0 grupos restantes, e os sobreviventes foram
+exatamente as linhas mais antigas de cada grupo.
+
 ### ⛔ REGRA PERMANENTE: excluir configuração não pode apagar a PROCEDÊNCIA
 
 Já existia a metade fácil da regra — *exclusão de configuração nunca destrói
