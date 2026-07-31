@@ -532,6 +532,15 @@ model Click {
 model Sale {
   id            String        @id @default(cuid())
   externalId    String?
+  /// Agrupador do checkout: order bump e upsell compartilham o pedido da compra
+  /// principal. NULO = venda antiga, anterior à migration — ela é o próprio
+  /// pedido, que é o comportamento de sempre.
+  ///
+  /// ⚠️ Faturamento soma LINHAS; conversões (vendas, CPA, funil, taxa de
+  /// aprovação) contam PEDIDOS DISTINTOS. Ver `lib/pedidos.ts`.
+  pedidoId      String?
+  /// "principal" | "orderbump" | "upsell".
+  itemTipo      String        @default("principal")
   value         Decimal       @db.Decimal(14, 2)
   currency      String        @default("BRL")
   product       String
@@ -571,6 +580,7 @@ model Sale {
   @@index([clickId])
   @@index([timestamp])
   @@index([userId, timestamp])
+  @@index([userId, pedidoId])
   @@index([status])
   @@index([buyerEmail])
 }

@@ -44,14 +44,20 @@ export async function registrarCheckoutDoGateway(
         userId: true,
         status: true,
         externalId: true,
+        pedidoId: true,
         timestamp: true,
         click: { select: { fbclid: true } },
       },
     });
     if (!sale) return "ignorado";
 
-    // Sem `externalId` não há chave estável para deduplicar reentrega.
-    const eventId = sale.externalId ? `gw:${sale.externalId}` : null;
+    // ⚠️ A chave é o PEDIDO, não o item. Com order bump, um único checkout vira
+    // N linhas de venda — e uma chave por linha geraria N InitiateCheckout para
+    // o mesmo carrinho, inflando o topo do funil e derrubando a taxa de
+    // conversão. `pedidoId` é NULO em venda antiga, e aí o `externalId` continua
+    // sendo a chave, exatamente como antes.
+    const chave = sale.pedidoId ?? sale.externalId;
+    const eventId = chave ? `gw:${chave}` : null;
     if (!eventId) return "ignorado";
 
     const jaExiste = await prisma.pixelEvent.findFirst({

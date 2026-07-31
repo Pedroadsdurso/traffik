@@ -3,6 +3,7 @@ import { getUserTimezone } from "@/lib/userTimezone";
 import { prisma } from "@/lib/prisma";
 import { janelaDoPeriodo, type PeriodoNome } from "@/lib/periodo";
 import { dayEnd, dayKeyInTz, dayStart, keyToDateColumn } from "@/lib/timezone";
+import { chaveDoPedido } from "@/lib/pedidos";
 import { splitPipe } from "@/lib/utm/parse";
 
 export interface AdsFilters {
@@ -175,7 +176,7 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
         userId,
         timestamp: { gte: start, lte: end },
       },
-      select: { value: true, status: true, product: true, webhookId: true, apiCredentialId: true, click: { select: { utmCampaign: true, utmContent: true, workspaceId: true } } },
+      select: { id: true, pedidoId: true, value: true, status: true, product: true, webhookId: true, apiCredentialId: true, click: { select: { utmCampaign: true, utmContent: true, workspaceId: true } } },
     }),
     // Cliques rastreados por NÓS, atribuídos por UTM. Chegam ao banco no
     // instante do clique (via `t.js`), sem depender do Facebook.
@@ -277,25 +278,46 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
   const iniciadasByContentId = new Map<string, number>();
   const iniciadasByContentName = new Map<string, number>();
 
+  // ⚠️ CONTAGEM POR PEDIDO, SOMA POR LINHA. `results` e `iniciadas` são
+  // conversões — o CPA e o ROAS da tabela saem delas, e contar itens derrubaria
+  // o CPA pela metade num checkout com order bump. `revenue` soma todas as
+  // linhas, senão o faturamento do bump sumiria da campanha que o vendeu.
+  //
+  // O `Set` é por CHAVE DE MAPA, não global: a mesma venda pode ser atribuída a
+  // uma campanha e a um anúncio, e um conjunto único faria a segunda atribuição
+  // ser descartada.
+  const pedidosPorChave = new Map<string, Set<string>>();
+  const primeiraVezNoDestino = (destino: string, venda: { id: string; pedidoId?: string | null }) => {
+    const chave = chaveDoPedido(venda);
+    let vistos = pedidosPorChave.get(destino);
+    if (!vistos) pedidosPorChave.set(destino, (vistos = new Set()));
+    if (vistos.has(chave)) return false;
+    vistos.add(chave);
+    return true;
+  };
+
   for (const s of vendasDaArea) {
     const camp = splitPipe(s.click?.utmCampaign);
     const cont = splitPipe(s.click?.utmContent);
     const aprovada = s.status === "APROVADA";
-    const bump = (map: Map<string, Attr>, key: string) => {
+    const bump = (map: Map<string, Attr>, key: string, prefixo: string) => {
       const cur = map.get(key) ?? vazio();
-      cur.iniciadas += 1; // toda venda conta como iniciada, independente do status
+      const nova = primeiraVezNoDestino(`${prefixo}:${key}`, s);
+      if (nova) cur.iniciadas += 1; // conversão iniciada, em qualquer status
       if (aprovada) {
-        cur.results += 1;
+        if (nova) cur.results += 1;
         cur.revenue += num(s.value);
       }
       map.set(key, cur);
     };
-    if (camp.id) bump(resultsByCampaignId, camp.id);
-    else if (camp.name) bump(resultsByName, camp.name.toLowerCase());
+    if (camp.id) bump(resultsByCampaignId, camp.id, "campId");
+    else if (camp.name) bump(resultsByName, camp.name.toLowerCase(), "campNome");
     // Nível de anúncio: atribuição por utm_content.
-    const incC = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);
-    if (cont.id) incC(iniciadasByContentId, cont.id);
-    else if (cont.name) incC(iniciadasByContentName, cont.name.toLowerCase());
+    const incC = (m: Map<string, number>, k: string, prefixo: string) => {
+      if (primeiraVezNoDestino(`${prefixo}:${k}`, s)) m.set(k, (m.get(k) ?? 0) + 1);
+    };
+    if (cont.id) incC(iniciadasByContentId, cont.id, "contId");
+    else if (cont.name) incC(iniciadasByContentName, cont.name.toLowerCase(), "contNome");
   }
 
   // Cliques rastreados por nós, pelos mesmos dois caminhos de atribuição.

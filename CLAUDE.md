@@ -3009,6 +3009,82 @@ Medido na produção: **13 das 14 vendas pendentes estavam erradas.**
 > Provado no dev com os 4 casos semeados: PIX vencido → EXPIRADA, carrinho →
 > ABANDONADA, PIX gerado **fica** PENDENTE, e a venda APROVADA **não é tocada**.
 
+### Etapa 3 — CONVERSÃO ≠ ITEM VENDIDO
+
+**Migration `20260730230000`**: `Sale.pedidoId` (nullable) + `Sale.itemTipo`
+(default `"principal"`) + índice `(userId, pedidoId)`.
+
+`lib/pedidos.ts` é a fonte única. As duas contagens existem e respondem a
+perguntas diferentes:
+
+| Pergunta | Conta |
+|---|---|
+| Quanto faturei? | **linhas** — 90 + 27 = 117 |
+| Quantas conversões tive? | **pedidos** — 1 |
+| CPA, taxa de aprovação, funil | **pedidos** |
+| Ticket médio | faturamento ÷ **pedidos** (é o valor do carrinho) |
+| Vendas por produto | **linhas** — ali o item é o assunto |
+
+Medido com 1 checkout com order bump + 1 simples (3 linhas, 2 compradores):
+
+| | contando ITENS | contando PEDIDOS |
+|---|---|---|
+| Vendas | 3 | **2** |
+| CPA | R$ 100,00 | **R$ 150,00** |
+| Ticket médio | R$ 72,33 | **R$ 108,50** |
+| Faturamento | R$ 217,00 | R$ 217,00 |
+
+**O CPA aparecia 33% mais barato que a realidade** — e o número parecia
+plausível, que é o que torna esse erro caro.
+
+> ### ⛔ Contagem e soma no MESMO laço, nunca `umPorPedido` onde há valor
+> A primeira versão trocou `for (const s of approved)` por
+> `for (const s of umPorPedido(approved))` nos laços de país, hora e dia. Isso
+> corrige a contagem e **descarta o faturamento do order bump** — o gráfico
+> deixaria de bater com o KPI de faturamento.
+>
+> Onde o laço soma valor, ele percorre TODAS as linhas e incrementa a contagem
+> só no primeiro item de cada pedido. `umPorPedido` só serve onde não há soma
+> (taxa de aprovação).
+
+> ### ⚠️ `pedidoId` NULO é o que preserva o histórico
+> `chaveDoPedido()` cai no próprio `id`: venda anterior à migration é o próprio
+> pedido, exatamente como antes. Sem esse fallback, todas colapsariam num balde
+> `null` e o CPA histórico explodiria.
+
+> ### 🐛 Faltou o `pedidoId` no `select` — e a contagem voltou a ser por item
+> Com a coluna fora do `select`, `chaveDoPedido` cai no `id` e **tudo volta ao
+> comportamento antigo, em silêncio**, com o número parecendo plausível. Foi
+> pego pelo teste ponta a ponta; nenhum `tsc`/`lint`/`build` acusaria.
+>
+> Vale para os três consumidores: `dashboard/metrics.ts`, `ads/overview.ts` e
+> `ads/creatives.ts`.
+
+> ### ⚠️ O `Set` de pedidos é POR DESTINO, não global
+> No Gerenciador a mesma venda é atribuída a uma campanha **e** a um anúncio. Um
+> conjunto único faria a segunda atribuição ser descartada, zerando a coluna de
+> vendas no nível de anúncio.
+
+**`checkoutEvent` deduplica por `gw:<pedidoId>`.** Com a chave por item, um
+checkout com bump geraria N `InitiateCheckout` para o mesmo carrinho, inflando o
+topo do funil e derrubando a taxa de conversão.
+
+> ⚠️ **A Kirvano continua sendo 1 linha por venda**, e é o correto: o order bump
+> dela vem dentro de `products[]` (com `is_order_bump: true`), na MESMA venda.
+> Separar em linhas exigiria mudar o `externalId` para `<sale_id>:<offer_id>` — e
+> mudar identificador já emitido faria o upsert criar linhas NOVAS ao lado das
+> existentes. O custo aceito: os produtos de bump da Kirvano não aparecem em
+> "Vendas por produto". Quem gera N linhas é a Cakto, cujos itens já vêm com id
+> próprio.
+
+> ### 🕐 O teste tropeçou no bug de fuso que o projeto documenta
+> Ele semeava o gasto com `CURRENT_DATE`, que é o dia do BANCO (UTC). Rodando às
+> **00h01 UTC = 21h01 em Brasília**, o gasto caiu no dia seguinte e o CPA veio 0.
+> É a janela exata descrita em "Fuso horário — causa raiz". Hoje semeia com
+> `(now() AT TIME ZONE 'America/Sao_Paulo')::date`.
+>
+> **Nenhuma agregação usa o dia do processo — e nenhum teste deveria semear com ele.**
+
 ### O que a etapa 1 **não** fez
 
 Etapas 2 a 8, na ordem acordada: precedência de fonte (2) · `pedidoId`+`itemTipo`

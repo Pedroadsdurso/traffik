@@ -12,6 +12,7 @@ import {
   keyToDateColumn,
   zonedToUtc,
 } from "@/lib/timezone";
+import { chaveDoPedido, contarPedidos, umPorPedido } from "@/lib/pedidos";
 import { calcularFinanceiro, type Composicao } from "@/lib/financeiro";
 import { janelaAnterior, janelaDoPeriodo, type PeriodoNome } from "@/lib/periodo";
 import type { PaymentMethod } from "@/generated/prisma/enums";
@@ -243,6 +244,10 @@ async function windowAggregate(
         id: true,
         value: true,
         product: true,
+        // ⚠️ `pedidoId` é o agrupador de conversão. Sem ele no select,
+        // `chaveDoPedido` cai no `id` e TODA contagem volta a ser por item —
+        // silenciosamente, com o número parecendo plausível.
+        pedidoId: true,
         status: true,
         paymentMethod: true,
         timestamp: true,
@@ -469,14 +474,19 @@ type Window = Awaited<ReturnType<typeof windowAggregate>>;
 function summarize(w: Window) {
   const approved = w.sales.filter((s) => s.status === "APROVADA");
   const revenue = approved.reduce((a, s) => a + num(s.value), 0);
-  const salesCount = approved.length;
+  // ⚠️ CONVERSÕES, não itens. Um checkout com order bump gera 2 linhas e 1
+  // conversão — contar linhas derrubaria o CPA pela metade e inflaria a taxa de
+  // conversão do funil, com os dois parecendo números plausíveis.
+  const salesCount = contarPedidos(approved);
   const pendentesLista = w.sales.filter((s) => s.status === "PENDENTE");
   const pendentes = pendentesLista.length;
   // ⚠️ VALOR, não contagem: é o que diz quanto dinheiro está esperando pagamento.
   const pendentesValor = pendentesLista.reduce((a, v) => a + num(v.value), 0);
   const reembolsadas = w.sales.filter((s) => s.status === "REEMBOLSADA").length;
   const chargebacks = w.sales.filter((s) => s.status === "CHARGEBACK").length;
-  const totalSalesEvents = w.sales.length;
+  // Idem para o topo do funil: "vendas iniciadas" é quanta gente chegou a
+  // comprar, não quantos itens foram para o carrinho.
+  const totalSalesEvents = contarPedidos(w.sales);
   const chargebackRate = totalSalesEvents ? (chargebacks / totalSalesEvents) * 100 : 0;
 
   const spend = w.metrics.reduce((a, m) => a + num(m.spend), 0);
@@ -599,18 +609,27 @@ function summarize(w: Window) {
   // mas é propriedade DELA, não do nosso desenho: um gateway novo que não mande
   // IP faz o número subir, e é assim que a tela avisa.
   const paisMap = new Map<string, { sales: number; revenue: number; estimadas: number }>();
+  // ⚠️ DUAS contagens no mesmo laço, e elas NÃO são a mesma coisa: `sales` conta
+  // conversões (um pedido, um país), `revenue` soma TODAS as linhas — senão o
+  // faturamento do order bump sumiria do ranking de países.
+  //
+  // Por isso o laço percorre `approved` inteiro e o `sales` só incrementa no
+  // primeiro item de cada pedido, em vez de usar `umPorPedido`.
+  const pedidosVistos = new Set<string>();
   for (const s of approved) {
     const proprio = (s.country ?? "").trim().toUpperCase();
     const doClique = (s.click?.country ?? "").trim().toUpperCase();
     const code = proprio || doClique;
     const cur = paisMap.get(code) ?? { sales: 0, revenue: 0, estimadas: 0 };
-    cur.sales += 1;
+    const primeiroDoPedido = !pedidosVistos.has(chaveDoPedido(s));
+    pedidosVistos.add(chaveDoPedido(s));
+    if (primeiroDoPedido) cur.sales += 1;
     cur.revenue += num(s.value);
     // Estimada = herdou o país do CLIQUE (gateway sem IP do comprador), ou o
     // próprio clique teve o país inferido em vez de medido. `payload` e `ip`
     // são medida; o resto é inferência e a tela precisa dizer isso.
     const inferida = s.countrySource != null && !["payload", "ip"].includes(s.countrySource);
-    if ((!proprio && doClique) || inferida) cur.estimadas += 1;
+    if (primeiroDoPedido && ((!proprio && doClique) || inferida)) cur.estimadas += 1;
     paisMap.set(code, cur);
   }
   const byCountry = [...paisMap.entries()]
@@ -622,7 +641,9 @@ function summarize(w: Window) {
   // O upsert por externalId (Bloco 10) faz a transição gerada→paga na MESMA
   // linha, então basta contar por status — não há dupla contagem.
   const aprovMap = new Map<PaymentMethod, { geradas: number; pagas: number }>();
-  for (const s of w.sales) {
+  // ⚠️ Por PEDIDO: a forma de pagamento é da compra, não do item. Um carrinho
+  // com bump geraria 2 "geradas" e 2 "pagas" para o mesmo Pix.
+  for (const s of umPorPedido(w.sales)) {
     const cur = aprovMap.get(s.paymentMethod) ?? { geradas: 0, pagas: 0 };
     cur.geradas += 1;
     if (s.status === "APROVADA") cur.pagas += 1;
@@ -656,19 +677,30 @@ function summarize(w: Window) {
   // `getHours()` devolve a hora do processo, não a do usuário.
   const tz = w.janela.tz;
   const byHour = Array.from({ length: 24 }, (_, hour) => ({ hour, sales: 0, revenue: 0, profit: 0 }));
+  // ⚠️ `sales` conta CONVERSÕES e `revenue` soma TODAS as linhas. Usar
+  // `umPorPedido` aqui descartaria o faturamento do order bump — o gráfico
+  // deixaria de bater com o KPI de faturamento.
+  const horasVistas = new Set<string>();
   for (const s of approved) {
     const h = hourInTz(s.timestamp, tz);
     const v = num(s.value);
-    byHour[h]!.sales += 1;
+    if (!horasVistas.has(chaveDoPedido(s))) {
+      horasVistas.add(chaveDoPedido(s));
+      byHour[h]!.sales += 1;
+    }
     byHour[h]!.revenue += v;
     byHour[h]!.profit += v - v * custoSobreReceita;
   }
 
   const diaMap = new Map<string, { sales: number; revenue: number }>();
+  const diasVistos = new Set<string>();
   for (const s of approved) {
     const key = dayKeyInTz(s.timestamp, tz);
     const cur = diaMap.get(key) ?? { sales: 0, revenue: 0 };
-    cur.sales += 1;
+    if (!diasVistos.has(chaveDoPedido(s))) {
+      diasVistos.add(chaveDoPedido(s));
+      cur.sales += 1;
+    }
     cur.revenue += num(s.value);
     diaMap.set(key, cur);
   }
@@ -761,7 +793,8 @@ function buildChart(
   // Derivadas dos mesmos buckets do gráfico, para a mini-linha contar a mesma
   // história do gráfico grande.
   const vendasPorBucket = buckets.map((b) =>
-    approved.filter((s) => s.timestamp.getTime() >= b.start && s.timestamp.getTime() < b.end).length,
+    // Conversões, para o sparkline de vendas/ticket/CPA bater com os cards.
+    contarPedidos(approved.filter((s) => s.timestamp.getTime() >= b.start && s.timestamp.getTime() < b.end)),
   );
   const compradoresPorBucket = buckets.map((b) => {
     const nesse = approved.filter((s) => s.timestamp.getTime() >= b.start && s.timestamp.getTime() < b.end);

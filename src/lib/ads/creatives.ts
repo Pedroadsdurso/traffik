@@ -3,6 +3,7 @@ import { carregarMapaDeAreas } from "@/lib/areas/atribuicao";
 import { prisma } from "@/lib/prisma";
 import { janelaDoPeriodo, type PeriodoNome } from "@/lib/periodo";
 import { dayEnd, dayKeyInTz, dayStart, keyToDateColumn } from "@/lib/timezone";
+import { chaveDoPedido } from "@/lib/pedidos";
 import { splitPipe } from "@/lib/utm/parse";
 
 /** ⚠️ Alias de `PeriodoNome` — mesma união do Dashboard e do Gerenciador. */
@@ -91,7 +92,7 @@ export async function computeCreatives(
         status: "APROVADA",
         timestamp: { gte: start, lte: end },
       },
-      select: { value: true, product: true, webhookId: true, apiCredentialId: true, click: { select: { utmContent: true, utmCampaign: true, workspaceId: true } } },
+      select: { id: true, pedidoId: true, value: true, product: true, webhookId: true, apiCredentialId: true, click: { select: { utmContent: true, utmCampaign: true, workspaceId: true } } },
     }),
   ]);
 
@@ -111,16 +112,26 @@ export async function computeCreatives(
   // utm_content (`nome|id`, Bloco 11); caímos no nome para cliques antigos.
   const salesByAdId = new Map<string, { sales: number; revenue: number }>();
   const salesByName = new Map<string, { sales: number; revenue: number }>();
+  // ⚠️ `sales` conta CONVERSÕES (pedidos distintos), `revenue` soma as linhas.
+  // Ver a mesma decisão em `ads/overview.ts` e `lib/pedidos.ts`.
+  const pedidosPorChave = new Map<string, Set<string>>();
   for (const s of vendasDaArea) {
     const { name, id } = splitPipe(s.click?.utmContent);
-    const bump = (map: Map<string, { sales: number; revenue: number }>, key: string) => {
+    const bump = (map: Map<string, { sales: number; revenue: number }>, key: string, prefixo: string) => {
       const cur = map.get(key) ?? { sales: 0, revenue: 0 };
-      cur.sales += 1;
+      const destino = `${prefixo}:${key}`;
+      let vistos = pedidosPorChave.get(destino);
+      if (!vistos) pedidosPorChave.set(destino, (vistos = new Set()));
+      const chave = chaveDoPedido(s);
+      if (!vistos.has(chave)) {
+        vistos.add(chave);
+        cur.sales += 1;
+      }
       cur.revenue += num(s.value);
       map.set(key, cur);
     };
-    if (id) bump(salesByAdId, id);
-    else if (name) bump(salesByName, name.toLowerCase());
+    if (id) bump(salesByAdId, id, "id");
+    else if (name) bump(salesByName, name.toLowerCase(), "nome");
   }
 
   const rows: CreativeRow[] = ads.map((a) => {

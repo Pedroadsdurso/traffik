@@ -61,6 +61,10 @@ export async function ingestSale(
     webhookId: ctx.webhookId ?? null,
     apiCredentialId: ctx.apiCredentialId ?? null,
     externalId: data.externalId,
+    // Agrupador do checkout: order bump e upsell do mesmo carrinho compartilham.
+    // Faturamento soma LINHAS; conversões contam PEDIDOS. Ver `lib/pedidos.ts`.
+    pedidoId: data.pedidoId,
+    itemTipo: data.itemTipo,
     value: data.valor,
     currency: data.moeda,
     product: data.produto,
