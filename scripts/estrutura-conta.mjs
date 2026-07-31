@@ -42,7 +42,7 @@ async function main() {
   console.log(`\n${C.b}Estrutura das contas${C.x} — projeto ${C.b}${ref}${C.x} · gasto dos últimos ${dias} dias  ${C.d}(só leitura)${C.x}`);
 
   const { rows } = await c.query(
-    `SELECT ac."name" AS conta,
+    `SELECT ac."name" AS conta, ac.id AS "contaId", ac."fbAccountId",
             cp.id, cp."name", cp.status::text AS status, cp."effectiveStatus" AS efetivo,
             cp."dailyBudget",
             (SELECT count(*)::int FROM "AdSet" s WHERE s."campaignId" = cp.id) AS conjuntos,
@@ -71,7 +71,13 @@ async function main() {
   for (const r of rows) {
     if (r.conta !== contaAtual) {
       contaAtual = r.conta;
-      console.log(`\n${C.b}${contaAtual}${C.x}`);
+      // O id INTERNO é o que `POST /api/ads/campaign` exige no corpo, e não
+      // aparece em lugar nenhum da interface — nem existe tela para criar
+      // campanha. Sem ele não há como criar uma cobaia. Ver "Cobaia" no
+      // CLAUDE.md.
+      console.log(
+        `\n${C.b}${contaAtual}${C.x}  ${C.d}accountId ${r.contaId} · act_${String(r.fbAccountId).replace(/^act_/, "")}${C.x}`,
+      );
     }
     // 🔴 A propriedade que importa: entrega exige CONJUNTO ATIVO com ANÚNCIO
     // ATIVO. Campanha sem isso não gasta nem se for ligada.

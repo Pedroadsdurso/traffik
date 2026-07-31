@@ -3769,6 +3769,135 @@ no rodapé, e Contas com "—". Dados de teste restaurados por id depois.
 - **Sem backfill**: toda linha nasce com `effectiveStatus` nulo e só o primeiro
   sync preenche. É por isso que nulo não pode alarmar.
 
+## 🧫 A COBAIA: nenhuma campanha é crua, e não há tela para criar uma
+
+**Medido em 31/07/2026:** as **13 campanhas** das duas contas têm 1 conjunto e 1
+anúncio cada. **Nenhuma é crua.** A "Nova campanha de Engajamento" tinha
+conjunto e anúncio ATIVOS e o gasto subiu de R$ 0,13 para R$ 0,17 entre duas
+medições — estava entregando.
+
+**A reconstrução:** o usuário criou a campanha pelo Gerenciador do Facebook, que
+no fluxo guiado cria conjunto e anúncio junto. Ele acreditou ter criado uma
+campanha crua, isso virou premissa escrita, e o plano de validação inteiro foi
+construído em cima dela. É a mesma falha do "nenhuma escrita real foi
+exercida": **uma afirmação plausível que ninguém mediu.**
+
+> Isso também explica o `8/8/8` que a `ads:sonda` reportava por conta — não era
+> campanha órfã, era 1 conjunto por campanha.
+
+### 🔴 `POST /api/ads/campaign` cria SÓ a campanha — e não tem tela
+
+Lido no código (`app/api/ads/campaign/route.ts` → `lib/facebook/manage.ts`):
+
+```
+POST /act_<conta>/campaigns
+  name, objective, status: "PAUSED", special_ad_categories: "[]"
+  daily_budget (só se vier no corpo, em centavos)
+```
+
+**Uma chamada, uma aresta.** Nada de `/adsets` nem de `/ads` — nem na Graph, nem
+no banco local (o `upsert` cria só a linha de `Campaign`, com `status: PAUSED`).
+É o oposto do fluxo guiado do Facebook.
+
+> ### ⚠️ Mas NÃO existe botão: `createCampaign` é código MORTO na interface
+> `useTraffikState` tem `newCampaignOpen`, `openNewCampaign`, os 4 `onNewCampaign*`
+> e o `createCampaign` — e **nenhum `.tsx` importa qualquer um deles**. A rota
+> funciona, o estado existe, a tela nunca foi escrita.
+>
+> É o **sexto** caso do PROCEDIMENTO OBRIGATÓRIO nesta base: pronto, compilando,
+> inerte. Entra na fila junto do resto do nav morto — mas aqui a dívida deixou
+> de ser cosmética: **é o que impede criar a cobaia pela ferramenta.**
+
+**Enquanto não houver tela**, o caminho é o console do navegador, logado no
+painel (usa o cookie de sessão, e a rota valida a posse da conta pelo `userId`):
+
+```js
+await fetch("/api/ads/campaign", {
+  method: "POST", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    accountId: "<id INTERNO da conta>",   // npm run conta:estrutura mostra
+    name: "COBAIA — não usar",
+    objective: "OUTCOME_TRAFFIC",
+    dailyBudget: 20,                       // CBO: exigido pelo teste do clamp
+  }),
+}).then((r) => r.json());
+```
+
+`npm run conta:estrutura` passou a imprimir o **`accountId` interno** no
+cabeçalho de cada conta, porque ele não aparece em lugar nenhum da interface.
+
+⚠️ **Medir depois de criar, sempre.** `conta:estrutura` tem de mostrar
+`○ crua (sem conjunto)`. Assumir foi exatamente o erro anterior.
+
+### O que volta a ser seguro com uma cobaia comprovadamente crua
+
+| Passo | Situação |
+|---|---|
+| **1(a)** pausar o já pausado | ✅ sempre foi seguro |
+| **1(b)** ativar | ✅ volta a ser: sem conjunto não há entrega |
+| **2** clamp de orçamento | ✅ volta a ser — ver abaixo |
+| **3** ações em massa (recusa de R$ 1,00) | ✅ |
+| **4** duplicar | ⚠️ nasce pausada, mas **reverter é o problema**: a única remoção pela ferramenta grava `DELETED`, que a Meta não desfaz |
+| bid cap | ❌ continua impossível: é campo de CONJUNTO, e criar um destrói a propriedade que torna a cobaia segura |
+
+### 🎯 Como exercitar o CLAMP sem risco financeiro
+
+**A pergunta é boa: campanha crua não gasta, logo não gera métrica, logo nenhuma
+condição real dispara.** Então sim, é preciso forçar — mas com uma diferença
+decisiva em relação ao acidente:
+
+> **Forçar de propósito, com a ferramenta dizendo que você está forçando.**
+> `Gasto ≥ 0` faz a análise estática emitir *"todas as condições são sempre
+> verdadeiras… a regra vai agir sobre TODAS as entidades do escopo"*, e o
+> "Testar condição" responde *"Bate em N de N"*. O acidente foi forçar **sem
+> saber**; aqui a tela avisa antes de salvar.
+
+**O valor do orçamento não pode custar dinheiro, e é isso que fecha o risco.**
+Orçamento é **teto de gasto, não gasto**. Numa campanha sem conjunto não há
+entrega, então mesmo um erro de unidade que gravasse R$ 2.500 em vez de R$ 25
+**não gastaria um centavo**. A cobaia crua protege exatamente contra o erro que
+o teste existe para pegar.
+
+**Receita:**
+
+| | |
+|---|---|
+| Cobaia | crua, **PAUSADA**, criada com `dailyBudget: 20` |
+| Regra | nível Campanha · conta = só a da cobaia · **aumentar 50%** · **teto R$ 25** |
+| Condição | `Gasto ≥ 0` |
+| Limite diário | **1** |
+
+> ⚠️ **`AJUSTAR_ORCAMENTO` não exige status ACTIVE** — só `PAUSAR`/`ATIVAR`
+> checam status. A campanha pode (e deve) ficar pausada durante o teste.
+
+Esperado no Facebook: **R$ 25,00**.
+
+| Resultado | Leitura |
+|---|---|
+| R$ 25,00 | ✅ clamp aplicou e as unidades estão certas |
+| R$ 30,00 | clamp não aplicou (unidade ok) |
+| R$ 0,25 | erro de unidade: dividiu por 100 |
+| R$ 2.500,00 | erro de unidade: multiplicou duas vezes |
+| Recusa da Meta | orçamento abaixo do mínimo da conta — rejeição legítima, é o Passo 3 |
+
+Rodar **de novo** exercita a outra guarda: deve registrar `já no teto
+(R$ 25,00)` **sem chamar a Meta**.
+
+> ### 🔴 O RISCO REAL não é o clamp — é o ESCOPO
+> `Gasto ≥ 0` bate em **tudo** que estiver no escopo. Se outra campanha daquela
+> conta tiver orçamento no nível de campanha (CBO), **o orçamento dela também
+> sobe até o teto**. Não é hipótese: é o mesmo mecanismo do acidente.
+>
+> Antes de salvar, `npm run conta:estrutura` mostra por campanha o campo
+> *"orçamento na campanha"*: quem exibe `—` é ABO e o motor **pula** com
+> *"sem orçamento diário (CBO?)"*; quem exibe um valor **será alterado**.
+> Escolha a conta em que a cobaia seja a única com valor ali.
+>
+> ⚠️ **A prévia SUPERESTIMA neste caso**, e é bom saber: ela conta quem satisfaz
+> a CONDIÇÃO, e o descarte por `dailyBudget == null` acontece no laço de ação,
+> não na condição. "Bate em 8 de 8" pode significar "8 avaliadas, 1 alterada".
+> Melhoria natural: a prévia informar quantas a AÇÃO alcançaria.
+
 ## 🔎 Drill-down no Gerenciador (31/07/2026)
 
 Marcar campanhas faz as abas **Conjuntos** e **Anúncios** mostrarem só o que
@@ -5716,6 +5845,11 @@ arquivo local, de propósito.
 - **`EditDashboardDrawer` + `editDashOpen`/`openEditDash`/`closeEditDash`/
   `metricList`** — a gaveta está montada no `DashboardShell` mas **nada a abre**;
   quem edita o dashboard é o painel inline do Bloco 2. Descoberto em 30/07/2026.
+- 🔴 **`createCampaign` + `newCampaign*` (~8 entradas) no `useTraffikState`** —
+  a rota `POST /api/ads/campaign` funciona, o estado existe, e **nenhum `.tsx`
+  importa nada disso**. Não há tela para criar campanha. Descoberto em
+  31/07/2026, e aqui a dívida **bloqueia trabalho**: é o que impede criar uma
+  cobaia crua pela ferramenta. Ver "A COBAIA".
 - **`Workspace.accountIds` / `webhookIds` / `pixelConfigIds` / `products`** —
   mortos, mantidos pela regra dos dois deploys.
 - **`DashboardLayout.workspaceId` nullable** — o NOT NULL entra num 2º deploy.
