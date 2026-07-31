@@ -3310,6 +3310,50 @@ A `WebhooksView` ainda tem o array `GATEWAYS` local, duplicando o registro — s
 na etapa 7. Enquanto isso, **o registro é a fonte de verdade do servidor** e o
 array só decide o que aparece no modal.
 
+## ✅ CAKTO VALIDADA EM PRODUÇÃO COM VENDA REAL (31/07/2026)
+
+Não é mais "passa nos exemplos da documentação". O usuário configurou o webhook
+na Cakto, ela disparou eventos de teste, e ele **gerou e PAGOU um PIX real** —
+tudo contabilizado na ferramenta.
+
+**A arquitetura universal de gateways está validada com um segundo gateway de
+verdade**, ponta a ponta: receptor universal → estratégia de auth da plataforma →
+parser dedicado → formato interno → ingestão → métricas.
+
+E ela custou o que o critério de aceite exigia: **um parser, uma entrada no
+registro, uma logo e um arquivo de exemplos.** Zero rota, zero mudança em
+`ingestSale`, nas métricas ou na interface.
+
+### 🔎 `npm run venda:inspecionar` — "a venda entrou COMPLETA?"
+
+Faturamento certo **não** responde essa pergunta: um parser pode acertar o valor
+e descartar a taxa, o país, o agrupador do pedido ou o casamento com o clique, e
+a tela continua parecendo correta.
+
+O inspetor mostra campo a campo **e o que significa cada vazio** — a mesma
+distinção do testador de payload ("o gateway não manda" × "o parser não leu"),
+aplicada ao que ficou GRAVADO. Ele lê as capacidades do registro para decidir se
+um vazio é esperado ou é bug:
+
+```bash
+npm run venda:inspecionar -- --url '<conn>' --gateway CAKTO --n 2
+```
+
+**Somente leitura** — pode rodar em produção.
+
+Exercitado contra linhas reais (exemplo agrupado enviado ao webhook de dev):
+2 linhas · **1 pedido** (`cakto:12345`) · R$ 90 + R$ 27 · `principal`/`orderbump`
+· taxas R$ 4,50 e R$ 1,35 · `fbc`/`fbp` gravados · log dizendo "2 itens no mesmo
+pedido". Dados de teste removidos depois.
+
+> ⚠️ **Vazios ESPERADOS numa venda da Cakto:** `country` e `countrySource` ficam
+> nulos quando não há clique casado — ela **não manda o IP do comprador**, e essa
+> é a capacidade declarada. `coproducao` fica nulo porque só conhecemos o tipo
+> `producer`. Nenhum dos dois é bug.
+>
+> 🔴 **Vazio que É bug:** `taxaGateway` nulo (o registro diz que ela manda
+> `fees`), ou `fbc`/`fbp` nulos num payload que os trouxe.
+
 ## ✍️ ESCRITA NA GRAPH API: o que já foi exercido (31/07/2026)
 
 > ### ⛔ A documentação afirmava, em QUATRO lugares, que nenhuma escrita real
@@ -4353,6 +4397,7 @@ Nenhuma migration foi necessária: `Sale.country` nulo + `Click.country` present
 | Gateway | Manda IP do comprador? | Verificado em |
 |---|---|---|
 | **Kirvano** | ✅ sim (`customer.ip`) | 30/07/2026, 15 vendas reais |
+| **Cakto** | 🔴 **não** — capacidade declarada `ipDoComprador: false` | 31/07/2026, **PIX real pago**. É o primeiro gateway cuja geografia depende do clique |
 | Hotmart | ❓ não integrado | — |
 | Kiwify | ❓ não integrado | — |
 | Cartpanda | ❓ não integrado | — |

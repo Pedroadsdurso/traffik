@@ -34,7 +34,8 @@
     "test:pedidos": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-pedidos.mjs",
     "backfill:taxas": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/backfill-taxas.mjs",
     "test:correspondencia": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-correspondencia.mjs",
-    "test:cakto": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-cakto.mjs"
+    "test:cakto": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-cakto.mjs",
+    "venda:inspecionar": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/inspecionar-venda.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
