@@ -27,18 +27,71 @@ export interface PaisVenda {
  */
 const AMBAR = "var(--color-warning,#fbbf24)";
 
-const SIZE = 300; // lado do viewBox (o globo é sempre quadrado)
+const SIZE = 300; // caixa de referência da esfera em zoom 1 (o globo é quadrado)
 const MARGEM = 6;
-const ZOOM_MIN = 0.8;
-const ZOOM_MAX = 1.04; // Máximo que garante 100% de visibilidade esférica sem clipping nas bordas
 
-/** Raio da esfera em unidades do viewBox para um dado zoom. */
+/**
+ * Folga em volta da esfera, em unidades de usuário.
+ *
+ * > ### ⛔ Sem isto, o brilho do marcador é cortado por uma PAREDE RETA
+ * > O viewBox recorta tudo que passa dele. Com a caixa justa no raio da esfera,
+ * > um marcador perto do limbo tem o `feGaussianBlur` cortado em `x=0` e
+ * > `x=SIZE` — o corte vertical a seco que parecia um bug do filtro.
+ * >
+ * > **A região do filtro nunca foi a causa**: ela já era `x="-140%"
+ * > width="380%"`, generosa. A caixa é que não tinha para onde crescer.
+ *
+ * 24 cobre o maior halo possível (`m.r * 3` no pico da animação, com `m.r ≤ 8`)
+ * mais o desvio do desfoque.
+ */
+const FOLGA = 24;
+
+/** Origem e lado do viewBox, já com a folga dos dois lados. */
+const VB_MIN = -FOLGA;
+const VB_LADO = SIZE + FOLGA * 2;
+
+const ZOOM_MIN = 0.8;
+/**
+ * ⚠️ Era **1.04** — o ponto exato em que `raio()` encosta na borda do viewBox.
+ * Não era um limite arbitrário: acima dele a esfera transbordava e era recortada
+ * nos quatro lados, virando um quadrado.
+ *
+ * A decisão de 31/07/2026 foi deixar a esfera **transbordar de propósito**: quem
+ * vende para o mundo precisa aproximar de um país, e num globo ortográfico
+ * "aproximar" e "continuar vendo o círculo inteiro" são geometricamente
+ * incompatíveis. Acima de ~1,2 a janela passa a estar DENTRO da esfera, que é o
+ * comportamento de qualquer mapa com zoom.
+ */
+const ZOOM_MAX = 8;
+
+/**
+ * Raio da esfera para um dado zoom.
+ *
+ * ⚠️ O zoom entra na **escala da projeção**, e os paths são recalculados — nunca
+ * num `transform`/`scale` do SVG. Escalar o SVG esticaria o traço e degradaria
+ * a geometria; aqui o globo é redesenhado maior, com contorno nítido em
+ * qualquer aproximação.
+ */
 function raio(zoom: number): number {
   return (SIZE / 2 - MARGEM) * zoom;
 }
 
 function clampZoom(z: number): number {
   return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z));
+}
+
+/**
+ * Opacidade do marcador conforme ele se aproxima do **limbo** — a borda onde a
+ * esfera vira para o lado oculto.
+ *
+ * Sem isto o ponto some de um quadro para o outro, quando `geoCircle` deixa de
+ * ser visível: um pisca-pisca na borda. Uma esfera girando de verdade some aos
+ * poucos, e é isso que o degradê reproduz.
+ */
+function opacidadeNoLimbo(x: number, y: number, r: number): number {
+  const d = Math.hypot(x - SIZE / 2, y - SIZE / 2) / (r || 1);
+  if (d <= 0.8) return 1;
+  return Math.max(0, Math.min(1, (0.995 - d) / 0.195));
 }
 
 /**
@@ -84,6 +137,15 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
     rotRef.current = rot;
   }, [rot]);
 
+  // ⚠️ Mesmo padrão do `rotRef`, e pelo mesmo motivo: os gestos de toque são
+  // registrados num efeito com deps `[modo, boxNo]`, então o `zoom` capturado no
+  // closure congelaria no valor da montagem. O arrasto de um dedo precisa do
+  // zoom ATUAL para dividir a sensibilidade.
+  const zoomRef = useRef(zoom);
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
+
   const totalRev = dados.reduce((a, d) => a + d.revenue, 0);
   const maxVendas = Math.max(1, ...dados.map((d) => d.sales));
 
@@ -117,12 +179,17 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
       if (!svg) return;
 
       const rect = svg.getBoundingClientRect();
-      const cx = ((e.clientX - rect.left) / rect.width) * SIZE;
-      const cy = ((e.clientY - rect.top) / rect.height) * SIZE;
+      // ⚠️ Converte para unidades de USUÁRIO usando a caixa real do viewBox, que
+      // tem a folga. Multiplicar por `SIZE` deslocava o alvo do zoom em `FOLGA`
+      // pixels — o globo "escapava" do cursor ao aproximar.
+      const cx = VB_MIN + ((e.clientX - rect.left) / rect.width) * VB_LADO;
+      const cy = VB_MIN + ((e.clientY - rect.top) / rect.height) * VB_LADO;
 
       setZoom((zAtual) => {
-        const delta = -e.deltaY * 0.0015;
-        const novo = clampZoom(zAtual + delta);
+        // Passo GEOMÉTRICO: com o teto em 8, um incremento fixo é grosso demais
+        // perto de 1 e lento demais perto de 8. O expoente mantém a sensação
+        // constante em toda a faixa.
+        const novo = clampZoom(zAtual * Math.exp(-e.deltaY * 0.0015));
         if (novo === zAtual) return zAtual;
 
         // Ao aproximar o zoom, orienta suavemente a esfera para a coordenada do cursor
@@ -166,9 +233,10 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
         const dx = t.clientX - touchState.current.x;
         const dy = t.clientY - touchState.current.y;
         const initialRot = touchState.current.rot;
+        const g = 0.35 / zoomRef.current;
         setRot([
-          initialRot[0] + dx * 0.35,
-          Math.max(-88, Math.min(88, initialRot[1] - dy * 0.35)),
+          initialRot[0] + dx * g,
+          Math.max(-88, Math.min(88, initialRot[1] - dy * g)),
         ]);
       } else if (e.touches.length === 2 && touchState.current?.dist) {
         const t1 = e.touches[0];
@@ -231,7 +299,14 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
         // O ponto pode estar no lado oculto da esfera: `geoCircle` minúsculo
         // devolve path vazio quando o centro não é visível.
         const visivel = Boolean(geoPath(proj)(geoCircle().center([p.lng, p.lat]).radius(0.5)()));
-        return { ...d, x: xy[0], y: xy[1], visivel, r: 3 + (d.sales / maxVendas) * 5 };
+        return {
+          ...d,
+          x: xy[0],
+          y: xy[1],
+          visivel,
+          r: 3 + (d.sales / maxVendas) * 5,
+          limbo: opacidadeNoLimbo(xy[0], xy[1], raio(zoom)),
+        };
       })
       .filter((m): m is NonNullable<typeof m> => m !== null && m.visivel);
 
@@ -301,7 +376,9 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
                           style={sx(`margin-left:6px;font-size:11px;border:1px solid ${AMBAR};color:${AMBAR};border-radius:4px;padding:0 5px`)}
                           title={`${d.estimadas} destas vendas não trouxeram o país no pagamento e herdaram o da visita. Quem compra pelo navegador do Instagram ou do Facebook aparece no país do servidor da Meta, então esse valor é estimativa.`}
                         >
-                          {d.estimadas === d.sales ? "estimado" : `${d.estimadas} estimada(s)`}
+                          {d.estimadas === d.sales
+                            ? "estimado"
+                            : plural(d.estimadas, "estimada", "estimadas")}
                         </span>
                       )}
                     </span>
@@ -331,15 +408,21 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
           }}
         >
           <svg
-            viewBox={`0 0 ${SIZE} ${SIZE}`}
+            viewBox={`${VB_MIN} ${VB_MIN} ${VB_LADO} ${VB_LADO}`}
             style={{ width: "auto", height: "100%", maxWidth: "100%", aspectRatio: "1", cursor: arrastando ? "grabbing" : "grab" }}
             onMouseDown={(e) => { arrasto.current = { x: e.clientX, y: e.clientY, rot }; setArrastando(true); }}
             onMouseUp={() => { arrasto.current = null; setArrastando(false); }}
             onMouseMove={(e) => {
               const a = arrasto.current;
               if (!a) return;
-              // 0.35°/px dá uma rotação que acompanha o mouse sem "escapar".
-              setRot([a.rot[0] + (e.clientX - a.x) * 0.35, Math.max(-88, Math.min(88, a.rot[1] - (e.clientY - a.y) * 0.35))]);
+              // 0.35°/px acompanha o mouse sem "escapar" — mas dividido pelo
+              // zoom: aproximado, o mesmo arrasto percorre muito mais superfície
+              // aparente, e sem isso o globo dispara ao menor movimento.
+              const g = 0.35 / zoom;
+              setRot([
+                a.rot[0] + (e.clientX - a.x) * g,
+                Math.max(-88, Math.min(88, a.rot[1] - (e.clientY - a.y) * g)),
+              ]);
             }}
           >
             <defs>
@@ -373,7 +456,7 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
             {marcadores.map((m) => {
               const on = ativo === m.code;
               return (
-                <g key={m.code} style={{ cursor: "pointer" }}
+                <g key={m.code} style={{ cursor: "pointer", opacity: m.limbo }}
                   onMouseEnter={(e) => {
                     setAtivo(m.code);
                     const box = boxNo?.getBoundingClientRect();
@@ -405,12 +488,15 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
           )}
 
           <div style={sx("position:absolute;bottom:8px;right:8px;display:flex;gap:4px")}>
+            {/* ⚠️ Passo MULTIPLICATIVO, não `+0.1`. Com o teto em 8, o passo
+                aditivo exigiria ~70 cliques para atravessar a faixa; e um passo
+                fixo é grosso perto de 1 e imperceptível perto de 8. */}
             <button type="button" className="btn btn-secondary" style={sx("padding:1px 8px;font-size:13px")}
-              onClick={() => setZoom((z) => clampZoom(z + 0.1))}
+              onClick={() => setZoom((z) => clampZoom(z * 1.35))}
               disabled={zoom >= ZOOM_MAX}
               aria-label="Aproximar">+</button>
             <button type="button" className="btn btn-secondary" style={sx("padding:1px 8px;font-size:13px")}
-              onClick={() => setZoom((z) => clampZoom(z - 0.1))}
+              onClick={() => setZoom((z) => clampZoom(z / 1.35))}
               disabled={zoom <= ZOOM_MIN}
               aria-label="Afastar">−</button>
             <button type="button" className="btn btn-secondary" style={sx("padding:1px 8px;font-size:11px")}
