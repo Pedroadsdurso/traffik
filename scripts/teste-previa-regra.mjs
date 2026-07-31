@@ -40,14 +40,18 @@ const c = new pg.Client({
 const backup = [];
 
 /** RuleRow mínima — a prévia não precisa da regra existir no banco. */
-function regra(userId, condicoes) {
+function regra(userId, condicoes, extra = {}) {
   return {
     id: "preview", userId, targetProduct: null, adAccountIds: [], workspaceId: null,
     level: "CAMPAIGN", nameFilter: null, action: "PAUSAR", actionParams: null,
     conditions: condicoes, calcPeriod: "hoje", frequencyMin: 30, dailyRunLimit: 10,
     maxBudget: null, windowStartHour: null, windowEndHour: null,
+    ...extra,
   };
 }
+
+/** Condição sempre verdadeira — isola o que se quer medir: a AÇÃO. */
+const SEMPRE = [{ metrica: "gasto", operador: ">=", valor: 0 }];
 
 async function main() {
   await c.connect();
@@ -105,6 +109,56 @@ async function main() {
     eq("status e orçamento intactos", JSON.stringify(depois.rows), JSON.stringify(antes.rows));
     const { rows: logs } = await c.query(`SELECT count(*)::int AS n FROM "AutomationRuleLog"`);
     eq("nenhum log de execução foi gravado", logs[0].n, 0);
+  }
+
+  console.log("\n\x1b[1m🔴 BATER ≠ SER ALTERADA — o que a AÇÃO alcança\x1b[0m");
+  {
+    // As duas estão ACTIVE e SEM orçamento no nível da campanha — que é o caso
+    // real do usuário: 13 campanhas, todas ABO.
+    const pausar = await previewRule(regra(userId, SEMPRE, { action: "PAUSAR" }));
+    eq("PAUSAR: bate em todas", pausar.bateram, camps.length);
+    eq("  …e alteraria todas (estão ativas)", pausar.agiria, camps.length);
+
+    const orcamento = await previewRule(regra(userId, SEMPRE, {
+      action: "AJUSTAR_ORCAMENTO", actionParams: { tipo: "percentual", valor: 50 }, maxBudget: 25,
+    }));
+    eq("ORÇAMENTO: bate no mesmo tanto", orcamento.bateram, camps.length);
+    eq("  …mas alteraria NENHUMA (todas ABO)", orcamento.agiria, 0);
+    eq("  …e diz por quê", orcamento.entidades[0].motivo, "sem orçamento diário (CBO?)");
+    eq("  …marcando como não acionável", orcamento.entidades.every((e) => !e.acionavel), true);
+
+    await c.query(`UPDATE "Campaign" SET status = 'PAUSED'::"EntityStatus" WHERE id = $1`, [camps[0].id]);
+    const p2 = await previewRule(regra(userId, SEMPRE, { action: "PAUSAR" }));
+    eq("PAUSAR pula a que já está pausada", p2.agiria, camps.length - 1);
+    eq("  …com o mesmo motivo do log", p2.entidades.find((e) => e.nome === camps[0].name).motivo, "já pausada");
+    const a2 = await previewRule(regra(userId, SEMPRE, { action: "ATIVAR" }));
+    eq("ATIVAR alcança só a pausada", a2.agiria, 1);
+    await c.query(`UPDATE "Campaign" SET status = 'ACTIVE'::"EntityStatus" WHERE id = $1`, [camps[0].id]);
+  }
+
+  console.log("\n\x1b[1m🔴 Aumento SEM TETO é recusado — e a prévia mostra ANTES de salvar\x1b[0m");
+  {
+    await c.query(`UPDATE "Campaign" SET "dailyBudget" = 20 WHERE id = $1`, [camps[0].id]);
+    const alvoDe = (p) => p.entidades.find((e) => e.nome === camps[0].name);
+
+    const semTeto = await previewRule(regra(userId, SEMPRE, {
+      action: "AJUSTAR_ORCAMENTO", actionParams: { tipo: "percentual", valor: 50 }, maxBudget: null,
+    }));
+    eq("a CBO não é acionável sem teto", alvoDe(semTeto).acionavel, false);
+    eq("  …com o motivo exato do motor", alvoDe(semTeto).motivo,
+      "recusado: aumento sem teto de orçamento configurado");
+
+    const comTeto = await previewRule(regra(userId, SEMPRE, {
+      action: "AJUSTAR_ORCAMENTO", actionParams: { tipo: "percentual", valor: 50 }, maxBudget: 25,
+    }));
+    eq("com teto, a CBO passa a ser acionável", comTeto.agiria, 1);
+
+    const noTeto = await previewRule(regra(userId, SEMPRE, {
+      action: "AJUSTAR_ORCAMENTO", actionParams: { tipo: "percentual", valor: 50 }, maxBudget: 20,
+    }));
+    eq("orçamento JÁ no teto não é acionável", noTeto.agiria, 0);
+    eq("  …dizendo que já está no teto", alvoDe(noTeto).motivo, "já no teto (R$ 20.00)");
+    await c.query(`UPDATE "Campaign" SET "dailyBudget" = NULL WHERE id = $1`, [camps[0].id]);
   }
 
   console.log("\n\x1b[1mCondições em E\x1b[0m");

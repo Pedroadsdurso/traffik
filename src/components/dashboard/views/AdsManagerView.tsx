@@ -10,6 +10,7 @@ import { Icone, type NomeIcone } from "../ui/Icone";
 import { Select } from "../ui/Select";
 import { AdsActionBar, type Acao, type AlvoSelecionado, type Nivel } from "./ads/AdsActionBar";
 import { AdsTable, type LinhaTabela } from "./ads/AdsTable";
+import { NovaCampanhaModal } from "./ads/NovaCampanhaModal";
 import type { TraffikView } from "../useTraffikState";
 
 // ⚠️ `icone` guarda um NOME do mapa de `ui/Icone`, não um `path` de SVG. Era um
@@ -361,7 +362,22 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
             ...v.adsAccountOptions.map((a) => ({ value: a.id, label: a.name })),
           ]}
         />
+        {/* Criar campanha vive aqui e não no cabeçalho porque é ação da aba
+            Campanhas, não do Gerenciador inteiro. A rota cria SÓ a campanha —
+            sem conjunto, sem anúncio, e pausada. */}
+        {v.adsSub === "campaigns" && (
+          <button
+            className="btn btn-secondary"
+            type="button"
+            style={sx("margin-left:auto")}
+            onClick={v.openNewCampaign}
+          >
+            + Nova campanha
+          </button>
+        )}
       </div>
+
+      {v.newCampaignOpen && <NovaCampanhaModal v={v} />}
 
       {/* Painel de controle (Bloco 7) — só nos níveis que aceitam ação */}
       {nivel && (

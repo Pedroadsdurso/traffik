@@ -308,7 +308,7 @@ export async function runRulesNow(): Promise<{ evaluated: number; acted: number 
  */
 export async function previewRuleConditions(
   input: CreateRuleInput,
-): Promise<{ total: number; bateram: number; nivel: RuleLevel; entidades: RulePreviewEntity[] }> {
+): Promise<{ total: number; bateram: number; agiria: number; nivel: RuleLevel; entidades: RulePreviewEntity[] }> {
   const userId = await requireUserId();
   const preview = await previewRule({
     // `id` só é usado na contagem do limite diário, que a prévia não faz.
@@ -332,6 +332,7 @@ export async function previewRuleConditions(
   return {
     total: preview.total,
     bateram: preview.bateram,
+    agiria: preview.agiria,
     nivel: preview.nivel,
     entidades: preview.entidades,
   };

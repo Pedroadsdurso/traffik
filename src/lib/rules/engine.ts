@@ -312,12 +312,100 @@ async function loadEntities(rule: RuleRow, start: Date, startKey: string) {
   return entities;
 }
 
+/** Entidade como `loadEntities` devolve — o que a ação precisa saber. */
+interface EntidadeAlvo {
+  name: string;
+  status: string;
+  token: string | null;
+  dailyBudget: number | null;
+  metrics: EntityMetrics;
+}
+
+/**
+ * O que a AÇÃO faria com esta entidade — **sem fazer**.
+ *
+ * 🔴 Extraída do laço de `evaluateRule` para que a **prévia e a execução usem a
+ * mesma decisão**. Bater a condição não significa ser alterada: pausar pula
+ * quem já está pausado, e ajustar orçamento pula quem não tem orçamento no
+ * próprio nível. Uma prévia que ignorasse isso diria "bate em 8" onde a ação
+ * alcança 1 — e um número que exagera treina o usuário a ignorá-lo.
+ *
+ * ⚠️ `ok` preserva a semântica do log: pulo esperado ("já pausada", "já no
+ * teto") conta como sucesso; recusa ("sem teto", "sem orçamento") não. É o que
+ * alimenta `affected` — mexer aqui muda o que a ferramenta reporta como feito.
+ */
+type PlanoDeAcao =
+  | { agir: true; novoOrcamento?: number }
+  | { agir: false; motivo: string; ok: boolean };
+
+function planejarAcao(rule: RuleRow, e: EntidadeAlvo): PlanoDeAcao {
+  if (!e.token) return { agir: false, motivo: "Sem token do perfil.", ok: false };
+
+  if (rule.action === "PAUSAR") {
+    if (e.status !== "ACTIVE") return { agir: false, motivo: "já pausada", ok: true };
+    return { agir: true };
+  }
+  if (rule.action === "ATIVAR") {
+    if (e.status === "ACTIVE") return { agir: false, motivo: "já ativa", ok: true };
+    return { agir: true };
+  }
+
+  // AJUSTAR_ORCAMENTO
+  if (e.dailyBudget == null) return { agir: false, motivo: "sem orçamento diário (CBO?)", ok: false };
+
+  const params = (rule.actionParams ?? {}) as { tipo?: string; valor?: number };
+  // Três modos, e a diferença importa:
+  //   percentual  → fator sobre o orçamento ATUAL (+20% = ×1,2)
+  //   valor       → define um valor absoluto
+  //   pct_gasto   → define uma fração do GASTO do período, para acompanhar a
+  //                 entrega em vez de compor sobre o próprio orçamento
+  let novo: number;
+  if (params.tipo === "valor") novo = params.valor ?? e.dailyBudget;
+  else if (params.tipo === "pct_gasto") novo = (e.metrics.spend * (params.valor ?? 0)) / 100;
+  else novo = e.dailyBudget * (1 + (params.valor ?? 0) / 100);
+
+  // Orçamento zero ou negativo seria recusado pela Meta e, pior, é o resultado
+  // natural de `pct_gasto` num dia sem gasto nenhum.
+  if (!Number.isFinite(novo) || novo <= 0) {
+    return { agir: false, motivo: `valor calculado inválido (${novo}) — sem gasto no período?`, ok: false };
+  }
+
+  // ── 🔴 TETO DE ORÇAMENTO ──────────────────────────────────────────────────
+  //
+  // O aumento é a única ação desta ferramenta que **gasta mais dinheiro do
+  // usuário a cada execução**. Uma regra "+20%" sem teto multiplica o orçamento
+  // indefinidamente: 100 → 120 → 144 → 173…
+  //
+  // FAIL-CLOSED: sem teto configurado, a regra NÃO aumenta. Mesma regra da
+  // autenticação de cron e webhook — ausência de configuração nunca vira
+  // permissão. Recusar é visível (aparece no log); aumentar sem limite não é,
+  // até a fatura chegar.
+  const aumenta = novo > e.dailyBudget;
+  const teto = rule.maxBudget == null ? null : Number(rule.maxBudget);
+  if (aumenta && teto == null) {
+    return { agir: false, motivo: "recusado: aumento sem teto de orçamento configurado", ok: false };
+  }
+  if (teto != null) {
+    if (e.dailyBudget >= teto) {
+      return { agir: false, motivo: `já no teto (R$ ${teto.toFixed(2)})`, ok: true };
+    }
+    // Trava no teto em vez de recusar: subir até o limite é o que o usuário
+    // pediu, e parar exatamente nele é o comportamento seguro.
+    if (novo > teto) novo = teto;
+  }
+  return { agir: true, novoOrcamento: novo };
+}
+
 /** Uma entidade na prévia: o que a regra veria, com os valores reais. */
 export interface RulePreviewEntity {
   nome: string;
   status: string;
   bateu: boolean;
   valores: Record<string, number>;
+  /** A AÇÃO alteraria esta entidade? Só faz sentido quando `bateu`. */
+  acionavel: boolean;
+  /** Por que a ação NÃO a alcançaria (ex.: "sem orçamento diário (CBO?)"). */
+  motivo?: string;
 }
 
 export interface RulePreview {
@@ -325,6 +413,15 @@ export interface RulePreview {
   total: number;
   /** Quantas satisfazem as condições AGORA. */
   bateram: number;
+  /**
+   * Quantas a AÇÃO realmente alteraria.
+   *
+   * 🔴 **Não é o mesmo que `bateram`**, e a diferença chega a ser a história
+   * toda: numa conta só de campanhas ABO, uma regra de orçamento bate em todas
+   * e altera **nenhuma**. Sem este número a prévia exagera, e número que
+   * exagera ensina o usuário a ignorá-lo.
+   */
+  agiria: number;
   /** Amostra, as que bateram primeiro. Truncada — ver `total`/`bateram`. */
   entidades: RulePreviewEntity[];
   nivel: RuleLevel;
@@ -365,21 +462,29 @@ export async function previewRule(rule: RuleRow, limite = 12): Promise<RulePrevi
   const { start, startKey } = calcStart(rule.calcPeriod, tz);
   const entities = await loadEntities(rule, start, startKey);
 
-  const avaliadas = entities.map((e) => ({
-    nome: e.name,
-    status: e.status,
-    bateu: conditionsMet(conds, e.metrics),
-    valores: Object.fromEntries(
-      // Via `metricValue`, como no log: `cpa`, `roas` e `ctr` são DERIVADAS e
-      // não existem como chave em `EntityMetrics`.
-      conds.map((c) => [c.metrica, metricValue(e.metrics, c.metrica)]),
-    ),
-  }));
+  const avaliadas = entities.map((e) => {
+    const bateu = conditionsMet(conds, e.metrics);
+    // MESMA decisão que a execução toma — ver `planejarAcao`.
+    const plano = planejarAcao(rule, e);
+    return {
+      nome: e.name,
+      status: e.status,
+      bateu,
+      acionavel: plano.agir,
+      motivo: plano.agir ? undefined : plano.motivo,
+      valores: Object.fromEntries(
+        // Via `metricValue`, como no log: `cpa`, `roas` e `ctr` são DERIVADAS e
+        // não existem como chave em `EntityMetrics`.
+        conds.map((c) => [c.metrica, metricValue(e.metrics, c.metrica)]),
+      ),
+    };
+  });
 
   const bateram = avaliadas.filter((e) => e.bateu);
   return {
     total: avaliadas.length,
     bateram: bateram.length,
+    agiria: bateram.filter((e) => e.acionavel).length,
     // As que bateram primeiro: são as que a regra tocaria. Se nenhuma bateu,
     // mostra o que ela avaliou — senão a tela fica muda justamente quando o
     // usuário precisa entender por que não bateu.
@@ -467,81 +572,33 @@ export async function evaluateRule(rule: RuleRow): Promise<RuleRunResult> {
     };
   }
 
-  const params = (rule.actionParams ?? {}) as { tipo?: string; valor?: number };
+  // (`actionParams` é lido dentro de `planejarAcao`, junto com o teto.)
   const applied: { name: string; action: string; ok: boolean; error?: string }[] = [];
   const type = LEVEL_TO_TYPE[rule.level];
 
   for (const e of matched) {
-    if (!e.token) { applied.push({ name: e.name, action: rule.action, ok: false, error: "Sem token do perfil." }); continue; }
+    // 🔴 A decisão de agir (e o valor do orçamento) vem de `planejarAcao`, a
+    // MESMA função que a prévia usa. Duplicar aqui faria a prévia prometer uma
+    // coisa e a execução fazer outra.
+    const plano = planejarAcao(rule, e);
+    if (!plano.agir) {
+      applied.push({ name: e.name, action: rule.action, ok: plano.ok, error: plano.motivo });
+      continue;
+    }
     try {
       if (rule.action === "PAUSAR") {
-        if (e.status !== "ACTIVE") { applied.push({ name: e.name, action: "PAUSAR", ok: true, error: "já pausada" }); continue; }
-        await setEntityStatus(e.fbId, "PAUSED", e.token);
+        await setEntityStatus(e.fbId, "PAUSED", e.token!);
         if (type === "campaign") await prisma.campaign.update({ where: { id: e.id }, data: { status: "PAUSED" } });
         else if (type === "adset") await prisma.adSet.update({ where: { id: e.id }, data: { status: "PAUSED" } });
         else await prisma.ad.update({ where: { id: e.id }, data: { status: "PAUSED" } });
       } else if (rule.action === "ATIVAR") {
-        if (e.status === "ACTIVE") { applied.push({ name: e.name, action: "ATIVAR", ok: true, error: "já ativa" }); continue; }
-        await setEntityStatus(e.fbId, "ACTIVE", e.token);
+        await setEntityStatus(e.fbId, "ACTIVE", e.token!);
         if (type === "campaign") await prisma.campaign.update({ where: { id: e.id }, data: { status: "ACTIVE" } });
         else if (type === "adset") await prisma.adSet.update({ where: { id: e.id }, data: { status: "ACTIVE" } });
         else await prisma.ad.update({ where: { id: e.id }, data: { status: "ACTIVE" } });
       } else {
-        // AJUSTAR_ORCAMENTO
-        if (e.dailyBudget == null) { applied.push({ name: e.name, action: "AJUSTAR_ORCAMENTO", ok: false, error: "sem orçamento diário (CBO?)" }); continue; }
-        // Três modos, e a diferença importa:
-        //   percentual  → fator sobre o orçamento ATUAL (+20% = ×1,2)
-        //   valor       → define um valor absoluto
-        //   pct_gasto   → define uma fração do GASTO do período (ex.: 80% do
-        //                 que foi gasto), útil para acompanhar a entrega em vez
-        //                 de compor sobre o próprio orçamento
-        let novo: number;
-        if (params.tipo === "valor") novo = params.valor ?? e.dailyBudget;
-        else if (params.tipo === "pct_gasto") novo = (e.metrics.spend * (params.valor ?? 0)) / 100;
-        else novo = e.dailyBudget * (1 + (params.valor ?? 0) / 100);
-
-        // Orçamento zero ou negativo seria recusado pela Meta e, pior, é o
-        // resultado natural de `pct_gasto` num dia sem gasto nenhum.
-        if (!Number.isFinite(novo) || novo <= 0) {
-          applied.push({
-            name: e.name, action: "AJUSTAR_ORCAMENTO", ok: false,
-            error: `valor calculado inválido (${novo}) — sem gasto no período?`,
-          });
-          continue;
-        }
-
-        // ── 🔴 TETO DE ORÇAMENTO ────────────────────────────────────────────
-        //
-        // O aumento é a única ação desta ferramenta que **gasta mais dinheiro
-        // do usuário a cada execução**. Uma regra "+20%" sem teto multiplica o
-        // orçamento indefinidamente: 100 → 120 → 144 → 173…
-        //
-        // FAIL-CLOSED: sem teto configurado, a regra NÃO aumenta. É a mesma
-        // regra da autenticação de cron e webhook — ausência de configuração
-        // nunca vira permissão. Recusar é visível (aparece no log); aumentar
-        // sem limite não é, até a fatura chegar.
-        const aumenta = novo > e.dailyBudget;
-        const teto = rule.maxBudget == null ? null : Number(rule.maxBudget);
-        if (aumenta && teto == null) {
-          applied.push({
-            name: e.name, action: "AJUSTAR_ORCAMENTO", ok: false,
-            error: "recusado: aumento sem teto de orçamento configurado",
-          });
-          continue;
-        }
-        if (teto != null) {
-          if (e.dailyBudget >= teto) {
-            applied.push({
-              name: e.name, action: "AJUSTAR_ORCAMENTO", ok: true,
-              error: `já no teto (R$ ${teto.toFixed(2)})`,
-            });
-            continue;
-          }
-          // Trava no teto em vez de recusar: subir até o limite é o que o
-          // usuário pediu, e parar exatamente nele é o comportamento seguro.
-          if (novo > teto) novo = teto;
-        }
-        await updateDailyBudget(e.fbId, novo, e.token);
+        const novo = plano.novoOrcamento!;
+        await updateDailyBudget(e.fbId, novo, e.token!);
         if (type === "campaign") await prisma.campaign.update({ where: { id: e.id }, data: { dailyBudget: novo } });
         else if (type === "adset") await prisma.adSet.update({ where: { id: e.id }, data: { dailyBudget: novo } });
       }

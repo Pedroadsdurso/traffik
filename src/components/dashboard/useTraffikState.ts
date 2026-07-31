@@ -1532,10 +1532,15 @@ export function useTraffikState(
     openNewCampaign: () =>
       set({ newCampaignOpen: true, newCampaignAccount: (ao?.accounts ?? [])[0]?.id ?? "", newCampaignName: "", newCampaignBudget: "" }),
     closeNewCampaign: () => set({ newCampaignOpen: false }),
-    onNewCampaignAccount: (e: React.ChangeEvent<HTMLSelectElement>) => set({ newCampaignAccount: e.target.value }),
-    onNewCampaignName: (e: React.ChangeEvent<HTMLInputElement>) => set({ newCampaignName: e.target.value }),
-    onNewCampaignObjective: (e: React.ChangeEvent<HTMLSelectElement>) => set({ newCampaignObjective: e.target.value }),
-    onNewCampaignBudget: (e: React.ChangeEvent<HTMLInputElement>) => set({ newCampaignBudget: e.target.value }),
+    // ⚠️ Recebem o VALOR, não o evento. Os quatro eram `ChangeEvent<HTMLSelectElement>`
+    // / `<HTMLInputElement>` — assinatura de `<select>` nativo, que este projeto
+    // não usa mais (`ui/Select` devolve o valor). Nunca houve tela consumindo
+    // isto, então a assinatura antiga era herança de um formulário que não
+    // existiu; ajustada junto com a tela que finalmente a usa.
+    setNewCampaignAccount: (newCampaignAccount: string) => set({ newCampaignAccount }),
+    setNewCampaignName: (newCampaignName: string) => set({ newCampaignName }),
+    setNewCampaignObjective: (newCampaignObjective: string) => set({ newCampaignObjective }),
+    setNewCampaignBudget: (newCampaignBudget: string) => set({ newCampaignBudget }),
     createCampaign: async () => {
       if (!s.newCampaignAccount || !s.newCampaignName.trim()) return;
       set({ newCampaignBusy: true });

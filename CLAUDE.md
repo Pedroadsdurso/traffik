@@ -3799,7 +3799,22 @@ POST /act_<conta>/campaigns
 no banco local (o `upsert` cria só a linha de `Campaign`, com `status: PAUSED`).
 É o oposto do fluxo guiado do Facebook.
 
-> ### ⚠️ Mas NÃO existe botão: `createCampaign` é código MORTO na interface
+> ### ✅ RESOLVIDO: a tela existe (31/07/2026)
+> **"+ Nova campanha"** na aba Campanhas do Gerenciador →
+> `views/ads/NovaCampanhaModal.tsx`. Conta, nome, objetivo (ODAX) e orçamento
+> diário opcional. O texto diz o que ela cria e o que **não** cria.
+>
+> ⚠️ Os quatro handlers do estado eram `ChangeEvent<HTMLSelectElement>` —
+> assinatura de `<select>` nativo, que este projeto não usa mais. Viraram
+> `setNewCampaign*(valor)`. Nunca houve tela consumindo aquilo, então a
+> assinatura era herança de um formulário que não existiu.
+>
+> ⚠️ **O campo de orçamento é o que define CBO**, e o texto diz isso: em branco,
+> o orçamento vive nos conjuntos (ABO) e **regra de orçamento no nível de
+> campanha não consegue alterá-lo**. Para a cobaia do teste do clamp, preencher
+> é obrigatório.
+>
+> #### O histórico (por que ela não existia)
 > `useTraffikState` tem `newCampaignOpen`, `openNewCampaign`, os 4 `onNewCampaign*`
 > e o `createCampaign` — e **nenhum `.tsx` importa qualquer um deles**. A rota
 > funciona, o estado existe, a tela nunca foi escrita.
@@ -3808,8 +3823,9 @@ no banco local (o `upsert` cria só a linha de `Campaign`, com `status: PAUSED`)
 > inerte. Entra na fila junto do resto do nav morto — mas aqui a dívida deixou
 > de ser cosmética: **é o que impede criar a cobaia pela ferramenta.**
 
-**Enquanto não houver tela**, o caminho é o console do navegador, logado no
-painel (usa o cookie de sessão, e a rota valida a posse da conta pelo `userId`):
+**Alternativa sem tela** (não é mais necessária, fica registrada): o console do
+navegador logado no painel — usa o cookie de sessão, e a rota valida a posse da
+conta pelo `userId`.
 
 ```js
 await fetch("/api/ads/campaign", {
@@ -3893,10 +3909,11 @@ Rodar **de novo** exercita a outra guarda: deve registrar `já no teto
 > *"sem orçamento diário (CBO?)"*; quem exibe um valor **será alterado**.
 > Escolha a conta em que a cobaia seja a única com valor ali.
 >
-> ⚠️ **A prévia SUPERESTIMA neste caso**, e é bom saber: ela conta quem satisfaz
-> a CONDIÇÃO, e o descarte por `dailyBudget == null` acontece no laço de ação,
-> não na condição. "Bate em 8 de 8" pode significar "8 avaliadas, 1 alterada".
-> Melhoria natural: a prévia informar quantas a AÇÃO alcançaria.
+> ✅ **A prévia deixou de superestimar** (31/07/2026): ela agora informa
+> **quantas a AÇÃO alcançaria**, não só quantas satisfazem a condição. Numa
+> conta só de ABO, uma regra de orçamento aparece como *"Bate em 13 · ⚠ Mas a
+> ação não alteraria nenhuma delas"*, com `sem orçamento diário (CBO?)` ao lado
+> de cada linha. Ver "Prévia da regra".
 
 ## 🔎 Drill-down no Gerenciador (31/07/2026)
 
@@ -4015,6 +4032,32 @@ Ver "Testar condição" abaixo. O que segue é o desenho, mantido porque explica
 > ⚠️ **Quando nada bate, ela lista o que foi AVALIADO** (com "·" em vez de "✓").
 > Uma tela muda justamente quando o usuário precisa entender *por que* não bateu
 > seria o pior momento para ficar calada.
+
+#### 🔴 BATER a condição ≠ SER ALTERADA (corrigido em 31/07/2026)
+
+A primeira versão contava só quem satisfazia a condição, e isso **exagerava**.
+Numa conta em que **todas as campanhas são ABO** — o caso real do usuário, 13 de
+13 —, uma regra de orçamento bate em todas e altera **nenhuma**. Um número que
+exagera ensina o usuário a ignorá-lo, que é o oposto do objetivo.
+
+A prévia devolve `agiria` além de `bateram`, e cada linha traz **o motivo do
+pulo**: `sem orçamento diário (CBO?)`, `já pausada`, `já ativa`, `já no teto
+(R$ …)`, `recusado: aumento sem teto de orçamento configurado`.
+
+> ### 🔴 `planejarAcao` — a decisão foi EXTRAÍDA do motor, não copiada
+> Ela decide se a ação agiria e qual seria o novo orçamento, e é chamada pelos
+> **dois**: o laço de `evaluateRule` e a prévia. Reimplementar a regra do teto
+> na prévia produziria o pior resultado possível — uma prévia que promete uma
+> coisa e um motor que faz outra, num código que mexe em orçamento real.
+>
+> ⚠️ O campo `ok` do plano preserva a semântica do log: pulo esperado ("já
+> pausada", "já no teto") conta como sucesso; recusa ("sem teto", "sem
+> orçamento") não. É o que alimenta `affected` — mexer ali muda o que a
+> ferramenta reporta como feito.
+
+> ⚠️ **A ação e seus parâmetros entram na `chavePrevia`.** Eles não mudam quem
+> BATE, mas mudam quem a ação ALCANÇA — trocar de "pausar" para "ajustar
+> orçamento" com o número antigo na tela seria a pior forma de mentir.
 
 #### O que a análise estática pode e não pode afirmar
 
@@ -5813,7 +5856,7 @@ npm run bot:reclassificar # reavalia Click.bot pelo userAgent. SIMULA; --aplicar
 npm run test:desempate   # 27 asserções, país quando o IP contradiz a campanha
 npm run test:veiculacao  # 40 asserções, status configurado × veiculação (puro)
 npm run test:analise-regra   # 32 asserções, avisos estáticos de condição (puro)
-npm run test:previa-regra    # 16 asserções, prévia da regra (banco de DEV)
+npm run test:previa-regra    # 30 asserções, prévia da regra (banco de DEV)
 npm run regras:auditar -- --url '<conn>'  # o que as regras fariam e o que já fizeram
 npm run conta:estrutura -- --url '<conn>'  # campanha → conjuntos → anúncios: quem PODE gastar
 npm run test:veiculacao:e2e            # 13 asserções, o campo CHEGA em computeAdsOverview (banco de DEV)
@@ -5845,11 +5888,9 @@ arquivo local, de propósito.
 - **`EditDashboardDrawer` + `editDashOpen`/`openEditDash`/`closeEditDash`/
   `metricList`** — a gaveta está montada no `DashboardShell` mas **nada a abre**;
   quem edita o dashboard é o painel inline do Bloco 2. Descoberto em 30/07/2026.
-- 🔴 **`createCampaign` + `newCampaign*` (~8 entradas) no `useTraffikState`** —
-  a rota `POST /api/ads/campaign` funciona, o estado existe, e **nenhum `.tsx`
-  importa nada disso**. Não há tela para criar campanha. Descoberto em
-  31/07/2026, e aqui a dívida **bloqueia trabalho**: é o que impede criar uma
-  cobaia crua pela ferramenta. Ver "A COBAIA".
+- ~~`createCampaign` + `newCampaign*`~~ → ✅ **resolvido em 31/07/2026**: a tela
+  passou a existir (`views/ads/NovaCampanhaModal.tsx`). Foi o único caso desta
+  base em que a dívida de código inerte **bloqueou trabalho**.
 - **`Workspace.accountIds` / `webhookIds` / `pixelConfigIds` / `products`** —
   mortos, mantidos pela regra dos dois deploys.
 - **`DashboardLayout.workspaceId` nullable** — o NOT NULL entra num 2º deploy.

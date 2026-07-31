@@ -258,7 +258,7 @@ export function RuleDrawer({
   // Nasceu do ensaio a seco que disparou: `gasto ≤ 999999` é visualmente
   // idêntica a `gasto ≥ 999999`, e nada distinguia as duas até a regra rodar.
   const [previa, setPrevia] = useState<
-    { chave: string; total: number; bateram: number; entidades: RulePreviewEntity[] } | null
+    { chave: string; total: number; bateram: number; agiria: number; entidades: RulePreviewEntity[] } | null
   >(null);
   const [testando, setTestando] = useState(false);
   const [erroPrevia, setErroPrevia] = useState<string | null>(null);
@@ -268,7 +268,13 @@ export function RuleDrawer({
    * número anterior MENTIRA — e um número velho ao lado de uma condição nova é
    * pior que nenhum número, porque parece confirmação.
    */
-  const chavePrevia = JSON.stringify([d.condicoes, d.level, d.contas, d.calcPeriod, d.produtos]);
+  // ⚠️ A AÇÃO e seus parâmetros entram na chave: eles não mudam quem BATE, mas
+  // mudam quem a ação ALCANÇA (`agiria`) — trocar de "pausar" para "ajustar
+  // orçamento" com o número antigo na tela seria a pior forma de mentir.
+  const chavePrevia = JSON.stringify([
+    d.condicoes, d.level, d.contas, d.calcPeriod, d.produtos,
+    d.acao, d.valor, d.unidade, d.sobreGasto, d.maxBudget,
+  ]);
   const previaAtual = previa && previa.chave === chavePrevia ? previa : null;
 
   /** Avisos demonstráveis sem dado nenhum. Ver `lib/rules/analise.ts`. */
@@ -279,7 +285,7 @@ export function RuleDrawer({
     setErroPrevia(null);
     try {
       const r = await previewRuleConditions(paraInput(d, workspaceId));
-      setPrevia({ chave: chavePrevia, total: r.total, bateram: r.bateram, entidades: r.entidades });
+      setPrevia({ chave: chavePrevia, total: r.total, bateram: r.bateram, agiria: r.agiria, entidades: r.entidades });
     } catch (e) {
       setErroPrevia(e instanceof Error ? e.message : "Não foi possível testar agora.");
     } finally {
@@ -521,6 +527,22 @@ export function RuleDrawer({
                 </p>
               )}
 
+              {/* 🔴 Bater a condição não é ser alterada. Numa conta só de
+                  campanhas ABO, uma regra de orçamento bate em todas e altera
+                  NENHUMA — e um número que exagera ensina a ignorar o número. */}
+              {previaAtual.bateram > 0 && (
+                <div style={sx(`font-size:12px;color:${previaAtual.agiria === 0 ? "#fbbf24" : "var(--color-text)"}`)}>
+                  {previaAtual.agiria === 0
+                    ? "⚠ Mas a ação não alteraria nenhuma delas."
+                    : previaAtual.agiria === previaAtual.bateram
+                      ? `A ação alteraria ${previaAtual.agiria === 1 ? "a única que bateu" : "todas elas"}.`
+                      : `Destas, a ação alteraria ${previaAtual.agiria}.`}
+                  {previaAtual.agiria < previaAtual.bateram && (
+                    <span className="text-muted"> As demais são puladas — o motivo aparece ao lado de cada uma.</span>
+                  )}
+                </div>
+              )}
+
               {/* Quais, não só quantas — para você reconhecer se são as que
                   esperava. Sem os nomes, "3 de 12" não é conferível. */}
               {previaAtual.entidades.length > 0 && (
@@ -533,6 +555,12 @@ export function RuleDrawer({
                       <span style={sx("flex:1 1 140px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap")}>
                         {e.nome}
                       </span>
+                      {/* O motivo do pulo é o que transforma "não alterou" em
+                          algo acionável: "sem orçamento diário (CBO?)" diz que
+                          a regra está no nível errado. */}
+                      {e.bateu && !e.acionavel && e.motivo && (
+                        <span style={sx("font-size:10.5px;color:#fbbf24;white-space:nowrap")}>{e.motivo}</span>
+                      )}
                       <span className="text-muted" style={sx("font-size:11px;font-variant-numeric:tabular-nums")}>
                         {Object.entries(e.valores)
                           .map(([k, v]) => `${k} ${v.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}`)
