@@ -4843,13 +4843,139 @@ desligada.** Nenhuma dessas ferramentas pergunta "alguém chama isto?".
 > Ao criar rota de cron, **agende no mesmo commit**. Ao criar consulta de
 > manutenção, **rode contra linhas semeadas no dev** antes de dizer que funciona.
 
-## 🚦 COMECE AQUI — fechamento da sessão de 31/07/2026
+## 🚦 COMECE AQUI — fechamento da sessão de 31/07/2026 (2ª parte)
 
-Tudo commitado e no `origin/main` até **`42f60a6`**. As migrations
-`20260731030000_sale_platform`, `…040000_pixel_event_dedup` e
-`…050000_pixel_event_owners` estão **aplicadas em produção**.
+Tudo commitado e no `origin/main` até **`0fa68d1`**. As migrations
+`20260731030000_sale_platform`, `…040000_pixel_event_dedup`,
+`…050000_pixel_event_owners` e **`…060000_pixel_event_espelho`** estão
+**aplicadas em produção**.
 
-### 📌 Estado do PIXEL — o assunto que dominou a sessão
+### ✅ O ESPELHO NO `fbq` NUNCA TINHA RODADO — corrigido e VERIFICADO em produção
+
+A sessão anterior entregou o espelho (`057c06e`) e ele **nunca disparou uma vez**.
+Sonda do usuário no navegador: **uma única** requisição para `facebook.com/tr`,
+**sem `eid`**, enquanto a nossa CAPI respondia `sent: 1`. A Meta recebia dois
+PageView sem nada em comum e contava os dois — desde o commit que "consertou" a
+dedup.
+
+**Causa:** a guarda `if (typeof window.fbq === "function")` dentro de um
+`try/catch` vazio. O snippet é um IIFE inline e roda `track("PageView")` de forma
+**síncrona, no parse**; colado ANTES do código da Meta no `<head>`, o `fbq` ainda
+não existe. A guarda retornava **sem log nenhum**.
+
+> ### 🔴 É o SÉTIMO caso do PROCEDIMENTO, e o mais sutil até agora
+> Os anteriores eram código nunca chamado. Este **era chamado**, na hora certa,
+> com os argumentos certos — e desistia na primeira linha. `tsc`, `lint`, `build`
+> e os testes passavam. O que denunciou foi o usuário abrir o DevTools.
+>
+> **Guarda de compatibilidade (`if (typeof X === "function")`) precisa de ramo
+> `else`.** Ela existe justamente para o caso em que a dependência falta — que é
+> o caso que ninguém vai observar se ela for calada.
+
+**Duas correções, e as duas importam:**
+
+| | O quê |
+|---|---|
+| **Tolerar a ordem** | sem `fbq`, o espelho entra numa **fila** e sai assim que ele aparece — sondagem de 200 ms, teto de 10 s. O `event_id` é capturado no `track()` e viaja na fila: recalcular quebraria o par, porque o `eid` tem janela de 10 s |
+| **Não falhar calado** | estourou o teto → `console.warn` dizendo **quais eventos** e o que fazer, e **`PixelEvent.espelho`** gravado (`ok` · `adiado` · `adiado-ok` · `sem-fbq` · `erro` · `alheio`) |
+
+O estado viaja no próprio POST do evento. Quando só se resolve depois, um segundo
+POST com **`somenteEspelho: true`** atualiza a coluna e **para** — não grava linha
+nova e **não reenvia para a CAPI**, que duplicaria o envio server-side.
+
+> ⛔ **Descartado esperar `load`/`DOMContentLoaded`:** falha justamente com código
+> da Meta injetado por GTM *depois* do marco, e não tem sinal de fracasso. A
+> sondagem tem prazo, e vencido o prazo ela **relata**.
+>
+> ⛔ **NUNCA definir `window.fbq` nós mesmos** para "garantir" que existe. O
+> código-base da Meta começa com `if (f.fbq) return;` — um stub nosso faria o
+> snippet do usuário **abortar inteiro**, e o pixel dele nunca inicializaria.
+
+### 🔴 `PageView` passou a ser do pixel NATIVO por padrão
+
+O código-base da Meta termina em `fbq('track','PageView')`: dispara em todo
+carregamento, **sem `event_id`**, e não há como fazê-lo ir com um.
+
+> ### ⛔ O espelho NÃO resolve o PageView — a conta prova
+> | | requisições `/tr` | a Meta conta |
+> |---|---|---|
+> | Sem espelho | 1 (automática, sem `eid`) | automática + CAPI sem par = **2** |
+> | Com espelho | 2 (automática + espelho `eid=X`) | automática + [espelho ⟷ CAPI] = **2** |
+>
+> O espelho casa com a **nossa** CAPI; o automático continua sozinho. **Dá 2 nos
+> dois casos.** Como nenhum dos dois lados cede, quem cede somos nós.
+
+`PADRAO_DO_EVENTO` (em `donos.ts`) põe `PageView` em **`navegador`**; os demais
+seguem em `traffik`, onde não existe segundo emissor automático e rebaixar
+perderia conversão em silêncio.
+
+⚠️ **Isto MUDA o comportamento de quem já tinha pixel cadastrado**, e é o
+objetivo — essas contas contavam visita em dobro. Quem **não** tem pixel nativo
+na página escolhe "Traffik" na gaveta e volta ao envio server-side.
+
+O valor **`navegador`** é novo (eram 3 donos, agora 4). "Meu gateway" apontava
+para o lugar errado no PageView: ali o outro emissor é o pixel da **própria
+página do usuário**, não o checkout — e um rótulo que aponta para o lugar errado
+manda procurar o problema onde ele não está. Cada opção agora traz a consequência
+escrita embaixo (`EXPLICACAO_DONO`), e o PageView tem aviso âmbar fixo
+(`NOTA_DO_EVENTO`).
+
+### ✅ Verificado em produção pelo usuário, no navegador
+
+| Evento | Resultado |
+|---|---|
+| **PageView** | 1 requisição `/tr` sem `eid`; POST devolveu `{"enviado":false,"motivo":"outro dono"}` — **sem duplicação** |
+| **InitiateCheckout** | 🎯 **o espelho disparou**: `eid=InitiateCheckout-90whss` e `-9uvavo` em dois cliques a 31 s de distância (ids diferentes = correto, são duas ações reais) |
+| **Lead** | não disparou — **toggle desligado na gaveta**, comportamento correto (ver abaixo) |
+| **AddToCart** | ainda não exercitado |
+
+`npm run test:espelho` — **30 asserções, 0 falhas**. Exercita o script gerado num
+DOM falso: `new Function` valida a sintaxe da template string, `fbq` presente
+espelha na hora, `fbq` ausente enfileira e sai quando ele aparece, `fbq` que nunca
+vem gera warn + relato, e o padrão novo deixa PageView como `alheio` **mas ainda
+registrado no nosso banco**.
+
+> ### 🔎 O formato do `eid` já é prova de que o espelho rodou
+> `InitiateCheckout-90whss` (nome + hash base36) só sai do nosso `eid()`, e o
+> **único** ponto do projeto que chama `fbq('track', …, {eventID})` é o
+> `espelhar()`. O pixel nativo não produz essa forma; o do gateway produzia UUID.
+>
+> E o par não pode divergir **por construção**: `track()` calcula `id` uma vez e
+> entrega a MESMA variável ao espelho e ao `payload.eventId`. Não são dois
+> cálculos.
+>
+> ⚠️ O que nada disso prova é se a **Meta** juntou os dois. Só o Gerenciador de
+> Eventos responde: uma linha marcada **"Navegador e Servidor"**, não duas.
+
+### 🔴 ACHADO: o detector fica CONGELADO no snippet instalado
+
+`LEAD`, `ADD_TO_CART` e a regra de `IC` são **assados no script na geração**
+(`var LEAD = false;` → `if (LEAD) document.addEventListener(...)`), enquanto o
+servidor consulta `PixelEventRule` **ao vivo**. As duas pontas divergem, e uma
+das direções é silenciosa:
+
+| Gaveta | Script instalado | Resultado |
+|---|---|---|
+| Lead **ligado** | `LEAD=false` (snippet velho) | 🔴 **nenhum evento, e nada denuncia** |
+| Lead desligado | `LEAD=true` | evento sai do navegador, servidor recusa com `regra desabilitada` — barulhento, tudo bem |
+
+**Ligar o toggle na gaveta não conserta sozinho — tem de regerar e reinstalar.**
+É a mesma classe de tudo nesta sessão: configuração numa ponta, comportamento
+congelado na outra.
+
+> ⚠️ **Com clientes isso deixa de ser inconveniente e vira impossível** — não dá
+> para abrir o DevTools na página de cada um para descobrir que o script está
+> velho. Virou o **item 1 da fila**.
+
+**Diagnóstico enquanto o aviso não existe** (do mais barato ao mais caro):
+1. abrir a gaveta e olhar o toggle;
+2. no console do DevTools, `getEventListeners(document).submit` → `undefined`
+   significa `LEAD=false` no script instalado (sem efeito colateral);
+3. `window.traffikPixel.track("Lead")` — a resposta do POST separa os dois casos:
+   `{"skipped":"regra desabilitada"}` = regra off; `{"sent":1}` = **divergência**.
+   ⚠️ Este manda um Lead **real** para a Meta.
+
+### 📌 (histórico) o que a 1ª parte da sessão entregou
 
 **Confirmado em produção pelo usuário: 1 venda real, o Gerenciador de Anúncios
 marcando 2.** A Meta vinha contando cada conversão duas vezes e otimizando as
@@ -4879,28 +5005,70 @@ campanhas com sinal inflado. Três coisas foram feitas:
 
 ⚠️ **O snippet vive no HTML do cliente.** A correção só chega por reinstalação.
 
-### ⚠️ O QUE O USUÁRIO AINDA PRECISA VERIFICAR
+### ⚠️ O QUE AINDA NÃO FOI VERIFICADO
 
 | | Item | Por que ficou assim |
 |---|---|---|
-| ⚠️ | **A gaveta do Pixel na tela** | o bloco "Quem envia cada evento" passou em `tsc`/`lint`/`build` e **não foi exercitado em navegador** |
-| ⚠️ | **A dedup no Testar Eventos da Meta** | precisa de tráfego real. O alvo: **um** evento com "Navegador e Servidor" juntos, não dois separados |
-| ⚠️ | **O globo** | conferido pelo usuário e corrigido em `47e2523`; vale reconferir zoom máximo e marcador cruzando a borda |
+| ⚠️ | **A dedup no Gerenciador de Eventos da Meta** | é a última prova que falta. Alvo: `InitiateCheckout` numa linha só, marcada **"Navegador e Servidor"** — duas linhas separadas significa que a Meta não juntou |
+| ⚠️ | **`AddToCart`** | o único evento do script ainda não exercitado. O detector é heurística fixa (texto/classe com "carrinho"/"comprar") |
+| ⚠️ | **O bloco "Quem envia cada evento" com 4 opções** | a gaveta foi aberta (o toggle de Lead foi conferido), mas o bloco reescrito nesta sessão **não foi olhado na tela** |
+| ⚠️ | **O globo** | corrigido em `47e2523`; vale reconferir zoom máximo e marcador cruzando a borda |
+
+### 🔴 Dívida criada nesta sessão
+
+**`PixelEvent.espelho` tem escritor e NENHUM leitor na tela.** É o padrão que o
+PROCEDIMENTO existe para pegar, registrado de propósito em vez de deixar passar.
+Hoje só responde por SQL:
+
+```sql
+SELECT event, COALESCE(espelho,'(nulo)') AS espelho, count(*)
+FROM "PixelEvent"
+WHERE "userId" = '<id>' AND timestamp > now() - interval '7 days'
+GROUP BY 1,2 ORDER BY 1,2;
+```
+
+⚠️ `NULL` = evento gravado por script anterior à coluna, ou pelo caminho
+server-side. **Não é "falhou"** — sem essa distinção todo evento histórico
+apareceria como espelho quebrado.
 
 ### 📋 A FILA
 
-1. **Item 2 — cópia dos UTMs para `Sale`.** Mesma classe do `Sale.platform`:
-   hoje a campanha de uma venda só existe via `sale.click.utmCampaign`, e
-   `clickId` é `SetNull`. A janela de backfill **não está fechando** (nada apaga
-   `Click` automaticamente), então é barato e não urgente.
-2. **Fila de UX reauditada** — 3a corrigido, 3b/3c já feitos, **3d e 3f
-   pendentes**, 3e a verificar. Ver a reauditoria de 31/07.
-3. Dívidas antigas: nav morto no `useTraffikState`, `EditDashboardDrawer`
-   inalcançável, import/export do Bloco 8.
+**Os itens 1 e 2 são da mesma família: tornar visível o que hoje só se descobre
+por teste manual.** Ordem definida pelo usuário em 31/07/2026.
 
-> ⚠️ **A sessão de 31/07 passou de US$ 490 em uso de API.** Ela cobriu segurança
-> de credenciais, `Sale.platform`, limpeza de dado de teste em produção, o globo,
-> o desempate por fuso e o pixel inteiro. Comece a próxima com contexto limpo.
+1. **Aviso de snippet defasado na gaveta do Pixel.** O detector fica congelado no
+   script instalado (ver o achado acima), e a divergência silenciosa — regra
+   ligada, script velho — não produz evento nenhum e nada denuncia.
+   **Com clientes isso é inviável de diagnosticar**: não dá para abrir o DevTools
+   na página de cada um.
+   > 💡 **O caminho já está pronto**: o script **já reporta pelo POST** de todo
+   > evento. Basta mandar junto quais detectores ele tem ligados
+   > (`lead`/`addToCart`/`ic` + o tipo da regra) e comparar com o
+   > `PixelEventRule` ao vivo. A gaveta então avisa "o script instalado está
+   > desatualizado — regere e reinstale".
+2. **Leitor da coluna `espelho` na aba Testes.** Algo como
+   *"espelhos nos últimos 7 dias: 412 ok · 3 sem-fbq"*, com o detalhamento por
+   evento. É o que fecha a dívida acima.
+3. **Cópia dos UTMs para `Sale`.** Mesma classe do `Sale.platform`: hoje a
+   campanha de uma venda só existe via `sale.click.utmCampaign`, e `clickId` é
+   `SetNull`. A janela de backfill **não está fechando** (nada apaga `Click`
+   automaticamente), então é barato e não urgente.
+   ⚠️ Decidir a precedência antes de codar — a preferência do usuário é
+   **continuar usando a cadeia `Sale → Click` enquanto o clique existir**, com a
+   cópia só como fallback.
+4. **Reauditoria da fila de UX** — 3a corrigido, 3b/3c já feitos, **3d e 3f
+   pendentes**, 3e a verificar. ⚠️ A fila envelhece: as telas criadas desde então
+   (gaveta da Cakto, nova campanha, drill-down, coluna de veiculação, testar
+   condição, dono do pixel) **não foram auditadas** quanto à linguagem.
+
+Dívidas antigas que continuam: nav morto no `useTraffikState`,
+`EditDashboardDrawer` inalcançável, import/export do Bloco 8.
+
+> ⚠️ **O dia 31/07 passou de US$ 560 em uso de API somando as duas partes.** Ele
+> cobriu segurança de credenciais, `Sale.platform`, limpeza de dado de teste em
+> produção, o globo, o desempate por fuso e o pixel inteiro — do `eventId`
+> determinístico até o espelho comprovadamente disparando em produção.
+> **Comece a próxima com contexto limpo.**
 
 ## 🚦 (histórico) estado em 30/07/2026
 
@@ -6421,6 +6589,7 @@ npm run test:bots        # 35 asserções, classificação de robô (puro)
 npm run bot:reclassificar # reavalia Click.bot pelo userAgent. SIMULA; --aplicar escreve
 npm run test:desempate   # 27 asserções, país quando o IP contradiz a campanha
 npm run test:onyxpag     # 43 asserções, parser + testador da OnyxPag (puro)
+npm run test:espelho     # 30 asserções, espelho no fbq em DOM falso (puro)
 npm run test:veiculacao  # 40 asserções, status configurado × veiculação (puro)
 npm run test:analise-regra   # 32 asserções, avisos estáticos de condição (puro)
 npm run test:previa-regra    # 30 asserções, prévia da regra (banco de DEV)
@@ -6913,7 +7082,7 @@ Registradas de propósito — **não são bugs esquecidos**, são decisões toma
 
 | # | Dívida | Por quê / risco |
 |---|--------|-----------------|
-| 1 | **Dedup parcial dos eventos de pixel.** `Lead`/`AddToCart`/`InitiateCheckout` mandam um `eventId` aleatório do cliente, então o Facebook **não consegue deduplicar** se o pixel do navegador disparar o mesmo evento. Só o `Purchase` deduplica de verdade (usa `sale.id`). | **Aceito conscientemente pelo usuário** em 24/07/2026 como suficiente para começar. Risco: contagem inflada desses 3 eventos se o usuário também tiver o pixel nativo da Meta instalado. Para resolver: derivar o `eventId` de algo estável (ex.: `fbclid` + nome do evento + janela de tempo) e expor a mesma chave ao pixel do navegador. |
+| 1 | ~~**Dedup parcial dos eventos de pixel.**~~ ✅ **RESOLVIDO em 31/07/2026.** `eventId` determinístico (`057c06e`), espelho no `fbq` (`057c06e`, que **nunca rodou** até `0fa68d1`) e partição por dono do evento (`e755894`). Verificado em produção: `eid=InitiateCheckout-90whss` saindo pelo navegador com o mesmo id da CAPI. | Fica só o **detector congelado no snippet** (item 1 da fila) e a confirmação no Gerenciador de Eventos da Meta ("Navegador e Servidor" numa linha só). |
 | 2 | **Nav morto no `useTraffikState`** (`navAnalise`, `navAuto`, `navConfig`, `pageTitle`, `activeTab`, `fbTabs`, `fbSub`) e o **gerador de link/snippet antigo** (`utmUrl`, `snippetText`). Nada é renderizado. | Sobrou do Bloco 1/11. Limpar num passo de faxina. |
 | 3 | **Atribuição por nome é ambígua** quando dois anúncios/campanhas têm o mesmo nome. | Limitação pré-existente; o id resolve para tráfego novo com os códigos do Bloco 11. O Teste de Tracking (Bloco 13) agora **avisa** quando o casamento foi por nome. |
 | 4 | **`WebhookLog` sem retenção nem paginação.** | Cresce indefinidamente. Falta cron de purga. |
