@@ -40,10 +40,44 @@ export interface Detectores {
   ic: string | null;
   /** Valor da regra (texto, seletor CSS, domínios). Entra na assinatura por hash. */
   icValor: string | null;
+  /**
+   * Há pixel nativo da Meta na página? Decide se o script espelha no `fbq`.
+   *
+   * 🔴 Entrou na v2 porque a v1 **não cobria o que o script realmente assa**.
+   */
+  nativo: boolean;
+  /**
+   * Dono de cada evento, já resolvido (sem herdar padrão na hora da comparação).
+   *
+   * ### 🔴 Este campo é o buraco que a v1 tinha
+   *
+   * `pixelScript()` embute `var ALHEIOS = [...]` a partir de `eventOwners`, mas a
+   * assinatura v1 cobria só `lead`/`addToCart`/`ic`. Mudar o dono de um evento
+   * gerava script defasado **que o aviso de divergência não pegava** — e uma
+   * direção específica recria o bug que este trabalho todo existe para consertar:
+   *
+   * | Passo | O que acontece |
+   * |---|---|
+   * | Dono do `PageView` vai de "pixel da página" para "Traffik" | |
+   * | Servidor (decide **ao vivo**) | passa a mandar PageView à CAPI |
+   * | Script instalado (`ALHEIOS` **congelado**) | continua sem espelhar |
+   * | Pixel nativo da página | segue disparando o dele, sem `eid` |
+   * | **Resultado** | CAPI sem par + nativo sozinho = **a Meta conta 2 de novo** |
+   */
+  donos: Record<string, string>;
 }
 
-/** Versão do formato. Muda quando um campo novo entra — snippet velho vira divergente. */
-const VERSAO = "v1";
+/**
+ * Versão do formato.
+ *
+ * ⚠️ **Campo novo no que o script assa PRECISA entrar aqui** — senão a assinatura
+ * passa a dizer "igual" para snippets que já não são, e o diagnóstico vira teatro.
+ *
+ * ⚠️ Subir a versão **não** transforma todo script instalado em "divergente": a
+ * comparação usa só os campos que a versão reportada conhece. Ver
+ * `diferencasDeDetectores` e `avisoDeVersao`.
+ */
+const VERSAO = "v2";
 
 /**
  * FNV-1a em base36 — o MESMO algoritmo do `eid()` do script.
@@ -84,6 +118,13 @@ function normalizarValor(tipo: string | null, valor: string | null): string {
   return v;
 }
 
+/** Ordem fixa dos eventos no hash dos donos — mudá-la invalida toda assinatura. */
+const ORDEM_EVENTOS = ["PageView", "Lead", "AddToCart", "InitiateCheckout", "Purchase"];
+
+function hashDonos(donos: Record<string, string>): string {
+  return fnv36(ORDEM_EVENTOS.map((e) => `${e}=${donos[e] ?? "?"}`).join(";"));
+}
+
 /** Assinatura estável do que um script gerado consegue detectar. */
 export function assinaturaDetectores(d: Detectores): string {
   return [
@@ -92,6 +133,8 @@ export function assinaturaDetectores(d: Detectores): string {
     `a${d.addToCart ? 1 : 0}`,
     `i${d.ic ?? "off"}`,
     `v${fnv36(normalizarValor(d.ic, d.icValor))}`,
+    `n${d.nativo ? 1 : 0}`,
+    `d${hashDonos(d.donos)}`,
   ].join(".");
 }
 
@@ -101,14 +144,25 @@ export interface AssinaturaLida {
   addToCart: boolean;
   ic: string | null;
   hashValor: string;
+  /** Só na v2 em diante. `null` = o script não sabe reportar isto. */
+  nativo: boolean | null;
+  hashDonos: string | null;
 }
 
-/** Lê uma assinatura reportada. Formato irreconhecível → `null`. */
+/**
+ * Lê uma assinatura reportada. Formato irreconhecível → `null`.
+ *
+ * ⚠️ Aceita **v1 (5 partes) e v2 (7 partes)**. Um script antigo continua legível
+ * naquilo que ele conhece; os campos que ele nunca soube reportar voltam `null`,
+ * e a comparação os ignora em vez de acusar divergência inventada.
+ */
 export function lerAssinatura(s: string): AssinaturaLida | null {
   const p = s.split(".");
-  if (p.length !== 5) return null;
-  const [versao, l, a, i, v] = p as [string, string, string, string, string];
-  if (!versao || l[0] !== "l" || a[0] !== "a" || i[0] !== "i" || v[0] !== "v") return null;
+  if (p.length !== 5 && p.length !== 7) return null;
+  const [versao, l, a, i, v, n, d] = p;
+  if (!versao || !l || !a || !i || !v) return null;
+  if (l[0] !== "l" || a[0] !== "a" || i[0] !== "i" || v[0] !== "v") return null;
+  const temExtras = p.length === 7 && n?.[0] === "n" && d?.[0] === "d";
   const ic = i.slice(1);
   return {
     versao,
@@ -116,6 +170,8 @@ export function lerAssinatura(s: string): AssinaturaLida | null {
     addToCart: a[1] === "1",
     ic: ic === "off" ? null : ic,
     hashValor: v.slice(1),
+    nativo: temExtras ? n!.slice(1) === "1" : null,
+    hashDonos: temExtras ? d!.slice(1) : null,
   };
 }
 
@@ -145,9 +201,6 @@ export function diferencasDeDetectores(instalado: string, esperado: string): str
   if (!inst || !esp) {
     return ["O script instalado é de uma versão anterior e não sabe informar o que detecta."];
   }
-  if (inst.versao !== esp.versao) {
-    return ["O script instalado foi gerado por uma versão anterior da ferramenta."];
-  }
 
   const out: string[] = [];
   const par = (nome: string, ligadoAqui: boolean, ligadoLa: boolean, oQueEleFaz: string) => {
@@ -170,10 +223,53 @@ export function diferencasDeDetectores(instalado: string, esperado: string): str
     out.push("O valor da regra de Initiate Checkout mudou depois que este script foi gerado.");
   }
 
-  // Assinaturas diferentes sem diferença explicável: campo novo que o `par`
-  // acima ainda não cobre. Dizer "está desatualizado" é verdade e é acionável;
+  // ⚠️ Campos que a versão INSTALADA não sabe reportar ficam de fora da
+  // comparação. Acusar divergência num campo que aquele script nunca conheceu
+  // seria alarme falso — e alarme que às vezes mente treina o usuário a ignorar
+  // todos, inclusive os certos. Quem cobre esse caso é `avisoDeVersao`.
+  if (inst.nativo !== null && esp.nativo !== null && inst.nativo !== esp.nativo) {
+    out.push(
+      esp.nativo
+        ? "Você respondeu que TEM o pixel do Facebook na página, mas o script instalado não espelha os eventos nele — a Meta pode contar as conversões em dobro."
+        : "Você respondeu que NÃO tem o pixel do Facebook na página, mas o script instalado fica esperando por ele em toda visita.",
+    );
+  }
+  if (inst.hashDonos !== null && esp.hashDonos !== null && inst.hashDonos !== esp.hashDonos) {
+    out.push(
+      "Quem envia cada evento mudou depois que este script foi gerado — e essa escolha também fica gravada nele.",
+    );
+  }
+
+  // Assinaturas diferentes sem diferença explicável: campo novo que os testes
+  // acima ainda não cobrem. Dizer "está desatualizado" é verdade e é acionável;
   // ficar calado com as strings diferentes seria o modo de falha que este
   // módulo existe para evitar.
-  if (out.length === 0) out.push("O script instalado não corresponde à configuração salva.");
+  //
+  // ⚠️ Só quando as duas versões são a MESMA. Entre versões diferentes, string
+  // diferente é o esperado (campos a mais), e quem fala disso é `avisoDeVersao`.
+  if (out.length === 0 && inst.versao === esp.versao) {
+    out.push("O script instalado não corresponde à configuração salva.");
+  }
   return out;
+}
+
+/**
+ * O que a versão do script instalado NÃO permite verificar.
+ *
+ * > ### ⛔ Isto é NOTA, não divergência
+ * > Um script v1 pode estar perfeitamente correto: ele só não sabe reportar
+ * > "quem envia cada evento". Marcá-lo como divergente pintaria de âmbar a
+ * > gaveta de todo usuário no dia do deploy, para a maioria sem nada errado —
+ * > e um aviso que aparece sempre vira ruído que se aprende a ignorar.
+ * >
+ * > A nota diz o que fazer **se** a condição se aplicar, e some sozinha na
+ * > primeira reinstalação.
+ */
+export function avisoDeVersao(instalado: string): string | null {
+  const inst = lerAssinatura(instalado);
+  if (!inst || inst.hashDonos !== null) return null;
+  return (
+    "Este script é anterior ao registro de “quem envia cada evento”, então não dá para conferir " +
+    "essa parte. Se você mudou isso depois de instalar, copie o script de novo."
+  );
 }

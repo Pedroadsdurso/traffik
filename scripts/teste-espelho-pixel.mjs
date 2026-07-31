@@ -142,5 +142,34 @@ console.log("\n5) PADRAO NOVO — sem eventOwners, PageView e do pixel nativo");
   eq("estado reportado", env.posts[0].espelho, "alheio");
 }
 
+// 🔴 Sem pixel nativo declarado, o script NAO pode esperar pelo `fbq`. Antes
+// disto ele enfileirava, esperava 10s, gritava no console e gravava `sem-fbq`
+// em TODA visita — alarme vermelho permanente numa instalacao correta, em que a
+// CAPI e o unico caminho de propósito.
+console.log("\n6) SEM PIXEL NATIVO — nao espera, nao avisa, nao alarma");
+{
+  const env = montarAmbiente({ comFbq: false });
+  const codigo = rodar({ ...base, eventOwners: { PageView: "traffik" }, temPixelNativo: false }, env);
+  eq("declara NATIVO = false", codigo.includes("var NATIVO = false"), true);
+  eq("o evento vai para o nosso servidor", env.posts.length, 1);
+  eq("estado NEUTRO, nao sem-fbq", env.posts[0].espelho, "sem-nativo");
+  eq("nada foi para o navegador", env.tr.length, 0);
+  eq("nenhum poller pendurado — nao ha o que esperar", env.ativos(), 0);
+  eq("nenhum aviso no console", env.warns.length, 0);
+}
+
+// E o contraste: MESMA pagina sem `fbq`, mas declarando que tem pixel nativo.
+// Ai a espera e o alarme sao corretos — e a diferenca entre os dois cenarios e
+// exatamente o que `sem-nativo` existe para registrar.
+console.log("\n7) DIZ QUE TEM PIXEL NATIVO, mas o fbq nao aparece");
+{
+  const env = montarAmbiente({ comFbq: false });
+  rodar({ ...base, eventOwners: { PageView: "traffik" }, temPixelNativo: true }, env);
+  eq("enfileira e espera", env.ativos() > 0, true);
+  env.tique(11000); // estoura o teto de 10s
+  eq("desiste depois do teto", env.posts.some((p) => p.espelho === "sem-fbq"), true);
+  eq("e AVISA no console", env.warns.length > 0, true);
+}
+
 console.log(`\n${ok} assercoes, ${falhas.length} falha(s)`);
 if (falhas.length) { falhas.forEach((f) => console.log("  - " + f)); process.exit(1); }

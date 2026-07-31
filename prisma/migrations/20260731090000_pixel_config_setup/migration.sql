@@ -1,0 +1,25 @@
+-- As respostas do preset da gaveta do Pixel: `{ "temPixelNativo": true }`.
+--
+-- POR QUE: a gaveta pedia o dono de CADA um dos 5 eventos, entre 4 opções — 20
+-- decisões que exigem entender deduplicação da Meta para serem tomadas. E o caso
+-- é o mesmo para quase todos os usuários desta ferramenta: pixel do Facebook na
+-- página, checkout hospedado pelo gateway, infoproduto. Quando o caso é o mesmo
+-- para quase todos, a ferramenta resolve — não pergunta.
+--
+-- 🔴 E NÃO É AÇÚCAR DE INTERFACE. A resposta amarra duas coisas que hoje moram
+-- em lugares diferentes e precisam concordar:
+--
+--   1. quem é o dono de cada evento (`eventOwners`), lido AO VIVO pelo servidor;
+--   2. se o script espelha no `fbq`, que é ASSADO no snippet na geração.
+--
+-- Separadas, elas divergem, e a divergência é cara nos dois sentidos: dono
+-- Traffik + script sem espelho = a Meta conta duas vezes; sem pixel nativo +
+-- script esperando = 10s de espera e alarme vermelho numa instalação correta.
+--
+-- ADITIVA: uma coluna nullable, sem default e sem backfill. Nenhum dado pode
+-- violá-la, então roda em qualquer ordem e é segura para reaplicar.
+--
+-- NULO significa "ainda não perguntamos", NUNCA "sem preset": `lerPreset()`
+-- infere do dono do PageView, e como o padrão do projeto já é `navegador`, todo
+-- pixel existente infere "tem pixel nativo" — que é o comportamento em vigor.
+ALTER TABLE "PixelConfig" ADD COLUMN IF NOT EXISTS "setup" JSONB;

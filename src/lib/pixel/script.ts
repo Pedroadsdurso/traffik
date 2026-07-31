@@ -7,12 +7,21 @@
  */
 
 import { assinaturaDetectores } from "./detectores";
-import { EVENTOS_DO_PIXEL, traffikEnvia } from "./donos";
+import { EVENTOS_DO_PIXEL, donoDoEvento, traffikEnvia } from "./donos";
 
 export interface PixelScriptConfig {
   configId: string;
   /** `PixelConfig.eventOwners` cru. Ausente = tudo da Traffik. */
   eventOwners?: unknown;
+  /**
+   * Há pixel nativo da Meta na página? Ausente = sim (comportamento anterior).
+   *
+   * 🔴 `false` faz o script **não espelhar e não esperar**. Sem isso, quem não
+   * tem pixel nativo — configuração legítima, em que a CAPI é o único caminho —
+   * ganhava 10s de espera, um `console.warn` e um `sem-fbq` gravado **em todo
+   * evento**: alarme vermelho permanente numa instalação correta.
+   */
+  temPixelNativo?: boolean;
   apiBase: string;
   lead: boolean;
   addToCart: boolean;
@@ -56,6 +65,13 @@ function assinatura(cfg: PixelScriptConfig): string {
     addToCart: cfg.addToCart,
     ic: cfg.initiateCheckout.enabled ? (cfg.initiateCheckout.type ?? "clique_checkout") : null,
     icValor: cfg.initiateCheckout.value ?? null,
+    nativo: cfg.temPixelNativo !== false,
+    // ⚠️ Resolvido AQUI, com o padrão já aplicado. Guardar o mapa cru faria
+    // "ausente" e "explicitamente no padrão" gerarem assinaturas diferentes para
+    // scripts idênticos — alarme falso puro.
+    donos: Object.fromEntries(
+      EVENTOS_DO_PIXEL.map((e) => [e, donoDoEvento(cfg.eventOwners, e)]),
+    ),
   });
 }
 
@@ -88,6 +104,9 @@ export function pixelScript(cfg: PixelScriptConfig): string {
   // Viaja em todo evento para a gaveta poder dizer "o script instalado está
   // desatualizado" — ver lib/pixel/detectores.ts.
   var DET = "${jsStr(assinatura(cfg))}";
+  // Há pixel nativo da Meta nesta página? Sem ele não existe o que espelhar —
+  // esperar por um \`fbq\` que nunca vem produziria alarme numa instalação certa.
+  var NATIVO = ${cfg.temPixelNativo !== false};
 
   function fbclid() {
     try {
@@ -200,6 +219,10 @@ export function pixelScript(cfg: PixelScriptConfig): string {
 
   function espelhar(event, id) {
     if (ALHEIOS.indexOf(event) > -1) return "alheio"; // o dono deste evento e outro
+    // Sem pixel nativo declarado: nao ha o que espelhar, e insistir geraria
+    // 10s de espera + aviso no console em TODA visita de uma instalacao correta.
+    // "sem-nativo" e neutro; "sem-fbq" e vermelho, e os dois nao sao a mesma coisa.
+    if (!NATIVO) return "sem-nativo";
     if (temFbq()) {
       try { atirar(event, id); return "ok"; }
       catch (err) { aviso("falha ao espelhar " + event + ": " + err); return "erro"; }

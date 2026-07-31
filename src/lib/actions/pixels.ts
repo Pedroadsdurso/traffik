@@ -13,7 +13,9 @@ import type { PixelEventType, PurchaseSendMode, PurchaseValueMode } from "@/gene
  * pelo gateway (pay.kirvano.com), onde o cliente não consegue instalar script.
  */
 import { lerDonos, type MapaDeDonos } from "@/lib/pixel/donos";
-import { assinaturaDetectores, diferencasDeDetectores } from "@/lib/pixel/detectores";
+import { assinaturaDetectores, avisoDeVersao, diferencasDeDetectores } from "@/lib/pixel/detectores";
+import { EVENTOS_DO_PIXEL, donoDoEvento } from "@/lib/pixel/donos";
+import { donosDoPreset, lerPreset, type PresetPixel } from "@/lib/pixel/preset";
 
 export type DetectionType = "clique_checkout" | "contem_texto" | "contem_css" | "contem_url";
 
@@ -48,6 +50,11 @@ export interface PixelConfigDTO {
    * qualquer caso — o funil e o Dashboard contam do nosso banco.
    */
   eventOwners: MapaDeDonos;
+  /**
+   * Respostas do preset. Pixel anterior à coluna vem **inferido** do estado
+   * atual, nunca vazio — ver `lib/pixel/preset.ts`.
+   */
+  preset: PresetPixel;
 }
 
 /** Input do formulário do popup (Bloco 12). */
@@ -68,6 +75,8 @@ export interface PixelFormInput {
   };
   /** Quem envia cada evento. Omitido = mantém o que está gravado. */
   eventOwners?: MapaDeDonos;
+  /** Respostas do preset. Omitido = mantém o que está gravado. */
+  preset?: PresetPixel;
 }
 
 const EVENT_TYPES: PixelEventType[] = ["LEAD", "ADD_TO_CART", "INITIATE_CHECKOUT", "PURCHASE"];
@@ -85,6 +94,7 @@ function toDTO(px: {
   name: string;
   enabled: boolean;
   eventOwners: unknown;
+  setup: unknown;
   metaPixels: { id: string; pixelId: string; nickname: string | null; accessToken: string | null }[];
   eventRules: {
     eventType: PixelEventType;
@@ -102,6 +112,7 @@ function toDTO(px: {
     name: px.name,
     enabled: px.enabled,
     eventOwners: lerDonos(px.eventOwners),
+    preset: lerPreset(px.setup, px.eventOwners),
     metaPixels: px.metaPixels.map((m) => ({
       id: m.id,
       pixelId: m.pixelId,
@@ -205,7 +216,13 @@ export async function createPixel(input: PixelFormInput): Promise<PixelConfigDTO
       name,
       provider: "META",
       workspaceId: escopo.areaId || null,
-      eventOwners: input.eventOwners ?? {},
+      // Pixel novo nasce com o preset respondido pela tela; sem resposta, o
+      // padrão (`tem pixel nativo`) é o caso comum e o mapa de donos vem dele.
+      // Objeto literal, não a interface: o Json do Prisma exige index signature,
+      // e escrever os campos aqui também impede que uma propriedade nova do
+      // preset vá parar no banco sem ninguém decidir.
+      setup: input.preset ? { temPixelNativo: input.preset.temPixelNativo } : undefined,
+      eventOwners: input.eventOwners ?? donosDoPreset(input.preset ?? { temPixelNativo: true }),
       metaPixels: { create: metaPixels },
       eventRules: { create: rulesFromForm(input) },
     },
@@ -244,6 +261,10 @@ export async function updatePixel(id: string, input: PixelFormInput): Promise<Pi
         // qualquer outra coisa do pixel devolveria todos os eventos à Traffik em
         // silêncio, que é o mesmo defeito do token apagado ao renomear.
         eventOwners: input.eventOwners ?? undefined,
+        // Objeto literal, não a interface: o Json do Prisma exige index signature,
+      // e escrever os campos aqui também impede que uma propriedade nova do
+      // preset vá parar no banco sem ninguém decidir.
+      setup: input.preset ? { temPixelNativo: input.preset.temPixelNativo } : undefined,
         metaPixels: { create: metaPixels },
         eventRules: { create: rulesFromForm(input) },
       },
@@ -275,6 +296,14 @@ export interface SnippetCheckDTO {
   visto: string | null;
   /** O que muda, em linguagem de consequência. Vazio quando `ok`. */
   divergencias: string[];
+  /**
+   * O que a VERSÃO do script instalado não permite conferir.
+   *
+   * ⚠️ É nota, não divergência: um script v1 pode estar perfeitamente correto —
+   * ele só não sabe reportar "quem envia cada evento". Marcá-lo como divergente
+   * pintaria de âmbar a gaveta de todo usuário no dia do deploy.
+   */
+  nota: string | null;
 }
 
 /**
@@ -307,6 +336,13 @@ export async function conferirSnippet(pixelConfigId: string): Promise<SnippetChe
     addToCart: config.eventRules.find((r) => r.eventType === "ADD_TO_CART")?.enabled ?? false,
     ic: ic?.enabled ? (det?.tipo ?? "clique_checkout") : null,
     icValor: det?.valor ?? null,
+    // As duas linhas abaixo são o achado que a v1 não cobria: as duas viajam
+    // ASSADAS no snippet, e mudá-las sem reinstalar produzia script defasado
+    // que o aviso não pegava.
+    nativo: lerPreset(config.setup, config.eventOwners).temPixelNativo,
+    donos: Object.fromEntries(
+      EVENTOS_DO_PIXEL.map((e) => [e, donoDoEvento(config.eventOwners, e)]),
+    ),
   });
 
   const ultimo = await prisma.pixelEvent.findFirst({
@@ -319,12 +355,17 @@ export async function conferirSnippet(pixelConfigId: string): Promise<SnippetChe
     select: { detectores: true, timestamp: true },
   });
 
-  if (!ultimo) return { estado: "sem-dados", visto: null, divergencias: [] };
+  if (!ultimo) return { estado: "sem-dados", visto: null, divergencias: [], nota: null };
   const visto = ultimo.timestamp.toISOString();
-  if (!ultimo.detectores) return { estado: "script-antigo", visto, divergencias: [] };
+  if (!ultimo.detectores) return { estado: "script-antigo", visto, divergencias: [], nota: null };
 
   const divergencias = diferencasDeDetectores(ultimo.detectores, esperado);
-  return { estado: divergencias.length ? "divergente" : "ok", visto, divergencias };
+  return {
+    estado: divergencias.length ? "divergente" : "ok",
+    visto,
+    divergencias,
+    nota: avisoDeVersao(ultimo.detectores),
+  };
 }
 
 export async function togglePixel(id: string): Promise<{ id: string; enabled: boolean }> {

@@ -36,7 +36,17 @@ const EVENT_MAP: Record<string, { capi: CapiEventName; rule: PixelEventType }> =
  * desta lista vira `null` — a rota é pública, então nada que chega por ela pode
  * ir cru para uma coluna.
  */
-const ESPELHOS: readonly string[] = ["ok", "adiado", "adiado-ok", "sem-fbq", "erro", "alheio"];
+const ESPELHOS: readonly string[] = [
+  "ok",
+  "adiado",
+  "adiado-ok",
+  "sem-fbq",
+  "erro",
+  "alheio",
+  // "não há pixel nativo nesta página" — configuração legítima, não falha.
+  // Separado de `sem-fbq`, que é erro de ordem de instalação.
+  "sem-nativo",
+];
 const lerEspelho = (v: unknown): string | null =>
   typeof v === "string" && ESPELHOS.includes(v) ? v : null;
 

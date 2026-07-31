@@ -4843,7 +4843,144 @@ desligada.** Nenhuma dessas ferramentas pergunta "alguém chama isto?".
 > Ao criar rota de cron, **agende no mesmo commit**. Ao criar consulta de
 > manutenção, **rode contra linhas semeadas no dev** antes de dizer que funciona.
 
-## 🚦 COMECE AQUI — sessão de 31/07/2026 (3ª parte) — TUDO EM PRODUÇÃO
+## 🚦 COMECE AQUI — gaveta do Pixel simplificada (31/07/2026, 4ª parte)
+
+**Na árvore de trabalho, SEM COMMIT.** Migration `20260731090000_pixel_config_setup`
+pendente em produção (aditiva: uma coluna Json nullable).
+
+A gaveta expunha o **mecanismo** em vez de resolver: ~10 blocos, e só o "Quem
+envia cada evento" eram **5 linhas × 4 opções = 20 decisões** que exigem entender
+deduplicação da Meta. Hoje são **8 controles** no caminho padrão.
+
+> ### ⛔ Quando o caso é o mesmo para quase todos, a ferramenta RESOLVE
+> O usuário desta ferramenta é infoprodutor: pixel do Facebook na página,
+> checkout hospedado pelo gateway. Uma pergunta que ele não consegue responder
+> sem estudar o mecanismo não é configuração — é transferência de problema.
+>
+> **Uma pergunta** ("o código do Facebook está instalado nesta página?") define
+> os 5 donos. O resto tem padrão sensato e vive em "Configuração avançada".
+
+### 🔴 Dois achados que a simplificação desenterrou — e a corrigem
+
+**Achado 1 — `eventOwners` também é ASSADO no script, e a assinatura v1 não
+cobria.** `pixelScript()` embute `var ALHEIOS = [...]`, mas a assinatura só
+cobria `lead`/`addToCart`/`ic`. Mudar o dono de um evento gerava script defasado
+**que o aviso de ontem não pegava** — e uma direção recria o bug que a 2ª parte
+consertou:
+
+| Passo | O que acontece |
+|---|---|
+| Dono do `PageView` vai de "pixel da página" para "Traffik" | |
+| Servidor (decide **ao vivo**) | passa a mandar PageView à CAPI |
+| Script instalado (`ALHEIOS` **congelado**) | continua sem espelhar |
+| Pixel nativo | segue disparando o dele, sem `eid` |
+| **Resultado** | CAPI sem par + nativo sozinho = **a Meta conta 2 de novo** |
+
+E a gaveta antiga convidava a isso: a nota do PageView dizia *"Escolha Traffik só
+se você NÃO tiver o pixel do Facebook na página"*, e quem clicava sem reinstalar
+caía exatamente aí. **Assinatura v2** cobre donos + pixel nativo.
+
+**Achado 2 — `sem-fbq` misturava um erro com uma configuração legítima.** Quem
+**não tem** pixel nativo — caso válido, em que a CAPI é o único caminho — ganhava
+10s de espera, `console.warn` e `sem-fbq` gravado **em toda visita**: alarme
+vermelho permanente numa instalação correta. Agora o script recebe
+`var NATIVO = false` e devolve **`sem-nativo`**, estado de tom neutro.
+
+> ⚠️ Os dois achados são a **mesma raiz** que o preset resolve: o dono do evento
+> (lido AO VIVO pelo servidor) e o comportamento do script (ASSADO no snippet)
+> moravam em lugares diferentes e podiam discordar. Uma resposta, os dois lados
+> coerentes por construção.
+
+### Assinatura v2 — subir a versão NÃO acusa todo mundo
+
+> ### ⛔ Comparar só os campos que a versão instalada CONHECE
+> Um script v1 pode estar perfeitamente correto: ele só não sabe reportar "quem
+> envia cada evento". Marcá-lo como divergente pintaria de âmbar a gaveta de todo
+> usuário no dia do deploy, para a maioria sem nada errado — e **aviso que
+> aparece sempre vira ruído que se aprende a ignorar**.
+>
+> `lerAssinatura` aceita 5 partes (v1) e 7 (v2); o que a v1 não tem volta `null`
+> e sai da comparação. `avisoDeVersao()` devolve uma **nota cinza** — não
+> divergência — dizendo *"se você mudou 'quem envia' depois de instalar, recole"*.
+> Ela some sozinha na primeira reinstalação.
+
+### O eixo "⟳ muda o script × ⚡ vale na hora"
+
+| ⟳ Exige recolar | ⚡ Vale na hora |
+|---|---|
+| A pergunta do preset | Nome |
+| Início de checkout · Lead · Carrinho | ID do pixel e token da CAPI |
+| Regra de detecção do IC | Purchase (ligar, modo, valor, produto) |
+| **Quem envia cada evento** | Ativar/desativar o pixel |
+
+> ### ⛔ O selo é da REGIÃO, nunca do campo
+> Exigência do usuário, e é restrição de layout, não decoração: campo a campo
+> seriam ~15 selos numa gaveta de 5 blocos. **Se um campo que muda o script for
+> parar num bloco `hora`, o selo passa a mentir** — ao mover campo de lugar,
+> confira em qual lado ele cai.
+
+**Ordem:** dados do pixel → como é o seu site (preset + eventos) → **script** →
+envio das vendas → avançado.
+
+> ⚠️ O script fica **depois** do bloco que o determina, não antes (o usuário
+> pediu antes e concordou com a inversão): script acima das causas significa que
+> marcar "Lead" deixa o código silenciosamente velho — o defeito exato que este
+> trabalho conserta. A leitura vira *"isto define o script; aqui está o script"*.
+>
+> ⚠️ **Na criação não há script**, e a tela diz isso: ele embute o
+> `PixelConfig.id`, que só existe depois do primeiro save.
+
+### O preset
+
+| | Sim, tenho pixel nativo (padrão) | Não |
+|---|---|---|
+| `PageView` | **o pixel da página** | **Traffik** |
+| Lead · AddToCart · IC · Purchase | Traffik | Traffik |
+| Script | espelha no `fbq` | **não espelha, não espera, não avisa** |
+
+> ⚠️ **Só o `PageView` inverte.** Os demais só saem do navegador se alguém chamar
+> `fbq('track', …)` explicitamente — não há emissor automático concorrendo, e
+> rebaixá-los perderia conversão em silêncio.
+>
+> ⚠️ **Responder de novo SOBRESCREVE ajuste manual**, de propósito: é um pedido
+> explícito de "reconfigure para este caso". O caminho de volta é o
+> **`↩ voltar ao padrão`**, que só aparece quando os donos divergem do preset
+> (`seguePreset`).
+
+### `PixelConfig.setup` — nulo é "ainda não perguntamos"
+
+`lerPreset()` **infere** do dono do PageView. Como o padrão do projeto já é
+`PageView: "navegador"`, **todo pixel existente infere "tem pixel nativo"** — que
+é exatamente o comportamento em vigor. Só cai em `false` quem trocou o PageView
+para Traffik na mão, e aí `false` é a leitura certa.
+
+### O que ficou de fora, e por quê
+
+- **A 2ª pergunta ("onde o comprador paga?") foi CORTADA** pelo usuário: o padrão
+  `clique_checkout` já cobre os dois casos, e uma pergunta a menos é uma decisão
+  a menos. A escolha da regra de detecção vive só no avançado.
+- **Nenhuma capacidade se perdeu.** Os 4 donos por evento continuam ajustáveis —
+  viraram 5 dropdowns em vez de 20 botões.
+- O campo **"Tipo: Meta (Facebook)"** saiu: era um select de uma opção só.
+
+### Verificação
+
+`test:detectores` **56/0** · `test:espelho` **39/0** · `test:utm-venda` 25/0 ·
+`test:match` 20/0 · `tsc`, `lint` e `build` limpos.
+
+**Conferido na tela** (dev, `dev@exemplo.dev`): criação cabe em meia gaveta (8
+controles); edição mostra o aviso âmbar de script defasado; responder "Não, só a
+Traffik" **reescreveu o PageView de "O pixel da sua página" para "Traffik"**;
+mudar Purchase para "Ninguém" fez aparecer o `↩ voltar ao padrão`; os selos
+`⟳ muda o script` / `⚡ vale na hora` aparecem no cabeçalho de cada região.
+
+> ⚠️ **Não exercitado:** salvar um pixel com o preset "Não" e conferir o script
+> gerado com `NATIVO = false` **no navegador** — só em teste (DOM falso). E o
+> `sem-nativo` nunca foi gravado por um script real.
+
+---
+
+## 🚦 (histórico) sessão de 31/07/2026 (3ª parte) — TUDO EM PRODUÇÃO
 
 **Três itens fechados e no ar** (commit `9c97a25`), migrations aplicadas antes do
 push, produção sondada 6× sem `500`. **E a dedup do pixel foi confirmada do lado
@@ -6851,8 +6988,8 @@ npm run test:bots        # 35 asserções, classificação de robô (puro)
 npm run bot:reclassificar # reavalia Click.bot pelo userAgent. SIMULA; --aplicar escreve
 npm run test:desempate   # 27 asserções, país quando o IP contradiz a campanha
 npm run test:onyxpag     # 43 asserções, parser + testador da OnyxPag (puro)
-npm run test:espelho     # 30 asserções, espelho no fbq em DOM falso (puro)
-npm run test:detectores  # 28 asserções, assinatura do snippet instalado (puro)
+npm run test:espelho     # 39 asserções, espelho no fbq em DOM falso (puro)
+npm run test:detectores  # 56 asserções, assinatura v2 + preset do pixel (puro)
 npm run test:utm-venda   # 25 asserções, UTMs copiadas para Sale (banco de DEV)
 npm run backfill:utms    # copia os UTMs do clique. SIMULA; --aplicar escreve
 npm run test:veiculacao  # 40 asserções, status configurado × veiculação (puro)

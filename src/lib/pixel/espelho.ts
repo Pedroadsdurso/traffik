@@ -64,6 +64,13 @@ export const ESTADOS_DO_ESPELHO: readonly EstadoDoEspelho[] = [
     ajuda: "O pixel do Facebook existia mas recusou o evento. Costuma ser conflito com outro script da página.",
   },
   {
+    estado: "sem-nativo",
+    rotulo: "sem pixel na página",
+    tom: "neutro",
+    ajuda:
+      "Você respondeu que não tem o código do Facebook nesta página, então não há o que espelhar — o evento vai só pelo nosso servidor, que é o caminho certo nesse caso. Não é falha.",
+  },
+  {
     estado: "alheio",
     rotulo: "outro dono envia",
     tom: "neutro",
