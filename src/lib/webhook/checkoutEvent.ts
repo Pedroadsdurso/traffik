@@ -4,6 +4,17 @@ import { prisma } from "@/lib/prisma";
 const JANELA_DEDUP_MS = 6 * 60 * 60 * 1000;
 
 /**
+ * Marca, no lugar da URL, o InitiateCheckout que **não veio do navegador**.
+ *
+ * Não é uma URL e não deve ser exibida como tal: o feed de Atividade Recente
+ * mostra `PixelEvent.url` na coluna de campanha, e este valor cru aparecia como
+ * uma "campanha" chamada `gateway:webhook` que não existe em lugar nenhum.
+ * Exportada para que a tela traduza pela MESMA constante — comparar com a
+ * string escrita à mão nos dois lados é como as duas pontas divergem.
+ */
+export const SENTINELA_CHECKOUT_GATEWAY = "gateway:webhook";
+
+/**
  * Registra um **InitiateCheckout a partir do webhook do gateway**.
  *
  * Por que existe: quando o checkout é hospedado pelo próprio gateway
@@ -86,7 +97,7 @@ export async function registrarCheckoutDoGateway(
         userId: sale.userId,
         event: "InitiateCheckout",
         eventId,
-        url: "gateway:webhook",
+        url: SENTINELA_CHECKOUT_GATEWAY,
         fbclid,
       },
     });

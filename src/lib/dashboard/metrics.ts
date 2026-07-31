@@ -15,6 +15,7 @@ import {
 import { chaveDoPedido, contarPedidos, umPorPedido } from "@/lib/pedidos";
 import { calcularFinanceiro, type Composicao } from "@/lib/financeiro";
 import { janelaAnterior, janelaDoPeriodo, type PeriodoNome } from "@/lib/periodo";
+import { SENTINELA_CHECKOUT_GATEWAY } from "@/lib/webhook/checkoutEvent";
 import type { PaymentMethod } from "@/generated/prisma/enums";
 
 /**
@@ -878,8 +879,17 @@ function buildActivity(w: Window) {
         : e.event === "AddToCart" ? "add_to_cart"
         : e.event === "PageView" ? "pageview"
         : "checkout",
-      source: "Pixel",
-      campaign: e.url ? e.url.replace(/^https?:\/\//, "").slice(0, 48) : "—",
+      source: e.url === SENTINELA_CHECKOUT_GATEWAY ? "Gateway" : "Pixel",
+      // ⚠️ `gateway:webhook` é SENTINELA, não URL: marca o InitiateCheckout que
+      // nasceu do webhook do gateway (checkout hospedado por ele, onde o nosso
+      // script não roda). Vazava cru para a coluna e se lia como nome de
+      // campanha inexistente — ver `registrarCheckoutDoGateway`.
+      campaign:
+        e.url === SENTINELA_CHECKOUT_GATEWAY
+          ? "Checkout no gateway"
+          : e.url
+            ? e.url.replace(/^https?:\/\//, "").slice(0, 48)
+            : "—",
       value: null,
       ts: e.timestamp.getTime(),
     });
