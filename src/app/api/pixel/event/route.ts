@@ -70,16 +70,27 @@ export async function POST(req: NextRequest) {
   // Persiste o evento (Bloco 5): sem isto o funil não tem como contar o
   // "Initiate Checkout" — antes o evento só era repassado à CAPI e descartado.
   // Falhar aqui não pode impedir o envio, que é o que o usuário realmente quer.
+  const idDoEvento = typeof body.eventId === "string" ? body.eventId : null;
+
+  // ⚠️ `createMany({ skipDuplicates: true })` e não `create`: com o `eventId`
+  // determinístico, duas cópias do script na mesma página (ou um reenvio)
+  // mandam o MESMO id, e o índice único parcial recusa a segunda. O
+  // `ON CONFLICT DO NOTHING` resolve isso no banco, sem `try/catch` engolindo
+  // erro de verdade — mesmo padrão do upsert monotônico de vendas e da trava do
+  // auto-sync: quem decide o vencedor é o banco.
   try {
-    await prisma.pixelEvent.create({
-      data: {
-        userId: config.userId,
-        pixelConfigId: config.id,
-        event: eventKey,
-        eventId: typeof body.eventId === "string" ? body.eventId : null,
-        url: typeof body.url === "string" ? body.url.slice(0, 500) : null,
-        fbclid: typeof body.fbclid === "string" ? body.fbclid : null,
-      },
+    await prisma.pixelEvent.createMany({
+      data: [
+        {
+          userId: config.userId,
+          pixelConfigId: config.id,
+          event: eventKey,
+          eventId: idDoEvento,
+          url: typeof body.url === "string" ? body.url.slice(0, 500) : null,
+          fbclid: typeof body.fbclid === "string" ? body.fbclid : null,
+        },
+      ],
+      skipDuplicates: true,
     });
   } catch (e) {
     console.error("[pixel/event] falha ao persistir evento:", e);
@@ -92,7 +103,11 @@ export async function POST(req: NextRequest) {
         ? [{ pixelId: config.pixelId, accessToken: config.accessToken }]
         : [];
 
-  const eventId = typeof body.eventId === "string" ? body.eventId : `${eventKey}-${Date.now()}`;
+  // 🔴 É ESTE valor que a Meta usa para casar o evento do navegador com o
+  // nosso. O script manda o mesmo id para o `fbq` e para cá — se as duas pontas
+  // divergirem, a Meta conta o evento DUAS VEZES e otimiza com sinal inflado.
+  // O fallback só existe para um `traffikPixel.track()` manual sem id.
+  const eventId = idDoEvento ?? `${eventKey}-${Date.now()}`;
   let sent = 0;
   for (const mp of targets) {
     // O token fica encriptado no banco; decripta só aqui, para a chamada.

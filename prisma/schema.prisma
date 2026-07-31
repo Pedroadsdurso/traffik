@@ -752,6 +752,11 @@ model PixelEvent {
   pixelConfigId String?
 
   @@index([userId, event, timestamp])
+  /// Deduplicação, possível só desde que o `eventId` virou determinístico.
+  /// PARCIAL (`WHERE "eventId" IS NOT NULL`) — ver a migration
+  /// `20260731040000_pixel_event_dedup`; o Prisma não expressa índice parcial,
+  /// então a declaração real vive no SQL e isto aqui é o espelho dela.
+  @@unique([userId, event, eventId])
 }
 
 /// Log cru de cada payload recebido por webhook — alimenta o "Teste de Webhook"
