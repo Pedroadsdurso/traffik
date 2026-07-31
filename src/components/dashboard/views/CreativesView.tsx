@@ -37,7 +37,11 @@ export function CreativesView({ v }: { v: TraffikView }) {
 
       {v.creatives.length === 0 ? (
         <div className="card text-muted" style={sx("font-size:13px")}>
-          {v.creativesLoading ? "Carregando criativos…" : "Nenhum criativo sincronizado. Sincronize suas contas em Facebook Ads."}
+          {/* ⚠️ O destino antigo ("Facebook Ads") não existe desde o Bloco 1 —
+              a instrução mandava o usuário para uma tela que sumiu. */}
+          {v.creativesLoading
+            ? "Carregando criativos…"
+            : "Nenhum criativo ainda. Conecte suas contas em Integrações › Anúncios e ligue o rastreamento delas."}
         </div>
       ) : (
         <div style={sx("display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:var(--space-4)")}>

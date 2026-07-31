@@ -36,7 +36,11 @@ const COR = {
 const ROTULO_ESTADO = {
   lido: "lido",
   ausente: "o gateway não enviou",
-  nao_mapeado: "está no payload e não foi lido",
+  // ⚠️ A distinção entre estes dois é a razão de o testador existir: campo vazio
+  // parece igual nos dois casos, e um deles é bug nosso. Mas dizer "payload" não
+  // é o que diferencia — quem lê esta tela é gestor de tráfego, não quem
+  // escreveu o parser.
+  nao_mapeado: "o gateway mandou, e não lemos",
 } as const;
 
 export function TestadorPayloadCard() {
@@ -216,7 +220,7 @@ function Resultado({ d }: { d: Diagnostico }) {
             <span style={sx("flex:1;min-width:0")}>{c.nome}</span>
             {c.divergente && (
               <span className="text-muted" style={sx("font-size:11px")}>
-                {c.declarada ? "esperávamos, não veio neste payload" : "veio, mas não estava previsto"}
+                {c.declarada ? "esperávamos, e não veio" : "veio, mas não estava previsto"}
               </span>
             )}
           </div>

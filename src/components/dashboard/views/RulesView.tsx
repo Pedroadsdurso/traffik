@@ -365,7 +365,7 @@ function GavetaLog({ r, onClose }: { r: RuleDTO; onClose: () => void }) {
     <Drawer aberta titulo="Histórico de execuções" descricao={r.name} largura={560} onClose={onClose}>
       {r.logs.length === 0 ? (
         <p className="card-body" style={sx("margin:0")}>
-          Esta regra ainda não executou. Quando ativa, ela roda pelo cron a cada {r.frequencyMin} minutos.
+          Esta regra ainda não executou. Quando ativa, ela roda sozinha a cada {r.frequencyMin} minutos.
         </p>
       ) : (
         <div style={sx("display:flex;flex-direction:column;gap:var(--space-3)")}>

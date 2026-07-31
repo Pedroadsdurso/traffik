@@ -318,7 +318,7 @@ export function RuleDrawer({
     <Drawer
       aberta={aberta}
       titulo={d.id ? "Editar regra" : "Nova regra"}
-      descricao="A regra roda pelo cron e age nas campanhas desta Área de Trabalho."
+      descricao="A regra roda sozinha, de tempos em tempos, e age nas campanhas desta Área de Trabalho."
       largura={560}
       onClose={onFechar}
       rodape={
@@ -338,7 +338,7 @@ export function RuleDrawer({
                     : "Esta regra vai ALTERAR o orçamento de campanhas automaticamente."}
                 </strong>
                 <div className="text-muted" style={sx("margin-top:3px")}>
-                  Ela age sozinha, pelo cron, sem ninguém olhando — e a Meta não oferece desfazer.
+                  Ela age sozinha, sem ninguém olhando — e a Meta não oferece desfazer.
                   {exigeTeto && tetoNum > 0 && ` O orçamento nunca passará de ${brl(tetoNum)}.`}{" "}
                   Confirme para salvar.
                 </div>
@@ -699,7 +699,7 @@ export function RuleDrawer({
         checked={d.active}
         onChange={(active) => patch({ active })}
         label="Ativar a regra ao salvar"
-        dica={d.active ? "Ela passará a rodar no próximo ciclo do cron." : "Fica salva e parada até você ativar."}
+        dica={d.active ? "Ela passa a rodar no próximo ciclo." : "Fica salva e parada até você ativar."}
       />
 
       {erro && <p style={sx("margin:0;font-size:12.5px;color:#ef4444")}>{erro}</p>}

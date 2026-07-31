@@ -70,7 +70,7 @@ function PixelTestCard() {
         setResult({ ok: false, msg: data.error ?? "O Facebook recusou o evento." });
       }
     } catch {
-      setResult({ ok: false, msg: "Não foi possível chamar o endpoint de teste." });
+      setResult({ ok: false, msg: "Não foi possível fazer o teste agora. Tente de novo em instantes." });
     } finally {
       setBusy(false);
     }
