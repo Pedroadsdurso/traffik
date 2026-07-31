@@ -8,6 +8,9 @@ import { derivar, somar, type LinhaBase } from "@/lib/ads/metrics";
 // lucro POSITIVO de verde — contra a regra do produto, em que só o negativo tem
 // cor. Duas telas decidindo cor por conta própria divergem.
 import { corFinanceira } from "@/lib/financeiro";
+// Rótulo, cor e "está divergindo?" da veiculação: fonte ÚNICA, mesma razão da
+// `corFinanceira` acima e do `lib/ads/status.ts`.
+import { veiculacao } from "@/lib/ads/veiculacao";
 import { sx } from "@/lib/sx";
 import { Checkbox } from "../../ui/Checkbox";
 import { Icone } from "../../ui/Icone";
@@ -18,7 +21,19 @@ export interface LinhaTabela extends LinhaBase {
   id: string;
   fbId: string;
   nome: string;
+  /** O que foi CONFIGURADO. É o que o toggle da 2ª coluna reflete. */
   status: string;
+  /**
+   * `effective_status` cru da Meta — se está REALMENTE veiculando.
+   *
+   * ⚠️ Três estados distintos, e a diferença importa:
+   * - `string`      → a Meta informou;
+   * - `null`        → a Meta ainda não informou (sync antigo);
+   * - **ausente**   → este NÍVEL não tem veiculação (aba Contas). A célula
+   *                   mostra "—" seco, sem o texto de "aguardando sincronização"
+   *                   que seria mentira ali.
+   */
+  effectiveStatus?: string | null;
   /** Subtítulo da coluna nome (ex.: campanha do conjunto). */
   sub?: string;
   bidCap?: number | null;
@@ -51,6 +66,10 @@ const COR_FONTE: Record<Fonte, string> = { meta: "#60a5fa", nosso: "#a78bfa", mi
 
 /** Colunas de métrica, na ordem pedida no Bloco 6. */
 const COLUNAS: { chave: string; label: string; dica?: string; fonte: Fonte }[] = [
+  // Vem logo depois do nome porque é a pergunta que se faz ANTES de olhar
+  // número nenhum: "isto está rodando?". Gasto zerado numa linha que não
+  // veicula não é problema de tracking — é a campanha parada.
+  { chave: "veiculacao", label: "Veiculação", fonte: "meta" },
   { chave: "orcamento", label: "Orçamento", fonte: "meta" },
   // A ordem é a da leitura natural: quanto POSSO gastar → quanto GASTEI →
   // quanto VENDI. Antes a tabela pulava de Orçamento direto para Vendas, e o
@@ -76,6 +95,49 @@ const COLUNAS: { chave: string; label: string; dica?: string; fonte: Fonte }[] =
 ];
 
 const traco = <span style={sx("opacity:.35")}>—</span>;
+
+/**
+ * Selo de veiculação.
+ *
+ * ⚠️ **A divergência precisa ser VISÍVEL sem hover.** O caso que esta coluna
+ * existe para resolver — "está ligada e não roda" — é justamente o que passa
+ * batido: a linha diz ACTIVE, o toggle está ligado, e a pessoa vai procurar o
+ * erro no tracking. Por isso a divergência ganha um "⚠" e o fundo tingido, e
+ * não só um `title`.
+ *
+ * O texto longo (o que fazer) fica no `title` — é explicação, não alerta.
+ */
+function SeloVeiculacao({ linha }: { linha: LinhaTabela }) {
+  // Ausente ≠ nulo: a aba Contas não tem veiculação nenhuma, e um "aguardando
+  // sincronização" ali seria falso.
+  if (linha.effectiveStatus === undefined) {
+    return <span title="A veiculação é informada por campanha, conjunto e anúncio.">{traco}</span>;
+  }
+
+  const v = veiculacao(linha.status, linha.effectiveStatus);
+  if (v.tom === "indefinido" && !v.desconhecido) {
+    return <span title={v.detalhe}>{traco}</span>;
+  }
+
+  const titulo = v.divergente
+    ? `Configurado como ativo, mas não está entregando. ${v.detalhe}`
+    : v.detalhe;
+
+  return (
+    <span
+      title={`${titulo}${v.cru ? `\n\nA Meta chama isto de: ${v.cru}` : ""}`}
+      style={sx(
+        "display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:999px;" +
+          "font-size:11.5px;white-space:nowrap;" +
+          `color:${v.cor};background:color-mix(in srgb, ${v.cor} 14%, transparent);` +
+          (v.divergente ? `box-shadow:inset 0 0 0 1px ${v.cor}` : ""),
+      )}
+    >
+      {v.divergente && <span aria-hidden>⚠</span>}
+      {v.rotulo}
+    </span>
+  );
+}
 
 /** Célula de orçamento: mostra o valor e, quando editável, a caneta. */
 function CelulaOrcamento({
@@ -177,6 +239,10 @@ export function AdsTable({
   const todasMarcadas = linhas.length > 0 && linhas.every((l) => selecionadas.has(l.id));
   const totais = somar(linhas);
   const md = derivar(totais);
+  /** Ligadas que NÃO estão entregando. Só faz sentido onde há veiculação. */
+  const divergentes = linhas.filter(
+    (l) => l.effectiveStatus !== undefined && veiculacao(l.status, l.effectiveStatus).divergente,
+  ).length;
 
   /** Números que compuseram a métrica no período, para o tooltip da fórmula. */
   function valoresDe(chave: string): [string, string][] | undefined {
@@ -298,6 +364,7 @@ export function AdsTable({
                     </div>
                   </td>
 
+                  <td><SeloVeiculacao linha={l} /></td>
                   <td><CelulaOrcamento linha={l} onSalvar={onSalvarOrcamento} /></td>
                   <td>{brl(l.spend)}</td>
                   <td>{n0(l.results)}</td>
@@ -328,6 +395,14 @@ export function AdsTable({
               <td className="fixa fixa-1" />
               <td className="fixa fixa-2" />
               <td className="fixa fixa-3" style={sx("font-weight:600")}>Total ({ordenadas.length})</td>
+              {/* Veiculação não soma — mas "quantas estão ligadas e paradas" é
+                  exatamente o número que se procura numa lista longa, onde um
+                  selo âmbar por linha passa despercebido. */}
+              <td style={sx(divergentes > 0 ? "color:var(--color-warning, #fbbf24)" : "")}>
+                {/* "sem entregar" e não "paradas": a mesma tabela lista
+                    campanhas, conjuntos e anúncios, e o gênero mudaria. */}
+                {divergentes > 0 ? `${divergentes} sem entregar` : traco}
+              </td>
               {/* Orçamento não soma: são tetos diários de linhas diferentes,
                   e somá-los produziria um número que não significa nada. */}
               <td>{traco}</td>

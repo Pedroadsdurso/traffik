@@ -325,11 +325,27 @@ model AdAccount {
 }
 
 model Campaign {
-  id             String       @id @default(cuid())
-  fbCampaignId   String
-  name           String
-  status         EntityStatus @default(UNKNOWN)
-  objective      String?
+  id           String       @id @default(cuid())
+  fbCampaignId String
+  name         String
+  status       EntityStatus @default(UNKNOWN)
+  /// `effective_status` da Meta, **cru**, como ela devolveu.
+  ///
+  /// 🔴 NÃO é o mesmo que `status`. `status` é o que foi CONFIGURADO; este é se
+  /// está REALMENTE veiculando. Uma campanha `ACTIVE` pode não entregar nada —
+  /// conjunto pausado, anúncio reprovado, conta sem forma de pagamento, fora da
+  /// janela de agendamento. A divergência entre os dois é a resposta para "por
+  /// que minha campanha não está rodando".
+  ///
+  /// ⚠️ Guardado como STRING crua, não como enum: a Meta acrescenta valores
+  /// (`PENDING_BILLING_INFO`, `PREAPPROVED`…) sem aviso, e um enum faria o sync
+  /// **falhar** num valor novo em vez de apenas exibi-lo sem tradução. A
+  /// tradução para linguagem simples vive em `lib/ads/veiculacao.ts`.
+  ///
+  /// ⚠️ NULO = ainda não sincronizado com o código que pede o campo. A tela
+  /// trata nulo como "não informado", nunca como "não está veiculando".
+  effectiveStatus String?
+  objective       String?
   /// Orçamento no nível da CAMPANHA = campanha CBO. Nulo = ABO (o orçamento
   /// vive nos conjuntos). É essa a detecção usada no modal de orçamento.
   dailyBudget    Decimal?     @db.Decimal(14, 2)
@@ -355,6 +371,10 @@ model AdSet {
   fbAdSetId        String
   name             String
   status           EntityStatus @default(UNKNOWN)
+  /// `effective_status` cru da Meta. Ver o comentário em `Campaign`.
+  /// No conjunto o valor mais informativo é `CAMPAIGN_PAUSED`: o conjunto está
+  /// ativo e não entrega porque a campanha acima dele está pausada.
+  effectiveStatus  String?
   dailyBudget      Decimal?     @db.Decimal(14, 2)
   lifetimeBudget   Decimal?     @db.Decimal(14, 2)
   /// Bid cap (`bid_amount` da Meta), em reais.
@@ -384,11 +404,15 @@ model AdSet {
 }
 
 model Ad {
-  id        String       @id @default(cuid())
-  fbAdId    String
-  name      String
-  status    EntityStatus @default(UNKNOWN)
-  createdAt DateTime     @default(now())
+  id     String       @id @default(cuid())
+  fbAdId String
+  name   String
+  status EntityStatus @default(UNKNOWN)
+  /// `effective_status` cru da Meta. Ver o comentário em `Campaign`.
+  /// É no ANÚNCIO que a Meta é mais específica: `DISAPPROVED`,
+  /// `PENDING_REVIEW`, `ADSET_PAUSED`, `PENDING_BILLING_INFO`.
+  effectiveStatus String?
+  createdAt       DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
   adAccountId String

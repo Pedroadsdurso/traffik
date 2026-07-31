@@ -3517,6 +3517,122 @@ mínimo diário da conta; `bid_amount` em campanha ou com estratégia incompatí
 orçamento de campanha quando os conjuntos têm orçamento próprio (ABO). Ativar
 campanha pausada e o objetivo de engajamento **não** rejeitam nada.
 
+## 🚦 Status de VEICULAÇÃO — `status` × `effective_status` (31/07/2026)
+
+**Migration `20260731020000`** — `effectiveStatus String?` em `Campaign`,
+`AdSet` e `Ad`. Aditiva: três colunas nullable, sem default e sem backfill.
+
+### 🔴 O campo estava na chamada, e mesmo assim não era guardado
+
+`effective_status` aparece **duas vezes** na requisição, com papéis diferentes:
+
+| Onde | Papel |
+|---|---|
+| `effective_status: STATUS_SINCRONIZADOS` | **filtro** de quais objetos trazer |
+| `fields: "…,effective_status,…"` | **campo** a ler |
+
+O sync tinha só o primeiro. A chamada trazia exatamente os objetos certos e
+**jogava fora a informação** — nada falhava, nada logava, e a resposta para "por
+que minha campanha não está rodando" simplesmente não existia no banco.
+
+| Campo | Responde |
+|---|---|
+| `status` | o que foi **configurado** — é o que o toggle da tabela reflete |
+| `effective_status` | se está **realmente veiculando** |
+
+### O mapa, e por que ele é DADO e não `switch` na view
+
+`lib/ads/veiculacao.ts` é a fonte única — o `AdsTable` mostra e a `ads:sonda`
+confere contra a resposta crua. Mesma razão de `corFinanceira` e de
+`lib/ads/status.ts`: rótulo e cor decididos na tela divergem quando aparece a
+segunda tela.
+
+| `effective_status` | Na tela | Tom |
+|---|---|---|
+| `ACTIVE` | Veiculando | verde |
+| `PAUSED` | Pausado | cinza |
+| `ADSET_PAUSED` | Conjunto pausado | âmbar |
+| `CAMPAIGN_PAUSED` | Campanha pausada | âmbar |
+| `DISAPPROVED` | Reprovado | vermelho |
+| `PENDING_REVIEW` | Em análise | âmbar |
+| `PREAPPROVED` | Aprovado provisoriamente | âmbar |
+| `PENDING_BILLING_INFO` | Falta pagamento | vermelho |
+| `IN_PROCESS` | Preparando | âmbar |
+| `WITH_ISSUES` | Com problema | vermelho |
+| `ARCHIVED` | Arquivado | cinza |
+| `DELETED` | Excluído | cinza |
+
+> ⚠️ **Esta lista veio da DOCUMENTAÇÃO da Marketing API, não de resposta real.**
+> Nenhuma chamada à Graph API foi observada nesta sessão. Quem confirma é a
+> **`npm run ads:sonda`**, que lista os valores realmente devolvidos, marca os
+> que a Traffik ainda não traduz e avisa quando um deles **nem chega pelo sync**.
+
+> ### ⛔ Valor NOVO da Meta aparece CRU — nunca vira chute
+> A Meta acrescenta valores sem aviso. Um `default` que dissesse "não está
+> veiculando" produziria diagnóstico falso; um que dissesse "veiculando"
+> esconderia problema real. Valor fora do mapa é exibido **como veio** e marcado
+> `desconhecido` — é o que faz a lacuna pedir correção em vez de passar batido.
+>
+> Pelo mesmo motivo a coluna é **`String?`, não enum**: um enum faria o **sync
+> falhar** num valor novo, em vez de apenas exibi-lo sem tradução.
+
+### 🔴 Três decisões que produzem alarme errado se forem invertidas
+
+1. **NULO é "não informado", NUNCA "parado".** Antes do primeiro sync com este
+   código, TODA linha do banco tem `effectiveStatus` nulo. Se nulo virasse
+   alarme, o Gerenciador inteiro apareceria em âmbar no dia do deploy.
+2. **Divergente = configurado `ACTIVE` **e** veiculação ≠ `ACTIVE`.** É o selo
+   âmbar com ⚠. Linha **pausada** com `DISAPPROVED` não alarma: ela está parada
+   por escolha, e o alarme existe para o que o usuário acha que está no ar.
+3. **Status conclusivo responde sozinho.** `PAUSED`/`ARCHIVED`/`DELETED` não têm
+   ambiguidade, então dispensam o campo da Meta. **É isto que faz a aba
+   Arquivados distinguir arquivado de excluído** (o pedido): a Meta **não
+   devolve objetos `DELETED`** em aresta de listagem nenhuma, então essas linhas
+   nunca receberão `effectiveStatus` — sem esse ramo, "Excluído" ficaria em "—"
+   para sempre.
+
+### Onde aparece
+
+Coluna **Veiculação**, logo depois do nome — antes de qualquer número, porque é
+a pergunta que se faz primeiro: *"isto está rodando?"*. Gasto zerado numa linha
+que não veicula não é problema de tracking, é a campanha parada.
+
+O rodapé de totais mostra **"N sem entregar"** em âmbar. Um selo por linha se
+perde numa lista de 40, e quem procura "por que não gastou nada" não vai rolar
+até achar.
+
+> ⚠️ **Na aba Contas a célula é um "—" seco, e a ausência é significativa.** Ali
+> o toggle é "rastreando na Traffik", não entrega da Meta — quem veicula é
+> campanha, conjunto e anúncio. Por isso `LinhaTabela.effectiveStatus` tem TRÊS
+> estados: string (informado), `null` (não informado ainda) e **ausente** (este
+> nível não tem veiculação). Um "aguardando sincronização" na aba Contas seria
+> mentira.
+
+> ⚠️ **`STATUS_SINCRONIZADOS` NÃO foi alterado.** Ele não pede `PREAPPROVED` nem
+> `PENDING_BILLING_INFO`, então objeto nesses estados **não existe na
+> ferramenta** — nem com o filtro "Arquivados". Acrescentá-los sem prova seria
+> mexer no filtro que já derruba o sync inteiro quando erra (foi assim que 12
+> campanhas sumiram). A `ads:sonda` consulta com a lista MAIOR justamente para
+> dizer se existe algum: **se existir, ela manda acrescentar à lista.**
+
+**Testado:** `npm run test:veiculacao` (40 asserções puras) + `test:veiculacao:e2e`
+(13 asserções contra o banco de DEV, provando que o valor **chega** em
+`computeAdsOverview` nos três níveis — a armadilha do `pedidoId` fora do
+`select`, que nenhum `tsc`/`lint`/`build` acusa). **Conferido na tela** nos 4
+níveis: campanha "Veiculando" × "⚠ Com problema", conjunto ligado com
+"⚠ Campanha pausada", anúncio "⚠ Reprovado" ao lado de um "—" que **não** conta
+no rodapé, e Contas com "—". Dados de teste restaurados por id depois.
+
+### ⚠️ O que NÃO foi verificado
+
+- 🔴 **Nenhuma resposta REAL da Graph API foi observada.** O campo entrou numa
+  chamada que já acontecia (custo zero de rate limit), mas o formato e os
+  valores continuam sendo os da documentação. **Rode a `ads:sonda` depois do
+  primeiro sync** — é o mesmo risco de `AdSet.geoCountries`, que pode ficar
+  inerte em silêncio.
+- **Sem backfill**: toda linha nasce com `effectiveStatus` nulo e só o primeiro
+  sync preenche. É por isso que nulo não pode alarmar.
+
 ## 📋 FILA DE TRABALHO PENDENTE
 
 Para referência direta: *"vamos para o item 3d"*. Ordem de prioridade definida
@@ -3526,20 +3642,11 @@ pelo usuário em 30/07/2026.
 > original vinha de um levantamento antigo. Ver as notas em cada um. Confira
 > antes de executar qualquer item desta lista: esta fila também envelhece.
 
-### 0. GERENCIADOR — PRÓXIMA SESSÃO, comece por aqui (31/07/2026)
+### 0. GERENCIADOR — o item (b) foi FEITO em 31/07/2026; sobrou o (a)
 
-Adiados de propósito por custo de sessão. **Escolha um e entregue completo** —
-os dois juntos não cabem numa sessão.
-
-> **Qual primeiro?** O usuário decide com contexto limpo. Os fatos para decidir:
-> **(a) é o mais barato** — estado de cliente e interface, sem schema, sem sync,
-> sem migration, então sem ordem de deploy e sem risco em produção. **(b) entrega
-> mais informação** de diagnóstico, mas é migration em três tabelas + campo novo
-> no sync + tabela de mapeamento + exibição.
-
-**(a) Drill-down por campanha.** Selecionar campanhas (checkbox, já existe) e as
-abas Conjuntos e Anúncios mostrarem só o que pertence a elas. O mesmo de
-conjuntos para anúncios.
+**(a) Drill-down por campanha — PENDENTE, é o próximo.** Selecionar campanhas
+(checkbox, já existe) e as abas Conjuntos e Anúncios mostrarem só o que pertence
+a elas. O mesmo de conjuntos para anúncios.
 
 > ⚠️ **Interseção com o filtro de conta, nunca substituição.** Nenhuma
 > selecionada = mostra todas. A seleção sobrevive à troca de aba.
@@ -3548,19 +3655,11 @@ conjuntos para anúncios.
 > `daConta()` em `AdsManagerView`), não código novo. Se virar um segundo
 > mecanismo paralelo, está errado — os dois vão divergir, como já divergiram a
 > contagem das abas e o filtro da tabela.
-
-**(b) `effective_status`.** O sync usa `effective_status` como **parâmetro de
-filtro** (`STATUS_SINCRONIZADOS`) mas **não o pede como campo** — então ele não é
-guardado. `status` é o que foi configurado; `effective_status` é se está
-realmente veiculando.
-
-> Uma campanha ACTIVE pode não entregar: conjunto pausado, anúncio reprovado,
-> orçamento esgotado, conta com problema, fora da janela de agendamento. É a
-> resposta para *"por que minha campanha não está rodando"*, que é a pergunta
-> real do usuário.
 >
-> Exibir em linguagem simples (não o valor cru da API), deixar EVIDENTE quando os
-> dois divergirem, e na aba Arquivados **distinguir arquivado de excluído**.
+> Custo: só cliente e interface. Sem schema, sem sync, sem migration — portanto
+> sem ordem de deploy e sem risco em produção.
+
+**(b) `effective_status`** → ✅ feito. Ver "Status de VEICULAÇÃO" abaixo.
 
 ### 1. CAKTO + arquitetura universal de gateways — **PRÓXIMO**
 
@@ -3778,7 +3877,13 @@ desligada.** Nenhuma dessas ferramentas pergunta "alguém chama isto?".
 Tudo até `3bc1cda` está **em produção**. **A padronização visual terminou** — os
 dois itens que faltavam (aproveitamento do espaço das 4 telas + os SVGs legados)
 foram feitos em 30/07/2026 e estão **na árvore de trabalho, ainda SEM COMMIT**,
-aguardando o teste do usuário. Sem migration pendente — o deploy é só push.
+aguardando o teste do usuário.
+
+> 🔴 **HÁ MIGRATION PENDENTE (31/07/2026): `20260731020000_effective_status`.**
+> Ordem obrigatória: `npx prisma migrate deploy` na produção **e só então**
+> `git push`. Ela é aditiva (3 colunas nullable), então o build antigo continua
+> funcionando — mas o código novo faz `SELECT` delas em toda carga do
+> Gerenciador. Depois do primeiro sync, rode **`npm run ads:sonda`**.
 
 ### ⚠️ Fila da próxima sessão
 
@@ -5283,6 +5388,9 @@ npm run geo:backfill     # país do histórico. SIMULA; --aplicar escreve
 npm run test:bots        # 35 asserções, classificação de robô (puro)
 npm run bot:reclassificar # reavalia Click.bot pelo userAgent. SIMULA; --aplicar escreve
 npm run test:desempate   # 27 asserções, país quando o IP contradiz a campanha
+npm run test:veiculacao  # 40 asserções, status configurado × veiculação (puro)
+npm run test:veiculacao:e2e            # 13 asserções, o campo CHEGA em computeAdsOverview (banco de DEV)
+npm run ads:sonda -- --url '<conn>'    # quais effective_status a Meta devolve (só leitura)
 npm run test:match       # 20 asserções, purga + match por IP (banco de DEV)
 npm run ip:simular -- --url '<conn>'   # o que a purga faria. NUNCA escreve
 npm run geo:sonda -- --url '<conn>'   # a segmentacao esta chegando? (so leitura)

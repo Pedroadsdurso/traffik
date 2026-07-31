@@ -53,6 +53,19 @@ const STATUS_SINCRONIZADOS = JSON.stringify([
   "WITH_ISSUES",
 ]);
 
+/**
+ * `effective_status` era usado só como PARÂMETRO DE FILTRO (acima) e nunca
+ * pedido como CAMPO — então o valor não era guardado em lugar nenhum.
+ *
+ * Guardamos a string crua. Ver o comentário de `Campaign.effectiveStatus` no
+ * schema: enum faria o sync FALHAR num valor novo da Meta, e a tradução para
+ * linguagem simples vive em `lib/ads/veiculacao.ts`.
+ */
+function efetivo(s?: string): string | null {
+  const v = s?.trim();
+  return v ? v : null;
+}
+
 function mapStatus(s?: string): EntityStatus {
   switch (s) {
     case "ACTIVE":
@@ -87,6 +100,8 @@ interface FbCampaign {
   id: string;
   name: string;
   status?: string;
+  /** Se está REALMENTE veiculando. Ver `lib/ads/veiculacao.ts`. */
+  effective_status?: string;
   objective?: string;
   daily_budget?: string;
   lifetime_budget?: string;
@@ -98,6 +113,7 @@ interface FbAdSet {
   id: string;
   name: string;
   status?: string;
+  effective_status?: string;
   daily_budget?: string;
   lifetime_budget?: string;
   optimization_goal?: string;
@@ -153,6 +169,7 @@ interface FbAd {
   id: string;
   name: string;
   status?: string;
+  effective_status?: string;
   campaign_id?: string;
   adset_id?: string;
   creative?: FbCreative;
@@ -205,7 +222,12 @@ async function syncAccount(
   const campaigns = await graphAll<FbCampaign>(
     `${act}/campaigns`,
     {
-      fields: "id,name,status,objective,daily_budget,lifetime_budget,bid_strategy,start_time,stop_time",
+      // ⚠️ `effective_status` aparece DUAS vezes e com papéis diferentes: em
+      // `fields` é o campo que queremos LER; embaixo é o FILTRO de quais
+      // objetos trazer. Ele estava só no filtro — por isso o valor nunca era
+      // guardado.
+      fields:
+        "id,name,status,effective_status,objective,daily_budget,lifetime_budget,bid_strategy,start_time,stop_time",
       effective_status: STATUS_SINCRONIZADOS,
     },
     accessToken,
@@ -217,6 +239,7 @@ async function syncAccount(
       update: {
         name: c.name,
         status: mapStatus(c.status),
+        effectiveStatus: efetivo(c.effective_status),
         objective: c.objective ?? null,
         dailyBudget: budget(c.daily_budget),
         lifetimeBudget: budget(c.lifetime_budget),
@@ -229,6 +252,7 @@ async function syncAccount(
         fbCampaignId: c.id,
         name: c.name,
         status: mapStatus(c.status),
+        effectiveStatus: efetivo(c.effective_status),
         objective: c.objective ?? null,
         dailyBudget: budget(c.daily_budget),
         lifetimeBudget: budget(c.lifetime_budget),
@@ -250,7 +274,7 @@ async function syncAccount(
       // zero de rate limit. Consultar sob demanda seria uma requisição por
       // clique, dentro de uma rota que hoje só escreve no banco.
       fields:
-        "id,name,status,daily_budget,lifetime_budget,optimization_goal,bid_amount,campaign_id,targeting{geo_locations}",
+        "id,name,status,effective_status,daily_budget,lifetime_budget,optimization_goal,bid_amount,campaign_id,targeting{geo_locations}",
       effective_status: STATUS_SINCRONIZADOS,
     },
     accessToken,
@@ -264,6 +288,7 @@ async function syncAccount(
       update: {
         name: a.name,
         status: mapStatus(a.status),
+        effectiveStatus: efetivo(a.effective_status),
         dailyBudget: budget(a.daily_budget),
         lifetimeBudget: budget(a.lifetime_budget),
         optimizationGoal: a.optimization_goal ?? null,
@@ -276,6 +301,7 @@ async function syncAccount(
         fbAdSetId: a.id,
         name: a.name,
         status: mapStatus(a.status),
+        effectiveStatus: efetivo(a.effective_status),
         dailyBudget: budget(a.daily_budget),
         lifetimeBudget: budget(a.lifetime_budget),
         optimizationGoal: a.optimization_goal ?? null,
@@ -294,7 +320,7 @@ async function syncAccount(
     `${act}/ads`,
     {
       fields:
-        "id,name,status,campaign_id,adset_id,creative{id,name,title,body,thumbnail_url,image_url,video_id,call_to_action_type,object_story_spec}",
+        "id,name,status,effective_status,campaign_id,adset_id,creative{id,name,title,body,thumbnail_url,image_url,video_id,call_to_action_type,object_story_spec}",
       effective_status: STATUS_SINCRONIZADOS,
     },
     accessToken,
@@ -307,8 +333,22 @@ async function syncAccount(
 
     const row = await prisma.ad.upsert({
       where: { adAccountId_fbAdId: { adAccountId: account.id, fbAdId: ad.id } },
-      update: { name: ad.name, status: mapStatus(ad.status), campaignId, adSetId },
-      create: { adAccountId: account.id, fbAdId: ad.id, name: ad.name, status: mapStatus(ad.status), campaignId, adSetId },
+      update: {
+        name: ad.name,
+        status: mapStatus(ad.status),
+        effectiveStatus: efetivo(ad.effective_status),
+        campaignId,
+        adSetId,
+      },
+      create: {
+        adAccountId: account.id,
+        fbAdId: ad.id,
+        name: ad.name,
+        status: mapStatus(ad.status),
+        effectiveStatus: efetivo(ad.effective_status),
+        campaignId,
+        adSetId,
+      },
       select: { id: true },
     });
     adIdMap.set(ad.id, row.id);

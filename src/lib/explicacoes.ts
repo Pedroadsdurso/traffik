@@ -201,6 +201,19 @@ export const METRICAS: Record<string, ConteudoInfo> = {
       "Vendas sem e-mail contam como compradores distintos — não há como agrupá-las, e é melhor superestimar o denominador do que fundir pessoas diferentes.",
     fonte: "derivada",
   },
+  veiculacao: {
+    titulo: "Veiculação",
+    corpo: [
+      "Se está entregando de verdade agora — que não é a mesma coisa que estar ligado.",
+    ],
+    lista: [
+      "O toggle da primeira coluna é o que VOCÊ configurou.",
+      "Esta coluna é o que a Meta está fazendo com essa configuração.",
+      "Quando os dois discordam, o aviso âmbar diz o motivo: conjunto pausado, anúncio reprovado, conta sem forma de pagamento, agendamento que não começou.",
+    ],
+    alerta: 'Um traço "—" significa que a Meta ainda não informou — o próximo ciclo de sincronização preenche.',
+    fonte: "meta",
+  },
   divergenciaMeta: {
     titulo: "Por que difere do Gerenciador da Meta?",
     corpo: ["Três motivos, e nenhum deles é erro de cálculo:"],

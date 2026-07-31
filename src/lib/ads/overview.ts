@@ -35,6 +35,13 @@ export interface CampaignRow {
   fbId: string;
   name: string;
   status: string;
+  /**
+   * `effective_status` cru da Meta — se está REALMENTE veiculando.
+   *
+   * ⚠️ NULO = a Meta ainda não informou (sync antigo), **não** "parado". Quem
+   * traduz para linguagem de tela é `lib/ads/veiculacao.ts`.
+   */
+  effectiveStatus: string | null;
   accountId: string;
   /// Orçamento na campanha ⇒ CBO. Nulo ⇒ ABO (orçamento nos conjuntos).
   dailyBudget: number | null;
@@ -142,11 +149,11 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
     }),
     prisma.campaign.findMany({
       where: { adAccount: { userId, ...accountWhere } },
-      select: { id: true, fbCampaignId: true, name: true, status: true, dailyBudget: true, lifetimeBudget: true, bidStrategy: true, adAccountId: true },
+      select: { id: true, fbCampaignId: true, name: true, status: true, effectiveStatus: true, dailyBudget: true, lifetimeBudget: true, bidStrategy: true, adAccountId: true },
     }),
     prisma.adSet.findMany({
       where: { adAccount: { userId, ...accountWhere } },
-      select: { id: true, fbAdSetId: true, name: true, status: true, dailyBudget: true, lifetimeBudget: true, bidAmount: true, adAccountId: true, campaignId: true },
+      select: { id: true, fbAdSetId: true, name: true, status: true, effectiveStatus: true, dailyBudget: true, lifetimeBudget: true, bidAmount: true, adAccountId: true, campaignId: true },
     }),
     prisma.ad.findMany({
       where: { adAccount: { userId, ...accountWhere } },
@@ -155,6 +162,7 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
         fbAdId: true,
         name: true,
         status: true,
+        effectiveStatus: true,
         adAccountId: true,
         campaignId: true,
         adSetId: true,
@@ -348,6 +356,7 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
       fbId: a.fbAdId,
       name: a.name,
       status: a.status,
+      effectiveStatus: a.effectiveStatus,
       accountId: a.adAccountId,
       campaignId: a.campaignId,
       campaignName: "",
@@ -406,6 +415,7 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
       fbId: c.fbCampaignId,
       name: c.name,
       status: c.status,
+      effectiveStatus: c.effectiveStatus,
       accountId: c.adAccountId,
       dailyBudget: c.dailyBudget != null ? num(c.dailyBudget) : null,
       lifetimeBudget: c.lifetimeBudget != null ? num(c.lifetimeBudget) : null,
@@ -434,6 +444,7 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
       fbId: a.fbAdSetId,
       name: a.name,
       status: a.status,
+      effectiveStatus: a.effectiveStatus,
       accountId: a.adAccountId,
       campaignId: a.campaignId,
       campaignName: campaignNameById.get(a.campaignId) ?? "",

@@ -35,7 +35,10 @@
     "backfill:taxas": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/backfill-taxas.mjs",
     "test:correspondencia": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-correspondencia.mjs",
     "test:cakto": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-cakto.mjs",
-    "venda:inspecionar": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/inspecionar-venda.mjs"
+    "venda:inspecionar": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/inspecionar-venda.mjs",
+    "test:veiculacao": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-veiculacao.mjs",
+    "ads:sonda": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/sonda-veiculacao.mjs",
+    "test:veiculacao:e2e": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-veiculacao-e2e.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

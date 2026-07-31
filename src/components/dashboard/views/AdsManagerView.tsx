@@ -64,7 +64,7 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
     let base: LinhaTabela[] = [];
     if (v.adsSub === "campaigns") {
       base = raw.campaigns.filter((c) => filtra(c.name, c.status) && daConta(c.accountId)).map((c) => ({
-        id: c.id, fbId: c.fbId, nome: c.name, status: c.status,
+        id: c.id, fbId: c.fbId, nome: c.name, status: c.status, effectiveStatus: c.effectiveStatus,
         // Orçamento na campanha ⇒ CBO. É o que o modal de orçamento lê.
         sub: c.dailyBudget != null ? "CBO · orçamento na campanha" : "ABO · orçamento nos conjuntos",
         orcamento: c.dailyBudget,
@@ -76,7 +76,8 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
       }));
     } else if (v.adsSub === "adsets") {
       base = raw.adSets.filter((a) => filtra(a.name, a.status) && daConta(a.accountId)).map((a) => ({
-        id: a.id, fbId: a.fbId, nome: a.name, status: a.status, sub: a.campaignName,
+        id: a.id, fbId: a.fbId, nome: a.name, status: a.status, effectiveStatus: a.effectiveStatus,
+        sub: a.campaignName,
         orcamento: a.dailyBudget, bidCap: a.bidAmount,
         // Conjunto só edita orçamento quando a campanha-mãe é ABO.
         orcamentoEditavel: raw.campaigns.find((c) => c.id === a.campaignId)?.dailyBudget == null,
@@ -86,12 +87,17 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
       }));
     } else if (v.adsSub === "ads") {
       base = raw.ads.filter((a) => filtra(a.name, a.status) && daConta(a.accountId)).map((a) => ({
-        id: a.id, fbId: a.fbId, nome: a.name, status: a.status, sub: a.campaignName,
+        id: a.id, fbId: a.fbId, nome: a.name, status: a.status, effectiveStatus: a.effectiveStatus,
+        sub: a.campaignName,
         spend: a.spend, impressions: a.impressions, clicks: a.clicks,
         results: a.results, revenue: a.revenue,
         ic: a.ic, cliquesAtribuidos: a.cliquesAtribuidos, vendasIniciadas: a.vendasIniciadas,
       }));
     } else {
+      // ⚠️ Conta NÃO leva `effectiveStatus` — e a ausência é significativa, não
+      // esquecimento. Aqui o toggle é "rastreando na Traffik", não entrega da
+      // Meta: quem veicula é campanha, conjunto e anúncio. A célula de
+      // Veiculação mostra "—" seco, sem falar em sincronização pendente.
       base = raw.accounts.map((ac) => ({
         id: ac.id, fbId: ac.fbAccountId, nome: ac.name,
         status: ac.tracking ? "ACTIVE" : "PAUSED",
