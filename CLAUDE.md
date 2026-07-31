@@ -3385,6 +3385,25 @@ numa tela **256×256 com o mesmo fundo branco** que a arte já traz, que é o qu
 > Regra para a próxima: **wordmark largo tem de ser quadrado antes de virar
 > `.webp`**. Só logo já quadrada pode ir direto.
 
+### 🐛 E um bug antigo que a OnyxPag revelou
+
+O botão "Adicionar" da gaveta checava `!gatewaySecret.trim()`
+**incondicionalmente** — escrito quando Kirvano e Cakto eram os únicos gateways
+e os dois exigiam chave. Resultado: o campo dizia **"(opcional)"** e o botão
+ficava desabilitado do mesmo jeito.
+
+Atingia a OnyxPag e, **desde sempre e sem ninguém notar, o "Sistema próprio"**
+(`CUSTOM`) — que também tem a chave como opcional. Ou seja: nunca foi possível
+cadastrar um checkout próprio sem inventar uma chave.
+
+Agora a trava sai do **registro** (`campos[].obrigatorio`), que é a mesma fonte
+de onde vem o rótulo "(opcional)". Tirar os dois do mesmo lugar é o que impede
+a tela de dizer uma coisa e o botão exigir outra.
+
+> ⚠️ **Padrão que fica:** toda regra de formulário que dependa do gateway sai do
+> `REGISTRO`. Se aparecer uma condição escrita à mão na `WebhooksView`, ela vai
+> divergir do registro no gateway seguinte — foi exatamente o que aconteceu aqui.
+
 ### O único arquivo fora do roteiro
 
 O subtítulo da gaveta tinha **dois** fluxos (`geradoPorNos` ou não) e a OnyxPag é
@@ -6017,7 +6036,7 @@ npm run geo:backfill     # país do histórico. SIMULA; --aplicar escreve
 npm run test:bots        # 35 asserções, classificação de robô (puro)
 npm run bot:reclassificar # reavalia Click.bot pelo userAgent. SIMULA; --aplicar escreve
 npm run test:desempate   # 27 asserções, país quando o IP contradiz a campanha
-npm run test:onyxpag     # 38 asserções, parser + testador da OnyxPag (puro)
+npm run test:onyxpag     # 43 asserções, parser + testador da OnyxPag (puro)
 npm run test:veiculacao  # 40 asserções, status configurado × veiculação (puro)
 npm run test:analise-regra   # 32 asserções, avisos estáticos de condição (puro)
 npm run test:previa-regra    # 30 asserções, prévia da regra (banco de DEV)

@@ -290,6 +290,14 @@ function WebhookModal({ v }: { v: TraffikView }) {
   const filtered = GATEWAYS.filter((g) => g.name.toLowerCase().includes(v.webhookGatewaySearch.toLowerCase()));
   const selected = GATEWAYS.find((g) => g.id === v.webhookGateway);
   const def = gatewayPorId(v.webhookGateway);
+  /**
+   * A chave é obrigatória para ESTE gateway?
+   *
+   * Sai do registro (`campos[].obrigatorio`), que é o mesmo lugar de onde o
+   * rótulo "(opcional)" vem. Tirar os dois da mesma fonte é o que impede a tela
+   * de dizer uma coisa e o botão exigir outra.
+   */
+  const exigeChave = def?.campos.some((c) => c.chave === "secret" && c.obrigatorio) ?? false;
   const emEdicao = editing ? v.webhooks.find((w) => w.id === v.webhookEditId) : null;
 
   return (
@@ -314,8 +322,14 @@ function WebhookModal({ v }: { v: TraffikView }) {
       rodape={
         <>
           <button className="btn btn-secondary" type="button" onClick={v.closeWebhookModal}>Cancelar</button>
+          {/* ⚠️ Quem decide se a chave é obrigatória é o REGISTRO, não esta
+              linha. A checagem era incondicional (`!gatewaySecret.trim()`),
+              escrita quando Kirvano e Cakto eram os únicos gateways e os dois
+              exigiam chave — então o campo dizia "(opcional)" e o botão ficava
+              desabilitado do mesmo jeito. Atingia a OnyxPag e, desde sempre e
+              sem ninguém notar, o "Sistema próprio". */}
           <button className="btn btn-primary" type="button" onClick={v.saveWebhook}
-            disabled={v.webhookBusy || !selected?.enabled || (!editing && !v.gatewaySecret.trim())}>
+            disabled={v.webhookBusy || !selected?.enabled || (!editing && exigeChave && !v.gatewaySecret.trim())}>
             {v.webhookBusy ? "Salvando…" : editing ? "Salvar" : "Adicionar"}
           </button>
         </>

@@ -51,6 +51,23 @@ console.log("\n\x1b[1mO gateway está no REGISTRO\x1b[0m");
   eq("  …mas confere se um for configurado", g.auth.onde.length > 0, true);
 }
 
+console.log("\n\x1b[1m🐛 A chave é obrigatória? O BOTÃO tem de ler isto\x1b[0m");
+{
+  // O "Adicionar" da gaveta checava `!gatewaySecret.trim()` incondicionalmente,
+  // escrito quando Kirvano e Cakto eram os únicos gateways e os dois exigiam
+  // chave. O campo dizia "(opcional)" e o botão travava do mesmo jeito.
+  // Agora ele deriva DAQUI — a mesma fonte de onde sai o rótulo "(opcional)".
+  const exige = (id) => REGISTRO[id].campos.some((c) => c.chave === "secret" && c.obrigatorio);
+  eq("KIRVANO exige chave", exige("KIRVANO"), true);
+  eq("CAKTO exige chave", exige("CAKTO"), true);
+  eq("🐛 ONYXPAG NÃO exige", exige("ONYXPAG"), false);
+  // Este estava quebrado desde sempre, e ninguém tinha esbarrado.
+  eq("🐛 CUSTOM NÃO exige (bug antigo, mesmo caminho)", exige("CUSTOM"), false);
+  // O rótulo e a trava saem do mesmo campo: não há como divergirem.
+  const campo = (id) => REGISTRO[id].campos.find((c) => c.chave === "secret");
+  eq("todo gateway declara o campo secret", ["KIRVANO", "CAKTO", "ONYXPAG", "CUSTOM"].every((id) => !!campo(id)), true);
+}
+
 console.log("\n\x1b[1m🔴 NENHUM campo em ÂMBAR nos exemplos\x1b[0m");
 for (const [i, ex] of EXEMPLOS_ONYXPAG.entries()) {
   const d = analisarPayload("ONYXPAG", ex.payload);
