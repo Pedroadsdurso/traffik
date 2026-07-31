@@ -885,10 +885,10 @@ modal avisou e **desabilitou o Confirmar**. Dados de demonstração removidos de
   Dashboard, que é no nível da conta, usa o lucro líquido.
 - **"Fixar" é só de sessão** — não persiste ao recarregar.
 - **Duplicar** depende do sync seguinte para a cópia aparecer na lista.
-- **Nenhuma ação de escrita foi exercida contra a API real do Facebook** nesta sessão
-  (a conta de teste não tem token). O caminho até a Graph API está escrito e tipado,
-  mas **a primeira execução real precisa ser observada** — comece por uma campanha
-  pausada e de baixo risco.
+- **Nenhuma ação de escrita foi exercida NESTA SESSÃO** (a conta de teste não tem
+  token). ✅ **Corrigido em 31/07/2026:** o usuário confirmou que **pausou campanha
+  e alterou orçamento pela ferramenta, em produção, e os dois funcionaram no
+  Facebook.** Ver "Escrita na Graph API: o que já foi exercido".
 - O **botão "Sincronizar métricas" continua existindo**; a sincronização oportunista
   (disparar sozinho quando o dado está velho) ficou para depois.
 
@@ -2422,11 +2422,14 @@ avalia; **aumento sem teto recusado antes de chamar a Meta**; **já no teto pula
 orçamento intacto no banco; limite diário 0 bloqueia; `runUserRules` avalia e
 grava log.
 
-> ⚠️ **Nenhuma ação de escrita foi exercida contra a Graph API real.** As duas
-> guardas do teto agem ANTES da chamada, então foram provadas de verdade; o
-> `clamp` no teto e o `updateDailyBudget` em si continuam sem execução real.
-> **A primeira execução real precisa ser observada** — comece por campanha
-> pausada e de baixo risco.
+> ⚠️ **O MOTOR DE REGRAS nunca agiu de verdade contra a Graph API.** As duas
+> guardas do teto agem ANTES da chamada, então foram provadas; o **clamp NO teto**
+> continua sem execução real.
+>
+> ⚠️ Não confunda com `updateDailyBudget`, que **já foi exercido** — pela caneta
+> inline, por uso real do usuário. O que falta é o caminho da REGRA: avaliar
+> condição e agir sozinha, de madrugada, sem ninguém olhando. É outro caminho de
+> código. Ver "Escrita na Graph API: o que já foi exercido".
 
 ### ✅ Tela refeita (2ª parte do Bloco 8)
 
@@ -3307,6 +3310,92 @@ A `WebhooksView` ainda tem o array `GATEWAYS` local, duplicando o registro — s
 na etapa 7. Enquanto isso, **o registro é a fonte de verdade do servidor** e o
 array só decide o que aparece no modal.
 
+## ✍️ ESCRITA NA GRAPH API: o que já foi exercido (31/07/2026)
+
+> ### ⛔ A documentação afirmava, em QUATRO lugares, que nenhuma escrita real
+> ### tinha acontecido. Era FALSO.
+> O usuário **pausou campanha e alterou orçamento pela ferramenta, em produção, e
+> os dois funcionaram no Facebook.** A afirmação nasceu correta ("não exercida
+> *nesta sessão*, a conta de teste não tem token") e foi sendo copiada adiante
+> perdendo o "nesta sessão", até virar uma verdade geral que ninguém checou.
+>
+> **Lição:** "não verificado por mim" não é "não verificado". Antes de registrar
+> algo como não exercido, pergunte ao usuário — ele usa o produto.
+
+### Inventário — quatro caminhos de escrita, e dois rodam SOZINHOS
+
+| Caminho | Onde | Exercido? |
+|---|---|---|
+| Pausar/ativar pelo toggle | `/api/ads/status` | ✅ uso real |
+| Alterar orçamento (caneta inline) | `updateDailyBudget` | ✅ uso real |
+| **`Purchase` na CAPI** | `dispatchPixel` | ✅ **automático, em TODA venda aprovada** |
+| **`Lead`/`AddToCart`/`IC` na CAPI** | `/api/pixel/event` | ✅ **automático, pelo script instalado** |
+| Teste de pixel | `/api/pixel/test` | ✅ |
+| Criar campanha | `/api/ads/campaign` | ❌ nunca |
+| **Regras agindo sozinhas** | `rules/engine.ts` | ❌ **nunca** |
+| **Clamp NO teto de orçamento** | `rules/engine.ts` | ❌ **nunca** |
+| Ações em massa | `/api/ads/bulk` | ❌ nunca |
+| Duplicar | `/copies` | ❌ nunca |
+| Excluir | `deleteEntity` | ❌ nunca (irreversível) |
+
+> ⚠️ Os dois automáticos são fáceis de esquecer porque ninguém clica neles: **cada
+> venda aprovada escreve na Meta** e alimenta a otimização da campanha. Não é
+> escrita de configuração, mas é dinheiro real sendo influenciado.
+
+### ✅ A cadeia de unidades está correta (verificada no código)
+
+`sync.ts` → `budget(v) = Number(v) / 100` (centavos → reais).
+`manage.ts` → `Math.round(reais * 100)` (reais → centavos).
+
+Consistente nos dois sentidos, e confirmada pelo uso real do usuário. **Não é
+onde procurar se um orçamento sair errado** — procure no caminho da REGRA, que é
+o único que nunca rodou.
+
+### 🧪 Plano de validação do que falta
+
+> ### 🔑 A cobaia não consegue gastar, e é isso que torna o teste seguro
+> Campanha **1382496493761816** (CA 1 MARIA, engajamento, PAUSADA) é **crua: sem
+> conjunto e sem anúncio**. A Meta só entrega através de conjuntos, então ela não
+> gasta **nem se for ativada**. Risco financeiro zero, não "baixo".
+>
+> ⚠️ **Isso deixa de valer no instante em que ela ganhar um conjunto.**
+
+**Passo 0 — ensaio a seco, obrigatório.** Regra com condição impossível
+(`Gasto ≥ 999999`), nível Campanha, conta CA 1 MARIA. O `details.avaliado` do log
+lista **cada entidade que a regra viu**, sem agir. Serve para responder: *as 12
+campanhas ARQUIVADAS da conta entram no escopo?* Se entrarem, nenhuma regra de
+ATIVAR pode rodar antes de apertar o escopo.
+
+**Passo 1 — motor agindo.** (a) `Gasto ≥ 0` + **Pausar** numa campanha já pausada:
+escrita real, efeito nulo, prova o caminho inteiro. (b) mesma regra com **Ativar**:
+prova mudança de estado, e é segura porque sem conjuntos não há entrega.
+
+**Passo 2 — o clamp.** Orçamento em **R$ 20**, regra **+50% com teto R$ 25**.
+Esperado no Facebook: **R$ 25,00**. R$ 30 = clamp não aplicou; R$ 0,25 ou
+R$ 2.500 = erro de unidade no caminho da regra.
+
+**Passo 3 — ações em massa.** O teste mais informativo é pedir **R$ 1,00** de
+orçamento: a Meta **rejeita** (abaixo do mínimo) e isso prova que o banco local só
+é atualizado DEPOIS de a Graph aceitar.
+
+**Passo 4 — duplicar.** Nasce **pausada** (`status_option: PAUSED`, o diálogo
+pergunta). `deep_copy: true`.
+
+> 🔴 **Reverter o duplicar é o problema:** a única remoção pela ferramenta é
+> Excluir, e `deleteEntity` grava `status: DELETED`, que **a Meta não desfaz**.
+> Arquive a cópia pelo Gerenciador do Facebook.
+
+> ### ⛔ BID CAP NÃO É TESTÁVEL NESTA COBAIA
+> `bid_amount` é campo de **CONJUNTO**, não de campanha, e exige estratégia
+> `LOWEST_COST_WITH_BID_CAP` ou `COST_CAP`. Testá-lo exigiria criar um conjunto —
+> o que remove a propriedade de "não pode gastar". Fica para quando houver uma
+> campanha real de baixo risco.
+
+**Rejeições LEGÍTIMAS, para não confundir com bug nosso:** orçamento abaixo do
+mínimo diário da conta; `bid_amount` em campanha ou com estratégia incompatível;
+orçamento de campanha quando os conjuntos têm orçamento próprio (ABO). Ativar
+campanha pausada e o objetivo de engajamento **não** rejeitam nada.
+
 ## 📋 FILA DE TRABALHO PENDENTE
 
 Para referência direta: *"vamos para o item 3d"*. Ordem de prioridade definida
@@ -3315,6 +3404,35 @@ pelo usuário em 30/07/2026.
 > ⚠️ **Os itens 3b e 3c foram VERIFICADOS no código e já estão feitos** — a fila
 > original vinha de um levantamento antigo. Ver as notas em cada um. Confira
 > antes de executar qualquer item desta lista: esta fila também envelhece.
+
+### 0. GERENCIADOR — combinado para a PRÓXIMA sessão (31/07/2026)
+
+Adiados de propósito por custo de sessão, com contexto limpo.
+
+**(a) Drill-down por campanha.** Selecionar campanhas (checkbox, já existe) e as
+abas Conjuntos e Anúncios mostrarem só o que pertence a elas. O mesmo de
+conjuntos para anúncios.
+
+> ⚠️ **Interseção com o filtro de conta, nunca substituição.** Nenhuma
+> selecionada = mostra todas. A seleção sobrevive à troca de aba.
+>
+> É **generalização** do filtro de conta que já existe (`contasFiltro` +
+> `daConta()` em `AdsManagerView`), não código novo. Se virar um segundo
+> mecanismo paralelo, está errado — os dois vão divergir, como já divergiram a
+> contagem das abas e o filtro da tabela.
+
+**(b) `effective_status`.** O sync usa `effective_status` como **parâmetro de
+filtro** (`STATUS_SINCRONIZADOS`) mas **não o pede como campo** — então ele não é
+guardado. `status` é o que foi configurado; `effective_status` é se está
+realmente veiculando.
+
+> Uma campanha ACTIVE pode não entregar: conjunto pausado, anúncio reprovado,
+> orçamento esgotado, conta com problema, fora da janela de agendamento. É a
+> resposta para *"por que minha campanha não está rodando"*, que é a pergunta
+> real do usuário.
+>
+> Exibir em linguagem simples (não o valor cru da API), deixar EVIDENTE quando os
+> dois divergirem, e na aba Arquivados **distinguir arquivado de excluído**.
 
 ### 1. CAKTO + arquitetura universal de gateways — **PRÓXIMO**
 
@@ -3575,8 +3693,9 @@ Fora isso: **faxina de código morto** (lista em "Pendências abertas") e o
 **import/export do Bloco 8**, que ficou de fora de propósito. O lint está em
 zero e não há item de padronização visual pendente.
 
-⚠️ **Nenhuma escrita real contra a Graph API foi exercida** — segue sendo a
-verificação mais importante em aberto. Ver "Pendências abertas".
+⚠️ **O motor de regras, as ações em massa e o duplicar nunca foram exercidos** —
+segue sendo a verificação mais importante em aberto. Pausar e alterar orçamento
+**já foram**, por uso real. Ver "Escrita na Graph API: o que já foi exercido".
 
 ### O que NÃO está pendente (não refaça)
 
@@ -5064,9 +5183,9 @@ arquivo local, de propósito.
 - **`Workspace.accountIds` / `webhookIds` / `pixelConfigIds` / `products`** —
   mortos, mantidos pela regra dos dois deploys.
 - **`DashboardLayout.workspaceId` nullable** — o NOT NULL entra num 2º deploy.
-- **Nenhuma escrita real contra a Graph API foi exercida.** O teste seguro
-  combinado: regra de PAUSAR numa campanha **já pausada**, condição `Gasto ≥ 0`.
-  O log deve dizer `✓ <campanha> — PAUSAR (já pausada)` sem alterar nada.
+- **O MOTOR DE REGRAS, as ações em massa e o duplicar nunca foram exercidos.**
+  Pausar e alterar orçamento **já foram**, por uso real do usuário. Ver "Escrita
+  na Graph API: o que já foi exercido" para o inventário e o plano de validação.
 - **`WebhookLog` sem retenção**, e logs sem dono não aparecem na UI.
 
 ## 🎨 Marca e logos
