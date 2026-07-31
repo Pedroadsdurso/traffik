@@ -4843,7 +4843,205 @@ desligada.** Nenhuma dessas ferramentas pergunta "alguém chama isto?".
 > Ao criar rota de cron, **agende no mesmo commit**. Ao criar consulta de
 > manutenção, **rode contra linhas semeadas no dev** antes de dizer que funciona.
 
-## 🚦 COMECE AQUI — fechamento da sessão de 31/07/2026 (2ª parte)
+## 🚦 COMECE AQUI — sessão de 31/07/2026 (3ª parte)
+
+**Três itens fechados**, todos verificados. Tudo na árvore de trabalho, **SEM
+COMMIT** — aguardando o teste do usuário.
+
+> 🔴 **DUAS MIGRATIONS PENDENTES: `20260731070000_pixel_event_detectores` e
+> `20260731080000_sale_utms`.** Ordem obrigatória: `npx prisma migrate deploy` na
+> produção **e só então** `git push`. As duas são aditivas (uma coluna nullable e
+> seis colunas nullable, sem default, sem backfill, sem constraint), então o build
+> antigo continua funcionando — mas o código novo faz `SELECT` delas.
+>
+> Depois do deploy: **`npm run backfill:utms`** (simula por padrão).
+
+### 1. ✅ Aviso de snippet defasado na gaveta do Pixel
+
+`src/lib/pixel/detectores.ts` — o script **assina** o que ele detecta no momento
+em que é gerado (`var DET = "v1.l1.a0.icontem_texto.v1rljein"`), manda a
+assinatura no POST de todo evento, e a gaveta compara com o `PixelEventRule` ao
+vivo. Migration `…070000` (`PixelEvent.detectores`).
+
+> ### 🔴 As duas direções NÃO são simétricas, e a tela diz qual é qual
+> | Na gaveta | No script instalado | O que acontece |
+> |---|---|---|
+> | Lead **ligado** | `LEAD=false` | 🔴 **nenhum evento sai, e nada denuncia** |
+> | Lead desligado | `LEAD=true` | o evento sai e o servidor recusa com `regra desabilitada` — barulhento, tudo bem |
+>
+> Por isso `diferencasDeDetectores` tem frases diferentes para cada direção.
+> Uma frase só ("os detectores divergem") esconderia qual delas custa conversão.
+
+**Quatro estados, e `sem-dados` NÃO é `ok`:**
+
+| Estado | Quando |
+|---|---|
+| `ok` | a assinatura reportada bate com a regra ao vivo |
+| `divergente` | 🔴 discordam; as frases dizem em quê e o que fazer |
+| `script-antigo` | está rodando, mas é anterior a este diagnóstico |
+| `sem-dados` | nenhum evento chegou — **não afirmamos nada** |
+
+Ausência de evento pode ser script não instalado, site sem tráfego ou script
+quebrado, e não distinguimos os três. Dizer "tudo certo" ali seria o mesmo
+silêncio que o diagnóstico existe para acabar.
+
+> ⚠️ **Decide pelo evento mais recente VINDO DO SCRIPT**, não pela última
+> assinatura já vista: um script reinstalado numa versão anterior tem de aparecer
+> como antigo, e não como a assinatura boa da semana passada. Eventos com
+> `eventId` começando em `gw:` são do webhook do gateway
+> (`webhook/checkoutEvent.ts`) e nunca têm detector.
+
+> ⚠️ **A checagem é recarregada DEPOIS de salvar.** Salvar muda o que a
+> ferramenta espera do script; um resultado calculado antes viraria afirmação
+> sobre a configuração anterior — pior que nenhuma, porque parece confirmação.
+
+> ⚠️ **Normalização é o que impede alarme falso.** `"pay.kirvano.com, hotmart"` e
+> `"pay.kirvano.com,hotmart"` dão a MESMA assinatura, porque
+> `dominiosCheckout()` já apara e passa para minúsculas. Mas **seletor CSS não é
+> normalizado** — `.btnCheckout` ≠ `.btncheckout` de verdade. Um aviso que às
+> vezes mente treina o usuário a ignorar todos.
+
+> ⚠️ **A rota aceita qualquer string curta em `det`**, de propósito. Validar
+> contra o formato ATUAL transformaria snippet velho em snippet invisível — que é
+> exatamente o caso que a coluna existe para exibir. O teto de 120 caracteres é só
+> para a rota pública não escrever texto ilimitado.
+
+**Campo novo no detector precisa entrar na assinatura** — senão ela passa a dizer
+"igual" para snippets que já não são.
+
+### 2. ✅ Leitor da coluna `espelho` (a dívida da sessão anterior)
+
+Card **"Espelho no pixel da sua página"** em Integrações › Testes, entre o Teste
+de Pixel e o de Webhook. Pílulas com a contagem por situação, aviso âmbar só
+quando há problema real, e detalhamento por evento.
+
+`src/lib/pixel/espelho.ts` é a fonte única de rótulo, tom e texto de ajuda —
+**não pode morar em `actions/diagnostics.ts`**, que é `"use server"`: lá todo
+export vira endpoint e um array exportado quebra o build.
+
+> ⚠️ **`nulo` NÃO é falha**, e a distinção é o que dá valor ao resto. Cobre dois
+> casos legítimos: evento de script anterior à coluna, e evento criado pelo
+> SERVIDOR (o `InitiateCheckout` que nasce do webhook do gateway — esse nunca
+> passa por navegador nenhum). Sem separá-lo, todo o histórico apareceria como
+> espelho quebrado e o número que importa (`sem-fbq`) se perderia no meio.
+>
+> ⚠️ **O aviso âmbar só aparece com problema.** Alerta permanente vira ruído que
+> se aprende a ignorar — inclusive quando muda de texto.
+
+### 3. ✅ UTMs copiadas para `Sale` — migration `…080000`
+
+`utmSource`/`utmMedium`/`utmCampaign`/`utmContent`/`utmTerm`/`fbclid`, gravados na
+ingestão a partir do clique casado. Mesma classe do `Sale.platform`.
+
+> ### ⛔ PRECEDÊNCIA: a cadeia `Sale → Click` VENCE a cópia — confirmado
+> A preferência do usuário está certa e virou `lib/vendas/utmsDaVenda.ts`, o
+> único ponto que decide isso. Três razões:
+>
+> 1. **É o caminho já exercido.** `ads/overview.ts`, `ads/creatives.ts` e
+>    `areas/precedencia.ts` leem do `Click` há meses, contra dado real.
+> 2. **Duas fontes para a mesma pergunta divergem sempre** — foi assim que a tela
+>    de Áreas passou a dizer "Sem webhook" para uma área com webhook vinculado.
+> 3. **A cópia é seguro, não índice.** Ela existe para o dia em que o clique
+>    sumir; enquanto ele estiver lá, ele manda.
+>
+> ⚠️ Enquanto o clique existir, **as duas respondem igual** — a cópia é feita a
+> partir dele e um `Click` nunca muda de UTM. A precedência só passa a importar
+> quando o clique é apagado, o que hoje só acontece por "apagar dados" na
+> exclusão de área, atrás de duas travas. **É por isso que ela é barata: não muda
+> número nenhum hoje.**
+>
+> ⚠️ **Nunca mescla.** Campanha do clique + criativo da cópia produziria uma
+> atribuição que não existiu em lugar nenhum. E o clique vence quando **tem algo a
+> dizer**, não pela mera existência: um clique de tráfego direto não pode calar
+> uma cópia herdada de um clique anterior mais forte.
+
+> ### 🔴 Os UTMs viajam no MESMO `updateMany` do `clickId`
+> Sob a MESMA guarda de precedência de fonte. Numa instrução separada, um match
+> mais fraco poderia trocar a campanha sem trocar o clique, e a cópia passaria a
+> descrever outro visitante. Escreve **inclusive os nulos**: a cópia descreve o
+> clique para o qual a venda aponta AGORA.
+
+> ### ⚠️ A armadilha do `select`, de novo — e desta vez com teste
+> `matchClick` precisa **selecionar** as seis colunas. Fora do `select` elas
+> chegam `undefined`, a venda nasce sem campanha e **nenhum `tsc`/`lint`/`build`
+> acusa** — é a armadilha do `pedidoId`. O `select` virou constante única
+> (`CAMPOS`) usada pelas três vias de match, e `test:utm-venda` chama o
+> `matchClick` de verdade contra o banco para provar que os valores chegam.
+
+**`npm run backfill:utms`** — simula por padrão. Idempotente de verdade: o `WHERE`
+exige as seis colunas da venda nulas **e** o clique com ao menos uma preenchida.
+Sem a segunda metade, toda venda de tráfego direto seria reescrita com nulos a
+cada passada e a 2ª execução reportaria linhas tocadas.
+
+> ✅ **A verificação que o usuário pediu é MEDIDA, não prometida.** Depois do
+> `--aplicar` o script compara `country`/`countrySource` **linha a linha** e falha
+> se qualquer um mudou; depois roda a 2ª passada e falha se ela tocar em algo.
+> Exercitado contra o banco de dev: 8 vendas, país idêntico em 8, 2ª passada 0.
+>
+> ⚠️ O relatório é **recortado por dono** (`userId`), como manda a regra do
+> `origem-venda.mjs`: um script que soma o banco inteiro está medindo outra coisa.
+
+**A coluna tem leitor**: `npm run venda:inspecionar` mostra Campanha/Criativo/
+Fonte resolvidos por `utmsDaVenda` e diz **de onde a resposta veio** ("respondido
+pelo CLIQUE (a fonte)" × "pela CÓPIA na venda (o clique sumiu)"), avisando quando
+falta cópia.
+
+> 🐛 **Achado de quebra:** o `SELECT s.*, c."utmCampaign", c.fbclid` do inspetor
+> passou a ter **nome de coluna repetido** — `Sale` agora tem `utmCampaign` e
+> `fbclid` próprios, e no objeto de linha do `pg` o último vence. O inspetor
+> mostraria o clique achando que mostra a venda. As colunas do clique foram
+> aliasadas. **Toda consulta que faz `s.*` + join no `Click` tem esse risco.**
+
+> ### ⚠️ O que NÃO foi feito, de propósito
+> **A atribuição não usa a cópia como fallback.** Ela só dispararia com o clique
+> apagado — que hoje não acontece sozinho — e ligá-la mudaria números (venda hoje
+> não atribuível passaria a ser) sem gatilho que justifique. `utmsDaVenda` está
+> pronto para quando fizer sentido: é uma linha.
+
+### Verificação
+
+| | |
+|---|---|
+| `npm run test:detectores` | **28 asserções, 0 falhas** (puro) |
+| `npm run test:utm-venda` | **25 asserções, 0 falhas** (banco de DEV) |
+| `npm run test:espelho` · `test:match` · `test:gateways` | 30 · 20 · 45, todos passando |
+| `tsc --noEmit` · `lint` · `next build` | limpos |
+| **Na tela** | as duas telas conferidas no navegador — ver abaixo |
+
+**Conferido na tela** (dev, `dev@exemplo.dev`, dados semeados e removidos por id):
+
+- gaveta do Pixel, pixel divergente → aviso âmbar com **as duas frases**
+  ("Lead está ligado aqui, mas o script instalado não escuta o envio de
+  formulários — nenhum evento chega." e "A regra de Initiate Checkout aqui é
+  'contém texto'; o script instalado usa 'desligado'."), mais a instrução de
+  regerar e o "Último evento recebido 5min atrás";
+- gaveta do outro pixel → "✓ O script instalado no seu site corresponde a esta
+  configuração.";
+- aba Testes → `11 saiu junto · 3 saiu depois de esperar · 4 o pixel da página
+  nunca apareceu · 1 erro ao espelhar · 8 outro dono envia · 8 não informado`,
+  com o bloco âmbar só para os dois problemas e o detalhamento por evento.
+
+### 📋 A FILA
+
+1. **Reauditoria da fila de UX** (o usuário adiou de propósito: precisa de
+   reapuração antes de executar, e as telas criadas desde então — gaveta da
+   Cakto, nova campanha, drill-down, coluna de veiculação, testar condição, dono
+   do pixel, e agora estas duas — **não foram auditadas** quanto à linguagem).
+2. **Evento de TESTE da Cakto conta como venda real** — bloqueado até o usuário
+   reativar a Cakto (precisa do payload real).
+3. Import/export do Bloco 8; faxina do nav morto no `useTraffikState` +
+   `EditDashboardDrawer` inalcançável.
+
+### O que o usuário ainda deve
+
+- Exercitar o **AddToCart** (único evento do script nunca exercitado).
+- Confirmar no **Gerenciador de Eventos da Meta** que o `InitiateCheckout`
+  aparece numa linha só, marcada **"Navegador e Servidor"**. Duas linhas
+  separadas = a Meta não juntou.
+
+---
+
+## 🚦 (histórico) fechamento da sessão de 31/07/2026 (2ª parte)
 
 Tudo commitado e no `origin/main` até **`0fa68d1`**. As migrations
 `20260731030000_sale_platform`, `…040000_pixel_event_dedup`,
@@ -6590,6 +6788,9 @@ npm run bot:reclassificar # reavalia Click.bot pelo userAgent. SIMULA; --aplicar
 npm run test:desempate   # 27 asserções, país quando o IP contradiz a campanha
 npm run test:onyxpag     # 43 asserções, parser + testador da OnyxPag (puro)
 npm run test:espelho     # 30 asserções, espelho no fbq em DOM falso (puro)
+npm run test:detectores  # 28 asserções, assinatura do snippet instalado (puro)
+npm run test:utm-venda   # 25 asserções, UTMs copiadas para Sale (banco de DEV)
+npm run backfill:utms    # copia os UTMs do clique. SIMULA; --aplicar escreve
 npm run test:veiculacao  # 40 asserções, status configurado × veiculação (puro)
 npm run test:analise-regra   # 32 asserções, avisos estáticos de condição (puro)
 npm run test:previa-regra    # 30 asserções, prévia da regra (banco de DEV)
@@ -7082,6 +7283,7 @@ Registradas de propósito — **não são bugs esquecidos**, são decisões toma
 
 | # | Dívida | Por quê / risco |
 |---|--------|-----------------|
+| 0 | ~~**`PixelEvent.espelho` sem leitor**~~ e ~~**detector congelado sem aviso**~~ ✅ **RESOLVIDOS em 31/07/2026 (3ª parte)** — card na aba Testes e aviso na gaveta do Pixel. | Fica só a confirmação no Gerenciador de Eventos da Meta, que é do usuário. |
 | 1 | ~~**Dedup parcial dos eventos de pixel.**~~ ✅ **RESOLVIDO em 31/07/2026.** `eventId` determinístico (`057c06e`), espelho no `fbq` (`057c06e`, que **nunca rodou** até `0fa68d1`) e partição por dono do evento (`e755894`). Verificado em produção: `eid=InitiateCheckout-90whss` saindo pelo navegador com o mesmo id da CAPI. | Fica só o **detector congelado no snippet** (item 1 da fila) e a confirmação no Gerenciador de Eventos da Meta ("Navegador e Servidor" numa linha só). |
 | 2 | **Nav morto no `useTraffikState`** (`navAnalise`, `navAuto`, `navConfig`, `pageTitle`, `activeTab`, `fbTabs`, `fbSub`) e o **gerador de link/snippet antigo** (`utmUrl`, `snippetText`). Nada é renderizado. | Sobrou do Bloco 1/11. Limpar num passo de faxina. |
 | 3 | **Atribuição por nome é ambígua** quando dois anúncios/campanhas têm o mesmo nome. | Limitação pré-existente; o id resolve para tráfego novo com os códigos do Bloco 11. O Teste de Tracking (Bloco 13) agora **avisa** quando o casamento foi por nome. |

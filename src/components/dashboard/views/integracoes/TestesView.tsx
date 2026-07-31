@@ -8,11 +8,14 @@ import {
   getInstallChecklist,
   listTestablePixels,
   listWebhookLogs,
+  resumoEspelhos,
   type ChecklistItemDTO,
+  type EspelhoResumoDTO,
   type PixelOptionDTO,
   type TrackingTestDTO,
   type WebhookLogDTO,
 } from "@/lib/actions/diagnostics";
+import { estadoDoEspelho, type TomDoEspelho } from "@/lib/pixel/espelho";
 import { sx } from "@/lib/sx";
 import { TestadorPayloadCard } from "./TestadorPayloadCard";
 import { Select } from "../../ui/Select";
@@ -125,7 +128,140 @@ function PixelTestCard() {
   );
 }
 
-// ───────────────────────── 2. Teste de Webhook ─────────────────────────
+// ─────────────────── 2. Espelho no pixel do navegador ───────────────────
+
+const COR_DO_TOM: Record<TomDoEspelho, string> = {
+  bom: "var(--color-success,#4ade80)",
+  atencao: "var(--color-warning,#fbbf24)",
+  ruim: "var(--color-danger,#f87171)",
+  neutro: "var(--color-text-muted,#9ca3af)",
+};
+
+/**
+ * O espelho no `fbq` é o que faz a Meta juntar o evento do navegador com o
+ * nosso, da CAPI. Sem este card, "os espelhos estão saindo?" só se respondia
+ * abrindo o DevTools na página — o que não escala com vários clientes.
+ */
+function EspelhoCard() {
+  const [dados, setDados] = useState<EspelhoResumoDTO | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    setBusy(true);
+    resumoEspelhos(7)
+      .then(setDados)
+      .catch(() => {})
+      .finally(() => setBusy(false));
+  }, []);
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- `load` busca no servidor e guarda o resultado
+  useEffect(load, [load]);
+
+  // Só os estados que pedem ação viram destaque. O resto explica o número.
+  const problemas = dados?.porEstado.filter((e) => estadoDoEspelho(e.estado).tom === "ruim") ?? [];
+
+  return (
+    <div className="card">
+      <div style={sx("display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-2)")}>
+        <div>
+          <div className="card-kicker">Pixel do navegador</div>
+          <div className="card-title">Espelho no pixel da sua página</div>
+          <p className="card-body" style={sx("margin:4px 0 0")}>
+            Para a Meta contar uma conversão em vez de duas, o mesmo evento precisa sair pelo nosso
+            servidor <em>e</em> pelo pixel da sua página, com o mesmo identificador. Aqui é onde se vê
+            se isso está acontecendo.
+          </p>
+        </div>
+        <button className="btn btn-secondary" type="button" onClick={load} disabled={busy} style={sx("white-space:nowrap")}>
+          {busy ? "Atualizando…" : "Atualizar"}
+        </button>
+      </div>
+
+      {!dados ? (
+        <p className="card-body text-muted" style={sx("margin:var(--space-3) 0 0")}>Verificando…</p>
+      ) : dados.total === 0 ? (
+        <p className="card-body text-muted" style={sx("margin:var(--space-3) 0 0")}>
+          Nenhum evento de pixel nos últimos {dados.dias} dias. Assim que uma página com o script
+          receber visita, os números aparecem aqui.
+        </p>
+      ) : (
+        <>
+          <div style={sx("display:flex;gap:6px;flex-wrap:wrap;margin-top:var(--space-3)")}>
+            {dados.porEstado.map(({ estado, n }) => {
+              const e = estadoDoEspelho(estado);
+              return (
+                <span
+                  key={estado}
+                  title={e.ajuda}
+                  style={sx(
+                    `display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 10px;border-radius:999px;` +
+                      `border:1px solid var(--color-border);color:${COR_DO_TOM[e.tom]}`,
+                  )}
+                >
+                  <strong style={sx("font-variant-numeric:tabular-nums")}>{n}</strong>
+                  {e.rotulo}
+                </span>
+              );
+            })}
+          </div>
+
+          <p className="card-body text-muted" style={sx("margin:var(--space-2) 0 0;font-size:11.5px")}>
+            {plural(dados.total, "evento", "eventos")} nos últimos {dados.dias} dias. Passe o mouse em
+            cada situação para ver o que ela significa.
+          </p>
+
+          {/* ⚠️ O aviso só aparece com problema de verdade. Um alerta permanente
+              vira ruído que se aprende a ignorar — inclusive quando muda. */}
+          {problemas.length > 0 && (
+            <div
+              style={sx(
+                "margin-top:var(--space-3);font-size:12px;line-height:1.5;color:var(--color-warning,#fbbf24);" +
+                  "border-left:2px solid var(--color-warning,#fbbf24);padding-left:10px",
+              )}
+            >
+              {problemas.map(({ estado, n }) => (
+                <div key={estado} style={sx("margin-bottom:4px")}>
+                  <strong>
+                    {n} {estadoDoEspelho(estado).rotulo}
+                  </strong>{" "}
+                  — {estadoDoEspelho(estado).ajuda}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={sx("display:flex;flex-direction:column;gap:2px;margin-top:var(--space-3)")}>
+            {dados.porEvento.map((ev) => (
+              <div
+                key={ev.event}
+                style={sx(
+                  "display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;padding:8px 0;border-bottom:1px solid var(--color-border)",
+                )}
+              >
+                <span style={sx("font-size:13px;font-weight:600;min-width:130px")}>{ev.event}</span>
+                <span className="text-muted" style={sx("font-size:11.5px;font-variant-numeric:tabular-nums")}>
+                  {ev.total}
+                </span>
+                <span style={sx("display:flex;gap:10px;flex-wrap:wrap;font-size:11.5px")}>
+                  {ev.estados.map(({ estado, n }) => {
+                    const e = estadoDoEspelho(estado);
+                    return (
+                      <span key={estado} title={e.ajuda} style={sx(`color:${COR_DO_TOM[e.tom]}`)}>
+                        {n} {e.rotulo}
+                      </span>
+                    );
+                  })}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ───────────────────────── 3. Teste de Webhook ─────────────────────────
 
 function WebhookLogsCard() {
   const [logs, setLogs] = useState<WebhookLogDTO[]>([]);
@@ -402,6 +538,7 @@ export function TestesView() {
     <div style={sx("display:flex;flex-direction:column;gap:var(--space-3);max-width:920px")}>
       <ChecklistCard />
       <PixelTestCard />
+      <EspelhoCard />
       <WebhookLogsCard />
       <TrackingTestCard />
       <TestadorPayloadCard />

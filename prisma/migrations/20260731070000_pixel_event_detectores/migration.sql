@@ -1,0 +1,20 @@
+-- O que o SCRIPT INSTALADO detecta, reportado por ele mesmo em todo evento.
+--
+-- POR QUE: os detectores (`LEAD`, `ADD_TO_CART`, a regra de IC) são literais
+-- assados no snippet no momento da geração, enquanto o servidor consulta
+-- `PixelEventRule` ao vivo. Quando o usuário liga uma regra na gaveta e não
+-- reinstala o script, a regra aparece ligada, o evento NUNCA é disparado e nada
+-- na ferramenta denuncia. A direção contrária é barulhenta (o servidor recusa
+-- com "regra desabilitada"); esta é silenciosa, e é a que custa conversão.
+--
+-- Descoberto em 31/07/2026: o Lead de produção não disparava, e a única forma
+-- de saber foi abrir o DevTools na página. Com clientes isso não escala.
+--
+-- ADITIVA e sem constraint: uma coluna nullable, sem default e sem backfill.
+-- Nenhum dado existente pode violá-la, então roda em qualquer ordem e é segura
+-- para reaplicar — ao contrário da 20260731040000, que criava índice único e
+-- falhou em produção por depender do estado do dado.
+--
+-- NULO significa "não informado" (script anterior a esta coluna, ou evento
+-- gerado pelo servidor), NUNCA "não detecta nada".
+ALTER TABLE "PixelEvent" ADD COLUMN IF NOT EXISTS "detectores" TEXT;

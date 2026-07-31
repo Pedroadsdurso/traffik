@@ -40,6 +40,19 @@ const ESPELHOS: readonly string[] = ["ok", "adiado", "adiado-ok", "sem-fbq", "er
 const lerEspelho = (v: unknown): string | null =>
   typeof v === "string" && ESPELHOS.includes(v) ? v : null;
 
+/**
+ * Assinatura dos detectores do script instalado (`lib/pixel/detectores.ts`).
+ *
+ * Aceita qualquer string curta, de propósito: a assinatura tem versão embutida,
+ * e um formato que esta rota não reconhece é EXATAMENTE o caso que a gaveta
+ * precisa exibir ("script de uma versão anterior"). Validar contra o formato
+ * atual aqui transformaria snippet velho em snippet invisível — o contrário do
+ * que esta coluna existe para fazer. O teto de 120 caracteres é só para a rota
+ * pública não escrever texto arbitrário sem limite numa coluna.
+ */
+const lerDetectores = (v: unknown): string | null =>
+  typeof v === "string" && v.length > 0 && v.length <= 120 ? v : null;
+
 
 /**
  * Recebe um evento do script de pixel próprio (Lead/AddToCart/InitiateCheckout)
@@ -125,6 +138,7 @@ export async function POST(req: NextRequest) {
           url: typeof body.url === "string" ? body.url.slice(0, 500) : null,
           fbclid: typeof body.fbclid === "string" ? body.fbclid : null,
           espelho,
+          detectores: lerDetectores(body.det),
         },
       ],
       skipDuplicates: true,

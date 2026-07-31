@@ -2,6 +2,22 @@ import { prisma } from "@/lib/prisma";
 import { candidatosDeIp } from "@/lib/geo/anonimizarIp";
 import { fbclidDoFbc } from "@/lib/gateways/campos";
 
+/**
+ * UTMs do clique casado, para serem COPIADOS na venda.
+ *
+ * 🔴 Sem esta cópia, a campanha de uma venda vive só em
+ * `sale.click.utmCampaign` — e `Sale.clickId` é `SetNull`. Ver
+ * `prisma/migrations/20260731080000_sale_utms`.
+ */
+export interface ClickUtms {
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
+  utmContent: string | null;
+  utmTerm: string | null;
+  fbclid: string | null;
+}
+
 export interface ClickMatch {
   clickId: string | null; // Click.id (cuid) para o FK, não o uuid público
   method: "direct" | "fbclid" | "ip" | "none";
@@ -13,6 +29,32 @@ export interface ClickMatch {
    * é a melhor evidência de país que a venda tem quando o payload não traz uma.
    */
   country: string | null;
+  /** UTMs do clique casado; `null` quando não houve match. */
+  utms: ClickUtms | null;
+}
+
+/**
+ * ⚠️ **Os campos precisam estar no `select`.** É a armadilha do `pedidoId`: com
+ * a coluna fora do `select`, o valor chega `undefined`, a venda nasce sem
+ * campanha e **nenhum `tsc`/`lint`/`build` acusa** — o número continua plausível.
+ * Por isso o `select` é uma constante única, usada pelas três vias de match.
+ */
+const CAMPOS = {
+  id: true,
+  country: true,
+  utmSource: true,
+  utmMedium: true,
+  utmCampaign: true,
+  utmContent: true,
+  utmTerm: true,
+  fbclid: true,
+} as const;
+
+type ClickLido = { id: string } & ClickUtms & { country: string | null };
+
+function achado(click: ClickLido, method: ClickMatch["method"]): ClickMatch {
+  const { id, country, ...utms } = click;
+  return { clickId: id, method, country, utms };
 }
 
 /** Janela de fallback por IP: cliques nas últimas 12h contam como origem. */
@@ -46,9 +88,9 @@ export async function matchClick(
   if (publicClickId) {
     const click = await prisma.click.findFirst({
       where: { userId, clickId: publicClickId },
-      select: { id: true, country: true },
+      select: CAMPOS,
     });
-    if (click) return { clickId: click.id, method: "direct", country: click.country };
+    if (click) return achado(click, "direct");
   }
 
   // 2) Pelo `_fbc` que o gateway devolveu: o último segmento é o `fbclid`.
@@ -59,9 +101,9 @@ export async function matchClick(
       // venda herdaria o país do datacenter dele.
       where: { userId, fbclid, bot: false },
       orderBy: { timestamp: "desc" },
-      select: { id: true, country: true },
+      select: CAMPOS,
     });
-    if (click) return { clickId: click.id, method: "fbclid", country: click.country };
+    if (click) return achado(click, "fbclid");
   }
 
   if (ip) {
@@ -82,10 +124,10 @@ export async function matchClick(
         timestamp: { gte: new Date(Date.now() - IP_WINDOW_MS) },
       },
       orderBy: { timestamp: "desc" },
-      select: { id: true, country: true },
+      select: CAMPOS,
     });
-    if (click) return { clickId: click.id, method: "ip", country: click.country };
+    if (click) return achado(click, "ip");
   }
 
-  return { clickId: null, method: "none", country: null };
+  return { clickId: null, method: "none", country: null, utms: null };
 }

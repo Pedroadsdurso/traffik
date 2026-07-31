@@ -11,6 +11,7 @@ import { auth } from "@/auth";
 import { getLastWorkspaceId } from "@/lib/actions/workspaces";
 import { escopoDeConfig } from "@/lib/areas/escopoConfig";
 import { prisma } from "@/lib/prisma";
+import { ordemDoEspelho } from "@/lib/pixel/espelho";
 import { parseTrackingCodes } from "@/lib/utm/parse";
 import type { WebhookLogStatus } from "@/generated/prisma/enums";
 
@@ -52,6 +53,73 @@ export async function listWebhookLogs(limit = 20): Promise<WebhookLogDTO[]> {
     createdAt: r.createdAt.toISOString(),
     payload: JSON.stringify(r.payloadRaw, null, 2),
   }));
+}
+
+// ─────────────────── Espelho no pixel do navegador (`fbq`) ───────────────────
+
+export interface EspelhoResumoDTO {
+  dias: number;
+  total: number;
+  /** Só os estados com contagem > 0, na ordem de `ESTADOS_DO_ESPELHO`. */
+  porEstado: { estado: string; n: number }[];
+  /** Detalhe por evento, do mais frequente para o menos. */
+  porEvento: { event: string; total: number; estados: { estado: string; n: number }[] }[];
+}
+
+/**
+ * "Os espelhos estão saindo?" — a pergunta que só o DevTools respondia.
+ *
+ * O espelho no `fbq` é o que faz a Meta juntar o evento do navegador com o nosso
+ * da CAPI. Quando o snippet está colado ANTES do código do Facebook, o `fbq`
+ * ainda não existe no momento do disparo; hoje o script espera e, se desistir,
+ * grava `sem-fbq`. **Este resumo é o único lugar em que isso aparece sem abrir o
+ * console na página do cliente** — que é o que não escala com vários deles.
+ */
+export async function resumoEspelhos(dias = 7): Promise<EspelhoResumoDTO> {
+  const userId = await requireUserId();
+  const janela = Math.min(Math.max(Math.trunc(dias), 1), 90);
+  const desde = new Date(Date.now() - janela * 24 * 60 * 60 * 1000);
+
+  const linhas = await prisma.pixelEvent.groupBy({
+    by: ["event", "espelho"],
+    where: { userId, timestamp: { gte: desde } },
+    _count: { _all: true },
+  });
+
+  // Estado que a tela não sabe nomear vira `nulo` em vez de sumir — mesma regra
+  // do "Não identificado" no ranking de países.
+  const chave = (v: string | null) => (v && ordemDoEspelho(v) < 99 ? v : "nulo");
+  const ordenar = (m: Map<string, number>) =>
+    [...m]
+      .map(([estado, n]) => ({ estado, n }))
+      .sort((a, b) => ordemDoEspelho(a.estado) - ordemDoEspelho(b.estado));
+
+  const geral = new Map<string, number>();
+  const porEvento = new Map<string, Map<string, number>>();
+  let total = 0;
+
+  for (const l of linhas) {
+    const n = l._count._all;
+    const k = chave(l.espelho);
+    total += n;
+    geral.set(k, (geral.get(k) ?? 0) + n);
+    const doEvento = porEvento.get(l.event) ?? new Map<string, number>();
+    doEvento.set(k, (doEvento.get(k) ?? 0) + n);
+    porEvento.set(l.event, doEvento);
+  }
+
+  return {
+    dias: janela,
+    total,
+    porEstado: ordenar(geral),
+    porEvento: [...porEvento]
+      .map(([event, m]) => ({
+        event,
+        total: [...m.values()].reduce((a, b) => a + b, 0),
+        estados: ordenar(m),
+      }))
+      .sort((a, b) => b.total - a.total),
+  };
 }
 
 // ─────────────────────────── Teste de Tracking ───────────────────────────

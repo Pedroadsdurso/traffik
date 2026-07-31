@@ -6,6 +6,7 @@
  * webhook), então não entra aqui.
  */
 
+import { assinaturaDetectores } from "./detectores";
 import { EVENTOS_DO_PIXEL, traffikEnvia } from "./donos";
 
 export interface PixelScriptConfig {
@@ -41,6 +42,23 @@ function eventosAlheios(donos: unknown): string[] {
   return EVENTOS_DO_PIXEL.filter((e) => !traffikEnvia(donos, e));
 }
 
+/**
+ * Assinatura do que ESTE script consegue detectar, assada no código gerado.
+ *
+ * 🔴 Os detectores são literais no snippet (`var LEAD = false;`), enquanto o
+ * servidor lê `PixelEventRule` ao vivo. Sem esta assinatura viajando de volta em
+ * todo evento, "a regra está ligada e o script instalado é velho" não produz
+ * evento nenhum e **nada denuncia**. Ver `lib/pixel/detectores.ts`.
+ */
+function assinatura(cfg: PixelScriptConfig): string {
+  return assinaturaDetectores({
+    lead: cfg.lead,
+    addToCart: cfg.addToCart,
+    ic: cfg.initiateCheckout.enabled ? (cfg.initiateCheckout.type ?? "clique_checkout") : null,
+    icValor: cfg.initiateCheckout.value ?? null,
+  });
+}
+
 /** Lista de domínios da regra por clique; vazio cai nos padrões. */
 function dominiosCheckout(ic: PixelScriptConfig["initiateCheckout"]): string[] {
   if (ic.type !== "clique_checkout") return [];
@@ -66,6 +84,10 @@ export function pixelScript(cfg: PixelScriptConfig): string {
   // o POST para nós continua, porque o funil e o Dashboard contam do nosso
   // banco e não podem perder uma etapa por causa de uma escolha de pixel.
   var ALHEIOS = ${JSON.stringify(eventosAlheios(cfg.eventOwners))};
+  // O que ESTE snippet detecta, congelado no momento em que ele foi gerado.
+  // Viaja em todo evento para a gaveta poder dizer "o script instalado está
+  // desatualizado" — ver lib/pixel/detectores.ts.
+  var DET = "${jsStr(assinatura(cfg))}";
 
   function fbclid() {
     try {
@@ -192,7 +214,7 @@ export function pixelScript(cfg: PixelScriptConfig): string {
     // ⚠️ O espelho vem ANTES do payload: o estado dele viaja junto do evento, e
     // é o que permite responder "os espelhos estao saindo?" sem abrir o console.
     var espelho = espelhar(event, id);
-    var payload = { pixelConfigId: CONFIG, event: event, eventId: id, url: location.href, fbclid: fbclid(), espelho: espelho };
+    var payload = { pixelConfigId: CONFIG, event: event, eventId: id, url: location.href, fbclid: fbclid(), espelho: espelho, det: DET };
     if (extra) for (var k in extra) payload[k] = extra[k];
     enviar(payload);
   }

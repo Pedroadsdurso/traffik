@@ -13,6 +13,7 @@ import type { PixelEventType, PurchaseSendMode, PurchaseValueMode } from "@/gene
  * pelo gateway (pay.kirvano.com), onde o cliente não consegue instalar script.
  */
 import { lerDonos, type MapaDeDonos } from "@/lib/pixel/donos";
+import { assinaturaDetectores, diferencasDeDetectores } from "@/lib/pixel/detectores";
 
 export type DetectionType = "clique_checkout" | "contem_texto" | "contem_css" | "contem_url";
 
@@ -258,6 +259,72 @@ export async function deletePixel(id: string): Promise<{ id: string }> {
   if (!px) throw new Error("Pixel não encontrado.");
   await prisma.pixelConfig.delete({ where: { id } });
   return { id };
+}
+
+// ───────────────── O script instalado bate com a configuração? ─────────────────
+
+export interface SnippetCheckDTO {
+  /**
+   * - `ok` — o script instalado detecta exatamente o que está configurado
+   * - `divergente` — 🔴 as duas pontas discordam; as frases dizem em quê
+   * - `script-antigo` — ele está rodando, mas é anterior a este diagnóstico
+   * - `sem-dados` — nenhum evento do script chegou; não dá para afirmar nada
+   */
+  estado: "ok" | "divergente" | "script-antigo" | "sem-dados";
+  /** Quando o último evento do script chegou (ISO). */
+  visto: string | null;
+  /** O que muda, em linguagem de consequência. Vazio quando `ok`. */
+  divergencias: string[];
+}
+
+/**
+ * Compara o snippet que está no site do cliente com a regra ao vivo.
+ *
+ * > ### ⛔ `sem-dados` NÃO é `ok`
+ * > A ausência de evento pode significar "script não instalado", "site sem
+ * > tráfego" ou "script instalado e quebrado" — e não temos como distinguir os
+ * > três. Dizer "tudo certo" aqui seria afirmar o que não sabemos, e é
+ * > exatamente o silêncio que este diagnóstico existe para acabar.
+ *
+ * ⚠️ Decide pelo evento **mais recente vindo do script**, não pela última
+ * assinatura já vista: um script REINSTALADO numa versão anterior tem de
+ * aparecer como antigo, e não como a assinatura boa que ele mandou semana
+ * passada. Eventos com `eventId` começando em `gw:` são do webhook do gateway
+ * (`webhook/checkoutEvent.ts`), não do navegador — eles nunca têm detector.
+ */
+export async function conferirSnippet(pixelConfigId: string): Promise<SnippetCheckDTO> {
+  const userId = await requireUserId();
+  const config = await prisma.pixelConfig.findFirst({
+    where: { id: pixelConfigId, userId },
+    include: { eventRules: true },
+  });
+  if (!config) throw new Error("Pixel não encontrado.");
+
+  const ic = config.eventRules.find((r) => r.eventType === "INITIATE_CHECKOUT");
+  const det = (ic?.detection as DetectionJson) ?? null;
+  const esperado = assinaturaDetectores({
+    lead: config.eventRules.find((r) => r.eventType === "LEAD")?.enabled ?? false,
+    addToCart: config.eventRules.find((r) => r.eventType === "ADD_TO_CART")?.enabled ?? false,
+    ic: ic?.enabled ? (det?.tipo ?? "clique_checkout") : null,
+    icValor: det?.valor ?? null,
+  });
+
+  const ultimo = await prisma.pixelEvent.findFirst({
+    where: {
+      pixelConfigId,
+      userId,
+      OR: [{ eventId: null }, { NOT: { eventId: { startsWith: "gw:" } } }],
+    },
+    orderBy: { timestamp: "desc" },
+    select: { detectores: true, timestamp: true },
+  });
+
+  if (!ultimo) return { estado: "sem-dados", visto: null, divergencias: [] };
+  const visto = ultimo.timestamp.toISOString();
+  if (!ultimo.detectores) return { estado: "script-antigo", visto, divergencias: [] };
+
+  const divergencias = diferencasDeDetectores(ultimo.detectores, esperado);
+  return { estado: divergencias.length ? "divergente" : "ok", visto, divergencias };
 }
 
 export async function togglePixel(id: string): Promise<{ id: string; enabled: boolean }> {

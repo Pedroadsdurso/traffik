@@ -26,6 +26,7 @@ import "dotenv/config";
 import pg from "pg";
 
 import { REGISTRO } from "../src/lib/gateways/registro.ts";
+import { utmsDaVenda } from "../src/lib/vendas/utmsDaVenda.ts";
 
 const args = process.argv.slice(2);
 const arg = (nome, padrao) => {
@@ -46,8 +47,18 @@ const ref = /postgres\.([a-z0-9]+)/.exec(String(url))?.[1] ?? "(local)";
 console.log(`\nBanco: ${ref}\n`);
 
 const { rows } = await cliente.query(
+  // ⚠️ As colunas do clique são ALIASADAS. `Sale` agora tem `utmCampaign` e
+  // `fbclid` próprios (a cópia da procedência), e num `SELECT s.*, c."utmCampaign"`
+  // o nome repetido faz o segundo sobrescrever o primeiro no objeto de linha —
+  // o inspetor mostraria o clique achando que mostra a venda.
   `SELECT s.*, w.platform, w.name AS webhook_nome,
-          c."clickId" AS clique_publico, c.country AS clique_pais, c."utmCampaign", c.fbclid
+          c."clickId" AS clique_publico, c.country AS clique_pais,
+          c."utmSource"   AS clique_utm_source,
+          c."utmMedium"   AS clique_utm_medium,
+          c."utmCampaign" AS clique_utm_campaign,
+          c."utmContent"  AS clique_utm_content,
+          c."utmTerm"     AS clique_utm_term,
+          c."fbclid"      AS clique_fbclid
      FROM "Sale" s
      LEFT JOIN "Webhook" w ON w.id = s."webhookId"
      LEFT JOIN "Click"  c ON c.id = s."clickId"
@@ -127,8 +138,50 @@ for (const s of rows) {
     texto: "🔴 nenhum clique casado — a venda não cola em campanha nenhuma",
   });
   linha("Clique (id público)", s.clique_publico);
-  linha("Campanha do clique", s.utmCampaign);
-  linha("fbclid do clique", s.fbclid);
+
+  // Precedência de leitura resolvida pelo MESMO módulo que a aplicação usa —
+  // `lib/vendas/utmsDaVenda.ts`. Duplicar a ordem aqui faria o diagnóstico
+  // afirmar uma coisa e o produto fazer outra.
+  const { utms, fonte } = utmsDaVenda({
+    utmSource: s.utmSource,
+    utmMedium: s.utmMedium,
+    utmCampaign: s.utmCampaign,
+    utmContent: s.utmContent,
+    utmTerm: s.utmTerm,
+    fbclid: s.fbclid,
+    click: s.clique_publico
+      ? {
+          utmSource: s.clique_utm_source,
+          utmMedium: s.clique_utm_medium,
+          utmCampaign: s.clique_utm_campaign,
+          utmContent: s.clique_utm_content,
+          utmTerm: s.clique_utm_term,
+          fbclid: s.clique_fbclid,
+        }
+      : null,
+  });
+
+  linha("Campanha", utms.utmCampaign, {
+    grave: true,
+    texto: "🔴 sem campanha — a venda não entra em ROAS, CPA nem no ranking de criativos",
+  });
+  linha("Criativo", utms.utmContent);
+  linha("Fonte / meio", [utms.utmSource, utms.utmMedium].filter(Boolean).join(" / ") || null);
+  linha("fbclid", utms.fbclid);
+  console.log(
+    `  ${"".padEnd(24)} \x1b[90mrespondido pelo ${
+      fonte === "clique" ? "CLIQUE (a fonte)" : fonte === "copia" ? "CÓPIA na venda (o clique sumiu)" : "nada"
+    }\x1b[0m`,
+  );
+
+  // A cópia é o seguro contra o clique ser apagado. Vazia com clique presente =
+  // venda anterior à migration `20260731080000` → `npm run backfill:utms`.
+  const temCopia = Boolean(s.utmSource || s.utmMedium || s.utmCampaign || s.utmContent || s.utmTerm || s.fbclid);
+  if (s.clique_publico && !temCopia) {
+    console.log(
+      `  ${"".padEnd(24)} \x1b[33m⚠ sem cópia dos UTMs na venda — apagar o clique perderia a campanha. Rode: npm run backfill:utms\x1b[0m`,
+    );
+  }
   linha("_fbc da venda", s.fbc, {
     grave: cap.fbc,
     texto: cap.fbc ? "🔴 o registro diz que este gateway manda `fbc`" : "este gateway não manda `fbc`",

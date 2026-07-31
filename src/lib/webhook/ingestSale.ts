@@ -97,6 +97,11 @@ export async function ingestSale(
     coproducao: somaDeComissoes(data),
     matchMethod: match.method,
     clickId: match.clickId,
+    // Cópia dos UTMs do clique casado. O `clickId` é `SetNull`: sem esta cópia,
+    // apagar o clique apagaria a campanha, o criativo e a fonte desta venda —
+    // e é daí que saem ROAS, CPA e a atribuição por área.
+    // ⚠️ Os leitores continuam usando a cadeia `Sale → Click`; isto é o seguro.
+    ...(match.utms ?? {}),
     approvedAt: data.status === "APROVADA" ? new Date() : null,
     rawPayload: rawPayload as object,
   };
@@ -229,7 +234,7 @@ async function upsertMonotonico(
   userId: string,
   externalId: string,
   saleData: Prisma.SaleCreateManyInput,
-  match: { clickId: string | null; method: string },
+  match: ClickMatch,
   rawPayload: unknown,
   country: string | null,
 ) {
@@ -280,7 +285,15 @@ async function upsertMonotonico(
         externalId,
         OR: [{ clickId: null }, { matchMethod: { in: matchesSobrescreviveis(match.method) } }],
       },
-      data: { clickId: match.clickId, matchMethod: match.method },
+      // ⚠️ Os UTMs viajam no MESMO `updateMany` do `clickId`, sob a MESMA
+      // guarda de precedência — e é isso que os mantém coerentes por construção.
+      // Numa instrução separada, um match mais fraco poderia trocar a campanha
+      // sem trocar o clique, e a cópia passaria a descrever outro visitante.
+      //
+      // Escreve inclusive os nulos: a cópia descreve o clique para o qual a
+      // venda aponta AGORA. Se o clique vencedor mudou e ele é tráfego direto
+      // (sem UTM), manter a campanha antiga seria pior que não ter cópia.
+      data: { clickId: match.clickId, matchMethod: match.method, ...(match.utms ?? {}) },
     });
   }
 

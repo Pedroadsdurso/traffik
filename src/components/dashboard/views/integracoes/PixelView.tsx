@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import {
+  conferirSnippet,
   createPixel,
   deletePixel,
   listPixels,
@@ -12,10 +13,11 @@ import {
   type DetectionType,
   type PixelConfigDTO,
   type PixelFormInput,
+  type SnippetCheckDTO,
 } from "@/lib/actions/pixels";
 import { getPublicAppUrl } from "@/lib/appUrl";
 import { pixelScript } from "@/lib/pixel/script";
-import { plural } from "@/lib/format";
+import { elapsed, plural } from "@/lib/format";
 import { CONFIG } from "@/lib/explicacoes";
 import { sx } from "@/lib/sx";
 import {
@@ -99,6 +101,72 @@ function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
   return <button className="sw" role="switch" aria-checked={on} onClick={onClick} type="button" />;
 }
 
+/**
+ * O script instalado bate com o que está configurado aqui?
+ *
+ * 🔴 Existe porque a divergência mais cara é MUDA: regra ligada na gaveta +
+ * snippet velho no site = nenhum evento, e a tela dizia que estava tudo certo.
+ * Ver `lib/pixel/detectores.ts`.
+ */
+function AvisoSnippet({ check }: { check: SnippetCheckDTO | null }) {
+  if (!check) return null;
+
+  const quando = check.visto ? `Último evento recebido ${elapsed(new Date(check.visto).getTime())}.` : "";
+
+  if (check.estado === "ok") {
+    return (
+      <div className="text-muted" style={sx("display:flex;gap:7px;align-items:flex-start;font-size:11.5px;line-height:1.45")}>
+        <Icone nome="ok" tamanho={13} />
+        <span>O script instalado no seu site corresponde a esta configuração. {quando}</span>
+      </div>
+    );
+  }
+
+  if (check.estado === "sem-dados") {
+    return (
+      <div className="text-muted" style={sx("display:flex;gap:7px;align-items:flex-start;font-size:11.5px;line-height:1.45")}>
+        <Icone nome="info" tamanho={13} />
+        {/* ⚠️ Não afirmamos "está tudo certo": sem evento nenhum não dá para
+            distinguir script ausente de site sem tráfego. */}
+        <span>
+          Nenhum evento chegou deste pixel ainda, então não dá para conferir o script instalado.
+          Ele aparece aqui na primeira visita à página.
+        </span>
+      </div>
+    );
+  }
+
+  const titulo =
+    check.estado === "script-antigo"
+      ? "O script instalado é de uma versão anterior."
+      : "O script instalado não corresponde ao que está configurado aqui.";
+
+  return (
+    <div
+      style={sx(
+        "display:flex;flex-direction:column;gap:6px;font-size:11.5px;line-height:1.45;" +
+          "color:var(--color-warning,#fbbf24);border-left:2px solid var(--color-warning,#fbbf24);padding-left:9px",
+      )}
+    >
+      <span style={sx("display:flex;gap:7px;align-items:flex-start;font-weight:600")}>
+        <Icone nome="aviso" tamanho={13} cor="aviso" />
+        {titulo}
+      </span>
+      {check.divergencias.length > 0 && (
+        <ul style={sx("margin:0;padding-left:16px;display:flex;flex-direction:column;gap:3px")}>
+          {check.divergencias.map((d, i) => (
+            <li key={i}>{d}</li>
+          ))}
+        </ul>
+      )}
+      <span>
+        Copie o script abaixo de novo e substitua o que está no seu site — o que o script detecta é
+        decidido no momento em que ele é gerado, não agora. {quando}
+      </span>
+    </div>
+  );
+}
+
 export function PixelView() {
   const [pixels, setPixels] = useState<PixelConfigDTO[]>([]);
   const [products, setProducts] = useState<string[]>([]);
@@ -109,11 +177,31 @@ export function PixelView() {
   const [metaOpen, setMetaOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [check, setCheck] = useState<SnippetCheckDTO | null>(null);
 
   useEffect(() => {
     listPixels().then(setPixels).catch(() => {});
     listTrackedProducts().then(setProducts).catch(() => {});
   }, []);
+
+  /**
+   * Confere o snippet instalado sempre que a gaveta muda de pixel.
+   *
+   * ⚠️ Recarregado também depois de SALVAR (ver `save`): salvar muda o que a
+   * ferramenta espera do script, então um resultado calculado antes do save
+   * viraria uma afirmação sobre a configuração anterior — pior que nenhuma,
+   * porque parece confirmação.
+   */
+  const carregarCheck = useCallback((id: string | null) => {
+    setCheck(null);
+    if (!id) return;
+    conferirSnippet(id).then(setCheck).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- `carregarCheck` busca no servidor e guarda o resultado
+    if (modalOpen) carregarCheck(editId);
+  }, [modalOpen, editId, carregarCheck]);
 
   function openNew() {
     setForm(EMPTY_FORM);
@@ -154,6 +242,9 @@ export function PixelView() {
       setPixels((list) => (editId ? list.map((p) => (p.id === saved.id ? saved : p)) : [...list, saved]));
       // Mantém a gaveta aberta no pixel recém-criado: é onde o script aparece.
       setEditId(saved.id);
+      // O que a ferramenta espera do script acabou de mudar — reconferir aqui é
+      // o que faz o aviso aparecer no exato momento em que ele passa a valer.
+      carregarCheck(saved.id);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Não foi possível salvar. Saia e entre novamente se persistir.");
     } finally {
@@ -530,6 +621,7 @@ export function PixelView() {
           return (
             <div style={sx("border-top:1px solid var(--color-divider);padding-top:var(--space-3);display:flex;flex-direction:column;gap:var(--space-2)")}>
               <div style={sx("font-weight:600;font-size:13px")}>Script de instalação</div>
+              <AvisoSnippet check={check} />
               <p className="card-body" style={sx("margin:0;font-size:12px")}>
                 Cole antes de <code>&lt;/head&gt;</code> do seu site (ou no campo de script do seu
                 gateway/checkout). Dispara PageView em toda página, mais os eventos habilitados acima.

@@ -599,6 +599,32 @@ model Sale {
   /// ⚠️ NULO = venda anterior a esta coluna cujo webhook **já não existia** no
   /// backfill. Não significa "sem gateway".
   platform      String?
+
+  /// ## Cópia dos UTMs do clique, gravada NA INGESTÃO
+  ///
+  /// 🔴 Mesma classe do `platform` acima. A campanha de uma venda só existia via
+  /// `sale.click.utmCampaign` — e `Sale.clickId` é `onDelete: SetNull`. Apagar o
+  /// clique mantinha o dinheiro e apagava, para sempre, de onde ele veio: é daí
+  /// que saem ROAS, CPA, criativo e a atribuição por área.
+  ///
+  /// > ### ⛔ PRECEDÊNCIA DE LEITURA: a cadeia `Sale → Click` VENCE a cópia
+  /// > O clique é a fonte; isto é o seguro. Enquanto o clique existir, ler dele
+  /// > mantém uma resposta só para "de qual campanha é esta venda" — duas fontes
+  /// > para a mesma pergunta divergem sempre, e foi assim que a tela de Áreas já
+  /// > mostrou "Sem webhook" para uma área com webhook. Ver
+  /// > `lib/vendas/utmsDaVenda.ts`, que é o único ponto que decide isso.
+  ///
+  /// ⚠️ NULO = venda anterior à coluna, ou venda sem clique casado. Não é
+  /// "veio sem campanha".
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  utmContent  String?
+  utmTerm     String?
+  /// `fbclid` do clique casado. Diferente de `fbc`, que vem do gateway: este é o
+  /// que o NOSSO script viu no navegador do comprador.
+  fbclid      String?
+
   rawPayload    Json?
   timestamp     DateTime      @default(now())
   approvedAt    DateTime?
@@ -754,6 +780,14 @@ model PixelEvent {
   /// caminho server-side. Não é "falhou" — sem esta distinção, todo evento
   /// histórico apareceria como espelho quebrado.
   espelho   String?
+  /// Assinatura do que o SCRIPT INSTALADO detecta, reportada por ele em todo
+  /// evento (ver `lib/pixel/detectores.ts`). É o que permite a gaveta comparar
+  /// o snippet que está no site do cliente com a regra ao vivo.
+  ///
+  /// ⚠️ NULO = evento de um script anterior a esta coluna, ou gerado pelo
+  /// servidor (o `InitiateCheckout` que nasce do webhook do gateway). Não é
+  /// "detector vazio" — é "não informado".
+  detectores String?
   timestamp DateTime @default(now())
 
   userId        String
