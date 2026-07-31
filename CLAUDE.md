@@ -3564,9 +3564,35 @@ Teste dirigido, em produção, com cobaia **medida** antes de usar.
 > A propriedade "crua" protege exatamente contra o erro que o teste procura — e
 > por isso ela foi **medida** com `conta:estrutura` antes, nunca assumida.
 
+### ✅ A 2ª guarda também — `já no teto` (02:31 do mesmo dia)
+
+Segunda execução da mesma regra, 16 minutos depois:
+
+```
+✓ COBAIA — não usar — AJUSTAR_ORCAMENTO (já no teto (R$ 25.00))
+✗ Nova campanha de Engajamento — AJUSTAR_ORCAMENTO (sem orçamento diário (CBO?))
+```
+
+**Nenhuma requisição saiu.** É a guarda que impede a regra de bater na Meta a
+cada 15 minutos, para sempre, depois que o orçamento já chegou no limite —
+`planejarAcao` devolve `{ agir: false, ok: true }` e o laço nem tenta.
+
+Com isso, **as três decisões do teto estão exercidas em produção**: recusar
+aumento sem teto (por asserção), travar NO teto (R$ 25 no Facebook) e pular
+quando já está lá.
+
+> ### ⚠️ E a ambiguidade do `affected` reapareceu — 2ª vez
+> A tela mostrou **"1 campanha afetada"** numa execução em que **nada foi
+> feito**. É o mesmo `ok: true` do pulo esperado alimentando o contador, igual
+> ao `já pausada` da madrugada.
+>
+> Não é bug de cálculo — é a palavra. "Afetada" descreve um pulo. **Melhoria
+> registrada:** separar no resumo o que foi ALTERADO do que foi PULADO, e
+> gravar o `novoOrcamento` no `applied` (`planejarAcao` já o calcula), para o
+> log responder sozinho o que hoje só o Gerenciador do Facebook responde.
+
 **Ainda NÃO exercidos** no caminho da regra: os modos `valor` (absoluto) e
-`pct_gasto` do `actionParams` — só `percentual` rodou; **ATIVAR** pela regra; e
-o pulo `já no teto`, que é a 2ª execução do mesmo teste.
+`pct_gasto` do `actionParams` — só `percentual` rodou — e **ATIVAR** pela regra.
 
 ## ✍️ ESCRITA NA GRAPH API: o que já foi exercido (31/07/2026)
 
@@ -3590,7 +3616,7 @@ o pulo `já no teto`, que é a 2ª execução do mesmo teste.
 | **`Lead`/`AddToCart`/`IC` na CAPI** | `/api/pixel/event` | ✅ **automático, pelo script instalado** |
 | Teste de pixel | `/api/pixel/test` | ✅ |
 | **Regras agindo sozinhas** | `rules/engine.ts` | ✅ **31/07/2026, em produção.** PAUSAR (por acidente) e AJUSTAR_ORCAMENTO (teste dirigido) |
-| **Clamp NO teto de orçamento** | `rules/engine.ts` | ✅ **31/07/2026** — R$ 20 +50% com teto R$ 25 → **R$ 25,00 no Facebook** |
+| **Clamp NO teto de orçamento** | `rules/engine.ts` | ✅ **31/07/2026** — R$ 20 +50% com teto R$ 25 → **R$ 25,00 no Facebook**; a 2ª execução pulou com `já no teto` sem chamar a Meta |
 | Criar campanha | `/api/ads/campaign` | ✅ 31/07/2026 — a cobaia crua |
 | Ações em massa | `/api/ads/bulk` | ❌ nunca |
 | Duplicar | `/copies` | ❌ nunca |
