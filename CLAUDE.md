@@ -2427,7 +2427,8 @@ grava log.
 > entidade certa (escopo correto, arquivadas fora) e chegou ao caminho de
 > PAUSAR. **Se a requisição HTTP chegou a sair depende do ramo "já pausada"**;
 > ver "O ENSAIO A SECO DISPAROU". As duas guardas do teto agem ANTES da chamada,
-> então seguem provadas; o **clamp NO teto** continua sem execução real.
+> então seguem provadas. ✅ **O clamp NO teto também foi exercido** em
+> 31/07/2026 — ver "O CLAMP FOI EXERCIDO".
 >
 > ⚠️ Não confunda com `updateDailyBudget`, que **já foi exercido** — pela caneta
 > inline, por uso real do usuário. O que falta é o caminho da REGRA: avaliar
@@ -3472,10 +3473,9 @@ avaliar condição, escolher entidade, agir sozinha e registrar — está exerci
 **por execução real em produção**, não por leitura de código. Foi por acidente,
 com consequência nula, e mesmo assim é a prova que faltava.
 
-> ⚠️ **A prova é do caminho de PAUSAR.** `AJUSTAR_ORCAMENTO` pela regra, e em
-> especial o **clamp no teto**, continuam sem execução real — as duas guardas do
-> teto agem ANTES da chamada, então elas seguem provadas, mas o valor travado no
-> teto nunca chegou à Meta por essa via.
+> ⚠️ Naquele momento a prova era só do caminho de PAUSAR. `AJUSTAR_ORCAMENTO`
+> e o clamp foram exercidos horas depois, em teste dirigido — ver a seção
+> seguinte.
 
 ### ⚠️ Mas `affected: 1` sozinho NÃO provaria isso
 
@@ -3525,6 +3525,49 @@ agora por execução real, não por leitura de código.
 > planejado teria provado a mesma coisa; foi o acidente que deu peso à prova,
 > porque exercitou o caminho inteiro em vez de parar na avaliação.
 
+## ✅ O CLAMP FOI EXERCIDO — Passo 2 fechado (31/07/2026)
+
+Teste dirigido, em produção, com cobaia **medida** antes de usar.
+
+| | |
+|---|---|
+| Cobaia | `COBAIA — não usar` — criada pela ferramenta, **crua** (0 conjuntos), PAUSADA, `dailyBudget` R$ 20 |
+| Regra | nível Campanha · só a conta da cobaia · **aumentar 50%** · **teto R$ 25** · `Gasto ≥ 0` |
+| Previsto pela prévia | "bate em 2 · a ação alteraria 1" |
+| Log | `1 de 2 entidade(s) afetada(s)` · `✓ COBAIA` · `✗ Nova campanha de Engajamento (sem orçamento diário (CBO?))` |
+| **No Facebook** | **R$ 25,00** |
+
+**O que isso prova, e não é pouco:**
+
+1. **O clamp trava no teto.** 20 × 1,5 = 30, e o que chegou à Meta foi 25.
+2. **A cadeia de unidades do caminho da REGRA está correta.** R$ 25 → 2500
+   centavos → R$ 25,00 na tela do Facebook. Não há divisão nem multiplicação
+   sobrando — era a hipótese mais cara de errar, e a mais difícil de notar.
+3. **A prévia é honesta.** Ela disse "bate em 2 · alteraria 1" **antes de
+   salvar**, e o log registrou exatamente isso. É a primeira vez que a promessa
+   e a execução foram comparadas com dado real.
+4. **O pulo por ABO funciona:** a campanha sem orçamento no nível da campanha
+   foi recusada com o motivo, em vez de alterada.
+
+> ### ⚠️ O log NÃO teria bastado
+> `✓ EXECUTOU AJUSTAR_ORCAMENTO` é idêntico para R$ 25 e para R$ 30 — o
+> `applied` registra que a chamada teve sucesso, nunca o valor enviado. **Quem
+> testa o clamp é o número no Gerenciador do Facebook.** Mesma lição do
+> `affected: 1`: o log prova que agiu, não prova o quê.
+>
+> **Melhoria natural:** `planejarAcao` já calcula `novoOrcamento` — gravá-lo no
+> `applied` tornaria o log auto-suficiente para esta classe de verificação.
+
+> ### 🔒 Por que o risco era zero, e não "baixo"
+> Orçamento é **teto de gasto, não gasto**. Numa campanha sem conjunto a Meta
+> não entrega, então nem o pior erro de unidade (R$ 2.500) custaria um centavo.
+> A propriedade "crua" protege exatamente contra o erro que o teste procura — e
+> por isso ela foi **medida** com `conta:estrutura` antes, nunca assumida.
+
+**Ainda NÃO exercidos** no caminho da regra: os modos `valor` (absoluto) e
+`pct_gasto` do `actionParams` — só `percentual` rodou; **ATIVAR** pela regra; e
+o pulo `já no teto`, que é a 2ª execução do mesmo teste.
+
 ## ✍️ ESCRITA NA GRAPH API: o que já foi exercido (31/07/2026)
 
 > ### ⛔ A documentação afirmava, em QUATRO lugares, que nenhuma escrita real
@@ -3546,9 +3589,9 @@ agora por execução real, não por leitura de código.
 | **`Purchase` na CAPI** | `dispatchPixel` | ✅ **automático, em TODA venda aprovada** |
 | **`Lead`/`AddToCart`/`IC` na CAPI** | `/api/pixel/event` | ✅ **automático, pelo script instalado** |
 | Teste de pixel | `/api/pixel/test` | ✅ |
-| Criar campanha | `/api/ads/campaign` | ❌ nunca |
-| **Regras agindo sozinhas** | `rules/engine.ts` | ⚠️ **avaliou, escolheu a entidade e chegou ao caminho de ação em produção (31/07/2026, por acidente).** Se a requisição chegou a SAIR depende do ramo "já pausada" — ver a seção do ensaio acima |
-| **Clamp NO teto de orçamento** | `rules/engine.ts` | ❌ **nunca** |
+| **Regras agindo sozinhas** | `rules/engine.ts` | ✅ **31/07/2026, em produção.** PAUSAR (por acidente) e AJUSTAR_ORCAMENTO (teste dirigido) |
+| **Clamp NO teto de orçamento** | `rules/engine.ts` | ✅ **31/07/2026** — R$ 20 +50% com teto R$ 25 → **R$ 25,00 no Facebook** |
+| Criar campanha | `/api/ads/campaign` | ✅ 31/07/2026 — a cobaia crua |
 | Ações em massa | `/api/ads/bulk` | ❌ nunca |
 | Duplicar | `/copies` | ❌ nunca |
 | Excluir | `deleteEntity` | ❌ nunca (irreversível) |
@@ -5894,11 +5937,10 @@ arquivo local, de propósito.
 - **`Workspace.accountIds` / `webhookIds` / `pixelConfigIds` / `products`** —
   mortos, mantidos pela regra dos dois deploys.
 - **`DashboardLayout.workspaceId` nullable** — o NOT NULL entra num 2º deploy.
-- **As ações em massa e o duplicar nunca foram exercidos.** Pausar e alterar
-  orçamento **já foram**, por uso real. O **motor de regras** rodou em produção
-  em 31/07/2026 (por acidente, operador invertido) e teve o escopo confirmado —
-  mas o último centímetro, a requisição HTTP, depende do ramo "já pausada". Ver
-  "Escrita na Graph API" e "O ENSAIO A SECO DISPAROU".
+- **As ações em massa, o duplicar e o excluir nunca foram exercidos.** O
+  **motor de regras** foi: PAUSAR (por acidente) e **AJUSTAR_ORCAMENTO com o
+  clamp** (teste dirigido), os dois em produção em 31/07/2026. Ver "O CLAMP FOI
+  EXERCIDO".
 - **`WebhookLog` sem retenção**, e logs sem dono não aparecem na UI.
 
 ## 🎨 Marca e logos
