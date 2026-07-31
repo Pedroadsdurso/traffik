@@ -53,7 +53,7 @@ export async function ingestSale(
   rawPayload: unknown,
   fallbackIp: string | null,
 ): Promise<IngestResult> {
-  const match = await matchClick(ctx.userId, data.clickId, data.ipDoComprador ?? fallbackIp);
+  const match = await matchClick(ctx.userId, data.clickId, data.ipDoComprador ?? fallbackIp, data.fbc);
   const { pais: country, fonte: countrySource } = paisDaVenda(data, match);
 
   const saleData = {
@@ -78,6 +78,10 @@ export async function ingestSale(
     countrySource,
     // Taxas que o GATEWAY informou. `null` quando ele não manda — e aí o
     // `financeiro.ts` cai na taxa cadastrada. Ver a REGRA 1 do contrato.
+    // Cookies da Meta que o gateway mandou. Vão para a CAPI como sinal de
+    // correspondência — o `fbp` nunca era enviado.
+    fbc: data.fbc,
+    fbp: data.fbp,
     taxaGateway: data.taxaGateway,
     coproducao: somaDeComissoes(data),
     matchMethod: match.method,

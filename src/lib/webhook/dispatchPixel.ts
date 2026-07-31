@@ -21,7 +21,9 @@ export async function dispatchPurchaseEvents(saleId: string): Promise<void> {
         buyerEmail: true,
         buyerPhone: true,
         country: true,
-        click: { select: { fbclid: true, ip: true, userAgent: true, url: true } },
+        fbc: true,
+        fbp: true,
+        click: { select: { fbclid: true, ip: true, userAgent: true, url: true, timestamp: true } },
       },
     });
     if (!sale) return;
@@ -66,6 +68,12 @@ export async function dispatchPurchaseEvents(saleId: string): Promise<void> {
           phone: sale.buyerPhone,
           country: sale.country,
           fbclid: sale.click?.fbclid,
+          // O cookie REAL que o gateway mandou, quando houver.
+          fbc: sale.fbc,
+          fbp: sale.fbp,
+          // Instante do CLIQUE, para reconstruir o `_fbc` com o timestamp certo
+          // quando o gateway não manda o cookie.
+          fbclidEm: sale.click ? Math.floor(sale.click.timestamp.getTime() / 1000) : null,
           clientIp: sale.click?.ip,
           clientUserAgent: sale.click?.userAgent,
           eventSourceUrl: sale.click?.url,

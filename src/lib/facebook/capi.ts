@@ -27,6 +27,17 @@ export interface ServerEventInput {
   phone?: string | null;
   country?: string | null;
   fbclid?: string | null;
+  /**
+   * O `_fbc` REAL, quando o gateway o enviou. Vence a reconstrução.
+   */
+  fbc?: string | null;
+  /** O `_fbp` do navegador do comprador, quando o gateway o enviou. */
+  fbp?: string | null;
+  /**
+   * Instante do CLIQUE no anúncio, em epoch de segundos. Usado só para
+   * reconstruir o `_fbc` quando não temos o real — ver `sendServerEvent`.
+   */
+  fbclidEm?: number | null;
   clientIp?: string | null;
   clientUserAgent?: string | null;
   eventSourceUrl?: string | null;
@@ -68,8 +79,27 @@ export async function sendServerEvent(input: ServerEventInput): Promise<{ ok: bo
   // provavelmente já é de outro assinante — seria sinal ERRADO, não fraco.
   if (podeIrParaCapi(input.clientIp)) userData.client_ip_address = input.clientIp.trim();
   if (input.clientUserAgent) userData.client_user_agent = input.clientUserAgent;
-  // fbc é derivado do fbclid: fb.1.<timestamp>.<fbclid>
-  if (input.fbclid) userData.fbc = `fb.1.${Math.floor(Date.now() / 1000)}.${input.fbclid}`;
+  // ── _fbc e _fbp ───────────────────────────────────────────────────────────
+  //
+  // ⚠️ O `_fbc` REAL vence sempre. O terceiro segmento dele
+  // (`fb.<sub>.<criado_em>.<fbclid>`) é QUANDO O COOKIE FOI CRIADO, ou seja
+  // quando a pessoa clicou no anúncio. Aqui havia `Date.now()`, que é o instante
+  // em que a VENDA foi processada — dias depois, num Pix pago com atraso. A
+  // string que mandávamos não batia com a do navegador do comprador, o que
+  // enfraquece a correspondência e a deduplicação navegador↔servidor.
+  //
+  // Sem o cookie real, reconstruímos — mas com o instante do CLIQUE, que é o
+  // que o campo significa.
+  if (input.fbc) {
+    userData.fbc = input.fbc;
+  } else if (input.fbclid) {
+    const criadoEm = input.fbclidEm ?? Math.floor(Date.now() / 1000);
+    userData.fbc = `fb.1.${criadoEm}.${input.fbclid}`;
+  }
+  // ⚠️ O `_fbp` NUNCA era enviado — o campo simplesmente não existia aqui,
+  // enquanto a Kirvano o manda em 45 de 46 eventos. Sinal de correspondência
+  // descartado em toda venda, mesma categoria do telefone sem DDI.
+  if (input.fbp) userData.fbp = input.fbp;
 
   const customData: Record<string, unknown> = {};
   if (input.currency) customData.currency = input.currency;

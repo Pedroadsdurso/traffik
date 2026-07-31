@@ -559,6 +559,12 @@ model Sale {
   /// cadastrada em Taxas e Despesas. ZERO = ele informou que não cobrou.
   /// Os dois significam coisas diferentes; ver a REGRA 1 em
   /// `lib/gateways/contrato.ts`.
+  /// Cookie `_fbc` da Meta, como o gateway o enviou — o MESMO que está no
+  /// navegador do comprador. Preferido na CAPI: fabricar um com `Date.now()`
+  /// produz um timestamp de processamento, não o do clique no anúncio.
+  fbc           String?
+  /// Cookie `_fbp` da Meta. Melhora a correspondência da CAPI; não casa clique.
+  fbp           String?
   taxaGateway   Decimal?      @db.Decimal(14, 2)
   /// Comissão de coprodutor/afiliado reportada pelo gateway. Mesma regra do
   /// NULO acima.

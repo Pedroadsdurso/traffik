@@ -31,7 +31,9 @@
     "test:gateways": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-gateways.mjs",
     "test:receptor": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-receptor.mjs",
     "backfill:status": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/backfill-status.mjs",
-    "test:pedidos": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-pedidos.mjs"
+    "test:pedidos": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-pedidos.mjs",
+    "backfill:taxas": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/backfill-taxas.mjs",
+    "test:correspondencia": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-correspondencia.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

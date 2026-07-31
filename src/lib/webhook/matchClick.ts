@@ -1,9 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { candidatosDeIp } from "@/lib/geo/anonimizarIp";
+import { fbclidDoFbc } from "@/lib/gateways/campos";
 
 export interface ClickMatch {
   clickId: string | null; // Click.id (cuid) para o FK, não o uuid público
-  method: "direct" | "ip" | "none";
+  method: "direct" | "fbclid" | "ip" | "none";
   /**
    * País do clique casado, quando houver.
    *
@@ -19,13 +20,28 @@ const IP_WINDOW_MS = 12 * 60 * 60 * 1000;
 
 /**
  * Encontra o clique de origem de uma venda.
- *  1. Match direto pelo click_id público enviado no checkout.
- *  2. Fallback simples: clique mais recente do mesmo IP dentro da janela.
+ *
+ * | # | Via | O que prova |
+ * |---|---|---|
+ * | 1 | `click_id` público | o NOSSO script propagou o id até o checkout. Identifica a SESSÃO, sem janela de tempo |
+ * | 2 | **`fbc` → `fbclid`** | identifica o CLIQUE NO ANÚNCIO. Igualmente exato; só não prova que o checkout propagou o nosso id |
+ * | 3 | IP do payload | inferência frouxa, dentro de 12h |
+ *
+ * > ### ⚠️ Por que o `click_id` continua vencendo o `fbc`
+ * > Os dois identificam a mesma pessoa, mas o `click_id` é emitido por nós e
+ * > sobrevive a um visitante que voltou pelo anúncio duas vezes — mesmo
+ * > `fbclid`, sessões diferentes.
+ * >
+ * > ### 🔴 Para a Cakto, o `fbc` é a via PRINCIPAL
+ * > Ela **não manda o IP do comprador**, então sem esta via a venda dela
+ * > dependeria só do `click_id` — e cairia no nada quando o checkout não o
+ * > propagasse.
  */
 export async function matchClick(
   userId: string,
   publicClickId: string | null,
   ip: string | null,
+  fbc?: string | null,
 ): Promise<ClickMatch> {
   if (publicClickId) {
     const click = await prisma.click.findFirst({
@@ -33,6 +49,19 @@ export async function matchClick(
       select: { id: true, country: true },
     });
     if (click) return { clickId: click.id, method: "direct", country: click.country };
+  }
+
+  // 2) Pelo `_fbc` que o gateway devolveu: o último segmento é o `fbclid`.
+  const fbclid = fbclidDoFbc(fbc ?? null);
+  if (fbclid) {
+    const click = await prisma.click.findFirst({
+      // ⚠️ `bot: false` pelo mesmo motivo do match por IP: robô não compra, e a
+      // venda herdaria o país do datacenter dele.
+      where: { userId, fbclid, bot: false },
+      orderBy: { timestamp: "desc" },
+      select: { id: true, country: true },
+    });
+    if (click) return { clickId: click.id, method: "fbclid", country: click.country };
   }
 
   if (ip) {

@@ -3154,6 +3154,73 @@ para ser reavaliado quando houver volume que justifique.
 > ⚠️ A Cakto **não** tem esse problema: os itens dela já chegam como entradas
 > separadas, com id próprio e `parent_order`.
 
+### Etapa 5 — correspondência da CAPI e o backfill das taxas
+
+**Migration `20260731010000`**: `Sale.fbc` e `Sale.fbp`.
+
+#### Dois sinais perdidos em silêncio
+
+| Sinal | O que acontecia | Agora |
+|---|---|---|
+| **`_fbp`** | **nunca era enviado** — o campo não existia no `user_data`, e a Kirvano manda em 45 de 46 eventos | vai para a CAPI |
+| **`_fbc`** | fabricado com `Date.now()` | usa o cookie REAL do gateway; sem ele, reconstrói com o **instante do CLIQUE** |
+
+> ### ⚠️ O terceiro segmento do `_fbc` é QUANDO O COOKIE FOI CRIADO
+> `fb.<sub>.<criado_em>.<fbclid>` — é o momento do clique no anúncio. Havia
+> `Date.now()`, que é o instante em que a VENDA foi processada. Num Pix pago
+> dois dias depois, a string não batia com a do navegador do comprador.
+>
+> Nenhum dos dois fazia a chamada falhar. Degradam a correspondência, que
+> alimenta a otimização das campanhas — dinheiro real, sem erro e sem log.
+
+**Medido: apenas 1 venda foi afetada até hoje**, e com defasagem de 0,00 dia (a
+venda foi processada no mesmo instante do clique). O estrago acumulado é
+praticamente nulo; o que importa é daqui para frente, com PIX pago com atraso.
+
+#### Match por `fbc` — a via principal da Cakto
+
+| # | Via | O que prova |
+|---|---|---|
+| 1 | `click_id` público | o NOSSO script propagou o id. Identifica a SESSÃO, sem janela |
+| 2 | **`fbc` → `fbclid`** | identifica o CLIQUE no anúncio |
+| 3 | IP do payload | inferência frouxa, 12 h |
+
+> ⚠️ O `click_id` continua vencendo: os dois identificam a mesma pessoa, mas o
+> nosso id sobrevive a um visitante que voltou pelo anúncio duas vezes (mesmo
+> `fbclid`, sessões diferentes). A força já estava em `fontes.ts`.
+>
+> 🔴 **Para a Cakto o `fbc` é a via PRINCIPAL** — ela não manda o IP do
+> comprador, então sem esta via a venda dependeria só do `click_id`.
+
+#### 🔒 `npm run backfill:taxas` — o primeiro teste REAL da restrição
+
+Relê o `rawPayload` com o parser atual e grava **só** `taxaGateway`/`coproducao`.
+
+Medido nas 26 vendas reais de produção (semeadas no dev):
+
+| | |
+|---|---|
+| Ganham taxa real | **14** (R$ 46,61 recuperados) |
+| Payload não traz o dado | 12 |
+| Faturamento líquido | R$ 1.307,77 → **R$ 1.305,15** |
+| Procedência | 2 vendas com taxa real, 10 pela cadastrada → **período MISTO** |
+
+> ### 🔴 A restrição, MEDIDA em vez de prometida
+> A simulação reporta o que aconteceria **se** o reprocessamento recalculasse o
+> país com o payload já purgado (Fase A): **15 das 26 vendas PERDERIAM o país.**
+>
+> É exatamente isso que a regra impede — e agora está exercitado, não suposto.
+> Depois do `--aplicar`, o script compara `country`/`countrySource` **linha a
+> linha** e falha se qualquer um mudou. Saiu idêntico; a 2ª passada não mexe em
+> nada.
+>
+> ⚠️ O `SET` toca só as duas colunas de taxa. País, fonte, clique, método de
+> match e status ficam de fora — a restrição é **estrutural**, não uma promessa
+> no comentário.
+
+`npm run test:correspondencia` — 8 asserções, interceptando o `fetch` para ler o
+`user_data` que iria à Meta. Sem rede e sem banco.
+
 ### O que a etapa 1 **não** fez
 
 Etapas 2 a 8, na ordem acordada: precedência de fonte (2) · `pedidoId`+`itemTipo`
