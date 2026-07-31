@@ -76,6 +76,10 @@ export async function ingestSale(
     buyerPhone: data.telefone,
     country,
     countrySource,
+    // Taxas que o GATEWAY informou. `null` quando ele não manda — e aí o
+    // `financeiro.ts` cai na taxa cadastrada. Ver a REGRA 1 do contrato.
+    taxaGateway: data.taxaGateway,
+    coproducao: somaDeComissoes(data),
     matchMethod: match.method,
     clickId: match.clickId,
     approvedAt: data.status === "APROVADA" ? new Date() : null,
@@ -106,6 +110,23 @@ export async function ingestSale(
   });
 
   return { id: sale.id, status: sale.status, match: sale.matchMethod ?? "none" };
+}
+
+/**
+ * Coprodução/afiliados que o gateway informou nesta venda.
+ *
+ * ⚠️ Devolve `null` quando o gateway não mandou comissão nenhuma — e `0` quando
+ * ele mandou dizendo que não houve. A diferença decide se o cálculo de lucro usa
+ * este número ou a taxa que o usuário cadastrou à mão.
+ *
+ * ⚠️ A comissão do PRODUTOR fica de fora: ela é o que sobra para o dono da
+ * conta, não um custo. Somá-la zeraria o lucro de toda venda.
+ */
+function somaDeComissoes(data: VendaNormalizada): number | null {
+  if (data.comissoes == null) return null;
+  return data.comissoes
+    .filter((c) => !/produtor|producer/i.test(c.tipo))
+    .reduce((a, c) => a + c.valor, 0);
 }
 
 /**

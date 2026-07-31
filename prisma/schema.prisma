@@ -553,6 +553,16 @@ model Sale {
   country       String?
   /// De onde veio o `country` da venda: payload · ip · clique · payload_cru.
   countrySource String?
+  /// Taxa do gateway REPORTADA por ele nesta venda.
+  ///
+  /// ⚠️ NULO = o gateway não informou → `lib/financeiro.ts` cai na taxa
+  /// cadastrada em Taxas e Despesas. ZERO = ele informou que não cobrou.
+  /// Os dois significam coisas diferentes; ver a REGRA 1 em
+  /// `lib/gateways/contrato.ts`.
+  taxaGateway   Decimal?      @db.Decimal(14, 2)
+  /// Comissão de coprodutor/afiliado reportada pelo gateway. Mesma regra do
+  /// NULO acima.
+  coproducao    Decimal?      @db.Decimal(14, 2)
   /// Como o clique de origem foi encontrado: "direct" | "ip" | "none".
   matchMethod   String?
   rawPayload    Json?

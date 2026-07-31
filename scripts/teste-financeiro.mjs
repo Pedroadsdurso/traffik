@@ -181,9 +181,70 @@ eq("ROAS null (sem gasto) -> normal, não vermelho", corFinanceira(null, "roas")
 // O mesmo 0,80 no ROI é LUCRO de 80% — a prova de que os cortes são distintos.
 eq("o MESMO 0,80 no ROI é verde", corFinanceira(0.8, "roi"), VERDE);
 
+
+// ── 6. Taxa REAL do gateway × taxa cadastrada (etapa 4) ─────────────────────
+//
+// Período MISTO é o caso NORMAL, não a exceção: basta ter dois gateways, ou um
+// que só informe a taxa em parte dos eventos (a Kirvano manda em 36 de 46).
+// O que não pode acontecer é o Faturamento Líquido somar medida com estimativa
+// sem dizer qual é qual.
+console.log("\n\x1b[1mTaxa reportada pelo gateway\x1b[0m");
+{
+  const PIX = "PIX";
+  const taxa5 = pct("TAXA_GATEWAY", 5);
+  const base = (vendas, despesas = [taxa5]) =>
+    calcularFinanceiro({
+      bruto: vendas.reduce((a, v) => a + v.valor, 0),
+      brutoPorPagamento: new Map([[PIX, vendas.reduce((a, v) => a + v.valor, 0)]]),
+      gastoAnuncios: 0,
+      despesas,
+      vendas,
+    });
+
+  const real = base([{ valor: 100, formaPagamento: PIX, taxaGateway: 7.5, coproducao: null }]);
+  eq("gateway informou → a taxa cadastrada é ignorada naquela venda", real.gateway, 7.5);
+  eq("  e a procedência fica registrada", real.fontes.gateway.real, 7.5);
+
+  // ⚠️ Se a base da taxa cadastrada não encolhesse, daria 7,50 + 10,00 = 17,50 —
+  // descontando DUAS VEZES da venda que já informou a própria taxa.
+  const misto = base([
+    { valor: 100, formaPagamento: PIX, taxaGateway: 7.5, coproducao: null },
+    { valor: 100, formaPagamento: PIX, taxaGateway: null, coproducao: null },
+  ]);
+  eq("MISTO: 7,50 real + 5,00 cadastrada, sem dupla contagem", misto.gateway, 12.5);
+  eq("  vendas com valor real", misto.fontes.gateway.vendasComValorReal, 1);
+  eq("  vendas pela taxa cadastrada", misto.fontes.gateway.vendasSemValorReal, 1);
+
+  // A REGRA 1 do contrato de gateways, no lugar onde ela custa dinheiro.
+  eq("gateway informou ZERO → desconta nada",
+    base([{ valor: 100, formaPagamento: PIX, taxaGateway: 0, coproducao: null }]).gateway, 0);
+  eq("gateway NÃO informou → cai nos 5% cadastrados",
+    base([{ valor: 100, formaPagamento: PIX, taxaGateway: null, coproducao: null }]).gateway, 5);
+
+  // Cobrar cadastro de um número que já é medido treinaria o usuário a ignorar
+  // o aviso — que é o oposto do que ele existe para fazer.
+  const tudoReal = base([{ valor: 100, formaPagamento: PIX, taxaGateway: 7.5, coproducao: 10 }], []);
+  eq("todas informaram → para de cobrar cadastro de taxa", tudoReal.faltando.includes("taxa do gateway"), false);
+  eq("  e de coprodução", tudoReal.faltando.includes("coprodução"), false);
+  eq("  mas imposto continua faltando (ninguém informou)", tudoReal.faltando.includes("imposto"), true);
+
+  const metade = base([
+    { valor: 100, formaPagamento: PIX, taxaGateway: 7.5, coproducao: null },
+    { valor: 100, formaPagamento: PIX, taxaGateway: null, coproducao: null },
+  ], []);
+  eq("mistura AINDA cobra cadastro — metade depende dele", metade.faltando.includes("taxa do gateway"), true);
+
+  // Chamador antigo (sem a lista de vendas) não pode mudar de comportamento.
+  const semLista = calcularFinanceiro({
+    bruto: 100, brutoPorPagamento: new Map([[PIX, 100]]), gastoAnuncios: 0, despesas: [taxa5],
+  });
+  eq("sem lista de vendas, comportamento é o de ANTES", semLista.gateway, 5);
+}
+
 console.log(
   falhas === 0
     ? `\n\x1b[1m\x1b[32m${ok} asserções passaram, 0 falharam.\x1b[0m\n`
     : `\n\x1b[1m\x1b[31m${ok} passaram, ${falhas} FALHARAM.\x1b[0m\n`,
 );
 process.exit(falhas === 0 ? 0 : 1);
+

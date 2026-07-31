@@ -45,6 +45,29 @@ export interface DespesaEntrada {
   paymentMethod: PaymentMethod | null;
 }
 
+/**
+ * De onde saiu um desconto, quando parte das vendas informa o valor real e
+ * parte não. **Período misto é o caso NORMAL**, não a exceção: basta ter dois
+ * gateways, ou um gateway que só informa a taxa em alguns eventos.
+ */
+export interface FonteDoDesconto {
+  /** Somado do que os gateways informaram, venda a venda. */
+  real: number;
+  /** Calculado pela taxa cadastrada, para as vendas que não informaram. */
+  estimado: number;
+  vendasComValorReal: number;
+  vendasSemValorReal: number;
+}
+
+/** Uma venda, no mínimo que a conta precisa saber. */
+export interface VendaParaFinanceiro {
+  valor: number;
+  formaPagamento: PaymentMethod;
+  /** NULO = gateway não informou. ZERO = informou que não cobrou. */
+  taxaGateway: number | null;
+  coproducao: number | null;
+}
+
 export interface Composicao {
   /** Faturamento das vendas APROVADAS no período. */
   bruto: number;
@@ -78,6 +101,15 @@ export interface Composicao {
   roi: number | null;
   /** Tipos de desconto que NÃO estão cadastrados. Ver o aviso acima. */
   faltando: RotuloDesconto[];
+  /**
+   * A procedência de cada desconto.
+   *
+   * ⚠️ **A tela é OBRIGADA a mostrar isto quando há mistura.** Um Faturamento
+   * Líquido que soma valor medido com estimativa, sem dizer qual é qual, é pior
+   * que não ter o dado: o número parece exato e não é. Exigência explícita do
+   * usuário em 31/07/2026.
+   */
+  fontes: { gateway: FonteDoDesconto; coproducao: FonteDoDesconto };
 }
 
 export type RotuloDesconto = "taxa do gateway" | "imposto" | "coprodução" | "custo de produto";
@@ -106,8 +138,51 @@ export function calcularFinanceiro(opts: {
   brutoPorPagamento: Map<PaymentMethod, number>;
   gastoAnuncios: number;
   despesas: DespesaEntrada[];
+  /**
+   * As vendas aprovadas do período, para usar a taxa REAL de quem informou.
+   *
+   * Omitir mantém o comportamento anterior (tudo pela taxa cadastrada) — é o
+   * que os testes puros e qualquer chamador antigo esperam.
+   */
+  vendas?: VendaParaFinanceiro[];
 }): Composicao {
   const { bruto, brutoPorPagamento, gastoAnuncios } = opts;
+
+  // ── Taxas REPORTADAS pelo gateway ────────────────────────────────────────
+  //
+  // O que o gateway informou é medida; a taxa cadastrada é média. Onde há
+  // medida, ela vence — e a base da taxa cadastrada encolhe para não descontar
+  // duas vezes da mesma venda.
+  const vendas = opts.vendas ?? [];
+  const zerada = (): FonteDoDesconto => ({ real: 0, estimado: 0, vendasComValorReal: 0, vendasSemValorReal: 0 });
+  const fGateway = zerada();
+  const fCoprod = zerada();
+  // Faturamento que AINDA precisa da taxa cadastrada, por forma de pagamento.
+  const baseSemTaxaReal = new Map<PaymentMethod, number>();
+  let baseSemCoprodReal = 0;
+
+  for (const v of vendas) {
+    if (v.taxaGateway != null) {
+      fGateway.real += v.taxaGateway;
+      fGateway.vendasComValorReal += 1;
+    } else {
+      fGateway.vendasSemValorReal += 1;
+      baseSemTaxaReal.set(v.formaPagamento, (baseSemTaxaReal.get(v.formaPagamento) ?? 0) + v.valor);
+    }
+    if (v.coproducao != null) {
+      fCoprod.real += v.coproducao;
+      fCoprod.vendasComValorReal += 1;
+    } else {
+      fCoprod.vendasSemValorReal += 1;
+      baseSemCoprodReal += v.valor;
+    }
+  }
+
+  // Sem lista de vendas, a base da taxa cadastrada é o faturamento inteiro —
+  // exatamente como antes.
+  const baseGateway = opts.vendas ? baseSemTaxaReal : brutoPorPagamento;
+  const baseGatewayTotal = opts.vendas ? [...baseSemTaxaReal.values()].reduce((x, y) => x + y, 0) : bruto;
+  const baseCoprod = opts.vendas ? baseSemCoprodReal : bruto;
 
   let gateway = 0;
   let impostos = 0;
@@ -121,15 +196,22 @@ export function calcularFinanceiro(opts: {
     if (rotulo) cadastrados.add(rotulo);
 
     switch (e.type) {
-      case "TAXA_GATEWAY":
-        gateway += aplicar(e, e.paymentMethod ? brutoPorPagamento.get(e.paymentMethod) ?? 0 : bruto);
+      case "TAXA_GATEWAY": {
+        const base = e.paymentMethod ? baseGateway.get(e.paymentMethod) ?? 0 : baseGatewayTotal;
+        const valor = aplicar(e, base);
+        fGateway.estimado += valor;
+        gateway += valor;
         break;
+      }
       case "IMPOSTO":
         impostos += aplicar(e, bruto);
         break;
-      case "COPRODUCAO":
-        coproducao += aplicar(e, bruto);
+      case "COPRODUCAO": {
+        const valor = aplicar(e, baseCoprod);
+        fCoprod.estimado += valor;
+        coproducao += valor;
         break;
+      }
       case "CUSTO_PRODUTO":
         custoProduto += aplicar(e, bruto);
         break;
@@ -138,6 +220,10 @@ export function calcularFinanceiro(opts: {
         recorrentes += e.amount;
     }
   }
+
+  // O que o gateway informou entra somado ao que a taxa cadastrada cobriu.
+  gateway += fGateway.real;
+  coproducao += fCoprod.real;
 
   const totalDescontos = gateway + coproducao + impostos + custoProduto;
   const liquido = bruto - totalDescontos;
@@ -169,7 +255,16 @@ export function calcularFinanceiro(opts: {
      * mostra "—", que é a resposta honesta.
      */
     roi: bruto === 0 && gastoAnuncios === 0 ? null : custoTotal > 0 ? lucro / custoTotal : null,
-    faltando: (Object.values(POR_TIPO) as RotuloDesconto[]).filter((r) => !cadastrados.has(r)),
+    // ⚠️ Não acusa "falta cadastrar" o que os gateways já informaram em TODAS
+    // as vendas do período — cobrar cadastro de um número que já é medido
+    // treinaria o usuário a ignorar o aviso.
+    faltando: (Object.values(POR_TIPO) as RotuloDesconto[]).filter((r) => {
+      if (cadastrados.has(r)) return false;
+      if (r === "taxa do gateway") return fGateway.vendasSemValorReal > 0 || fGateway.vendasComValorReal === 0;
+      if (r === "coprodução") return fCoprod.vendasSemValorReal > 0 || fCoprod.vendasComValorReal === 0;
+      return true;
+    }),
+    fontes: { gateway: fGateway, coproducao: fCoprod },
   };
 }
 

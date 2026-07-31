@@ -688,6 +688,28 @@ export function useTraffikState(
   const pendentes = k?.pendentes ?? 0;
   const pendentesValor = k?.pendentesValor ?? 0;
   const liquido = k?.liquido ?? 0;
+
+  /**
+   * De onde saiu a taxa do gateway neste período.
+   *
+   * ⚠️ **Período MISTO é o caso normal**, não a exceção: basta ter dois gateways,
+   * ou um que só informe a taxa em parte dos eventos (a Kirvano manda em 36 de
+   * 46). Um Faturamento Líquido que soma valor medido com estimativa sem dizer
+   * qual é qual é PIOR que não ter o dado — parece exato e não é.
+   *
+   * Por isso o rótulo do card muda, em vez de a informação viver só no tooltip:
+   * quem olha o número tem de ver a procedência junto.
+   */
+  const fonteTaxa = d?.financeiro?.fontes?.gateway;
+  const rotuloLiquido = (() => {
+    if (!fonteTaxa) return "após taxas e impostos";
+    const { vendasComValorReal: reais, vendasSemValorReal: estimadas } = fonteTaxa;
+    if (reais > 0 && estimadas > 0) {
+      return `taxa real em ${reais} de ${reais + estimadas} vendas`;
+    }
+    if (reais > 0) return "taxa informada pelo gateway";
+    return "após taxas e impostos";
+  })();
   const lucro = k?.profit ?? 0;
   const reembolsadas = k?.reembolsadas ?? 0;
   const chargebackRate = k?.chargebackRate ?? 0;
@@ -735,7 +757,7 @@ export function useTraffikState(
       label: "Faturamento líquido",
       value: brl(liquido),
       delta: null, invertido: false, trendColor: N, trendPath: UP_PATH,
-      trendLabel: "após taxas e impostos",
+      trendLabel: rotuloLiquido,
       cor: corFinanceira(liquido, "lucro"),
     },
     lucroLiquido: {

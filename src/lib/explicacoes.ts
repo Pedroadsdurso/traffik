@@ -75,6 +75,7 @@ export const METRICAS: Record<string, ConteudoInfo> = {
     corpo: [
       "O que sobra do faturamento depois do que sai por causa da própria venda.",
       "Não desconta anúncio nem despesa fixa — isso é o Lucro.",
+      "Quando o gateway informa quanto cobrou, usamos o valor REAL daquela venda em vez da taxa média que você cadastrou. Se o período tiver vendas dos dois tipos, o rótulo do card diz em quantas a taxa é real.",
     ],
     formula: "Bruto − taxa do gateway − coprodução − impostos − custo de produto",
     alerta:

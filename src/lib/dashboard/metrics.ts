@@ -255,6 +255,9 @@ async function windowAggregate(
         buyerEmail: true, // identifica comprador único para o ARPU
         country: true, // "Vendas por país" (Bloco 5)
         countrySource: true, // procedência, para a tela marcar estimativa
+        // Taxas REPORTADAS pelo gateway. NULO ≠ zero — ver `lib/financeiro.ts`.
+        taxaGateway: true,
+        coproducao: true,
         // O resolvedor de área precisa destes três para aplicar a precedência.
         webhookId: true,
         apiCredentialId: true,
@@ -512,6 +515,14 @@ function summarize(w: Window) {
     brutoPorPagamento: revenueByPayment,
     gastoAnuncios: spend,
     despesas: w.expenses.map((e) => ({ ...e, amount: num(e.amount) })),
+    // Onde o gateway informou a taxa, ela vence a cadastrada — e a `Composicao`
+    // devolve quantas vendas usaram cada fonte, para a tela poder dizer.
+    vendas: approved.map((s) => ({
+      valor: num(s.value),
+      formaPagamento: s.paymentMethod,
+      taxaGateway: s.taxaGateway == null ? null : num(s.taxaGateway),
+      coproducao: s.coproducao == null ? null : num(s.coproducao),
+    })),
   });
   const profit = fin.lucro;
   // ROI como **multiplicador** (Bloco 4), na mesma escala do ROAS: 1,87x.

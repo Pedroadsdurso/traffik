@@ -3085,6 +3085,75 @@ topo do funil e derrubando a taxa de conversão.
 >
 > **Nenhuma agregação usa o dia do processo — e nenhum teste deveria semear com ele.**
 
+### Etapa 4 — taxa REAL do gateway vence a cadastrada
+
+**Migration `20260731000000`**: `Sale.taxaGateway` e `Sale.coproducao`, ambas
+`Decimal?`. A Kirvano manda `fee` e o bloco `fiscal` em 36 de 46 eventos reais;
+a Cakto manda `fees` e `commissions[]`. Tudo isso era descartado, e o desconto
+saía de uma taxa **média** cadastrada à mão.
+
+> ### 🔴 PERÍODO MISTO É O CASO NORMAL — e a tela é obrigada a dizer
+> Basta ter dois gateways, ou um que só informe a taxa em parte dos eventos.
+> Um Faturamento Líquido que soma **medida com estimativa sem dizer qual é
+> qual** é pior que não ter o dado: parece exato e não é. Exigência explícita do
+> usuário em 31/07/2026.
+>
+> Por isso a procedência vive no **rótulo do card**, não só no tooltip:
+>
+> | Situação | Rótulo |
+> |---|---|
+> | Todas as vendas informaram | "taxa informada pelo gateway" |
+> | **Misto** | **"taxa real em 12 de 30 vendas"** |
+> | Nenhuma informou | "após taxas e impostos" (como antes) |
+>
+> `Composicao.fontes` devolve `{ real, estimado, vendasComValorReal,
+> vendasSemValorReal }` por desconto. **Não remova esse campo** — sem ele a tela
+> volta a exibir um número de fonte mista sem procedência.
+
+> ### ⛔ A base da taxa cadastrada ENCOLHE, senão desconta duas vezes
+> Com 2 vendas de R$ 100, uma informando R$ 7,50 e a outra não, o desconto é
+> `7,50 + 5% de 100 = 12,50`. Se a base continuasse sendo o faturamento inteiro
+> daria `7,50 + 10,00 = 17,50` — cobrando taxa duas vezes da venda que já
+> informou a própria.
+
+> ### ⚠️ NULO ≠ ZERO, e é aqui que custa dinheiro
+> `NULL` = o gateway não informou → usa a taxa cadastrada.
+> `0` = ele informou que não cobrou → desconta nada.
+> Colapsar os dois faz o líquido aparecer MAIOR que a realidade. É a REGRA 1 do
+> contrato de gateways, agora no schema.
+
+> ### ⚠️ A comissão do PRODUTOR fica de fora da coprodução
+> Ela é o que sobra para o dono da conta, não um custo. Somá-la zeraria o lucro
+> de toda venda. Só entram as entradas cujo tipo não é produtor.
+
+> ### ⚠️ `faltando` para de cobrar cadastro do que já é medido
+> Se TODAS as vendas do período informaram a taxa, o aviso âmbar some — cobrar
+> cadastro de um número já medido treina o usuário a ignorar o aviso. Com
+> mistura, ele **continua** aparecendo: metade das vendas depende do cadastro.
+
+`npm run test:financeiro` — **54 asserções**, 12 delas cobrindo esta etapa,
+inclusive o chamador antigo (sem lista de vendas) mantendo o comportamento
+anterior.
+
+### 💳 Dívida conhecida: order bump da Kirvano não aparece em "Vendas por produto"
+
+O order bump dela vem dentro de `products[]` (com `is_order_bump: true`), na
+MESMA venda — então a Traffik grava 1 linha com o nome do produto principal e o
+`total_price` somado. O faturamento está certo; o **produto do bump é invisível**
+no ranking de produtos e nos produtos descobertos por área.
+
+**A saída é migração de DADOS, não mudança de parser.** Separar em linhas exige
+que o `externalId` vire `<sale_id>:<offer_id>` — e mudar identificador já emitido
+faz o upsert criar linhas NOVAS ao lado das existentes, duplicando as 26 vendas
+de produção. Seria preciso: migrar as linhas antigas para a chave nova, e só
+então trocar o parser, num único passo transacional.
+
+**Decisão do usuário em 31/07/2026: não vale o risco agora.** Fica registrado
+para ser reavaliado quando houver volume que justifique.
+
+> ⚠️ A Cakto **não** tem esse problema: os itens dela já chegam como entradas
+> separadas, com id próprio e `parent_order`.
+
 ### O que a etapa 1 **não** fez
 
 Etapas 2 a 8, na ordem acordada: precedência de fonte (2) · `pedidoId`+`itemTipo`
@@ -3276,6 +3345,36 @@ desligada.** Nenhuma dessas ferramentas pergunta "alguém chama isto?".
 | Coluna nova | **quem lê e quem escreve?** | os dois lados; só escrever é dado morto |
 | Consulta de manutenção | **rodou contra linha de verdade?** | semear no dev o estado que ela deve encontrar |
 | Campo novo da Graph API | **veio preenchido?** | sonda que mostra a resposta CRUA |
+| **Agregação / métrica** | **o número muda com dado que exercite o caso?** | teste PONTA A PONTA que semeia o caso e lê o resultado final |
+
+> ### 🔴 Métrica exige teste ponta a ponta — a função certa não basta
+> Acrescentado em 31/07/2026, depois de **três armadilhas na mesma etapa**, todas
+> do mesmo tipo: **número plausível e errado, sem `tsc`/`lint`/`build` acusar.**
+>
+> | Armadilha | O que produzia |
+> |---|---|
+> | `pedidoId` fora do `select` | `chaveDoPedido` cai no `id` e **toda contagem volta a ser por item**, em silêncio |
+> | `umPorPedido` num laço que SOMA valor | contagem certa e **faturamento do order bump descartado** |
+> | `Set` de pedidos global em vez de por destino | a segunda atribuição da mesma venda é descartada e **o nível de anúncio zera** |
+>
+> `contarPedidos` estava correta e testada isolada nas três. O que falhava era o
+> **caminho** — de onde o dado vem, em que laço ele entra, com qual chave.
+>
+> **A regra:** métrica nova ou alterada leva um teste que semeia o caso e lê o
+> número no fim da cadeia (`computeDashboard`, `computeAdsOverview`), não só a
+> função pura. É o que `npm run test:pedidos` faz.
+
+> ### 🕐 A regra do FUSO vale para script e teste, não só para produção
+> `teste-pedidos.mjs` semeava o gasto com `CURRENT_DATE`, que é o dia do BANCO
+> (UTC). Rodando às **00h01 UTC = 21h01 em Brasília**, o gasto caiu no dia
+> seguinte e o CPA veio 0 — a janela exata descrita em "Fuso horário — causa
+> raiz", pegando o próprio teste que existe para provar a métrica.
+>
+> Hoje ele semeia com `(now() AT TIME ZONE 'America/Sao_Paulo')::date`.
+>
+> **Nenhuma agregação usa o dia do processo — e nenhum teste deveria semear com
+> ele.** Um teste que falha só depois das 21h é pior que um teste que falha
+> sempre: ele passa no horário em que se costuma rodar e quebra sozinho à noite.
 
 > ### 🔴 "Compila e tem teste" ≠ "está funcionando no sistema"
 > Teste de função pura prova que a função está certa. **Não prova que ela é
