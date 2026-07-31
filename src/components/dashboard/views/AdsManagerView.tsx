@@ -3,7 +3,7 @@
 import { plural } from "@/lib/format";
 import { useMemo, useState } from "react";
 
-import { combinaStatus } from "@/lib/ads/status";
+import { combinaStatus, estaArquivado } from "@/lib/ads/status";
 import { sx } from "@/lib/sx";
 import { FiltroPeriodo } from "../ui/FiltroPeriodo";
 import { Icone, type NomeIcone } from "../ui/Icone";
@@ -107,6 +107,39 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
    * que mostraria "12 campanhas" com a tabela vazia depois que "Todos os
    * status" passou a esconder arquivadas.
    */
+  /**
+   * O que dizer quando a tabela está vazia.
+   *
+   * 🔴 O estado vazio era MUDO: "Nenhuma campanha neste período", sempre. Com
+   * uma conta cujos objetos foram todos arquivados no Facebook, as três abas
+   * ficavam vazias e **nada dizia que havia 12 itens escondidos pelo filtro** —
+   * porque "Todos os status" exclui arquivados de propósito.
+   *
+   * ⚠️ Esconder é certo (no Gerenciador do Facebook "excluir" apenas arquiva, e
+   * sem o filtro a lista enche do que o usuário já apagou). Esconder **sem
+   * dizer** é que estava errado: o usuário via vazio e concluía que o sync
+   * falhou.
+   */
+  const mensagemVazio = (() => {
+    if (v.adsSub === "accounts") return "Nenhuma conta conectada. Conecte um perfil em Integrações › Anúncios.";
+    const rows: { name: string; status: string; accountId?: string }[] =
+      v.adsSub === "adsets" ? (raw?.adSets ?? []) : v.adsSub === "ads" ? (raw?.ads ?? []) : (raw?.campaigns ?? []);
+    const nome = v.adsSub === "adsets" ? "conjunto" : v.adsSub === "ads" ? "anúncio" : "campanha";
+    // Só os que o filtro de STATUS derrubou — busca e conta continuam valendo.
+    const escondidos = rows.filter(
+      (r) =>
+        estaArquivado(r.status) &&
+        r.name.toLowerCase().includes(v.adsSearch.toLowerCase()) &&
+        (contasFiltro.size === 0 || !r.accountId || contasFiltro.has(r.accountId)),
+    ).length;
+
+    if (escondidos > 0 && v.adsStatus !== "arquivado") {
+      return `Nenhum ${nome} ativo neste período — mas ${plural(escondidos, `${nome} arquivado`, `${nome}s arquivados`)} não ${escondidos === 1 ? "aparece" : "aparecem"} com este filtro. Troque o status para "Arquivados" para ver.`;
+    }
+    if (v.adsSearch.trim()) return `Nenhum ${nome} com esse nome. Limpe a busca para ver todos.`;
+    return `Nenhum ${nome} neste período. Tente outro intervalo ou outro status.`;
+  })();
+
   const contar = (rows?: { name: string; status: string; accountId?: string }[]) =>
     (rows ?? []).filter(
       (r) =>
@@ -350,11 +383,7 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
         onSalvarOrcamento={salvarOrcamento}
         fixadas={fixadas}
         carregando={v.adsLoading}
-        vazio={
-          v.adsSub === "accounts"
-            ? "Nenhuma conta conectada. Conecte um perfil em Integrações › Anúncios."
-            : "Nenhuma campanha neste período. Tente outro intervalo ou outro status."
-        }
+        vazio={mensagemVazio}
       />
     </div>
   );

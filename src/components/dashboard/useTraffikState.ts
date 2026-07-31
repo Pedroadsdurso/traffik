@@ -1626,7 +1626,14 @@ export function useTraffikState(
         gatewayName: "", webhookError: null,
       }),
     openEditWebhook: (w: WebhookRowDTO) =>
-      set({ webhookModalOpen: true, webhookEditId: w.id, webhookGateway: w.platform, gatewaySecret: "", gatewayName: w.name, webhookError: null }),
+      set({
+        webhookModalOpen: true, webhookEditId: w.id, webhookGateway: w.platform,
+        // 🔴 Era `""` fixo. Para gateway cuja chave NÓS geramos, o campo é um
+        // bloco de copiar ligado a este estado — vazio, ele não tinha o que
+        // copiar, e a chave ficava inacessível para sempre.
+        gatewaySecret: w.secret ?? "",
+        gatewayName: w.name, webhookError: null,
+      }),
     closeWebhookModal: () => set({ webhookModalOpen: false }),
     onWebhookGatewaySearch: (e: React.ChangeEvent<HTMLInputElement>) => set({ webhookGatewaySearch: e.target.value }),
     // 🐛 Gerava uma chave NOVA a cada clique, inclusive clicando no gateway que

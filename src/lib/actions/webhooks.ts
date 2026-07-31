@@ -15,8 +15,21 @@ export interface WebhookRowDTO {
   url: string;
   active: boolean;
   eventCount: number;
-  /** Se há token de segurança configurado (não expomos o valor). */
+  /** Se há chave de segurança configurada. */
   hasSecret: boolean;
+  /**
+   * A chave, **em texto**, e SÓ para gateway cuja chave nós geramos.
+   *
+   * 🔴 Sem isto a Cakto era um beco sem saída: a ferramenta gerava a chave,
+   * mostrava uma vez e nunca mais. Quem perdesse a cópia — ou copiasse a errada
+   * — não tinha como recuperá-la, e a única saída era apagar o webhook e criar
+   * outro, trocando a URL no painel do gateway.
+   *
+   * ⚠️ Fica `null` para gateway cuja chave o USUÁRIO cria (Kirvano): ali ele já
+   * tem o valor no painel do gateway, e expor não resolveria nada que ele não
+   * pudesse resolver de lá. Menos superfície, mesma utilidade.
+   */
+  secret: string | null;
 }
 
 /**
@@ -36,15 +49,18 @@ function toDTO(w: {
   eventCount: number;
   secret: string | null;
 }): WebhookRowDTO {
+  const def = gatewayDoWebhook(w.platform);
+  const nosGeramos = def.auth.tipo === "segredo" && def.auth.geradoPorNos;
   return {
     id: w.id,
     name: w.name,
     platform: w.platform,
     token: w.token,
-    url: gatewayDoWebhook(w.platform).urlDoWebhook(w.token, getAppUrl()),
+    url: def.urlDoWebhook(w.token, getAppUrl()),
     active: w.active,
     eventCount: w.eventCount,
     hasSecret: Boolean(w.secret),
+    secret: nosGeramos ? w.secret : null,
   };
 }
 
@@ -127,8 +143,18 @@ export async function updateWebhook(input: {
     where: { id: input.id },
     data: {
       ...(input.name !== undefined ? { name: input.name.trim() || current.name } : {}),
-      // secret === "" limpa; undefined mantém.
-      ...(input.secret !== undefined ? { secret: input.secret.trim() || null } : {}),
+      // 🔴 VAZIO MANTÉM O ATUAL — nunca apaga.
+      //
+      // Era `input.secret.trim() || null`, ou seja: campo vazio APAGAVA a chave.
+      // A gaveta de edição abre com o campo em branco ("deixe em branco para
+      // manter"), então **salvar sem tocar no campo zerava o segredo** e todas
+      // as vendas seguintes eram recusadas com 401.
+      //
+      // ⚠️ É exatamente o bug já documentado do Pixel ("editar um pixel apagava
+      // os tokens da CAPI"). Mesma forma, mesmo estrago, outro lugar: um campo
+      // que não volta ao cliente não pode ser reenviado vazio e tratado como
+      // "apagar". Quem quiser trocar a chave digita uma nova.
+      ...(input.secret?.trim() ? { secret: input.secret.trim() } : {}),
     },
   });
   return toDTO(updated);
