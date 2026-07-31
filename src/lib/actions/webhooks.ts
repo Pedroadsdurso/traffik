@@ -100,21 +100,17 @@ export async function createWebhook(input: {
   const name = input.name?.trim() || `Webhook ${REGISTRO[platform].nome}`;
   const secret = input.secret?.trim() || null;
 
+  // 🐛 Aqui havia um cast (`platform as ...`) para o TypeScript aceitar uma
+  // String numa coluna que ainda era enum. Ele calava o compilador sobre
+  // exatamente o que estourava no Postgres: gravar "CAKTO" num enum que só
+  // tinha KIRVANO/HOTMART/KIWIFY/CUSTOM. Salvar um webhook da Cakto falhava.
+  //
+  // ⚠️ **Cast num limite de persistência é um alerta, não uma solução.** Ele
+  // troca um erro de compilação por um erro de runtime — e o de runtime só
+  // aparece quando alguém clica. A coluna virou `String` na migration
+  // `20260731020000` e o cast deixou de existir.
   const created = await prisma.webhook.create({
-    // ⚠️ O cast some quando `Webhook.platform` virar `String` (decisão aprovada,
-    // migration ainda não rodada). Hoje a coluna é um enum do Postgres, e é
-    // justamente essa restrição que faz cada gateway novo custar uma migration.
-    //
-    // Ele é seguro porque `platform` acabou de passar por `gatewayValido()`: o
-    // valor sempre existe no registro. É o único ponto do código que assume o
-    // enum — de propósito, para a troca ser de uma linha.
-    data: {
-      userId,
-      platform: platform as Parameters<typeof prisma.webhook.create>[0]["data"]["platform"],
-      name,
-      secret,
-      workspaceId: escopo.areaId || null,
-    },
+    data: { userId, platform, name, secret, workspaceId: escopo.areaId || null },
   });
   return toDTO(created);
 }

@@ -1629,14 +1629,19 @@ export function useTraffikState(
       set({ webhookModalOpen: true, webhookEditId: w.id, webhookGateway: w.platform, gatewaySecret: "", gatewayName: w.name, webhookError: null }),
     closeWebhookModal: () => set({ webhookModalOpen: false }),
     onWebhookGatewaySearch: (e: React.ChangeEvent<HTMLInputElement>) => set({ webhookGatewaySearch: e.target.value }),
+    // 🐛 Gerava uma chave NOVA a cada clique, inclusive clicando no gateway que
+    // já estava selecionado. Quem copiasse a chave e clicasse de novo antes de
+    // salvar levava para o painel do gateway uma chave que a ferramenta não
+    // guardaria — e as vendas seriam recusadas, sem nada denunciar.
+    //
+    // ⚠️ A chave só é gerada quando o gateway MUDA e ainda não há uma. Regerar
+    // é ação explícita do usuário (botão), nunca efeito colateral de clicar.
     selectWebhookGateway: (g: string) =>
-      set({
-        webhookGateway: g,
-        // ⚠️ Gateway cuja chave NÓS geramos (Cakto) já nasce com ela preenchida:
-        // o usuário precisa copiá-la para o painel do gateway, e um campo vazio
-        // ali seria um beco — não há o que digitar.
-        gatewaySecret: segredoInicial(g),
-      }),
+      set(
+        s.webhookGateway === g && s.gatewaySecret
+          ? { webhookGateway: g }
+          : { webhookGateway: g, gatewaySecret: segredoInicial(g) },
+      ),
     onGatewaySecret: (e: React.ChangeEvent<HTMLInputElement>) => set({ gatewaySecret: e.target.value }),
     onGatewayName: (e: React.ChangeEvent<HTMLInputElement>) => set({ gatewayName: e.target.value }),
     saveWebhook: async () => {

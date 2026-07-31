@@ -41,13 +41,6 @@ enum PaymentMethod {
   OUTRO
 }
 
-enum WebhookPlatform {
-  KIRVANO
-  HOTMART
-  KIWIFY
-  CUSTOM
-}
-
 /// Estado de processamento de um payload recebido por webhook (Bloco 13).
 enum WebhookLogStatus {
   /// Gravado assim que chega, antes de qualquer processamento.
@@ -608,7 +601,13 @@ model Webhook {
   name String
   /// Segmento público da URL: /api/webhook/sale/{token} (ou ?id={token} na Kirvano)
   token       String          @unique @default(uuid())
-  platform    WebhookPlatform @default(CUSTOM)
+  /// Id do gateway no REGISTRO (`lib/gateways/registro.ts`), que é o dono do
+  /// domínio — não o banco. Era um enum, e cada gateway novo custava uma
+  /// migration; hoje quem valida é `gatewayValido()` em `createWebhook`.
+  ///
+  /// ⚠️ Valor desconhecido não recusa a venda: `gatewayDoWebhook()` cai no
+  /// parser genérico. Perder o parser dedicado é ruim; perder a venda é pior.
+  platform    String          @default("CUSTOM")
   active      Boolean         @default(true)
   /// Token de segurança configurado pelo usuário no painel do gateway
   /// (ex.: Kirvano). Validado a cada evento recebido.
