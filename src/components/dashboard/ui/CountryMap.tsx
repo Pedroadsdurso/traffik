@@ -52,20 +52,35 @@ const VB_LADO = SIZE + FOLGA * 2;
 
 const ZOOM_MIN = 0.8;
 /**
- * ⚠️ Era **1.04** — o ponto exato em que `raio()` encosta na borda do viewBox.
- * Não era um limite arbitrário: acima dele a esfera transbordava e era recortada
- * nos quatro lados, virando um quadrado.
+ * ⚠️ Era **1.04** — o ponto exato em que `raio()` encostava na borda do viewBox.
+ * Não era limite arbitrário: acima dele a esfera transbordava e era recortada nos
+ * quatro lados, virando um quadrado.
  *
- * A decisão de 31/07/2026 foi deixar a esfera **transbordar de propósito**: quem
- * vende para o mundo precisa aproximar de um país, e num globo ortográfico
- * "aproximar" e "continuar vendo o círculo inteiro" são geometricamente
- * incompatíveis. Acima de ~1,2 a janela passa a estar DENTRO da esfera, que é o
- * comportamento de qualquer mapa com zoom.
+ * Com o `clipPath` circular (ver `RAIO_VISOR`) o teto deixou de ter relação com
+ * a geometria — a esfera pode crescer o quanto for, porque o que se vê é sempre
+ * o interior de um círculo. 8 é escolha de produto: aproxima o suficiente para
+ * isolar um país sem que a simplificação do `land-110m` fique visível.
  */
 const ZOOM_MAX = 8;
 
 /**
- * Raio da esfera para um dado zoom.
+ * Raio da JANELA — fixo, independente do zoom.
+ *
+ * > ### ⛔ É ELE que mantém o globo redondo em qualquer aproximação
+ * > A versão anterior deixava a esfera transbordar o viewBox e ser recortada nos
+ * > quatro lados: aproximar transformava o globo num **quadrado** de mapa. Eu
+ * > tinha concluído que "aproximar de um país" e "continuar redondo" eram
+ * > geometricamente incompatíveis num globo ortográfico. **Estavam errado.**
+ * >
+ * > A resolução é um `clipPath` circular de raio FIXO: a esfera cresce por trás
+ * > dele conforme o zoom, e o que se vê é uma porção menor e ampliada — por uma
+ * > janela redonda. É o comportamento de olhar um globo por uma vigia, e é
+ * > circular por construção, em qualquer zoom.
+ */
+const RAIO_VISOR = SIZE / 2 - MARGEM;
+
+/**
+ * Raio da ESFERA para um dado zoom — o que cresce.
  *
  * ⚠️ O zoom entra na **escala da projeção**, e os paths são recalculados — nunca
  * num `transform`/`scale` do SVG. Escalar o SVG esticaria o traço e degradaria
@@ -73,7 +88,7 @@ const ZOOM_MAX = 8;
  * qualquer aproximação.
  */
 function raio(zoom: number): number {
-  return (SIZE / 2 - MARGEM) * zoom;
+  return RAIO_VISOR * zoom;
 }
 
 function clampZoom(z: number): number {
@@ -88,10 +103,13 @@ function clampZoom(z: number): number {
  * ser visível: um pisca-pisca na borda. Uma esfera girando de verdade some aos
  * poucos, e é isso que o degradê reproduz.
  */
-function opacidadeNoLimbo(x: number, y: number, r: number): number {
-  const d = Math.hypot(x - SIZE / 2, y - SIZE / 2) / (r || 1);
-  if (d <= 0.8) return 1;
-  return Math.max(0, Math.min(1, (0.995 - d) / 0.195));
+function opacidadeNoLimbo(x: number, y: number): number {
+  // ⚠️ Medido contra o VISOR, não contra a esfera. Em zoom 1 os dois coincidem e
+  // isto é o limbo de verdade; acima disso o visor corta antes, e é a borda dele
+  // que precisa do degradê — senão o marcador some num corte reto do `clipPath`.
+  const d = Math.hypot(x - SIZE / 2, y - SIZE / 2) / RAIO_VISOR;
+  if (d <= 0.82) return 1;
+  return Math.max(0, Math.min(1, (1 - d) / 0.18));
 }
 
 /**
@@ -113,6 +131,9 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
   const [modo, setModo] = useState<"globo" | "ranking">("globo");
   const [rot, setRot] = useState<[number, number]>([-50, -12]); // começa no Atlântico Sul
   const [zoom, setZoom] = useState(1);
+  // Alvo do zoom. Quem a roda e os botões mexem é ESTE; o `zoom` persegue por
+  // rAF, senão cada notch é um salto seco.
+  const [zoomAlvo, setZoomAlvo] = useState(1);
   const [ativo, setAtivo] = useState<string | null>(null);
   const [tip, setTip] = useState<{ x: number; y: number; code: string } | null>(null);
 
@@ -145,6 +166,30 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
   useEffect(() => {
     zoomRef.current = zoom;
   }, [zoom]);
+
+  /**
+   * Zoom SUAVE: a roda e os botões mexem no ALVO, e o zoom corrente persegue.
+   *
+   * ⚠️ Não dá para usar transição CSS aqui — o zoom entra na escala da projeção
+   * e os `d` dos paths mudam de forma a cada quadro. Quem interpola tem de ser o
+   * número, não o estilo. Sem isto o salto era instantâneo a cada notch da roda,
+   * que é o "rápido e pouco fluido" relatado.
+   */
+  useEffect(() => {
+    let raf = 0;
+    const passo = () => {
+      const atual = zoomRef.current;
+      const d = zoomAlvo - atual;
+      if (Math.abs(d) < 0.002) {
+        setZoom(zoomAlvo);
+        return;
+      }
+      setZoom(atual + d * 0.14);
+      raf = requestAnimationFrame(passo);
+    };
+    raf = requestAnimationFrame(passo);
+    return () => cancelAnimationFrame(raf);
+  }, [zoomAlvo]);
 
   const totalRev = dados.reduce((a, d) => a + d.revenue, 0);
   const maxVendas = Math.max(1, ...dados.map((d) => d.sales));
@@ -185,11 +230,11 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
       const cx = VB_MIN + ((e.clientX - rect.left) / rect.width) * VB_LADO;
       const cy = VB_MIN + ((e.clientY - rect.top) / rect.height) * VB_LADO;
 
-      setZoom((zAtual) => {
+      setZoomAlvo((zAtual) => {
         // Passo GEOMÉTRICO: com o teto em 8, um incremento fixo é grosso demais
         // perto de 1 e lento demais perto de 8. O expoente mantém a sensação
         // constante em toda a faixa.
-        const novo = clampZoom(zAtual * Math.exp(-e.deltaY * 0.0015));
+        const novo = clampZoom(zAtual * Math.exp(-e.deltaY * 0.0006));
         if (novo === zAtual) return zAtual;
 
         // Ao aproximar o zoom, orienta suavemente a esfera para a coordenada do cursor
@@ -243,7 +288,7 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
         const t2 = e.touches[1];
         const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
         const factor = dist / touchState.current.dist;
-        setZoom((z) => clampZoom(z * factor));
+        setZoomAlvo((z) => clampZoom(z * factor));
         touchState.current.dist = dist;
       }
     };
@@ -305,7 +350,7 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
           y: xy[1],
           visivel,
           r: 3 + (d.sales / maxVendas) * 5,
-          limbo: opacidadeNoLimbo(xy[0], xy[1], raio(zoom)),
+          limbo: opacidadeNoLimbo(xy[0], xy[1]),
         };
       })
       .filter((m): m is NonNullable<typeof m> => m !== null && m.visivel);
@@ -443,15 +488,25 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
                   <feMergeNode in="SourceGraphic" />
                 </feMerge>
               </filter>
+              {/* ⛔ A JANELA REDONDA. Sem ela, aproximar transforma o globo num
+                  quadrado de mapa: a esfera cresce com o zoom e o viewBox recorta
+                  nos quatro lados. Com o clip, o que transborda é escondido por um
+                  círculo de raio FIXO — redondo em qualquer aproximação. */}
+              <clipPath id="visor-globo">
+                <circle cx={SIZE / 2} cy={SIZE / 2} r={RAIO_VISOR} />
+              </clipPath>
             </defs>
 
+            <g clipPath="url(#visor-globo)">
             {/* Oceano */}
             <path d={esfera} fill="url(#globo-luz)" />
             {/* Continentes */}
             <path d={caminhoTerra} fill={isLight ? "#4338ca" : "#38477e"} stroke={isLight ? "#312e81" : "#5b6bb5"} strokeWidth={0.4} vectorEffect="non-scaling-stroke" />
-            {/* Halo da borda: reforça a curvatura */}
-            <path d={esfera} fill="url(#globo-brilho)" />
-            <path d={esfera} fill="none" stroke={isLight ? "#4338ca" : "#6d5fe0"} strokeWidth={0.7} opacity={0.5} vectorEffect="non-scaling-stroke" />
+            {/* Halo da borda: reforça a curvatura.
+                ⚠️ Preso ao VISOR, não à esfera. Na esfera ele é desenhado em
+                88–100% do raio DELA — que em zoom fica muito além do visor, e a
+                vinheta sumia exatamente quando o globo estava ampliado. */}
+            <circle cx={SIZE / 2} cy={SIZE / 2} r={RAIO_VISOR} fill="url(#globo-brilho)" />
 
             {marcadores.map((m) => {
               const on = ativo === m.code;
@@ -475,6 +530,11 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
                 </g>
               );
             })}
+            </g>
+            {/* Aro do visor — fora do clip, senão o traço é comido pela borda. */}
+            <circle cx={SIZE / 2} cy={SIZE / 2} r={RAIO_VISOR} fill="none"
+              stroke={isLight ? "#4338ca" : "#6d5fe0"} strokeWidth={0.9} opacity={0.55}
+              vectorEffect="non-scaling-stroke" />
           </svg>
 
           {/* Estado vazio: o globo continua girando, a mensagem só se sobrepõe. */}
@@ -492,15 +552,15 @@ export function CountryMap({ dados }: { dados: PaisVenda[] }) {
                 aditivo exigiria ~70 cliques para atravessar a faixa; e um passo
                 fixo é grosso perto de 1 e imperceptível perto de 8. */}
             <button type="button" className="btn btn-secondary" style={sx("padding:1px 8px;font-size:13px")}
-              onClick={() => setZoom((z) => clampZoom(z * 1.35))}
-              disabled={zoom >= ZOOM_MAX}
+              onClick={() => setZoomAlvo((z) => clampZoom(z * 1.5))}
+              disabled={zoomAlvo >= ZOOM_MAX}
               aria-label="Aproximar">+</button>
             <button type="button" className="btn btn-secondary" style={sx("padding:1px 8px;font-size:13px")}
-              onClick={() => setZoom((z) => clampZoom(z / 1.35))}
-              disabled={zoom <= ZOOM_MIN}
+              onClick={() => setZoomAlvo((z) => clampZoom(z / 1.5))}
+              disabled={zoomAlvo <= ZOOM_MIN}
               aria-label="Afastar">−</button>
             <button type="button" className="btn btn-secondary" style={sx("padding:1px 8px;font-size:11px")}
-              onClick={() => { setZoom(1); setRot([-50, -12]); }}>Reset</button>
+              onClick={() => { setZoomAlvo(1); setRot([-50, -12]); }}>Reset</button>
           </div>
 
           {tip && marcado && (
