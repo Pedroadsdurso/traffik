@@ -5212,6 +5212,140 @@ invisível por semanas justamente por ser condicional.
 
 ---
 
+## 🛒 CHECKOUT PRÓPRIO — decisões de 01/08/2026
+
+O usuário está construindo uma **página de vendas com checkout próprio** sobre a
+OnyxPag. Isso muda três coisas em relação a um gateway hospedado, e as três já
+morderam em outro contexto.
+
+### ⛔ O Purchase é do WEBHOOK, e só dele. Nunca `fbq('track','Purchase')` na /obrigado.
+
+**Decisão do usuário, 01/08/2026.** Vale para qualquer checkout próprio, não só
+este. Hoje o nosso script **não dispara Purchase** (a rota `/api/pixel/event`
+rejeita: `EVENT_MAP` só tem Lead/AddToCart/InitiateCheckout, mais o PageView) —
+quem dispara é `dispatchPurchaseEvents(saleId)` quando a venda entra APROVADA.
+
+Pôr um Purchase de navegador na página de obrigado cria o **segundo caminho sem
+`event_id` compartilhado**, e a Meta conta 2. É exatamente o padrão da Kirvano
+que foi resolvido em 31/07 — recriado num contexto novo.
+
+> ### 🔴 E aqui NÃO dá para coordenar, só particionar
+> Com a Kirvano a partição foi escolha; aqui é a única opção. Purchase não passa
+> pelo `/api/pixel/event`, então não existe caminho para os dois lados
+> compartilharem o mesmo `eid`. Ou o webhook envia, ou o navegador envia.
+
+**Os três motivos de o dono ser o webhook, na ordem em que pesam:**
+
+| | |
+|---|---|
+| 1 | 🔴 **PIX pago depois.** O comprador gera o PIX, fecha a aba e paga dois dias depois — **nunca volta à /obrigado**. Só o webhook sabe que a venda existiu. É o motivo decisivo |
+| 2 | A /obrigado dispara na **chegada**, não no pagamento. Purchase por PIX apenas gerado é faturamento que pode nunca existir |
+| 3 | Server-side atravessa bloqueador de anúncios e leva o `user_data` que montamos (`fbc`/`fbp`, e-mail e telefone com hash) |
+
+> ⚠️ Se um dia o navegador tiver de ser o dono, o caminho é a gaveta do Pixel →
+> Purchase = **"O pixel da sua página"**, que faz a Traffik parar de enviar.
+> **Nunca os dois** — ver `lib/pixel/donos.ts`.
+
+### 🔗 A OnyxPag não tem via de atribuição — mas o checkout é DELE
+
+`REGISTRO` declara: sem `click_id` ecoado, sem `fbc`/`fbp`, sem IP do comprador.
+Venda dela entra sem campanha, sem criativo e sem país. **Num checkout hospedado
+isso é limitação do gateway; num checkout próprio é uma escolha de quem monta a
+página**, porque a API aceita `tracking`/`metadata` na criação da cobrança.
+
+> ### 🔴 O campo é `click_id`, NÃO `sck`
+> O parser lê os dois, mas em destinos diferentes, e só um alimenta o match:
+>
+> ```ts
+> clickId: toStr(pick(trk, ["click_id", "clickId", "trk_click_id"]), 191),  // ← vira o match
+> utm: { sck: toStr(pick(trk, ["sck", "client_reference_id", "xcode"]), 191) } // ← texto livre
+> ```
+>
+> `ingestSale` chama `matchClick(userId, data.clickId, …)` — **`utm.sck` não
+> entra**. Mandar o click_id em `sck` grava a string e **não casa clique
+> nenhum**, sem erro em lugar nenhum. Foi o conselho errado dado numa primeira
+> resposta desta sessão, corrigido ao ler o `ingestSale`.
+
+`rastreio(d)` mescla `{...d, ...d.metadata, ...d.tracking}`, então **mandar em
+`tracking` e `metadata` ao mesmo tempo é gratuito** e aumenta a chance de um dos
+dois voltar no webhook.
+
+> ⚠️ **A doc da OnyxPag NÃO promete devolver `tracking` no webhook.** O parser é
+> defensivo. Mandar é necessário e **não é suficiente** — só um payload real
+> responde. Confira com `npm run venda:inspecionar -- --gateway ONYXPAG` depois
+> da primeira venda: se `clickId` vier nulo com o campo enviado, ela não devolve
+> e a atribuição terá de vir por outra via.
+
+### 🧪 `npm run pixel:duplicados` — por que o mesmo evento virou duas linhas
+
+Somente leitura, recortado por `userId`. Confere se o índice único existe (a
+`20260731040000` já falhou uma vez em produção), agrupa por *mesma ação*
+(usuário + pixel + evento + url + fbclid) e lista os últimos eventos com os
+**ingredientes do `eid` lado a lado**, dizendo qual divergiu.
+
+```js
+eid(nome) = nome + "-" + hash([CONFIG, nome, location.href, fbclid, Math.floor(Date.now()/10000)])
+```
+
+| Divergiu | Causa | De quem é |
+|---|---|---|
+| `url` | `location.href` mudou entre os POSTs (o Next normaliza query, assenta o router) | da página |
+| `fbclid` | o cookie ainda não tinha sido lido na 1ª chamada | da página |
+| **só o balde** | 🔴 `Math.floor(Date.now()/10000)` é **balde fixo, não janela deslizante** | **nosso** |
+
+> ### 🔴 O conserto da causa 3, se ela se confirmar
+> Duas chamadas a 1 ms de distância caem em baldes diferentes sempre que cruzam
+> uma fronteira de 10 s. A probabilidade é baixa (≈ Δt/10000) e **não é zero** —
+> e é sistemática, não aleatória: todo usuário com dois POSTs por carregamento
+> a pega eventualmente.
+>
+> **A correção NÃO é aumentar o balde** — isso só dilui o problema e passa a
+> juntar ações genuinamente distintas (dois cliques reais em "comprar" viram um
+> evento só). O tempo tem de **sair da chave**: o id passa a derivar de uma
+> âncora estável do carregamento, gerada uma vez e reusada.
+>
+> Um `sessionStorage`/variável de módulo com um id por *pageview*
+> (`CONFIG + nome + pageviewId`) resolve as três causas de uma vez: sobrevive ao
+> `location.href` mudando, não depende do `fbclid` já estar lido e não tem
+> fronteira para cruzar. **Custo:** o mesmo evento disparado de propósito duas
+> vezes na mesma página passa a deduplicar — o que para `PageView` é certo e
+> para `InitiateCheckout` **não é** (dois cliques reais em "comprar" são duas
+> intenções). Então a âncora tem de ser por evento, não global: `PageView` usa a
+> do carregamento; os de ação continuam precisando de um discriminador.
+>
+> ⚠️ **Não implemente antes de o script dizer que é a causa 3.** As causas 1 e 2
+> são muito mais prováveis e não exigem mexer no gerador.
+
+### ⚠️ `listTestablePixels` — defeito de ROTULAGEM, não de staleness
+
+`where: { userId }`, sem escopo de área: o seletor do Teste de Pixel lista os
+pixels de **todas** as áreas, rotulados só como `nome (N pixels da Meta)`, sem
+dizer de qual área cada um é.
+
+**Não é a família da `UtmsView`, e a distinção decide a prioridade:**
+
+| | UtmsView | Teste de Pixel |
+|---|---|---|
+| A lista está errada? | sim — **stale** | não — global, sempre completa |
+| Quem escolhe | ninguém: você copia o que está na tela | **você**, num dropdown |
+| O erro persiste? | sim, no site do cliente | não, é um evento de teste |
+
+O único jeito de errar é confundir dois pixels **pelo nome**. Consequência: um
+Purchase de teste de R$ 1 na CAPI do pixel errado — chato, não permanente.
+
+**Fica sem subir na fila** (decisão do usuário, 01/08/2026: hoje há uma área só
+com pixel, então o risco não existe). O conserto, quando vier, é de uma linha:
+mostrar a área no rótulo, ou escopar a consulta.
+
+### ➖ `AddPaymentInfo` não é nosso
+
+Não está em `EVENTOS_DO_PIXEL` nem no `EVENT_MAP` — `/api/pixel/event`
+responderia **400**. Se ele aparece disparando com valor numa página, é o `fbq`
+do próprio usuário ou a biblioteca do checkout. Nós não emitimos nem
+registramos. **Sem ação.**
+
+---
+
 ## 🚦 (histórico) fila de UX: (e) e (a) fechados (31/07/2026, 5ª parte)
 
 ### O que ficou pronto
