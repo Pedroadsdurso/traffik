@@ -5648,6 +5648,137 @@ mais, produção do mesmo projeto, domínio próprio, lista vazia.
 
 ---
 
+## 👥 ANTES DE CONVIDAR OUTRAS PESSOAS (01/08/2026)
+
+### ✅ Isolamento — auditado, e está correto
+
+| Superfície | Veredito |
+|---|---|
+| Server actions (`expenses`, `facebook`, `webhooks`, `apiCredentials`, `pixels`, `rules`) | ✅ todas no padrão `findFirst({ id, userId })` → `throw` → mutar por id |
+| Rotas que escrevem (`ads/status`, `ads/bulk`, `ads/campaign`, `pixel/test`, `sync/facebook`) | ✅ resolvem o alvo com `adAccount: { userId }` ou `userId` no `where` |
+
+Nenhuma exceção encontrada. **Ninguém lê nem escreve dado de outro por engano.**
+
+### 🔴 O cron em SÉRIE — corrigido o que dava sem escalar
+
+`sync-facebook` processa os usuários um a um. Com 1 nunca importou; com N, o
+tempo soma e pode estourar o `maxDuration` — e aí **a função é morta sem
+resposta nenhuma**: nenhum log, nenhum contador, nenhum sinal. O último da fila
+não sincroniza e ninguém fica sabendo.
+
+| | O quê |
+|---|---|
+| 1 | **Orçamento de tempo** (`maxDuration - 15s`). O laço para de COMEÇAR usuário novo e **consegue responder** com `interrompido: true` + `naoAlcancados` |
+| 2 | **`entraram` × `completaram`**, mais `ms` por usuário e `msPorUsuario` |
+| 3 | **Ordem ROTATIVA** — `AdProfile.lastSyncedAt` ascendente, **nulos primeiro** |
+
+> ### ⛔ O contador sozinho NÃO resolveria
+> Função morta não devolve resposta, e sem resposta não há contador. **É o
+> orçamento que transforma o modo de falha invisível em `interrompido: true`.**
+> O contador cobre o outro caso, o de responder com alguém faltando. Os dois
+> juntos cobrem as duas formas de perder um usuário.
+
+> ### ⚖️ A ordem rotativa não aumenta a vazão — resolve a INJUSTIÇA
+> Com ordem fixa é sempre o mesmo que fica de fora, e para ele a ferramenta
+> parece não funcionar. Por idade, quem ficou de fora é o **primeiro** da
+> execução seguinte. `nulls: "first"` prioriza quem nunca sincronizou — o caso
+> de todo convidado no primeiro dia.
+>
+> ⚠️ `distinct` depois do `orderBy`: usuário com dois perfis entra uma vez, pelo
+> perfil mais antigo, que é a prioridade certa.
+
+| Sinal no retorno | Significa |
+|---|---|
+| `entraram === completaram`, `interrompido: false` | todos rodaram |
+| `interrompido: true` | 🔴 orçamento acabou; `naoAlcancados` diz quem ficou |
+| `entraram > completaram` | 🔴 alguém não terminou **nem caiu no catch** |
+
+> ### ⚠️ O `msPorUsuario` medido no DEV NÃO VALE
+> Medido: **2.429 ms para 1 usuário**. Mas o token do dev é falso, então o
+> caminho exercido é o de **erro** (`Invalid OAuth access token`), que falha
+> rápido. Um sync real chama a Graph API `1 + 4×contas` vezes.
+>
+> **A medição verdadeira só existe em produção.** Chame a rota com o
+> `CRON_SECRET` e leia `msPorUsuario`; `orcamentoMs ÷ msPorUsuario` é o teto
+> real de usuários por execução. Faça com os convidados já conectados.
+
+### 📋 Fila registrada — sem urgência para 3 pessoas
+
+| | Item | Sintoma quando morder |
+|---|---|---|
+| 1 | **Rate limit da Graph API é por APP, não por usuário** | sync falhando em pico. N pessoas no painel multiplicam chamadas contra a mesma cota |
+| 2 | **`ENCRYPTION_KEY` = ponto único de falha para TODOS** | trocá-la hoje perde os seus tokens; com convidados, os de todos. Sem rotação implementada |
+| 3 | **`WebhookLog` cresce com N usuários** | `/api/cron/manutencao` já existe e está agendado; conferir que dá conta |
+| 4 | **Zero teste de concorrência ENTRE usuários** | dois syncs simultâneos, dois webhooks de contas diferentes. A trava do auto-sync é por conta e deve segurar — é raciocínio, não medição |
+| 5 | 🔒 **id em texto nos endpoints públicos** | ver abaixo |
+
+> ### 🔒 O id público dos endpoints de tracking — SEGURANÇA para quando abrir
+> `/api/track/click` recebe `account` = o `userId` literal; `/api/pixel/event`
+> recebe o `pixelConfigId`. Os dois são públicos por desenho e **os ids ficam
+> visíveis no HTML de quem instala o snippet**.
+>
+> Não é vazamento de leitura — é **poluição de escrita**: quem ler o snippet de
+> outro pode injetar cliques e eventos falsos na conta dele.
+>
+> ⚠️ **Que a Utmify tenha o mesmo problema não o torna aceitável para sempre.**
+> Com 3 conhecidos o risco é zero; num produto aberto, não. A correção natural é
+> um id de tracking próprio (não o `userId`) + origem declarada por pixel, com
+> evento de origem não declarada **marcado, nunca descartado** — mesma regra do
+> ambiente de teste.
+
+### 🔌 Gateways — o maior risco do convite
+
+| Gateway | Estado |
+|---|---|
+| Kirvano · Cakto | ✅ parser dedicado, validados com venda real |
+| OnyxPag | ⚠️ parser pronto, **nunca recebeu payload real** |
+| **Hotmart · Kiwify** | 🔴 `ativo: false` — **não aparecem na tela** |
+| Sistema próprio (CUSTOM) | ✅ ativo, parser genérico |
+
+> ⚠️ **A saída pelo CUSTOM é parcial e perigosa.** Dá para apontar o webhook da
+> Hotmart para um "Sistema próprio", e o parser genérico provavelmente extrai
+> valor, e-mail e produto. Mas o **status** não está mapeado
+> (`PURCHASE_APPROVED` cai no `statusPeloTexto`), então venda aprovada pode
+> entrar como pendente. **Faturamento errado é pior que erro visível.**
+
+**Custo de um gateway novo: meia sessão** — parser + registro + logo +
+exemplos, como a Cakto. **Mas exija um payload REAL antes de começar**: sem ele
+repete-se a OnyxPag, que passa nos exemplos da doc e ninguém sabe se funciona.
+
+### 🤝 Traffik e Utmify em PARALELO
+
+🔴 **O risco real é contagem dupla na Meta.** As duas mandando `Purchase` para o
+mesmo pixel = cada conversão contada duas vezes, porque o `event_id` de uma
+nunca coincide com o da outra. É o bug de 31/07, recriado.
+
+> **Avise antes: UMA ferramenta só envia cada evento à CAPI.** Se a Utmify manda
+> Purchase, na Traffik ponha o dono como "Ninguém" (Integrações › Pixel ›
+> avançado). Ou o contrário. Nunca as duas.
+
+O resto convive: os scripts não colidem (cookies e globais distintos), e dois
+cliques registrados é o que se quer comparar. Mas avise que **os números vão
+divergir sem que nenhum esteja errado** — janela de atribuição, dedup por sessão
+× por pessoa, consolidação. Sem esse aviso, a primeira divergência vira "a
+Traffik está errada".
+
+⚠️ O snippet da Traffik vem **depois** do código base do Facebook no `<head>`,
+senão o espelho no `fbq` entra em fila.
+
+### ⚠️ Cadastro — NÃO verificado no navegador
+
+O `signupAction` está correto (lido e com os inserts reproduzidos): valida,
+recusa e-mail duplicado, cria `User` + `NotificationSettings` +
+`DashboardPreference` + webhook principal, e loga. **Mas a jornada no navegador
+não foi exercitada** — não consegui deslogar no harness, e `/signup` redireciona
+quem já tem sessão. **Teste em janela anônima.**
+
+⚠️ A conta nova **não cria Área de Trabalho no cadastro** — ela nasce no
+primeiro carregamento do dashboard, via `garantirAreaPrincipal()`. É uma escrita
+no primeiro load: se falhar ali, o convidado vê um dashboard quebrado sem
+entender por quê.
+
+---
+
 ## 🏁 FECHAMENTO DA SESSÃO DE 01/08/2026
 
 ### Entregue
