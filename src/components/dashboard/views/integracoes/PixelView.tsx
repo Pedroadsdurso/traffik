@@ -213,7 +213,18 @@ function AvisoSnippet({ check }: { check: SnippetCheckDTO | null }) {
   );
 }
 
-export function PixelView() {
+/**
+ * 🔴 **Recebe o `workspaceId`.** `listPixels` é escopado por área e caía no
+ * `getLastWorkspaceId()` do servidor; com a busca presa à montagem, trocar de
+ * área com esta aba aberta continuava listando os pixels da área ANTERIOR —
+ * `router.refresh()` re-renderiza o servidor mas **preserva estado de
+ * componente cliente**. Quem refaz a consulta é a prop nas dependências.
+ *
+ * ⚠️ `listTrackedProducts` é global de propósito (é o seletor de produto do
+ * Purchase, e uma venda não pertence a uma área de configuração). Ela viaja no
+ * mesmo efeito só por conveniência — a refetch extra é inofensiva.
+ */
+export function PixelView({ workspaceId }: { workspaceId: string | null }) {
   const [pixels, setPixels] = useState<PixelConfigDTO[]>([]);
   const [products, setProducts] = useState<string[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
@@ -227,9 +238,9 @@ export function PixelView() {
   const [check, setCheck] = useState<SnippetCheckDTO | null>(null);
 
   useEffect(() => {
-    listPixels().then(setPixels).catch(() => {});
+    listPixels(workspaceId).then(setPixels).catch(() => {});
     listTrackedProducts().then(setProducts).catch(() => {});
-  }, []);
+  }, [workspaceId]);
 
   /**
    * Confere o snippet instalado sempre que a gaveta muda de pixel.

@@ -4725,6 +4725,8 @@ visível já é a exceção prevista.
 | Checkboxes nativos | 7 | **0** (a única ocorrência é um comentário) |
 | Ícones `0 0 256 256` | dois sistemas | **0** — `Icon.tsx` foi deletado; a única ocorrência é um comentário histórico |
 
+**(d)** ⚠️ **ESCOPO REDUZIDO em 01/08/2026** — ver "ITEM (d) — escopo NOVO". Não é mais varrer 23 blocos: são 4 tipos de overlay + os condicionais.
+
 **(d) PROMPT J — responsividade em duas dimensões** (viewport e container).
 Inclui os dois casos confirmados:
 - Rodapé do funil — ✅ **resolvido** (`min-height:0`; a causa é genérica, ver a
@@ -5003,22 +5005,62 @@ para dizer a **consequência**:
 | Cards de `/dashboard/areas` | ✅ pendências por área |
 | Checklist em Integrações › Testes | 🔴 **mostrava a área ERRADA** — corrigido |
 
-> ### 🔴 O checklist não seguia a troca de área
+> ### 🔴🔴 CASO: componente cliente que busca no MOUNT não reage a `router.refresh()`
+>
 > `ChecklistCard` chamava `getInstallChecklist()` **sem argumento**, deixando o
 > servidor cair no `getLastWorkspaceId()`, e o efeito rodava **uma vez, na
 > montagem**. `trocarWorkspace` faz `router.refresh()`, que re-renderiza o
 > servidor mas **preserva estado de componente cliente** — então trocar de área
 > com a aba aberta deixava o card afirmando "4 de 5 prontos" sobre uma área que o
-> usuário já tinha deixado.
+> usuário já tinha deixado. **Alguém confiaria nesse número.**
 >
-> Agora o `workspaceId` vem por prop (padrão de `RulesView`) e entra nas
-> dependências. **Medido no navegador: 4 de 5 → 1 de 5 na troca, sem navegar** —
-> e de volta a 4 de 5 ao retornar.
+> **A assinatura do defeito, para reconhecer o próximo:**
+> 1. componente **cliente** autocontido, que busca por server action;
+> 2. a action é **escopada por área** e aceita `workspaceId?` com fallback para
+>    `getLastWorkspaceId()`;
+> 3. a chamada **omite o argumento**;
+> 4. o efeito tem deps `[]` (ou um `useCallback` com deps `[]`).
 >
-> ⚠️ **Os outros cards da aba Testes têm a mesma forma** (`listTestablePixels`,
-> `resumoEspelhos`, `listWebhookLogs` sem `workspaceId`). Os logs de webhook são
-> globais por desenho; os outros dois **não foram auditados** — ficam como
-> suspeita registrada, não como conserto feito.
+> Os quatro juntos = a tela mostra a área anterior, com cara de dado atual.
+> Nenhum `tsc`/`lint`/`build`/teste acusa. **A correção é sempre a mesma:**
+> `workspaceId` por prop, vindo de `useTraffik().workspaceAtiva` na página, e a
+> prop nas dependências.
+
+### 🔎 Auditoria do padrão — 3 casos, todos corrigidos em 01/08/2026
+
+Varredura de **todo** `useEffect` que busca dado nas views:
+
+| Onde | Veredito |
+|---|---|
+| `ChecklistCard` (Testes) | 🔴 **era o bug** — `getInstallChecklist()` sem arg, deps `[]` |
+| 🔴 **`UtmsView`** | `getUtmCodes()` sem arg, deps `[]` — **o pior dos três**, ver abaixo |
+| 🔴 **`PixelView`** | `listPixels()` sem arg, deps `[]` — listava os pixels da área anterior |
+| `RulesView` | ✅ já recebia `workspaceId` e tinha nas deps |
+| `AnunciosView` · `WebhooksView` | ✅ leem do contexto (`v`), que o layout do servidor renova |
+| `AreasView` | ✅ lista TODAS as áreas por natureza — não é escopada |
+| `TestadorPayloadCard` | ✅ gateways vêm do `REGISTRO`, global |
+| `ExcluirAreaDialog` | ✅ recebe a área explicitamente |
+| `EspelhoCard` · `WebhookLogsCard` (Testes) | ⚠️ **globais hoje** — não é staleness |
+| `listTestablePixels` (Teste de Pixel) | ⚠️ **não aceita `workspaceId`** (`where: { userId }`) — lista pixels de todas as áreas. É inconsistência de ESCOPO, não o mesmo defeito; não foi mexido |
+
+> ### 🔴 Na aba UTMs o defeito não era número velho — era INSTALAÇÃO ERRADA
+> Desde a Sessão 3 o script de UTM é **por área** (embute o `WS`). Com a busca
+> presa à montagem, trocar de área continuava exibindo o script da área
+> ANTERIOR — e esse bloco existe para ser **copiado e colado no site**. O
+> resultado seria carimbar os cliques daquela página na área errada, sem nada na
+> tela denunciando, e só aparecendo depois no relatório.
+>
+> É o caso que mostra por que este padrão merece a auditoria: o mesmo defeito
+> mecânico produz "um número desatualizado" numa tela e "dado de produção
+> atribuído à operação errada" em outra.
+
+**Medido no navegador, nas três**, trocando de área **sem navegar**:
+
+| Tela | Antes da troca | Depois | Voltando |
+|---|---|---|---|
+| Checklist (Testes) | 4 de 5 prontos | **1 de 5** | 4 de 5 |
+| UTMs | "Instale na página de vendas de **Principal**" | **…de `mjh`** | Principal |
+| Pixel | 2 pixels | **"Cadastrar seu primeiro pixel"** | 2 pixels |
 
 > ### ⛔ A Principal continua sem banner, e isso não mudou
 > Reavaliei e mantive: ela é o catch-all e é o estado normal de quem tem uma
@@ -5081,13 +5123,64 @@ avançado sozinha**; os 4 estados vazios de Taxas e o do sino renderizados, com
 
 ### 📋 Próximo
 
-1. **(d) Responsividade / varredura de condicionais** — em sessão própria, como
-   combinado. Comece pelos **overlays** (ver acima) e resolva o contorno de
-   resize ANTES: janela restaurada ou CDP.
+1. **(d) — escopo REDUZIDO, ver a seção abaixo.** Deixou de ser "varrer 23
+   blocos": são **4 tipos de overlay + os estados condicionais**.
 2. Evento de TESTE da Cakto contando como venda real — bloqueado até reativar a
    Cakto.
 3. Import/export do Bloco 8; faxina do nav morto no `useTraffikState` +
    `EditDashboardDrawer` inalcançável.
+
+## 🎯 ITEM (d) — escopo NOVO, aprovado em 01/08/2026
+
+**Deixou de ser "varrer 23 blocos em N larguras".** A descoberta de que **não
+existe uma única `@media` de largura na base** (só `prefers-reduced-motion` e
+`prefers-color-scheme`) muda o cálculo: toda responsividade é `auto-fit`/`minmax`
+mais o `react-grid-layout` com `useContainerWidth()`, ou seja, **tudo responde à
+largura do CONTAINER**. Constringir o container é equivalente a estreitar a
+janela, e o **"0 de 23" da sessão anterior vale** — não precisa ser refeito.
+
+### O que sobra, e é o alvo real: os `position:fixed`
+
+São os únicos que dimensionam pelo **viewport**, que o método do container não
+estreita. Todos passam por `ui/useOverlay` e são portados para o `<body>`:
+
+| # | Overlay | Suspeita |
+|---|---|---|
+| 1 | **`ui/Drawer`** | 🔴 **largura FIXA em px** — 520 padrão, **560** nas gavetas de Regra e Pixel. Abaixo de ~600px de viewport não cabe |
+| 2 | `ui/Modal` | centrado; conferir `max-width` e as margens |
+| 3 | Dropdown do `ui/Select` | ancorado ao gatilho, `minWidth` por chamada (até 290px) |
+| 4 | Popup do `ui/DateRangePicker` | ancoragem **fixa** (`left: 0`), sem reposicionamento — dívida já registrada |
+
+> ⚠️ **O `Drawer` é o alvo óbvio e o mais barato de consertar**: `largura` vira
+> um teto (`min(largura, 100vw - margem)`) em vez de um valor absoluto. Mas
+> **meça antes de mudar** — foi medir que evitou aumentar o `minH` do funil
+> quando o problema era `min-height:auto`.
+
+### E a varredura de condicionais, que continua no item
+
+Semear dados que ativem **cada caminho condicional** — estados de erro, avisos
+âmbar, rodapés, badges, chips — e conferir **cada um na tela**. O "0 de 23" só
+prova que não há transbordo **naquele estado de dados**; o rodapé do funil ficou
+invisível por semanas justamente por ser condicional.
+
+### 📏 A regra do resize, que vale para qualquer sessão
+
+> ### ⛔ NUNCA confie na mensagem de sucesso do `resize_window`
+> Com a janela **maximizada** ele devolve *"Successfully resized window … to
+> 900x850 pixels"* e **nada acontece** — o gerenciador de janelas ignora o
+> `chrome.windows.update({width,height})` nesse estado, e nada no retorno confere
+> o resultado. Chamar de novo não adianta. Reproduzido em 01/08/2026.
+>
+> **Depois de qualquer resize, leia `innerWidth`/`innerHeight` e compare.**
+> `innerWidth === screen.availWidth` é o indício de janela maximizada.
+
+**O método do (d) é janela restaurada ou CDP — NÃO o container:**
+
+| | Como | Custo |
+|---|---|---|
+| 1 | **Restaurar a janela** (Win+Down ou duplo clique na barra de título) antes da sessão | precisa do usuário: a extensão manda tecla para a PÁGINA, não para o gerenciador de janelas |
+| 2 | `chrome-devtools-mcp` → `resize_page` (CDP `Emulation.setDeviceMetricsOverride`) | **imune ao estado da janela**. Exige fechar o Chrome do perfil `~/.cache/chrome-devtools-mcp/chrome-profile` (ou `--isolated`), e é sessão separada → novo login |
+| ❌ | Constringir o container | **não serve aqui**: overlay é `position:fixed` e não enxerga o container |
 
 ---
 
@@ -5190,13 +5283,16 @@ removidos **por id coletado na criação**.
 **Commitado em `cf19351` e já no `origin/main`** (a nota de "sem commit" acima
 era da própria sessão que escreveu isto, e envelheceu).
 
-> 🔴 **`20260731090000_pixel_config_setup` continua marcada como PENDENTE em
-> produção** — e o código que a lê **já está deployado**. É a ordem invertida que
-> este arquivo documenta como perigosa. Ela é aditiva (uma coluna Json nullable)
-> e `lerPreset()` trata ausência como "ainda não perguntamos", então o risco real
-> é baixo; mesmo assim, **confirme com `npx prisma migrate deploy` antes de
-> escrever qualquer coisa que dependa de `PixelConfig.setup`.** Ninguém verificou
-> se ela foi aplicada.
+> ✅ **`20260731090000_pixel_config_setup` ESTÁ APLICADA em produção** —
+> confirmado pelo usuário em 01/08/2026: `37 migrations found · No pending
+> migrations to apply`. Ele rodou o `migrate deploy` na própria sessão em que o
+> aviso foi escrito. **Não há pendência de migration.**
+>
+> ⚠️ O aviso anterior dizia "continua marcada como PENDENTE" e estava
+> **errado** — ninguém tinha verificado, e "não verificado por mim" virou "não
+> aplicado" na escrita. É o mesmo modo de falha do "nenhuma escrita real foi
+> exercida", que também nasceu de uma afirmação plausível e não checada.
+> **Antes de registrar algo como pendente, pergunte — o usuário opera o sistema.**
 
 A gaveta expunha o **mecanismo** em vez de resolver: ~10 blocos, e só o "Quem
 envia cada evento" eram **5 linhas × 4 opções = 20 decisões** que exigem entender

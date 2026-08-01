@@ -349,12 +349,25 @@ function ScriptsBlock({ codes }: { codes: UtmCodesDTO | null }) {
 
 // ─────────────────────────── View ───────────────────────────
 
-export function UtmsView() {
+/**
+ * 🔴 **Recebe o `workspaceId`, e aqui isso é mais grave que em outras telas.**
+ *
+ * Desde a Sessão 3 o script de UTM é **por área** (embute o `WS`). Com a busca
+ * presa à montagem, trocar de área com esta aba aberta continuava exibindo o
+ * script da área ANTERIOR — e o usuário copia esse bloco e instala no site. Não
+ * é um número velho na tela: é uma instalação errada, que carimba os cliques
+ * daquela página na área errada e só se descobre depois, no relatório.
+ *
+ * `router.refresh()` não resolve sozinho: ele re-renderiza o servidor e
+ * **preserva o estado de componente cliente**. Quem refaz a consulta é a prop na
+ * lista de dependências.
+ */
+export function UtmsView({ workspaceId }: { workspaceId: string | null }) {
   const [codes, setCodes] = useState<UtmCodesDTO | null>(null);
 
   useEffect(() => {
     let alive = true;
-    getUtmCodes()
+    getUtmCodes(workspaceId)
       .then((c) => {
         if (alive) setCodes(c);
       })
@@ -362,7 +375,7 @@ export function UtmsView() {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [workspaceId]);
 
   return (
     <div style={sx("display:grid;gap:var(--space-4);align-items:start")}>
