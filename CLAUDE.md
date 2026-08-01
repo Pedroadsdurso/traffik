@@ -5305,9 +5305,26 @@ eid(nome) = nome + "-" + hash([CONFIG, nome, location.href, fbclid, Math.floor(D
 > até 5 s (`--segundos`), que é a única distância em que "mesmo carregamento" é
 > explicação possível.
 >
-> **A regra, de novo:** diagnóstico que acusa comportamento normal é pior que
-> nenhum. E ao corrigir um alarme, **procure as outras saídas do mesmo módulo** —
-> foi o mesmo erro de endurecer uma rota de webhook e deixar a outra aberta.
+> ### ⛔ REGRA: ao endurecer um alarme, procure as OUTRAS SAÍDAS do mesmo módulo
+> Um módulo de diagnóstico quase sempre tem mais de um caminho até a tela. Este
+> tinha dois — o agrupamento e o aviso linha a linha — e eu corrigi **um**.
+> A saída não corrigida continuou afirmando o oposto da corrigida, e é a que o
+> usuário leu primeiro.
+>
+> **É a mesma família do `origem-venda.mjs`**, que separava por dono na
+> *exibição* e somava o banco inteiro no *cálculo*: dois caminhos para a mesma
+> pergunta, um deles arrumado. Nos dois casos a parte correta deu **falsa
+> garantia** — quem viu a separação/janela funcionando não desconfiou da outra.
+>
+> E é a mesma família do bypass de webhook: endurecer `/api/webhook/kirvano` e
+> deixar `/api/webhook/sale/[token]` aceitando a mesma credencial.
+>
+> **Ao corrigir um limiar, uma janela, um filtro ou uma autenticação: `grep` o
+> módulo inteiro pelo mesmo conceito antes de fechar.** Corrigir uma saída de
+> duas é pior que não corrigir nenhuma.
+>
+> ⚠️ E a regra de sempre: diagnóstico que acusa comportamento normal é pior que
+> nenhum — ele treina a ignorar o alarme que importa.
 
 ### ✅ AS DUAS CAUSAS EXISTEM — medidas em produção, e o gerador foi reescrito
 
@@ -5340,9 +5357,22 @@ Com o script corrigido, o usuário achou as duas em dados reais:
 > URL estar na chave. Foi a **querystring** que mudou nos dois POSTs medidos, e
 > o `pathname` era o mesmo (`/checkout`).
 >
-> ⚠️ **Limite aceito:** uma SPA que dispare `PageView` duas vezes para o mesmo
-> `pathname` no mesmo carregamento (só a query mudando) verá os dois virarem um.
-> É o preço de consertar a causa 1, e é o lado certo de errar.
+> ### ⚠️ LIMITAÇÃO CONHECIDA: PageView some quando só a QUERY distingue a página
+> Numa SPA que dispare `PageView` duas vezes no mesmo carregamento para o mesmo
+> `pathname`, mudando **só a querystring**, os dois viram **um evento só**.
+>
+> Hoje é o lado certo de errar — foi exatamente essa mudança de query que
+> produziu a causa 1, e o caso comum é ruído, não navegação. Mas o dia em que
+> isso morde é previsível: **uma página em que a query É a navegação** — filtro
+> de catálogo (`/produtos?categoria=x` → `?categoria=y`), paginação, busca. Ali
+> o segundo PageView é legítimo e vai **sumir em silêncio**.
+>
+> **O sintoma será "PageView faltando", nunca um erro.** Se aparecer, o conserto
+> não é voltar ao `location.href` (isso ressuscita a causa 1): é acrescentar um
+> contador de PageView por carregamento à chave — o que dedupica o POST repetido
+> e preserva a navegação, ao custo de um estado a mais no script.
+>
+> ⚠️ Vale só para `PageView`. Os eventos de ação já têm o instante na chave.
 >
 > ⚠️ **O `fbclid` saiu da chave** porque a âncora já distingue visitantes: dois
 > navegadores nunca compartilham âncora. Era ele a causa 2.
@@ -5377,6 +5407,39 @@ Se um dia virar problema de produto, a forma é **domínio de produção declara
 no `PixelConfig`, e evento de outro host fica **MARCADO, nunca descartado** — o
 funil exclui e o usuário vê por quê. Não foi construído: com o `if` na origem, o
 problema não existe.
+
+### 🧹 `npm run eventos:limpar` — apagar o que a construção já sujou
+
+Limpeza do estrago que ficou **antes** do `if` na origem. Apaga só `PixelEvent`
+de deploy preview e localhost; nenhuma venda, nenhum clique, nenhuma
+configuração.
+
+```bash
+npm run eventos:limpar -- --url '<conn>' --email voce@exemplo.com          # SIMULA
+npm run backup -- --url '<conn>'                                           # obrigatório
+ALLOW_PROD_WRITES=EU_QUERO_MESMO_ESCREVER_EM_PRODUCAO \
+  npm run eventos:limpar -- --url '<conn>' --email voce@exemplo.com --aplicar
+```
+
+> ### ⛔ Ele imprime as URLs que vai MANTER, não só as que vai apagar
+> Conferir só a lista de exclusão responde *"entrou alguma legítima?"* e deixa
+> passar a outra metade: *"faltou alguma que eu queria fora?"*. Um host de teste
+> que os padrões não cobrem (`127.0.0.1`, um preview da Vercel, `https://localhost`)
+> **só aparece se as duas listas forem impressas**.
+
+> ### ⚠️ O impacto no funil é calculado por VISITANTES DISTINTOS, não por linhas
+> `dashboard/metrics.ts` deduplica o Initiate Checkout por
+> `fbclid → eventId → id`. Um relatório que contasse linhas **superestimaria a
+> queda** e assustaria à toa. O script reproduz a mesma deduplicação e, depois
+> do `--aplicar`, **confere se o número bateu com o previsto** — se divergir,
+> ele avisa em vermelho.
+
+> ⚠️ `%--%.netlify.app%` exige o `--` **antes** de `.netlify.app`, que é a forma
+> do preview (`<hash>--<site>.netlify.app`). O domínio de produção
+> (`https://site.netlify.app/`) não casa. **Exercitado no banco de dev** com as
+> URLs reais do usuário: as 4 de preview/localhost saíram, e
+> `https://sigmatoolsd.netlify.app/`, `…/checkout?qty=1` e as duas de
+> `moldes.tiarosi.online` sobreviveram. Linhas de teste removidas por id depois.
 
 ### 🔴 O conserto da causa 3, se ela se confirmar (histórico — CONFIRMOU)
 > Duas chamadas a 1 ms de distância caem em baldes diferentes sempre que cruzam
