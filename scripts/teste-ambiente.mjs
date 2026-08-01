@@ -12,7 +12,7 @@
  * sobre o hospedeiro". Se algum dia `site.netlify.app` passar a ser detectado,
  * a regra virou heurística e está errada.
  */
-import { ambienteDaUrl, familiasDePreview } from "../src/lib/pixel/ambiente.ts";
+import { ambienteDaUrl, ambientePorPadraoAprovado, casaPadrao, familiasDePreview } from "../src/lib/pixel/ambiente.ts";
 
 let ok = 0;
 const falhas = [];
@@ -116,6 +116,40 @@ fam("segmentos sem dígito (parecem palavras) não casam",
 
 fam("produção do usuário fica de fora mesmo com os previews juntos",
   [...reais, "moldes.tiarosi.online", "sigmatoolsd.netlify.app"], reais);
+
+console.log("\n8) PADRÃO APROVADO — a metade preventiva, que BLOQUEIA na ingestão");
+const P = "moldes-*-noahvivaryder3s-projects.vercel.app";
+function casa(nome, host, esperado) {
+  const r = casaPadrao(host, P);
+  if (r === esperado) { ok++; console.log(`  ok  ${nome}`); }
+  else { falhas.push(nome); console.log(`  FALHA  ${nome} — obtido ${r}`); }
+}
+// Host NOVO, que a regra retroativa nunca viu: é para isto que o padrão existe.
+casa("host novo do mesmo padrão bloqueia", "moldes-zz9kk1x40-noahvivaryder3s-projects.vercel.app", true);
+casa("um dos originais continua casando", "moldes-ahuhuv5fb-noahvivaryder3s-projects.vercel.app", true);
+
+// 🔴 As recusas — cada uma impede a aprovação de virar regra mais ampla que o
+// combinado. Aprovar amplia o ALCANCE, nunca afrouxa o teste.
+casa("segmento que é PALAVRA não bloqueia", "moldes-producao-noahvivaryder3s-projects.vercel.app", false);
+casa("outro escopo não bloqueia", "moldes-zz9kk1x40-outroescopo-projects.vercel.app", false);
+casa("outro projeto não bloqueia", "loja-zz9kk1x40-noahvivaryder3s-projects.vercel.app", false);
+casa("segmentos a mais não bloqueia", "moldes-zz9kk1x40-extra-noahvivaryder3s-projects.vercel.app", false);
+casa("produção do mesmo projeto não bloqueia", "moldes.vercel.app", false);
+casa("domínio próprio não bloqueia", "moldes.tiarosi.online", false);
+
+const aprovados = [{ padrao: P }];
+function via(nome, url, esperado) {
+  const r = ambientePorPadraoAprovado(url, aprovados).ambiente;
+  if (r === esperado) { ok++; console.log(`  ok  ${nome}`); }
+  else { falhas.push(nome); console.log(`  FALHA  ${nome} — obtido ${r}`); }
+}
+via("url do padrão vira preview", "https://moldes-zz9kk1x40-noahvivaryder3s-projects.vercel.app/x", "preview");
+via("url de produção segue produção", "https://moldes.tiarosi.online/", null);
+via("url ilegível não bloqueia", "nao-e-url", null);
+// Sem nada aprovado, a proteção preventiva não existe — é o estado padrão.
+if (ambientePorPadraoAprovado("https://moldes-zz9kk1x40-noahvivaryder3s-projects.vercel.app/", []).ambiente === null) {
+  ok++; console.log("  ok  sem padrão aprovado, nada é bloqueado");
+} else { falhas.push("lista vazia"); console.log("  FALHA  lista vazia bloqueou algo"); }
 
 console.log(
   falhas.length

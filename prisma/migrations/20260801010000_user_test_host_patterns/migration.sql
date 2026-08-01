@@ -1,0 +1,13 @@
+-- Padrões de host de ambiente de teste APROVADOS pelo usuário.
+--
+-- Fecha a assimetria: a Netlify é detectada preventivamente (formato reservado),
+-- e o preview de hash da Vercel só era pego DEPOIS, pela regra de repetição —
+-- então os eventos novos já tinham ido para a CAPI.
+--
+-- Json e não tabela: é uma lista curta que o próprio usuário gerencia, e o
+-- endpoint público `/api/pixel/event` precisa dela em TODA requisição. Como
+-- coluna de `User`, ela viaja no mesmo `include` do `PixelConfig` que a rota já
+-- faz — zero ida extra ao banco num caminho quente.
+--
+-- ADITIVA e nullable: ausência = nenhum padrão aprovado = comportamento atual.
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "testHostPatterns" JSONB;

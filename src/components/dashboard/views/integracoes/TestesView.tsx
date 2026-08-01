@@ -8,9 +8,12 @@ import {
   getInstallChecklist,
   listTestablePixels,
   listWebhookLogs,
+  listarPadroesDeTeste,
+  removerPadraoDeTeste,
   resumoEspelhos,
   type ChecklistItemDTO,
   type EspelhoResumoDTO,
+  type PadraoAprovadoDTO,
   type PixelOptionDTO,
   type TrackingTestDTO,
   type WebhookLogDTO,
@@ -576,12 +579,90 @@ function TituloColuna({ children }: { children: string }) {
  * A divisão também equilibra a altura: as listas que crescem sem teto (20 logs
  * de webhook, um detalhamento por evento) ficam todas de um lado só.
  */
+/**
+ * Padrões de ambiente de teste aprovados — a metade REMOVÍVEL da proteção.
+ *
+ * 🔴 Existe porque bloquear na ingestão é irreversível: o evento não vai para a
+ * Meta e não volta. Uma regra de bloqueio que só saísse por SQL seria
+ * irreversível na prática — e irreversível é justamente o que ela não pode ser.
+ *
+ * ⚠️ O card só aparece quando há padrão aprovado. Nada a gerenciar = nada na
+ * tela; um card vazio permanente vira ruído que se aprende a ignorar.
+ */
+function PadroesDeTesteCard() {
+  const [padroes, setPadroes] = useState<PadraoAprovadoDTO[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    listarPadroesDeTeste().then(setPadroes).catch(() => {});
+  }, []);
+
+  if (padroes.length === 0) return null;
+
+  const remover = async (padrao: string) => {
+    setBusy(padrao);
+    try {
+      setPadroes(await removerPadraoDeTeste(padrao));
+    } catch {
+      // Silencioso: a lista continua como está e o usuário pode tentar de novo.
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="card">
+      <div className="card-kicker">Ambientes de teste</div>
+      <div className="card-title">Endereços que não contam como visita</div>
+      <p className="card-body" style={sx("margin:4px 0 0")}>
+        Você aprovou estes formatos de endereço como ambiente de desenvolvimento. Eventos que
+        chegam deles ficam registrados, mas <strong>não entram no funil e não vão para o
+        Facebook</strong>. O <code>*</code> é a parte que muda a cada publicação.
+      </p>
+      <div style={sx("display:flex;flex-direction:column;gap:2px;margin-top:var(--space-3)")}>
+        {padroes.map((p) => (
+          <div
+            key={p.padrao}
+            style={sx("display:flex;align-items:center;justify-content:space-between;gap:var(--space-2);padding:8px 0;border-bottom:1px solid var(--color-border)")}
+          >
+            <div style={sx("min-width:0")}>
+              <div style={sx("font-size:12.5px;font-family:var(--font-mono,monospace);overflow:hidden;text-overflow:ellipsis")}>
+                {p.padrao}
+              </div>
+              {p.criadoEm && (
+                <div className="text-muted" style={sx("font-size:11px")}>
+                  aprovado em {new Date(p.criadoEm).toLocaleDateString("pt-BR")}
+                </div>
+              )}
+            </div>
+            <button
+              className="btn btn-ghost"
+              type="button"
+              disabled={busy === p.padrao}
+              onClick={() => void remover(p.padrao)}
+              style={sx("flex:none;font-size:11.5px;white-space:nowrap")}
+              title="Os endereços deste formato voltam a contar no funil e a ir para o Facebook."
+            >
+              {busy === p.padrao ? "Removendo…" : "Remover"}
+            </button>
+          </div>
+        ))}
+      </div>
+      <p className="text-muted" style={sx("margin:var(--space-3) 0 0;font-size:11.5px;line-height:1.45")}>
+        Removeu por engano? Nada foi apagado — os eventos continuam no banco, e os próximos
+        voltam a contar normalmente.
+      </p>
+    </div>
+  );
+}
+
 export function TestesView({ workspaceId }: { workspaceId: string | null }) {
   return (
     <div style={sx("display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:var(--space-4);align-items:start")}>
       <div style={sx(COLUNA)}>
         <TituloColuna>Como está agora</TituloColuna>
         <ChecklistCard workspaceId={workspaceId} />
+        <PadroesDeTesteCard />
         <EspelhoCard />
         <WebhookLogsCard />
       </div>

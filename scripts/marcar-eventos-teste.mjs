@@ -30,7 +30,7 @@ import "dotenv/config";
 import pg from "pg";
 
 import { exigirBancoDeDesenvolvimento } from "./guard-db.mjs";
-import { ambienteDaUrl, familiasDePreview, ROTULO_AMBIENTE } from "../src/lib/pixel/ambiente.ts";
+import { ambienteDaUrl, familiasDePreview, lerPadroes, ROTULO_AMBIENTE } from "../src/lib/pixel/ambiente.ts";
 
 const args = process.argv.slice(2);
 const arg = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : d; };
@@ -206,5 +206,32 @@ console.log(`\n  ${amb(bold(`${tocados} evento(s) marcado(s).`))}  Funil IC = ${
 console.log(icFinal === depois ? verde("  ✓ bateu com o previsto na simulação.\n")
   : `  🔴 previsto ${depois}, obtido ${icFinal} — investigue.\n`);
 console.log(dim("  Nada foi apagado. `--limpar --aplicar` desfaz.\n"));
+
+/**
+ * 🔴 Aprovar a família guarda o PADRÃO, que passa a valer NA INGESTÃO.
+ *
+ * É o que fecha a assimetria: a Netlify já era preventiva (formato reservado),
+ * a Vercel só era pega DEPOIS — então o preview novo já tinha ido para a CAPI
+ * antes de qualquer coisa marcá-lo.
+ *
+ * ⚠️ Bloquear é IRREVERSÍVEL (o evento não vai para a Meta e não volta), então
+ * o script diz em letras o que acabou de criar e ONDE se remove. A reversão
+ * mora na tela, não aqui — regra de bloqueio que só saísse por SQL seria
+ * irreversível na prática.
+ */
+if (familias.length) {
+  const atual = (await c.query(`SELECT "testHostPatterns" AS p FROM "User" WHERE id=$1`, [userId])).rows[0]?.p;
+  const atuais = lerPadroes(atual);
+  const novos = familias.map((f) => f.padrao).filter((p) => !atuais.some((a) => a.padrao === p));
+  if (novos.length) {
+    const lista = [...atuais, ...novos.map((padrao) => ({ padrao, criadoEm: new Date().toISOString() }))];
+    await c.query(`UPDATE "User" SET "testHostPatterns" = $2::jsonb WHERE id = $1`, [userId, JSON.stringify(lista)]);
+    console.log(amb(bold(`  ${novos.length} padrão(ões) guardado(s) — passam a valer NA INGESTÃO:`)));
+    for (const p of novos) console.log(`    ${p}`);
+    console.log(dim("\n  Host NOVO que case com isto não conta no funil e NÃO vai para o Facebook."));
+    console.log(dim("  O segmento variável ainda precisa parecer hash — aprovar não é cheque em branco."));
+    console.log(dim('  Para desfazer: Integrações › Testes › "Endereços que não contam como visita".\n'));
+  }
+}
 
 await c.end();

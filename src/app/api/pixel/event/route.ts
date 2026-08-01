@@ -4,7 +4,7 @@ import { ipDaRequisicao } from "@/lib/geo/clientIp";
 import { decryptSecretSafe } from "@/lib/crypto/secrets";
 import { sendServerEvent, type CapiEventName } from "@/lib/facebook/capi";
 import { prisma } from "@/lib/prisma";
-import { ambienteDaUrl } from "@/lib/pixel/ambiente";
+import { ambienteDaUrl, ambientePorPadraoAprovado, lerPadroes } from "@/lib/pixel/ambiente";
 import { traffikEnvia } from "@/lib/pixel/donos";
 import type { PixelEventType } from "@/generated/prisma/enums";
 
@@ -115,6 +115,9 @@ export async function POST(req: NextRequest) {
   const config = await prisma.pixelConfig.findUnique({
     where: { id: configId },
     include: {
+      // Os padrões aprovados viajam no MESMO `include` — nenhuma ida extra ao
+      // banco neste caminho, que é público e quente.
+      user: { select: { testHostPatterns: true } },
       metaPixels: true,
       eventRules: mapped ? { where: { eventType: mapped.rule } } : false,
     },
@@ -147,7 +150,18 @@ export async function POST(req: NextRequest) {
    * (`<hash>--<site>.netlify.app`, `-git-…vercel.app`, `localhost`), não por
    * palpite sobre o hospedeiro. Ver `lib/pixel/ambiente.ts`.
    */
-  const { ambiente } = ambienteDaUrl(urlDoEvento);
+  const porFormato = ambienteDaUrl(urlDoEvento);
+  // Depois do contrato de plataforma vem a lista que o usuário APROVOU. Nesta
+  // ordem de propósito: `FORMATOS` é contrato, a lista é escolha — se um dia
+  // discordarem, quem manda é o contrato.
+  //
+  // ⚠️ Casar o molde não basta: `ambientePorPadraoAprovado` ainda exige que o
+  // segmento variável pareça hash. Aprovar amplia o alcance da regra, nunca
+  // afrouxa o teste que a torna confiável — bloquear é irreversível.
+  const { ambiente } =
+    porFormato.ambiente !== null
+      ? porFormato
+      : ambientePorPadraoAprovado(urlDoEvento, lerPadroes(config.user?.testHostPatterns));
 
   try {
     await prisma.pixelEvent.createMany({

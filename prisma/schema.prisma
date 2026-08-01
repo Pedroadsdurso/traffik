@@ -148,6 +148,13 @@ model User {
   /// gravados em UTC; este campo é o que define onde o dia começa e termina
   /// para este usuário. Ver `src/lib/timezone.ts`.
   timezone      String   @default("America/Sao_Paulo")
+  /// Padrões de host de ambiente de teste APROVADOS por este usuário, como
+  /// `[{ "padrao": "moldes-*-escopo.vercel.app", "criadoEm": "..." }]`.
+  ///
+  /// 🔴 Só entram por APROVAÇÃO explícita (`npm run eventos:marcar --aplicar`),
+  /// e bloqueiam o envio à CAPI na ingestão. Por isso são removíveis na tela
+  /// (Integrações › Testes) — bloquear é irreversível, a lista não pode ser.
+  testHostPatterns Json?
   /// Quando o usuário concluiu (ou pulou) o assistente de primeiro acesso.
   /// Nulo = nunca viu o onboarding. É o que impede o assistente de reaparecer
   /// a cada login — a marcação fica no banco, não no navegador.

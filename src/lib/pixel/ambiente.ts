@@ -260,3 +260,108 @@ export function familiasDePreview(hosts: string[]): FamiliaDePreview[] {
   }
   return saida;
 }
+
+// ─────────────── Padrões APROVADOS: a metade preventiva ───────────────
+
+/**
+ * # Fechar a assimetria: Netlify era preventivo, Vercel era retroativo
+ *
+ * `FORMATOS` bloqueia na hora, porque são formatos reservados. A regra de
+ * repetição só age DEPOIS, então o preview novo da Vercel já tinha ido para a
+ * CAPI antes de qualquer coisa marcá-lo.
+ *
+ * Quando o usuário APROVA uma família (`eventos:marcar --aplicar`), o padrão
+ * (`moldes-*-noahvivaryder3s-projects.vercel.app`) é guardado em
+ * `User.testHostPatterns` e passa a valer **na ingestão**, como os formatos.
+ *
+ * ## 🔴 Aprovar NÃO é cheque em branco
+ *
+ * Casar o desenho do host não basta: o segmento variável **ainda precisa
+ * parecer hash**. Um `moldes-producao-noahvivaryder3s-projects.vercel.app`
+ * casa o molde e **não bloqueia**, porque `producao` é palavra.
+ *
+ * É a aplicação do critério "errar para o lado seguro": bloquear é
+ * irreversível (o evento não vai para a CAPI e não volta), então a aprovação
+ * amplia o alcance da regra, nunca afrouxa o teste que a torna confiável.
+ *
+ * ## ⚠️ Por isso a lista é REMOVÍVEL na tela
+ *
+ * Integrações › Testes lista os padrões aprovados com botão de remover. Uma
+ * regra de bloqueio que só saísse por SQL seria irreversível na prática — e
+ * irreversível é exatamente o que ela não pode ser.
+ */
+export interface PadraoAprovado {
+  padrao: string;
+  criadoEm?: string;
+}
+
+/** Lê o Json cru, descartando o que não reconhece. */
+export function lerPadroes(bruto: unknown): PadraoAprovado[] {
+  if (!Array.isArray(bruto)) return [];
+  const out: PadraoAprovado[] = [];
+  for (const item of bruto) {
+    if (!item || typeof item !== "object") continue;
+    const p = (item as Record<string, unknown>).padrao;
+    // Só padrão com curinga NO MEIO — ver `casaPadrao`.
+    if (typeof p !== "string" || !p.includes("*")) continue;
+    const c = (item as Record<string, unknown>).criadoEm;
+    out.push({ padrao: p, criadoEm: typeof c === "string" ? c : undefined });
+  }
+  return out;
+}
+
+/** Um único segmento parece hash gerado? Mesmo critério do `pareceHashes`. */
+export function pareceHashUnico(v: string): boolean {
+  return /^[a-z0-9]{6,14}$/.test(v) && /\d/.test(v);
+}
+
+/**
+ * O host casa este padrão aprovado?
+ *
+ * ⚠️ Exige, cumulativamente: **mesmo número de segmentos**, todos os fixos
+ * idênticos, **exatamente um** curinga, ele **no meio** (nunca no primeiro nem
+ * no último, que carregam projeto e domínio) e o valor variável passando no
+ * teste de hash. Qualquer folga aqui transforma uma aprovação pontual numa
+ * regra ampla, e o custo é evento real fora da CAPI.
+ */
+export function casaPadrao(host: string, padrao: string): boolean {
+  const pp = padrao.toLowerCase().split("-");
+  const hp = host.toLowerCase().split("-");
+  if (pp.length !== hp.length || pp.length < 3) return false;
+  let curinga = -1;
+  for (let i = 0; i < pp.length; i++) {
+    if (pp[i] === "*") {
+      if (curinga >= 0) return false; // dois curingas: recusa
+      curinga = i;
+      continue;
+    }
+    if (pp[i] !== hp[i]) return false;
+  }
+  if (curinga <= 0 || curinga >= pp.length - 1) return false;
+  return pareceHashUnico(hp[curinga]!);
+}
+
+/**
+ * Classifica pela lista aprovada, DEPOIS de `ambienteDaUrl` não ter decidido.
+ *
+ * ⚠️ Nunca sobrescreve `FORMATOS`: aquilo é contrato de plataforma, isto é
+ * escolha do usuário. Se um dia os dois discordarem, quem manda é o contrato.
+ */
+export function ambientePorPadraoAprovado(
+  url: string | null | undefined,
+  padroes: PadraoAprovado[],
+): Deteccao {
+  if (!url || padroes.length === 0) return NENHUM;
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return NENHUM;
+  }
+  for (const p of padroes) {
+    if (casaPadrao(host, p.padrao)) {
+      return { ambiente: "preview", porque: `Padrão de ambiente de teste aprovado por você: ${p.padrao}` };
+    }
+  }
+  return NENHUM;
+}

@@ -5587,6 +5587,105 @@ registramos. **Sem ação.**
 
 ---
 
+## 🔒 PROTEÇÃO PREVENTIVA: padrão aprovado bloqueia na ingestão (01/08/2026)
+
+Fecha a assimetria: a Netlify era **preventiva** (formato reservado), a Vercel
+era **retroativa** (regra de repetição) — então todo preview novo dela já tinha
+ido para a CAPI antes de qualquer coisa marcá-lo.
+
+**Migration `20260801010000`** — `User.testHostPatterns` (Json, nullable).
+
+Ao APROVAR uma família (`eventos:marcar --aplicar`), o padrão
+`moldes-*-noahvivaryder3s-projects.vercel.app` é guardado e passa a valer **na
+ingestão**, como os formatos.
+
+> ### 🔴 Aprovar amplia o ALCANCE, nunca afrouxa o teste
+> Casar o molde **não basta**: `casaPadrao` ainda exige que o segmento variável
+> pareça hash. `moldes-producao-noahvivaryder3s-projects.vercel.app` casa o
+> desenho e **não bloqueia**, porque `producao` é palavra.
+>
+> É o critério "errar para o lado seguro" aplicado: bloquear é irreversível (o
+> evento não vai para a CAPI e não volta), então a aprovação estende o alcance
+> de uma regra que continua rigorosa. Ela exige, cumulativamente: mesmo número
+> de segmentos, todos os fixos idênticos, **exatamente um** curinga, ele **no
+> meio** (nunca no primeiro nem no último, que carregam projeto e domínio), e o
+> teste de hash.
+
+> ### ⛔ A ordem é CONTRATO primeiro, escolha depois
+> `FORMATOS` decide antes da lista aprovada. Se um dia discordarem, quem manda é
+> o contrato de plataforma — a lista do usuário só age sobre o que sobrou.
+
+> ### ⚠️ Custo zero no caminho quente
+> Os padrões viajam no **mesmo `include`** do `PixelConfig` que a rota já fazia
+> (`user: { select: { testHostPatterns: true } }`). Nenhuma ida extra ao banco
+> num endpoint público que roda em toda visita. Foi por isso que virou coluna
+> Json em `User`, e não tabela.
+
+> ### 🔴 A REVERSÃO MORA NA TELA, não no SQL
+> **Integrações › Testes › "Endereços que não contam como visita"** lista os
+> padrões aprovados com botão Remover. Uma regra de bloqueio que só saísse por
+> SQL seria irreversível na prática — e irreversível é exatamente o que ela não
+> pode ser. O card **só aparece quando há padrão**: nada a gerenciar = nada na
+> tela.
+
+**Testado:** `npm run test:ambiente` — **58 asserções**. As 12 novas são quase
+todas RECUSAS: segmento que é palavra, outro escopo, outro projeto, segmentos a
+mais, produção do mesmo projeto, domínio próprio, lista vazia.
+
+**E exercitado AO VIVO** contra `/api/pixel/event` (dev), com o padrão guardado:
+
+| POST | Resposta |
+|---|---|
+| host **novo** do padrão | `{"registrado":true,"enviado":false,"motivo":"ambiente de teste","ambiente":"preview"}` |
+| `moldes.tiarosi.online` | não caiu na regra de ambiente |
+| `moldes-**producao**-…` | não caiu na regra de ambiente |
+| `sigmatoolsd.netlify.app` | não caiu na regra de ambiente |
+
+> 🐛 **O primeiro probe deu 500** — o dev server rodava com um cliente Prisma
+> gerado ANTES da coluna existir. Não era bug de código (`tsc` e `build`
+> passavam); era processo velho. **Depois de `prisma generate`, reinicie o dev
+> server antes de sondar** — senão o 500 parece regressão e não é.
+
+---
+
+## 🏁 FECHAMENTO DA SESSÃO DE 01/08/2026
+
+### Entregue
+
+| | O quê |
+|---|---|
+| ✅ | **Fila de UX (f) e (g)** — regras em duas regiões com selo; 7 estados vazios que ensinam |
+| ✅ | **Checklist/UTMs/Pixel seguindo a troca de área** — 3 casos do mesmo padrão, com o da UtmsView produzindo **instalação errada**, não só número velho |
+| ✅ | **`eid` determinístico por ÂNCORA** — as duas causas medidas em produção (`location.href` a 4 ms; balde de 10 s a 921 ms) |
+| ✅ | **Detecção de ambiente de teste** — `PixelEvent.ambiente`, formatos reservados, fora do funil e fora da CAPI |
+| ✅ | **Regra de repetição** (retroativa) + **padrão aprovado** (preventivo, removível na tela) |
+| ✅ | **25 eventos marcados em produção** pelo usuário — localhost e os 6 previews da Netlify. O funil **não mudou** (49 → 49): nenhum deles gerou InitiateCheckout |
+| ✅ | Purchase de checkout próprio é do **webhook, e só dele** |
+
+### ⚠️ NÃO exercitado contra tráfego real
+
+| | Item |
+|---|---|
+| ⚠️ | **`-git-` da Vercel e os túneis** (ngrok, loca.lt, trycloudflare) — só contra os formatos documentados. Netlify preview, localhost e o padrão aprovado saíram de dados reais |
+| ⚠️ | O **card de padrões aprovados** não foi visto no navegador (a lista do dev foi limpa no fim) |
+| ⚠️ | `AddToCart` e `Lead` continuam sem nunca terem disparado numa página real |
+
+### 📋 A fila que sobra
+
+1. **Item (d) da UX, em sessão própria.** Escopo já reduzido: **4 tipos de
+   overlay** `position:fixed` (Drawer com largura fixa de 520/560px à frente) +
+   a varredura de condicionais. Resolva o contorno do `resize_window` ANTES —
+   janela restaurada ou CDP, nunca o container, que overlay não enxerga.
+2. **`click_id` na OnyxPag**, quando a página for ao ar. O campo é `click_id`
+   (NÃO `sck`), em `tracking` **e** `metadata`. O parser já lê; falta o
+   construtor mandar. Confira com `npm run venda:inspecionar -- --gateway ONYXPAG`
+   depois da primeira venda — a doc não promete devolver `tracking` no webhook.
+3. Evento de TESTE da Cakto contando como venda — bloqueado até reativá-la.
+4. Import/export do Bloco 8; faxina do nav morto no `useTraffikState` +
+   `EditDashboardDrawer` inalcançável.
+
+---
+
 ## 🚦 (histórico) fila de UX: (e) e (a) fechados (31/07/2026, 5ª parte)
 
 ### O que ficou pronto

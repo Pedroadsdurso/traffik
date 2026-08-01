@@ -12,6 +12,7 @@ import { getLastWorkspaceId } from "@/lib/actions/workspaces";
 import { escopoDeConfig } from "@/lib/areas/escopoConfig";
 import { plural } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
+import { lerPadroes } from "@/lib/pixel/ambiente";
 import { ordemDoEspelho } from "@/lib/pixel/espelho";
 import { parseTrackingCodes } from "@/lib/utm/parse";
 import type { WebhookLogStatus } from "@/generated/prisma/enums";
@@ -471,4 +472,36 @@ export async function listarGatewaysDoTestador() {
 export async function carregarExemploDeGateway(gateway: string, indice: number) {
   await requireUserId();
   return exemploDoGateway(gateway, indice);
+}
+
+// ─────────────── Padrões de ambiente de teste aprovados ───────────────
+
+export interface PadraoAprovadoDTO {
+  padrao: string;
+  criadoEm: string | null;
+}
+
+/**
+ * Os padrões que o usuário aprovou, e que BLOQUEIAM o envio à CAPI na ingestão.
+ *
+ * 🔴 Existem na tela porque bloquear é irreversível: o evento não vai para a
+ * Meta e não volta. Uma regra de bloqueio que só saísse por SQL seria
+ * irreversível na prática — e irreversível é o que ela não pode ser.
+ */
+export async function listarPadroesDeTeste(): Promise<PadraoAprovadoDTO[]> {
+  const userId = await requireUserId();
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { testHostPatterns: true } });
+  return lerPadroes(u?.testHostPatterns).map((p) => ({ padrao: p.padrao, criadoEm: p.criadoEm ?? null }));
+}
+
+/** Remove um padrão. A partir daí os hosts dele voltam a contar e a ir à CAPI. */
+export async function removerPadraoDeTeste(padrao: string): Promise<PadraoAprovadoDTO[]> {
+  const userId = await requireUserId();
+  const u = await prisma.user.findUnique({ where: { id: userId }, select: { testHostPatterns: true } });
+  const restantes = lerPadroes(u?.testHostPatterns).filter((p) => p.padrao !== padrao);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { testHostPatterns: JSON.parse(JSON.stringify(restantes)) },
+  });
+  return restantes.map((p) => ({ padrao: p.padrao, criadoEm: p.criadoEm ?? null }));
 }
