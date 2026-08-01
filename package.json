@@ -43,6 +43,7 @@
     "test:cakto": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-cakto.mjs",
     "venda:inspecionar": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/inspecionar-venda.mjs",
     "pixel:duplicados": "node scripts/pixel-duplicados.mjs",
+    "test:eid": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-eid-pixel.mjs",
     "test:veiculacao": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-veiculacao.mjs",
     "ads:sonda": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/sonda-veiculacao.mjs",
     "test:veiculacao:e2e": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-veiculacao-e2e.mjs",

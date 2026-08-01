@@ -5293,7 +5293,92 @@ eid(nome) = nome + "-" + hash([CONFIG, nome, location.href, fbclid, Math.floor(D
 | `fbclid` | o cookie ainda não tinha sido lido na 1ª chamada | da página |
 | **só o balde** | 🔴 `Math.floor(Date.now()/10000)` é **balde fixo, não janela deslizante** | **nosso** |
 
-> ### 🔴 O conserto da causa 3, se ela se confirmar
+> ### 🐛 O AGRUPAMENTO tinha o mesmo defeito que o aviso — corrigido em 01/08
+> A 1ª versão agrupava por (usuário, pixel, evento, url, fbclid) na **janela
+> inteira** e chamava tudo de duplicata. Isso juntava **todos os PageView da
+> mesma URL em 180 minutos**, e quem está construindo o site recarrega dezenas
+> de vezes: ele acusou "CAUSA 3" em eventos a **17, 22 e 40 segundos** de
+> distância — recarregamentos legítimos.
+>
+> Eu tinha corrigido exatamente isso no aviso linha a linha (janela de 30 s) e
+> **deixei passar no agrupamento**. Hoje usa `lag()` sobre pares CONSECUTIVOS a
+> até 5 s (`--segundos`), que é a única distância em que "mesmo carregamento" é
+> explicação possível.
+>
+> **A regra, de novo:** diagnóstico que acusa comportamento normal é pior que
+> nenhum. E ao corrigir um alarme, **procure as outras saídas do mesmo módulo** —
+> foi o mesmo erro de endurecer uma rota de webhook e deixar a outra aberta.
+
+### ✅ AS DUAS CAUSAS EXISTEM — medidas em produção, e o gerador foi reescrito
+
+Com o script corrigido, o usuário achou as duas em dados reais:
+
+| Causa | Evidência |
+|---|---|
+| **1** | `04:42:31.602 /checkout?qty=1` × `04:42:31.606 /checkout?product=snow-foam-sgt-9939&qty=1` — **4 ms**, `location.href` mudou no mesmo carregamento |
+| **3** | `04:46:29.591` (balde 178555958) × `04:46:30.512` (balde 178555959) — **921 ms**, mesma URL, cruzou a fronteira |
+
+**`eid()` foi reescrito** (`lib/pixel/script.ts`): saiu `location.href`, saiu o
+`fbclid`, saiu o balde fixo. Entrou uma **ÂNCORA por carregamento** —
+`Math.random() + Date.now()`, gerada uma vez — mais `location.pathname`.
+
+> ### ⛔ A âncora é POR EVENTO, nunca global
+> | | `PageView` | `Lead` · `AddToCart` · `InitiateCheckout` |
+> |---|---|---|
+> | Quem dispara | o carregamento | o usuário |
+> | Dois disparos no mesmo load | a **mesma visita** contada 2× | podem ser **duas intenções reais** |
+> | Logo | deduplica SEMPRE (só âncora) | deduplica só se quase simultâneos |
+>
+> `PageView` usa `[CONFIG, nome, pathname, ANCORA]` — sem tempo nenhum. Os de
+> ação acrescentam o instante, mas com **janela DESLIZANTE de 1 s ancorada no
+> primeiro disparo** (`ultimoDeAcao`), nunca um balde fixo — é a fronteira que
+> criava o bug. Deduplicar dois cliques em "comprar" separados por segundos
+> apagaria uma intenção real do funil.
+
+> ⚠️ **`location.href` → `location.pathname`, e não "remover a URL".** O
+> `pathname` preserva a distinção entre rotas de uma SPA, que é o motivo de a
+> URL estar na chave. Foi a **querystring** que mudou nos dois POSTs medidos, e
+> o `pathname` era o mesmo (`/checkout`).
+>
+> ⚠️ **Limite aceito:** uma SPA que dispare `PageView` duas vezes para o mesmo
+> `pathname` no mesmo carregamento (só a query mudando) verá os dois virarem um.
+> É o preço de consertar a causa 1, e é o lado certo de errar.
+>
+> ⚠️ **O `fbclid` saiu da chave** porque a âncora já distingue visitantes: dois
+> navegadores nunca compartilham âncora. Era ele a causa 2.
+
+**`npm run test:eid` — 11 asserções, 0 falhas**, exercitando o script gerado num
+DOM falso com relógio e URL controláveis: as duas causas reais reproduzidas
+(mesmo id agora), **e os três casos legítimos que NÃO podem deduplicar** —
+recarregar a página, mudar de rota na SPA, e dois cliques reais a 3 s.
+
+> ⚠️ **O snippet vive no HTML do cliente.** Quem já instalou continua com o
+> gerador antigo até recolar. Ids antigos e novos não colidem, então a mudança é
+> segura em qualquer ordem.
+
+### 🌐 URL de PREVIEW (Netlify/Vercel) poluindo os eventos — NÃO vamos filtrar
+
+Cada deploy gera um host único (`6a6d6a40…--sigmatoolsd.netlify.app`), então os
+eventos de preview se misturam aos de produção e nem dá para filtrar por um
+hostname só.
+
+> ### ⛔ Detectar "preview" por padrão de hostname seria heurística que MENTE
+> Muita gente roda **produção** em `*.netlify.app` e `*.vercel.app`. Uma regra
+> por hostname descartaria evento real dessas contas **em silêncio** — perda de
+> conversão sem erro e sem log, que é o pior modo de falha deste projeto.
+> Mesmo princípio de `PROXIES_CONFIAVEIS`: não adivinhe, **declare**.
+
+**O conserto certo é na origem, e é do lado de quem monta a página:** não
+instalar/ativar o snippet em deploy de preview (`process.env.CONTEXT === "production"`
+no Netlify, `NEXT_PUBLIC_VERCEL_ENV` na Vercel). Um `if`. Filtrar depois seria
+tarde — o evento **já foi enviado à CAPI** e já influenciou a otimização.
+
+Se um dia virar problema de produto, a forma é **domínio de produção declarado**
+no `PixelConfig`, e evento de outro host fica **MARCADO, nunca descartado** — o
+funil exclui e o usuário vê por quê. Não foi construído: com o `if` na origem, o
+problema não existe.
+
+### 🔴 O conserto da causa 3, se ela se confirmar (histórico — CONFIRMOU)
 > Duas chamadas a 1 ms de distância caem em baldes diferentes sempre que cruzam
 > uma fronteira de 10 s. A probabilidade é baixa (≈ Δt/10000) e **não é zero** —
 > e é sistemática, não aleatória: todo usuário com dois POSTs por carregamento

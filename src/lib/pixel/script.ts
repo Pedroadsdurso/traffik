@@ -123,18 +123,61 @@ export function pixelScript(cfg: PixelScriptConfig): string {
     return h.toString(36);
   }
   /**
-   * Id do evento — DETERMINÍSTICO.
+   * ÂNCORA DO CARREGAMENTO — um valor por pageview, gerado uma vez.
    *
-   * Era \`nome + Date.now() + Math.random()\`, ou seja, um id novo a cada
-   * chamada. Isso tornava a deduplicação impossível por construção: nem o nosso
-   * servidor nem a Meta conseguiam reconhecer o mesmo evento duas vezes.
+   * Substitui os três ingredientes instáveis que o id usava antes
+   * (\`location.href\`, \`fbclid\` e um balde fixo de tempo). Medido em produção
+   * em 01/08/2026, os três divergiam de verdade entre dois POSTs do MESMO
+   * carregamento — e id diferente é linha duplicada no banco e evento contado
+   * duas vezes na Meta.
+   */
+  var ANCORA = Math.random().toString(36).slice(2) + Date.now().toString(36);
+  var ultimoDeAcao = {};
+  var JANELA_ACAO_MS = 1000;
+  /**
+   * Id do evento — DETERMINÍSTICO, e a âncora NÃO é global: é por evento.
    *
-   * Agora deriva do que identifica a AÇÃO: pixel, evento, página, visitante e
-   * uma janela de 10s. Duas cópias do script na mesma página, um reenvio, ou o
-   * mesmo clique contado duas vezes produzem o MESMO id — e viram um evento só.
+   * ## Por que o desenho é diferente para PageView e para os de ação
+   *
+   * | | PageView | Lead · AddToCart · InitiateCheckout |
+   * |---|---|---|
+   * | Quem dispara | o carregamento | o usuário |
+   * | Dois disparos no mesmo load significam | **a mesma visita** contada 2× | podem ser **duas intenções reais** |
+   * | Logo | deduplicar SEMPRE | deduplicar só se forem quase simultâneos |
+   *
+   * Deduplicar dois cliques em "comprar" separados por segundos apagaria uma
+   * intenção real do funil. Deduplicar dois PageView do mesmo load é
+   * exatamente o que se quer.
+   *
+   * ## O que saiu da chave, e por quê
+   *
+   * - **\`location.href\` → \`location.pathname\`.** Medido: o mesmo load
+   *   POSTou \`/checkout?qty=1\` e, 4 ms depois, \`/checkout?product=…&qty=1\`.
+   *   O caminho não muda; a querystring, sim. Manter o \`pathname\` preserva a
+   *   distinção entre rotas de uma SPA, que é o motivo de ele existir na chave.
+   * - **\`fbclid\` saiu.** Se o cookie ainda não foi lido na 1ª chamada e já foi
+   *   na 2ª, o id muda. A âncora já distingue visitantes — dois navegadores
+   *   nunca compartilham âncora.
+   * - **O balde de 10 s saiu.** Era \`Math.floor(Date.now()/10000)\`: FIXO, não
+   *   deslizante. Duas chamadas a 921 ms de distância caíram em baldes
+   *   diferentes só por cruzarem a fronteira (visto em produção).
+   *
+   * ⛔ **Aumentar o balde não era conserto** — só dilui a probabilidade e passa
+   * a juntar ações genuinamente distintas. O tempo tinha de SAIR da chave.
+   *
+   * ⚠️ Limite aceito: numa SPA que dispare PageView duas vezes para o MESMO
+   * \`pathname\` no mesmo carregamento (só a query mudando), os dois viram um.
+   * É o preço de consertar a causa 1, e é o lado certo de errar.
    */
   function eid(name) {
-    return name + "-" + hash([CONFIG, name, location.href, fbclid() || "", Math.floor(Date.now() / 10000)].join("|"));
+    if (name === "PageView") return name + "-" + hash([CONFIG, name, location.pathname, ANCORA].join("|"));
+    // Eventos de AÇÃO: janela DESLIZANTE, ancorada no primeiro disparo — nunca
+    // um balde fixo, que é o que criava a fronteira.
+    var agora = Date.now(), u = ultimoDeAcao[name];
+    if (u && agora - u.t <= JANELA_ACAO_MS) return u.id;
+    var id = name + "-" + hash([CONFIG, name, location.pathname, ANCORA, agora].join("|"));
+    ultimoDeAcao[name] = { id: id, t: agora };
+    return id;
   }
 
   function enviar(payload) {

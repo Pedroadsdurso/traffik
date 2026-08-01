@@ -78,47 +78,69 @@ if (idx.length === 0) {
   console.log(`  ${idx[0].indexdef}\n`);
 }
 
-// ── 2. Grupos com mais de uma linha para a mesma AÇÃO ───────────────────────
-// A "mesma ação" é (usuário, pixel, evento, url, fbclid) dentro da janela. Se
-// um grupo tem 2+ linhas, o `eventId` divergiu — e as colunas dizem em quê.
-const { rows: grupos } = await cliente.query(
-  `SELECT "userId", "pixelConfigId", event, url, fbclid,
-          count(*) AS n,
-          array_agg("eventId" ORDER BY timestamp) AS ids,
-          array_agg(timestamp ORDER BY timestamp) AS quando
-     FROM "PixelEvent"
-    WHERE timestamp > now() - ($1 || ' minutes')::interval
-      AND ($2::text IS NULL OR event = $2)
-      AND "eventId" IS NOT NULL
-    GROUP BY 1,2,3,4,5
-   HAVING count(*) > 1
-    ORDER BY max(timestamp) DESC
-    LIMIT $3`,
-  [String(minutos), eventoFiltro, limite],
+// ── 2. Pares CONSECUTIVOS da mesma ação, próximos no TEMPO ──────────────────
+//
+// 🔴 A primeira versão agrupava por (usuário, pixel, evento, url, fbclid) na
+// janela inteira e chamava tudo de duplicata. Isso juntava **todos os PageView
+// da mesma URL em 180 minutos** — e recarregar a página é ação legítima, não
+// duplo POST. Quem está construindo o site recarrega dezenas de vezes, e o
+// script acusava "CAUSA 3" em eventos a 17, 22 e 40 SEGUNDOS de distância.
+//
+// É o mesmo defeito que o aviso linha a linha já tinha: **falta de janela de
+// tempo**. Um diagnóstico que acusa comportamento normal é pior que nenhum.
+//
+// Agora usa `lag()` para olhar só pares CONSECUTIVOS da mesma ação, e só
+// quando estão a poucos segundos um do outro — que é a única distância em que
+// "mesmo carregamento" é uma explicação possível.
+const SEGUNDOS_MESMA_ACAO = Number(arg("--segundos", 5));
+
+const { rows: pares } = await cliente.query(
+  `WITH base AS (
+     SELECT "userId", "pixelConfigId", event, url, fbclid, "eventId", timestamp,
+            lag(timestamp) OVER j AS t_anterior,
+            lag("eventId")  OVER j AS id_anterior
+       FROM "PixelEvent"
+      WHERE timestamp > now() - ($1 || ' minutes')::interval
+        AND ($2::text IS NULL OR event = $2)
+        AND "eventId" IS NOT NULL
+     WINDOW j AS (PARTITION BY "userId","pixelConfigId",event,url,fbclid ORDER BY timestamp)
+   )
+   SELECT * FROM base
+    WHERE t_anterior IS NOT NULL
+      AND timestamp - t_anterior <= ($3 || ' seconds')::interval
+      AND id_anterior IS DISTINCT FROM "eventId"
+    ORDER BY timestamp DESC
+    LIMIT $4`,
+  [String(minutos), eventoFiltro, String(SEGUNDOS_MESMA_ACAO), limite],
 );
 
-if (grupos.length === 0) {
-  console.log("Nenhum grupo duplicado nesta janela (mesmo usuário + pixel + evento + url + fbclid).");
-  console.log("Se você viu duas linhas, elas diferem em `url` ou `fbclid` — veja a lista abaixo.\n");
+if (pares.length === 0) {
+  console.log(
+    `Nenhum par suspeito: não há duas linhas da MESMA ação (mesmo pixel, evento, url e fbclid)\n` +
+      `a menos de ${SEGUNDOS_MESMA_ACAO}s uma da outra com ids diferentes.\n\n` +
+      `⚠️ Recarregar a página gera eventos legítimos e distintos — eles NÃO entram aqui.\n` +
+      `   Se as suas duas linhas têm urls diferentes, elas aparecem na lista detalhada abaixo.\n`,
+  );
 } else {
-  console.log(`🔴 ${grupos.length} grupo(s) com a MESMA ação e ids diferentes:\n`);
-  for (const g of grupos) {
-    console.log(`  ${g.event}  ·  ${g.n} linhas  ·  pixel ${String(g.pixelConfigId).slice(0, 8)}…`);
-    console.log(`    url    : ${g.url ?? "(nulo)"}`);
-    console.log(`    fbclid : ${g.fbclid ?? "(nulo)"}`);
-    for (let i = 0; i < g.ids.length; i++) {
-      const t = new Date(g.quando[i]);
-      const balde = Math.floor(t.getTime() / 10000);
-      console.log(`    #${i + 1} ${g.ids[i]}   ${t.toISOString()}   balde10s=${balde}`);
-    }
-    // url e fbclid são iguais por construção (estão no GROUP BY). Então só
-    // sobra o balde — e o veredito é direto.
-    const baldes = new Set(g.quando.map((t) => Math.floor(new Date(t).getTime() / 10000)));
+  console.log(`🔴 ${pares.length} par(es) suspeito(s) — mesma ação, a menos de ${SEGUNDOS_MESMA_ACAO}s, ids diferentes:\n`);
+  for (const p of pares) {
+    const t2 = new Date(p.timestamp);
+    const t1 = new Date(p.t_anterior);
+    const ms = t2 - t1;
+    const b1 = Math.floor(t1.getTime() / 10000);
+    const b2 = Math.floor(t2.getTime() / 10000);
+    console.log(`  ${p.event}  ·  Δ ${ms} ms  ·  pixel ${String(p.pixelConfigId).slice(0, 8)}…`);
+    console.log(`    url    : ${p.url ?? "(nulo)"}`);
+    console.log(`    fbclid : ${p.fbclid ?? "(nulo)"}`);
+    console.log(`    #1 ${p.id_anterior}   ${t1.toISOString()}   balde10s=${b1}`);
+    console.log(`    #2 ${p.eventId}       ${t2.toISOString()}   balde10s=${b2}`);
+    // url e fbclid são iguais por construção (estão na PARTITION). Só sobra o
+    // balde — ou o CONFIG, se nem o balde divergiu.
     console.log(
-      baldes.size > 1
-        ? "    → CAUSA 3: os POSTs cruzaram a fronteira do balde de 10s. Bug nosso.\n"
+      b1 !== b2
+        ? "    → 🔴 CAUSA 3: cruzaram a fronteira do balde de 10s. Bug NOSSO.\n"
         : "    → mesmo balde e mesmos ingredientes, e ainda assim ids diferentes:\n" +
-            "      investigue o CONFIG (dois pixels na página?) — é o 5º ingrediente.\n",
+            "      suspeite do CONFIG — duas cópias do script na página?\n",
     );
   }
 }
