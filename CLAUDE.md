@@ -5026,6 +5026,34 @@ para dizer a **consequência**:
 > `workspaceId` por prop, vindo de `useTraffik().workspaceAtiva` na página, e a
 > prop nas dependências.
 
+> ### ⛔⛔ TELA STALE QUE EXIBE NÚMERO É RUIM. QUE EXIBE ALGO COPIÁVEL É ARMADILHA.
+>
+> Esta é a distinção que importa ao priorizar, e os três casos desta auditoria
+> caem dos dois lados de uma linha bem nítida:
+>
+> | | Checklist · Pixel | **UTMs** |
+> |---|---|---|
+> | O que a tela mostrava | informação desatualizada | **um artefato para copiar** |
+> | Onde o erro morre | ao recarregar a página | **no site do cliente, permanente** |
+> | Quem descobre | quem olhar de novo | **ninguém** — só o relatório, semanas depois |
+> | Reversível? | sozinho | só reinstalando, e é preciso SABER que precisa |
+>
+> Ler "4 de 5 prontos" da área errada custa uma decisão ruim que o próximo
+> carregamento corrige. Copiar o script da área errada, colar no site e sair
+> carimbando cliques na operação errada **não se corrige sozinho nunca**: o dado
+> entra errado no banco, com aparência perfeitamente normal, e a tela que
+> mentiu já foi fechada.
+>
+> **Regra ao triar este defeito:** pergunte o que a tela ENTREGA, não o que ela
+> exibe. Se o usuário leva alguma coisa dali para fora — script, snippet, URL de
+> webhook, chave de API, id — o componente stale deixa de ser incômodo e vira
+> **fonte de dado errado permanente**, e sobe de prioridade na hora.
+>
+> ⚠️ As telas que entregam artefato hoje: **UTMs** (script por área) · **Pixel**
+> (script com o `PixelConfig.id`) · **Webhooks** (URL do gateway, chave de API).
+> Toda uma delas tem de reagir à troca de área — as três já reagem, mas é aqui
+> que a próxima regressão custa caro.
+
 ### 🔎 Auditoria do padrão — 3 casos, todos corrigidos em 01/08/2026
 
 Varredura de **todo** `useEffect` que busca dado nas views:
