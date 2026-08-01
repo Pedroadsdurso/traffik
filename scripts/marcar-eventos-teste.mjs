@@ -30,7 +30,7 @@ import "dotenv/config";
 import pg from "pg";
 
 import { exigirBancoDeDesenvolvimento } from "./guard-db.mjs";
-import { ambienteDaUrl, ROTULO_AMBIENTE } from "../src/lib/pixel/ambiente.ts";
+import { ambienteDaUrl, familiasDePreview, ROTULO_AMBIENTE } from "../src/lib/pixel/ambiente.ts";
 
 const args = process.argv.slice(2);
 const arg = (n, d) => { const i = args.indexOf(n); return i >= 0 ? args[i + 1] : d; };
@@ -101,16 +101,57 @@ for (const r of rows) {
   if (r.event === "InitiateCheckout") g.ic++;
 }
 
+/**
+ * ## Segunda passada: previews que só se revelam EM CONJUNTO
+ *
+ * ⛔ **Seção SEPARADA de propósito.** A primeira lista sai de formatos
+ * reservados pela plataforma — é contrato. Esta sai de um padrão observado nos
+ * SEUS dados, e é a única parte deste script que pode errar de verdade.
+ * Misturar as duas faria a confiança da primeira emprestar credibilidade à
+ * segunda.
+ *
+ * `--sem-repeticao` pula esta parte inteira.
+ */
+const semRepeticao = args.includes("--sem-repeticao");
+const hostDe = (u) => { try { return new URL(u).hostname.toLowerCase(); } catch { return null; } };
+const porRepeticao = new Map(); // id → host
+const familias = semRepeticao
+  ? []
+  : familiasDePreview(rows.filter((r) => !porId.has(r.id)).map((r) => hostDe(r.url)).filter(Boolean));
+const hostsSuspeitos = new Set(familias.flatMap((f) => f.hosts));
+if (hostsSuspeitos.size) {
+  for (const r of rows) {
+    if (porId.has(r.id)) continue;
+    const h = hostDe(r.url);
+    if (h && hostsSuspeitos.has(h)) porRepeticao.set(r.id, h);
+  }
+}
+
 console.log(`  ${bold("A MARCAR")} — ${porUrl.size} URL(s), ${porId.size} evento(s)\n`);
 if (porUrl.size === 0) console.log(dim("    (nenhuma)"));
 for (const [url, g] of [...porUrl].sort((a, b) => b[1].n - a[1].n)) {
   console.log(`    ${String(g.n).padStart(5)} ev ${dim(`(${g.ic} IC)`)}  ${amb(ROTULO_AMBIENTE[g.ambiente].padEnd(24))} ${url}`);
 }
 
+if (familias.length) {
+  console.log(`\n  ${amb(bold("SUGERIDO POR REPETIÇÃO — confira uma a uma"))}\n`);
+  console.log(dim("    Não é formato reservado: é um padrão observado NOS SEUS DADOS."));
+  console.log(dim("    N hosts com mesmo prefixo e mesmo escopo, diferindo só num segmento"));
+  console.log(dim("    com cara de hash. Nenhum site de produção tem vários domínios assim."));
+  console.log(dim("    Use --sem-repeticao para ignorar esta seção inteira.\n"));
+  for (const f of familias) {
+    console.log(`    padrão: ${amb(f.padrao)}   ${dim(`(${f.hosts.length} hosts)`)}`);
+    for (const h of f.hosts) {
+      const n = [...porRepeticao.values()].filter((x) => x === h).length;
+      console.log(`      ${String(n).padStart(4)} ev  ${h}`);
+    }
+  }
+}
+
 // As que FICAM — a outra metade da conferência: "faltou alguma?".
 const ficam = new Map();
 for (const r of rows) {
-  if (porId.has(r.id)) continue;
+  if (porId.has(r.id) || porRepeticao.has(r.id)) continue;
   const k = r.url ?? "(sem url — evento do servidor)";
   ficam.set(k, (ficam.get(k) ?? 0) + 1);
 }
@@ -128,7 +169,7 @@ const ic = async (extra) => {
       WHERE "userId"=$1 AND event='InitiateCheckout' ${extra}`, [userId]);
   return r.n;
 };
-const idsMarcar = [...porId.keys()];
+const idsMarcar = [...porId.keys(), ...porRepeticao.keys()];
 const antes = await ic("");
 const depois = idsMarcar.length ? await ic(`AND NOT (id = ANY('{${idsMarcar.join(",")}}'::text[]))`) : antes;
 
@@ -148,8 +189,10 @@ if (!aplicar) {
 }
 
 let tocados = 0;
-for (const [ambiente] of [...new Set([...porId.values()])].map((a) => [a])) {
-  const ids = idsMarcar.filter((id) => porId.get(id) === ambiente);
+// A repetição sempre grava `preview` — é o que ela detecta.
+const ambienteDe = (id) => porId.get(id) ?? "preview";
+for (const ambiente of [...new Set(idsMarcar.map(ambienteDe))]) {
+  const ids = idsMarcar.filter((id) => ambienteDe(id) === ambiente);
   if (!ids.length) continue;
   const r = await c.query(`UPDATE "PixelEvent" SET ambiente=$2 WHERE "userId"=$1 AND id = ANY($3)`, [userId, ambiente, ids]);
   tocados += r.rowCount;

@@ -101,6 +101,19 @@ export const FORMATOS: FormatoDeTeste[] = [
     testar: (h) => h.endsWith(".vercel.app") && h.includes("-git-"),
   },
   {
+    ambiente: "local",
+    // RFC 2606 e RFC 6761 RESERVAM estes nomes para documentação e teste. A
+    // IANA garante que nunca são delegados — não existe loja em `example.com`.
+    // É contrato, como os formatos de plataforma, não palpite.
+    porque: "Domínio reservado pela IANA para documentação e teste (RFC 2606/6761).",
+    testar: (h) =>
+      h === "example.com" || h === "example.org" || h === "example.net" ||
+      h.endsWith(".example.com") || h.endsWith(".example.org") || h.endsWith(".example.net") ||
+      h === "example" || h.endsWith(".example") ||
+      h === "test" || h.endsWith(".test") ||
+      h === "invalid" || h.endsWith(".invalid"),
+  },
+  {
     ambiente: "tunel",
     porque: "Túnel de desenvolvimento (ngrok / localtunnel / cloudflared).",
     testar: (h) =>
@@ -148,3 +161,102 @@ export const ROTULO_AMBIENTE: Record<Ambiente, string> = {
   local: "máquina local",
   tunel: "túnel de desenvolvimento",
 };
+
+// ─────────────── Detecção por REPETIÇÃO (só no marcador, nunca ao vivo) ───────────────
+
+/**
+ * # Previews que só se revelam EM CONJUNTO
+ *
+ * O preview de hash aleatório da Vercel
+ * (`<projeto>-<hash>-<escopo>.vercel.app`) é indistinguível, **numa URL
+ * sozinha**, de um projeto legítimo com hífens (`loja-verao-brasil.vercel.app`).
+ * Por isso ele ficou de fora de `FORMATOS`.
+ *
+ * Mas o dado real trouxe o contrapadrão: **quatro** hosts com o mesmo prefixo
+ * (`moldes-`) e o mesmo escopo (`-noahvivaryder3s-projects.vercel.app`),
+ * diferindo só num segmento do meio. Nenhum site de produção tem quatro
+ * domínios assim. **O sinal não é o formato de uma URL — é a repetição.**
+ *
+ * > ### ⛔ ISTO NÃO RODA NA INGESTÃO, E NÃO PODE RODAR
+ * > A classificação de um evento depende da EXISTÊNCIA de outros. No instante
+ * > do primeiro POST não há repetição para observar — logo:
+ * >
+ * > 1. não dá para usar isto para cortar o envio à CAPI (a decisão é tomada
+ * >    antes de a evidência existir);
+ * > 2. os primeiros eventos de uma família nunca seriam marcados ao vivo.
+ * >
+ * > É uma regra **retroativa**, e o lugar dela é o `eventos:marcar` — que
+ * > mostra o que vai fazer e **espera aprovação**. É essa confirmação que torna
+ * > uma regra ambígua segura: um falso positivo é pego pelo usuário, não pela
+ * > produção.
+ */
+export interface FamiliaDePreview {
+  /** Os hosts do grupo. */
+  hosts: string[];
+  /** Prefixo e sufixo compartilhados, para a tela mostrar o que casou. */
+  padrao: string;
+}
+
+/** Maior prefixo comum entre as strings. */
+function prefixoComum(vs: string[]): number {
+  if (vs.length < 2) return vs[0]?.length ?? 0;
+  let n = 0;
+  while (n < vs[0]!.length && vs.every((v) => v[n] === vs[0]![n])) n++;
+  return n;
+}
+
+/**
+ * Parece hash gerado, e não palavra?
+ *
+ * ⚠️ O teste decisivo NÃO é "alfanumérico curto" — `cliente1`, `cliente2`,
+ * `cliente3` passariam nisso, e um multi-tenant legítimo seria marcado como
+ * teste. O que separa os dois é o **prefixo comum**: hashes de verdade
+ * (`ahuhuv5fb`, `ralhb1gzf`, `ppxn74d34`, `4i5mg0sx2`) não compartilham
+ * começo; `cliente1..3` compartilham sete caracteres.
+ */
+function pareceHashes(valores: string[]): boolean {
+  if (valores.some((v) => !/^[a-z0-9]{6,14}$/.test(v) || !/\d/.test(v))) return false;
+  return prefixoComum(valores) <= 1;
+}
+
+/** Mínimo de hosts distintos para a repetição valer como evidência. */
+const MINIMO_DE_HOSTS = 3;
+
+/**
+ * Agrupa hosts que diferem em UM único segmento com cara de hash.
+ *
+ * ⚠️ Subdomínio legítimo (`app.loja.com`, `blog.loja.com`) **não casa**: o
+ * padrão ali é outro nível de DNS, não um segmento hifenizado do mesmo rótulo,
+ * e `app`/`blog` não passam no teste de hash.
+ */
+export function familiasDePreview(hosts: string[]): FamiliaDePreview[] {
+  const unicos = [...new Set(hosts.map((h) => h.toLowerCase()))];
+  /** chave "seg|*|seg" → hosts */
+  const grupos = new Map<string, { hosts: string[]; valores: string[]; i: number; partes: string[] }>();
+
+  for (const host of unicos) {
+    const partes = host.split("-");
+    // Menos de 3 segmentos não tem "meio" — e `loja-verao.vercel.app` não deve
+    // entrar em nenhum agrupamento.
+    if (partes.length < 3) continue;
+    // Só posições do MEIO: o primeiro é o projeto e o último carrega o domínio.
+    for (let i = 1; i < partes.length - 1; i++) {
+      const chave = partes.map((p, j) => (j === i ? "*" : p)).join("-");
+      if (!grupos.has(chave)) grupos.set(chave, { hosts: [], valores: [], i, partes });
+      const g = grupos.get(chave)!;
+      g.hosts.push(host);
+      g.valores.push(partes[i]!);
+    }
+  }
+
+  const saida: FamiliaDePreview[] = [];
+  const jaUsado = new Set<string>();
+  for (const [chave, g] of grupos) {
+    if (g.hosts.length < MINIMO_DE_HOSTS) continue;
+    if (!pareceHashes(g.valores)) continue;
+    if (g.hosts.some((h) => jaUsado.has(h))) continue;
+    for (const h of g.hosts) jaUsado.add(h);
+    saida.push({ hosts: g.hosts, padrao: chave });
+  }
+  return saida;
+}

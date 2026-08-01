@@ -12,7 +12,7 @@
  * sobre o hospedeiro". Se algum dia `site.netlify.app` passar a ser detectado,
  * a regra virou heurística e está errada.
  */
-import { ambienteDaUrl } from "../src/lib/pixel/ambiente.ts";
+import { ambienteDaUrl, familiasDePreview } from "../src/lib/pixel/ambiente.ts";
 
 let ok = 0;
 const falhas = [];
@@ -73,6 +73,49 @@ eh(undefined, null);
 eh("", null);
 eh("nao-e-uma-url", null);
 eh("javascript:void(0)", null);
+
+console.log("\n6) Domínio reservado pela IANA (RFC 2606/6761)");
+eh("https://example.com/", "local");
+eh("https://loja.example.com/checkout", "local");
+eh("https://algo.test/", "local");
+eh("https://algo.invalid/", "local");
+// ⚠️ Contém "example" mas é domínio real e delegável.
+eh("https://example.com.br/", null);
+eh("https://meuexample.com/", null);
+
+console.log("\n7) REPETIÇÃO — previews da Vercel que só aparecem em conjunto");
+function fam(nome, hosts, esperado) {
+  const r = familiasDePreview(hosts).flatMap((f) => f.hosts).sort();
+  const a = JSON.stringify(r), b = JSON.stringify([...esperado].sort());
+  if (a === b) { ok++; console.log(`  ok  ${nome}`); }
+  else { falhas.push(nome); console.log(`  FALHA  ${nome}\n        obtido:   ${a}\n        esperado: ${b}`); }
+}
+
+// Os 4 hosts REAIS do usuário.
+const reais = [
+  "moldes-ahuhuv5fb-noahvivaryder3s-projects.vercel.app",
+  "moldes-ralhb1gzf-noahvivaryder3s-projects.vercel.app",
+  "moldes-ppxn74d34-noahvivaryder3s-projects.vercel.app",
+  "moldes-4i5mg0sx2-noahvivaryder3s-projects.vercel.app",
+];
+fam("os 4 previews reais viram uma família", reais, reais);
+
+// 🔴 O contra-exemplo que a regra existe para NÃO pegar.
+fam("multi-tenant legítimo NÃO casa (prefixo comum nos segmentos)",
+  ["loja-cliente1-br.vercel.app", "loja-cliente2-br.vercel.app", "loja-cliente3-br.vercel.app"], []);
+
+fam("2 hosts não bastam — o mínimo é 3", reais.slice(0, 2), []);
+
+fam("projeto legítimo com hífens, sozinho", ["loja-verao-brasil.vercel.app"], []);
+
+fam("subdomínios legítimos não casam",
+  ["app.loja.com", "blog.loja.com", "conta.loja.com", "ajuda.loja.com"], []);
+
+fam("segmentos sem dígito (parecem palavras) não casam",
+  ["loja-verao-br.vercel.app", "loja-outono-br.vercel.app", "loja-inverno-br.vercel.app"], []);
+
+fam("produção do usuário fica de fora mesmo com os previews juntos",
+  [...reais, "moldes.tiarosi.online", "sigmatoolsd.netlify.app"], reais);
 
 console.log(
   falhas.length

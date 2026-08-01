@@ -5460,7 +5460,66 @@ e a que fica) e `--limpar --aplicar` desfaz.
 > deveria, e o erro era dela. Sem ela, o script teria dito "pronto" e ninguém
 > saberia se o funil mudou.
 
-**Testado:** `npm run test:ambiente` — **33 asserções**, a maioria do lado
+### 🔁 Previews que só se revelam EM CONJUNTO — regra de REPETIÇÃO
+
+O preview de hash aleatório da Vercel ficou de fora de `FORMATOS` porque
+`<projeto>-<hash>-<escopo>.vercel.app` é indistinguível, **numa URL sozinha**,
+de um projeto legítimo com hífens. O dado real do usuário trouxe o
+contrapadrão:
+
+```
+moldes-ahuhuv5fb-noahvivaryder3s-projects.vercel.app
+moldes-ralhb1gzf-noahvivaryder3s-projects.vercel.app
+moldes-ppxn74d34-noahvivaryder3s-projects.vercel.app
+moldes-4i5mg0sx2-noahvivaryder3s-projects.vercel.app
+```
+
+**Quatro** hosts, mesmo prefixo, mesmo escopo, diferindo só num segmento do
+meio. Nenhum site de produção tem quatro domínios assim. **O sinal não é o
+formato de UMA url — é a repetição.**
+
+> ### ⛔ ISTO NÃO RODA NA INGESTÃO, E NÃO PODE RODAR
+> A classificação de um evento depende da EXISTÊNCIA de outros. No primeiro
+> POST não há repetição para observar, então:
+> 1. **não dá para cortar o envio à CAPI com esta regra** — a decisão é tomada
+>    antes de a evidência existir;
+> 2. os primeiros eventos de uma família nunca seriam marcados ao vivo.
+>
+> É regra **retroativa**, e o lugar dela é o `eventos:marcar`, que mostra o que
+> vai fazer e **espera aprovação**. É a confirmação que torna uma regra ambígua
+> segura: um falso positivo é pego pelo usuário, não pela produção. Por isso ela
+> sai numa **seção separada** da lista de formatos reservados — misturar faria a
+> confiança de uma emprestar credibilidade à outra. `--sem-repeticao` pula.
+
+**O teste decisivo NÃO é "alfanumérico curto".** `cliente1`, `cliente2`,
+`cliente3` passariam nisso e um multi-tenant legítimo seria marcado. O que
+separa os dois é o **prefixo comum**: hashes de verdade não compartilham começo
+(`a`/`r`/`p`/`4`), `cliente1..3` compartilham sete caracteres. `pareceHashes()`
+exige `[a-z0-9]{6,14}`, ao menos um dígito, e **prefixo comum ≤ 1**.
+
+Mais: mínimo de **3 hosts**, e só segmentos do MEIO (o primeiro é o projeto, o
+último carrega o domínio).
+
+### 🌐 `example.com` — é RFC, não palpite
+
+Investigado: **não vem de código nosso** — as únicas ocorrências de
+`example.com` no repositório são e-mails em fixtures, e o testador de payload
+nunca grava `PixelEvent`. Origem provável: requisição manual do próprio usuário
+ao endpoint público.
+
+Entrou em `FORMATOS` mesmo assim, e por um motivo forte: **RFC 2606 e RFC 6761
+RESERVAM** `example.com/.org/.net`, `.test`, `.invalid` e `.example` — a IANA
+garante que nunca são delegados. Não existe loja ali. É contrato, como os
+formatos de plataforma.
+
+> ⚠️ `example.com.br` e `meuexample.com` **não casam** — são domínios reais e
+> delegáveis. Estão no teste.
+
+> 💡 **Como saber se um evento veio de script instalado ou de curl:** o script
+> manda `espelho` e `det` em todo POST. Linha com os dois NULOS não veio de um
+> navegador com o snippet — veio de requisição manual.
+
+**Testado:** `npm run test:ambiente` — **46 asserções**, a maioria do lado
 *"NÃO é teste"*: `sigmatoolsd.netlify.app` (produção do usuário),
 `minha-loja.netlify.app`, `loja-verao-brasil.vercel.app`,
 `loja.netlify.app/promo--relampago` (o `--` depois do domínio),
