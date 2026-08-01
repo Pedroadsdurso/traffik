@@ -8,6 +8,21 @@ import { Icone } from "../../ui/Icone";
 import { Modal } from "../../ui/Modal";
 
 export type Nivel = "campaign" | "adset" | "ad";
+
+/**
+ * Como cada nível se chama na tela. Mora aqui porque é aqui que `Nivel` mora, e
+ * o `AdsManagerView` importa daqui em vez de manter a segunda cópia.
+ *
+ * ⚠️ Existe porque o diálogo de confirmação dizia `"1 item(ns) como excluídos"`
+ * — plural entre parênteses e concordância errada, na tela mais perigosa do
+ * produto (a Meta não desfaz exclusão). "item" também não é o vocabulário de
+ * ninguém: o que se exclui é campanha, conjunto ou anúncio.
+ */
+export const NOME_DO_NIVEL: Record<Nivel, { um: string; varios: string; genero: "a" | "o" }> = {
+  campaign: { um: "campanha", varios: "campanhas", genero: "a" },
+  adset: { um: "conjunto", varios: "conjuntos", genero: "o" },
+  ad: { um: "anúncio", varios: "anúncios", genero: "o" },
+};
 export type Acao = "activate" | "pause" | "budget" | "bidcap" | "duplicate" | "delete";
 
 export interface AlvoSelecionado {
@@ -195,13 +210,24 @@ export function AdsActionBar({
               <p style={sx("margin:0;font-size:13px")}>
                 {confirmar.acao === "delete" ? (
                   <>
-                    Isto marca <strong>{n} item(ns)</strong> como excluídos <strong>na sua conta do Facebook</strong>.
+                    Isto marca{" "}
+                    <strong>
+                      {plural(n, NOME_DO_NIVEL[nivel].um, NOME_DO_NIVEL[nivel].varios)}
+                    </strong>{" "}
+                    como excluíd{NOME_DO_NIVEL[nivel].genero}
+                    {n === 1 ? "" : "s"} <strong>na sua conta do Facebook</strong>.
                     A Meta não oferece desfazer — a ação é <strong>irreversível</strong>.
                   </>
                 ) : confirmar.acao === "duplicate" ? (
                   <>Serão duplicadas <strong>{plural(n, "campanha", "campanhas")}</strong>, com conjuntos e anúncios.</>
                 ) : (
-                  <>A ação será aplicada a <strong>{n} item(ns)</strong> direto no Facebook.</>
+                  <>
+                    A ação será aplicada a{" "}
+                    <strong>
+                      {plural(n, NOME_DO_NIVEL[nivel].um, NOME_DO_NIVEL[nivel].varios)}
+                    </strong>{" "}
+                    direto no Facebook.
+                  </>
                 )}
               </p>
 

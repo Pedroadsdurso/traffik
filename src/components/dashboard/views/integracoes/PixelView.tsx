@@ -405,7 +405,7 @@ export function PixelView() {
                     <span>
                       {px.metaPixels.length === 0
                         ? "Nenhum pixel da Meta — os eventos não chegam ao Facebook."
-                        : "Falta conectar: sem token, os eventos não chegam ao Facebook."}
+                        : "Falta conectar — os eventos não chegam ao Facebook."}
                     </span>
                   </div>
                 )}
@@ -453,7 +453,7 @@ export function PixelView() {
           <>
             <button className="btn btn-secondary" type="button" onClick={() => setModalOpen(false)}>Cancelar</button>
             <button className="btn btn-primary" type="button" onClick={save} disabled={busy || !temPixel}>
-              {busy ? "Salvando…" : "Salvar dados"}
+              {busy ? "Salvando…" : "Salvar"}
             </button>
           </>
         }

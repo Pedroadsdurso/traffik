@@ -293,7 +293,7 @@ function CardRegra({
         <div style={sx(`display:flex;gap:8px;align-items:flex-start;font-size:12px;color:${AMARELO}`)}>
           <Icone nome="aviso" tamanho={15} cor="aviso" />
           <span>
-            Aumento <strong>sem teto de orçamento</strong> — o motor recusa esta ação por segurança.
+            Aumento <strong>sem teto de orçamento</strong> — a Traffik recusa esta ação por segurança.
             Edite a regra e informe o teto para ela voltar a agir.
           </span>
         </div>

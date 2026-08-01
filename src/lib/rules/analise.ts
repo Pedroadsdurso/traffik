@@ -166,7 +166,10 @@ export function analisarCondicoes(conds: RuleCondition[]): AvisoCondicao[] {
     avisos.push({
       gravidade: todas ? "sempre" : "atencao",
       texto: todas
-        ? `Todas as condições são sempre verdadeiras (${ROTULO[sempre[0]!.metrica]} nunca fica abaixo de zero). A regra vai agir sobre TODAS as entidades do escopo.`
+        // ⚠️ "entidades" é o nome interno do que o motor carrega. Quem lê a tela
+        // pensa em campanha, conjunto e anúncio — e o nível não chega aqui, então
+        // a frase honesta é a genérica.
+        ? `Todas as condições são sempre verdadeiras (${ROTULO[sempre[0]!.metrica]} nunca fica abaixo de zero). A regra vai agir sobre TUDO que estiver no escopo escolhido.`
         : `${sempre.map((c) => `${ROTULO[c.metrica]} ${c.operador} ${c.valor}`).join(", ")} é sempre verdadeira e não filtra nada.`,
     });
   }

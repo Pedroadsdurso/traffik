@@ -288,7 +288,8 @@ function WebhookLogsCard() {
           <div className="card-kicker">Webhooks</div>
           <div className="card-title">Teste de Webhook</div>
           <p className="card-body" style={sx("margin:4px 0 0")}>
-            Últimos payloads recebidos, exatamente como chegaram — inclusive os recusados. Clique para ver o corpo cru.
+            Tudo que os seus gateways enviaram, exatamente como chegou — inclusive o que foi
+            recusado. Clique para ver o conteúdo.
           </p>
         </div>
         <button className="btn btn-secondary" type="button" onClick={load} disabled={busy} style={sx("white-space:nowrap")}>
@@ -308,7 +309,7 @@ function WebhookLogsCard() {
 
       {logs.length === 0 ? (
         <p className="card-body text-muted" style={sx("margin:var(--space-3) 0 0")}>
-          Nenhum payload recebido ainda. Assim que o gateway disparar um evento, ele aparece aqui.
+          Nada recebido ainda. Assim que o gateway enviar um evento, ele aparece aqui.
         </p>
       ) : (
         <div style={sx("display:flex;flex-direction:column;gap:6px;margin-top:var(--space-3)")}>
@@ -533,15 +534,51 @@ function ChecklistCard() {
 
 // ───────────────────────── View ─────────────────────────
 
+/**
+ * ⚠️ `min-width:0` não é enfeite. Item de grid nasce com mínimo = conteúdo, e
+ * esta coluna guarda o `<pre>` do payload cru e a URL longa do Teste de
+ * Tracking — sem isso, uma linha comprida estoura o track e cria rolagem
+ * horizontal na página inteira (a mesma armadilha documentada em `FeesView`).
+ */
+const COLUNA = "display:flex;flex-direction:column;gap:var(--space-3);min-width:0";
+
+function TituloColuna({ children }: { children: string }) {
+  return (
+    <div
+      className="text-muted"
+      style={sx("font-size:11px;text-transform:uppercase;letter-spacing:.08em;font-weight:600")}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * ## Duas colunas com significado, não a lista cortada ao meio
+ *
+ * Esquerda responde **"como está agora?"** — os três cards apenas LEEM o que já
+ * aconteceu (o que está instalado, os espelhos que saíram, os payloads que
+ * chegaram). Direita é **"testar agora"**: nos três você fornece alguma coisa e
+ * a resposta vem do serviço de verdade.
+ *
+ * A divisão também equilibra a altura: as listas que crescem sem teto (20 logs
+ * de webhook, um detalhamento por evento) ficam todas de um lado só.
+ */
 export function TestesView() {
   return (
-    <div style={sx("display:flex;flex-direction:column;gap:var(--space-3);max-width:920px")}>
-      <ChecklistCard />
-      <PixelTestCard />
-      <EspelhoCard />
-      <WebhookLogsCard />
-      <TrackingTestCard />
-      <TestadorPayloadCard />
+    <div style={sx("display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:var(--space-4);align-items:start")}>
+      <div style={sx(COLUNA)}>
+        <TituloColuna>Como está agora</TituloColuna>
+        <ChecklistCard />
+        <EspelhoCard />
+        <WebhookLogsCard />
+      </div>
+      <div style={sx(COLUNA)}>
+        <TituloColuna>Testar agora</TituloColuna>
+        <PixelTestCard />
+        <TrackingTestCard />
+        <TestadorPayloadCard />
+      </div>
     </div>
   );
 }

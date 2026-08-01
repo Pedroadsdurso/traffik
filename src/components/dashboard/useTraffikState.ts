@@ -1582,7 +1582,7 @@ export function useTraffikState(
           setS((st) => ({
             ...st,
             syncBusy: false,
-            syncResult: `Sincronizado: ${json.campaigns} campanhas, ${json.ads} anúncios, ${json.metrics} dias de métricas${json.errors?.length ? ` (${json.errors.length} erro(s))` : ""}.`,
+            syncResult: `Sincronizado: ${json.campaigns} campanhas, ${json.ads} anúncios, ${json.metrics} dias de métricas${json.errors?.length ? ` (${plural(json.errors.length, "erro", "erros")})` : ""}.`,
             refreshKey: st.refreshKey + 1,
           }));
         } else {
@@ -1870,7 +1870,7 @@ export function useTraffikState(
         if (res.ok) {
           // Recarrega as regras para trazer os logs novos.
           const fresh = await listRules(s.workspaceAtiva);
-          setS((st) => ({ ...st, ruleRunBusy: false, rules: fresh, ruleRunResult: `${json.evaluated} regra(s) avaliada(s), ${json.acted} com ação.` }));
+          setS((st) => ({ ...st, ruleRunBusy: false, rules: fresh, ruleRunResult: `${plural(json.evaluated, "regra avaliada", "regras avaliadas")}, ${json.acted} com ação.` }));
         } else {
           set({ ruleRunBusy: false, ruleRunResult: json.error ?? "Falha ao executar." });
         }

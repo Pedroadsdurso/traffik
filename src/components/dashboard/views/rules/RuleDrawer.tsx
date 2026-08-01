@@ -576,8 +576,8 @@ export function RuleDrawer({
                 </p>
               )}
               <p className="text-muted" style={sx("margin:0;font-size:11px;line-height:1.4")}>
-                Arquivados e excluídos ficam de fora do escopo, como no motor. A janela de
-                horário e o limite diário não entram nesta conta.
+                Arquivados e excluídos ficam de fora, igual a quando a regra rodar de verdade.
+                A janela de horário e o limite diário não entram nesta conta.
               </p>
             </div>
           )}
@@ -597,7 +597,7 @@ export function RuleDrawer({
                   ? "Percentual sobre o GASTO do período de cálculo."
                   : "Valor absoluto, em reais."
                 : d.unidade === "%"
-                  ? "Percentual sobre o orçamento atual da entidade."
+                  ? "Percentual sobre o orçamento atual."
                   : "Valor absoluto somado ou subtraído."
             }
           >
@@ -650,7 +650,7 @@ export function RuleDrawer({
               />
               {tetoFaltando && (
                 <div style={sx("font-size:11.5px;color:#ef4444")}>
-                  Informe o teto — sem ele o motor recusaria o aumento e a regra nunca agiria.
+                  Informe o teto — sem ele a Traffik recusa o aumento e a regra nunca age.
                 </div>
               )}
             </Campo>

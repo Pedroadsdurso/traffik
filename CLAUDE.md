@@ -4734,11 +4734,46 @@ Inclui os dois casos confirmados:
   na tela**. A auditoria feita deu "0 de 23", mas só prova que não há transbordo
   **naquele estado de dados**.
 
-**(e) Espaço mal aproveitado nas abas** — Webhooks, UTMs, Áreas, Regras.
+**(e) Espaço mal aproveitado nas abas** — ✅ **FEITO.** Webhooks, UTMs, Taxas e
+Pixel em 30/07/2026; **Testes e Notificações em 31/07/2026** (ver a seção
+própria). Áreas e Regras **não têm restrição de largura** — o item da fila
+estava desatualizado.
 
-> ⚠️ Webhooks e UTMs foram refeitas em 30/07/2026 (ver "Aproveitamento do espaço
-> nas 4 telas"). **Confira o estado atual antes de reabrir** — o que sobra
-> provavelmente é Áreas e Regras.
+**(g) 🔴 REGRAS EM DUAS REGIÕES — prioridade ACIMA do (f)** *(decidido em
+31/07/2026)*
+
+Herdar da gaveta do Pixel reformada as duas coisas que transferem, e só elas:
+
+1. **Separação por região, com selo** — o análogo do `⟳ muda o script` × `⚡ vale
+   na hora`:
+
+   | Região | Selo |
+   |---|---|
+   | Ação, teto de orçamento, escopo (contas/produtos/nível) | **mexe na sua conta do Facebook** |
+   | Período de cálculo, frequência, intervalo de execução, limite diário | **só decide quando roda** |
+
+2. **Esconder no avançado** o que tem padrão sensato: intervalo de execução,
+   limite diário e período de cálculo. De ~11 controles visíveis para ~5 (nome +
+   escopo + condição + ação).
+
+> ### 🔴 Por que isto vale MAIS que na gaveta do Pixel
+> Lá o pior caso de misturar as regiões era **script defasado**. Aqui um dos
+> grupos **move dinheiro real** — pausa campanha e altera orçamento sozinho, de
+> madrugada — e hoje os dois estão **intercalados** na mesma gaveta.
+
+> ### ⛔ NÃO invente uma pergunta única aqui
+> A terceira ideia da gaveta do Pixel — *uma pergunta em vez de vinte escolhas* —
+> **não transfere**, e isso foi avaliado e recusado em 31/07/2026. Ela funciona lá
+> porque existe um caso comum de verdade (infoprodutor com o pixel do Facebook já
+> na página) que deriva os demais campos. Numa regra não existe caso comum: a
+> escolha da ação **é** a decisão. Um preset aqui inventaria uma pergunta, que é o
+> oposto do objetivo.
+>
+> Pelo mesmo motivo isso não vale para as outras telas: Webhooks já é montada do
+> registro, Áreas já foi reduzida a três campos na Sessão 3, e Notificações são
+> booleanos independentes — lá o que faltava era tornar visível a dependência
+> (com os dois alertas desligados, os quatro "Exibir na notificação" não aparecem
+> em lugar nenhum), e isso já foi acrescentado.
 
 **(f) Camada didática** — estados vazios que ensinam, indicador de progresso de
 configuração, tooltips ⓘ nas métricas.
@@ -4767,6 +4802,38 @@ desempata — comportamento correto, mas silencioso.
 | `/api/cron/manutencao` | rota completa, **nunca agendada** — rodou zero vezes | ao ir criar uma rota que já existia |
 | Consulta da purga de IP | escrita e testada por função pura — **nunca executada contra linha nenhuma** | o usuário perguntou |
 | **`Sale.apiCredentialId`** | **6 leitores, ZERO escritores** — coluna sempre nula | ao mapear o `receber.ts` da etapa 1 |
+| **`NOTA_DO_EVENTO`** (`lib/pixel/donos.ts`) | exportada e **importada por nenhum arquivo** — e o TEXTO dela mandava fazer o que a reforma do pixel eliminou | ao ler a gaveta do Pixel na auditoria de microcópia (31/07/2026) |
+
+> ### 🔴🔴 CÓDIGO MORTO CUJO TEXTO CONTRADIZ A ARQUITETURA É PIOR QUE CÓDIGO MORTO COMUM
+>
+> Os cinco casos acima eram inertes e **corretos**: religá-los faria a coisa
+> certa. Este é de outra categoria.
+>
+> `NOTA_DO_EVENTO` era um aviso por evento, e só o `PageView` tinha um. Ele
+> dizia:
+>
+> > *"Escolha Traffik só se você NÃO tiver o pixel do Facebook na página."*
+>
+> A reforma da gaveta (`cf19351`) parou de renderizá-lo e ninguém removeu a
+> constante. Mas o texto **ficou contra a reforma**: ele pede para o usuário
+> trocar o dono do `PageView` na mão, e é exatamente esse caminho que deixa o
+> script instalado defasado em silêncio (o `ALHEIOS` é assado na geração). Hoje
+> quem responde isso é a PERGUNTA do preset, que muda os donos **e** o
+> comportamento do script de uma vez.
+>
+> **Voltar a renderizá-lo instruiria o usuário a reintroduzir o bug que a
+> reforma consertou** — e pareceria uma correção, porque o aviso é útil e bem
+> escrito. Código morto comum, no pior caso, não faz nada.
+>
+> ### ⛔ REGRA QUE FICA
+> **Ao remover uma tela ou uma seção, procure as constantes de texto dela — e
+> pergunte se alguma descreve comportamento que MUDOU.** Órfã que apenas
+> descreve algo que ainda é verdade é dívida cosmética; órfã que descreve o
+> comportamento antigo é uma armadilha esperando o próximo commit que a
+> "reaproveite".
+>
+> O `grep` pelo nome do símbolo fora do próprio arquivo responde a primeira
+> metade. A segunda só a leitura responde.
 
 > ### 🔴 O 5º caso é o mais caro — e o mais silencioso
 > `Sale.apiCredentialId` é o **passo 4 da precedência de área** ("credencial de
@@ -4843,10 +4910,112 @@ desligada.** Nenhuma dessas ferramentas pergunta "alguém chama isto?".
 > Ao criar rota de cron, **agende no mesmo commit**. Ao criar consulta de
 > manutenção, **rode contra linhas semeadas no dev** antes de dizer que funciona.
 
-## 🚦 COMECE AQUI — gaveta do Pixel simplificada (31/07/2026, 4ª parte)
+## 🚦 COMECE AQUI — fila de UX: (e) e (a) fechados (31/07/2026, 5ª parte)
 
-**Na árvore de trabalho, SEM COMMIT.** Migration `20260731090000_pixel_config_setup`
-pendente em produção (aditiva: uma coluna Json nullable).
+### O que ficou pronto
+
+**(e) Espaço mal aproveitado — as duas telas que faltavam.**
+`TestesView` (era `max-width:920px`) e `NotificationsView` (era `680px`) adotaram
+o padrão de 2 colunas de Webhooks/UTMs/Taxas/Pixel.
+
+Em Testes a divisão é **semântica, não a lista cortada ao meio**:
+
+| Coluna | Cards | O que têm em comum |
+|---|---|---|
+| **Como está agora** | Checklist · Espelho · Teste de Webhook | só **leem** o que já aconteceu — e são os que crescem sem teto (20 logs, detalhamento por evento) |
+| **Testar agora** | Teste de Pixel · Teste de Tracking · Testar um aviso de venda | você fornece algo e a resposta vem do serviço de verdade |
+
+Em Notificações os toggles viraram **ladrilhos numa grade**, e esse é o ponto:
+sem isso, alargar a tela só esticaria cada linha (rótulo à esquerda,
+interruptor à direita, um metro de nada no meio — o defeito que a `FeesView`
+corrigiu). Em grade, alargar **acomoda mais itens por linha**.
+
+> ⚠️ **`min-width:0` nas colunas não é enfeite.** Item de grid nasce com mínimo
+> = conteúdo, e a coluna esquerda de Testes guarda o `<pre>` do payload cru.
+> Medido com 3 avisos reais contendo uma URL de 250 caracteres sem espaço:
+> **transbordo 0 em todas as larguras de 1600 a 420**, e `document.scrollWidth`
+> nunca passou do viewport. Colapsa para 1 coluna em ~864px.
+>
+> ⚠️ `resize_window`/`resize_page` **não pegam com a janela do Chrome
+> maximizada** — falham em silêncio (a captura muda de escala e parece que
+> funcionou). A varredura de larguras foi feita constringindo o container, que
+> é equivalente para layout que só depende de `auto-fit`/`minmax`. Se precisar
+> de viewport real, restaure a janela antes.
+
+**(a) Microcópia — as 9 telas nunca auditadas, lidas uma a uma.**
+Limpas, nada a fazer: nova campanha, coluna de veiculação, aviso de snippet,
+card de espelho. Os módulos de rótulo (`veiculacao.ts`, `espelho.ts`,
+`detectores.ts`) já estavam escritos em consequência.
+
+O que estava errado:
+
+| Achado | Onde |
+|---|---|
+| 🔴 **Plural entre parênteses, 9×** — incluindo *"Isto marca 1 item(ns) como excluídos"* no diálogo de EXCLUSÃO em massa | `AdsActionBar` (2) · Checklist (4) · ação em massa · sync · runRules · testador |
+| **Crase renderizada literal** — `` `secret` `` e `` `postbackUrl` `` apareciam com as crases na gaveta | `REGISTRO` (Cakto, OnyxPag) |
+| **Nome interno na tela** — "o **motor** recusa" (3×), "TODAS as **entidades** do escopo", "orçamento atual da **entidade**" | Regras |
+| **"payload" e "corpo cru"** — já estavam na lista de fora junto com POST/endpoint/cabeçalho | aba Testes |
+| **"Nenhum pixel com token da CAPI"** — sobreviveu à troca que o resto do produto já fez para "conectado" | Checklist |
+
+> ### ⛔ O parêntese não é só feiúra: ele esconde erro de concordância
+> *"1 item(ns) como excluídos"* está errado em número **e** em gênero, na tela
+> mais perigosa do produto (a Meta não desfaz exclusão). O `plural()` sozinho
+> não bastava — o nome do nível tem gênero, então `NOME_DO_NIVEL` guarda
+> `{ um, varios, genero }` e a frase concorda. Conferido na tela nos quatro
+> casos: "1 campanha … excluída", "2 campanhas … excluídas", "2 anúncios …
+> excluídos".
+>
+> `NOME_DO_NIVEL` mora em `AdsActionBar` (casa do tipo `Nivel`) e o
+> `AdsManagerView` **importa de lá** em vez de manter a segunda cópia — os dois
+> nomeiam os mesmos níveis, e duas listas para a mesma pergunta divergem.
+
+**Deixados de propósito:** `NEXT_PUBLIC_APP_URL` no aviso de URL local (só
+aparece em dev, e só quem faz o deploy pode agir), `</head>`, "Contém CSS"
+(dentro do avançado) e o bloco de código das Credenciais de API (já endereçado
+a "quem cuida do seu site").
+
+### ⚠️ NÃO exercitado na tela — verificado só por código
+
+| Item | Por que ficou assim |
+|---|---|
+| Ramo **"Falta conectar"** do card de pixel | exige um `PixelConfig` com `MetaPixel` cadastrado **e sem token**; os do dev têm zero pixels da Meta, então caem no outro ramo |
+| **"N campanhas atualizadas"** (resultado da ação em massa) | executar exigiria escrita real na Graph API |
+| **Resumo do sync** (`N erros`) e **`runRules`** (`N regras avaliadas`) | idem — dependem de chamada externa que não foi disparada |
+
+Os três são troca de texto coberta por `tsc`/`build`, mas nenhum foi visto
+renderizado. O diálogo de exclusão, esse sim, foi aberto e **cancelado** nos
+dois níveis para conferir a concordância.
+
+### 📋 Ordem da próxima sessão (decidida pelo usuário)
+
+1. **(f) Camada didática** — estados vazios que ensinam + indicador de progresso
+   de configuração.
+2. **(g) Regras em duas regiões** — ver a fila de UX. Prioridade acima do (f)
+   *no valor*, mas o usuário escolheu fazer (f) primeiro.
+3. **(d) Responsividade / varredura de condicionais** — **por último e em sessão
+   própria**: exige semear dados que ativem cada caminho condicional.
+
+### Verificação desta sessão
+
+`tsc`, `lint` e `build` limpos. Suítes afetadas: `test:analise-regra` 32/0 ·
+`test:detectores` 56/0 · `test:espelho` 39/0 · `test:veiculacao` 40/0 ·
+`test:gateways` 45/0. Os 3 `WebhookLog` semeados para testar o `<pre>` foram
+removidos **por id coletado na criação**.
+
+---
+
+## 🚦 (histórico) gaveta do Pixel simplificada (31/07/2026, 4ª parte)
+
+**Commitado em `cf19351` e já no `origin/main`** (a nota de "sem commit" acima
+era da própria sessão que escreveu isto, e envelheceu).
+
+> 🔴 **`20260731090000_pixel_config_setup` continua marcada como PENDENTE em
+> produção** — e o código que a lê **já está deployado**. É a ordem invertida que
+> este arquivo documenta como perigosa. Ela é aditiva (uma coluna Json nullable)
+> e `lerPreset()` trata ausência como "ainda não perguntamos", então o risco real
+> é baixo; mesmo assim, **confirme com `npx prisma migrate deploy` antes de
+> escrever qualquer coisa que dependa de `PixelConfig.setup`.** Ninguém verificou
+> se ela foi aplicada.
 
 A gaveta expunha o **mecanismo** em vez de resolver: ~10 blocos, e só o "Quem
 envia cada evento" eram **5 linhas × 4 opções = 20 decisões** que exigem entender

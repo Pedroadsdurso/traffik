@@ -10,6 +10,7 @@ import {
 import { auth } from "@/auth";
 import { getLastWorkspaceId } from "@/lib/actions/workspaces";
 import { escopoDeConfig } from "@/lib/areas/escopoConfig";
+import { plural } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import { ordemDoEspelho } from "@/lib/pixel/espelho";
 import { parseTrackingCodes } from "@/lib/utm/parse";
@@ -356,7 +357,7 @@ export async function getInstallChecklist(workspaceId?: string | null): Promise<
       ok: contasComPerfil > 0,
       detail:
         contasComPerfil > 0
-          ? `${contasComPerfil} conta(s) de anúncio vinculada(s) a esta área.`
+          ? `${plural(contasComPerfil, "conta de anúncio vinculada", "contas de anúncio vinculadas")} a esta área.`
           : "Nenhuma conta de anúncio nesta área — sem ela, o gasto exibido não é o desta operação.",
       href: "/dashboard/integracoes/anuncios",
     },
@@ -366,7 +367,7 @@ export async function getInstallChecklist(workspaceId?: string | null): Promise<
       ok: trackedAccounts > 0,
       detail:
         trackedAccounts > 0
-          ? `${trackedAccounts} conta(s) com rastreamento ligado.`
+          ? `${plural(trackedAccounts, "conta com rastreamento ligado", "contas com rastreamento ligado")}.`
           : "Nenhuma conta de anúncio com rastreamento ligado.",
       href: "/dashboard/integracoes/anuncios",
     },
@@ -374,7 +375,7 @@ export async function getInstallChecklist(workspaceId?: string | null): Promise<
       key: "webhook",
       label: "Webhook de gateway configurado",
       ok: webhooks > 0,
-      detail: webhooks > 0 ? `${webhooks} webhook(s) ativo(s).` : "Nenhum webhook ativo — as vendas não chegam.",
+      detail: webhooks > 0 ? `${plural(webhooks, "webhook ativo", "webhooks ativos")}.` : "Nenhum webhook ativo — as vendas não chegam.",
       href: "/dashboard/integracoes/webhooks",
     },
     {
@@ -383,7 +384,7 @@ export async function getInstallChecklist(workspaceId?: string | null): Promise<
       ok: clicks > 0,
       detail:
         clicks > 0
-          ? `${clicks} clique(s) já recebido(s) — o script está reportando.`
+          ? `${plural(clicks, "clique já recebido", "cliques já recebidos")} — o script está reportando.`
           : "Nenhum clique recebido ainda. Copie o script na aba UTMs e instale no <head> do site.",
       // ⚠️ Único item que NÃO é por área: o script de UTM é único por conta,
       // por desenho, e um `Click` não tem dono declarado.
@@ -394,9 +395,12 @@ export async function getInstallChecklist(workspaceId?: string | null): Promise<
       label: "Pixel configurado",
       ok: pixelsComToken > 0,
       detail:
+        // "token da CAPI" é ESTADO interno — o vocabulário que o resto do
+        // produto já trocou por "conectado". O token só é nomeado onde ele é o
+        // que o usuário cola (o campo da gaveta do Pixel).
         pixelsComToken > 0
-          ? `${pixelsComToken} pixel(is) com token da Conversions API.`
-          : "Nenhum pixel com token da CAPI — os eventos não seriam enviados.",
+          ? `${plural(pixelsComToken, "pixel conectado", "pixels conectados")}.`
+          : "Nenhum pixel conectado — os eventos não chegam ao Facebook.",
       href: "/dashboard/integracoes/pixel",
     },
   ];

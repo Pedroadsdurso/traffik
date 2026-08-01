@@ -158,11 +158,24 @@ export const EXPLICACAO_DONO: Record<DonoDoEvento, string> = {
   ninguem: "Este evento não vai para a Meta. Continua contando aqui.",
 };
 
-/**
- * Aviso preso ao evento, não à escolha — aparece sempre, para explicar por que
- * aquela linha tem o padrão que tem.
+/*
+ * ## ⛔ `NOTA_DO_EVENTO` foi REMOVIDA (31/07/2026) — não a recrie
+ *
+ * Era um aviso por evento, e só o `PageView` tinha um. Ele dizia:
+ *
+ * > "Escolha Traffik só se você NÃO tiver o pixel do Facebook na página."
+ *
+ * Duas coisas aconteceram com ele, e as duas mandam apagar em vez de reescrever:
+ *
+ * 1. **A gaveta reformada parou de renderizá-lo** e ninguém removeu a constante
+ *    — exportada, documentada e **importada por nenhum arquivo**. Mais um caso
+ *    do PROCEDIMENTO OBRIGATÓRIO: código inerte que compila.
+ * 2. Pior, o texto ficou **contra** a reforma. Aquela frase pedia para o usuário
+ *    trocar o dono do PageView na mão, e é exatamente esse caminho que deixa o
+ *    script instalado defasado em silêncio (o `ALHEIOS` é assado na geração).
+ *    Hoje quem responde isso é a PERGUNTA do preset, que muda os donos **e** o
+ *    comportamento do script de uma vez.
+ *
+ * Se um evento voltar a precisar de nota, ela pertence ao lado do controle que
+ * o usuário deve mexer — a pergunta —, nunca ao lado do que ele não deve.
  */
-export const NOTA_DO_EVENTO: Partial<Record<EventoDoPixel, string>> = {
-  PageView:
-    "O código do Facebook instalado na sua página já dispara PageView sozinho, e sem identificador — não dá para juntar o dele com o nosso. Deixando com ele, a Meta conta uma visita em vez de duas. Escolha Traffik só se você NÃO tiver o pixel do Facebook na página.",
-};

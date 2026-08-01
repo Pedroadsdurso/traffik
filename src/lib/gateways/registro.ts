@@ -138,7 +138,10 @@ export const REGISTRO: Record<string, GatewayDef> = {
       {
         chave: "secret",
         rotulo: "Chave de segurança",
-        ajuda: "Geramos para você. Cole no campo `secret` ao cadastrar o webhook na Cakto.",
+        // ⚠️ Sem crase: este texto é renderizado como nó de texto, não como
+        // Markdown — a crase apareceria literalmente na tela. Aspas curvas são
+        // o que o resto do produto usa para citar o nome de um campo alheio.
+        ajuda: "Geramos para você. Cole no campo “secret” ao cadastrar o webhook na Cakto.",
         obrigatorio: true,
         gerado: true,
       },
@@ -239,10 +242,10 @@ export const REGISTRO: Record<string, GatewayDef> = {
         texto: "É ele que a OnyxPag vai chamar a cada mudança de status da cobrança.",
       },
       {
-        titulo: "Informe o endereço no campo `postbackUrl`",
+        titulo: "Informe o endereço no campo “postbackUrl”",
         texto:
           "Na OnyxPag o webhook não é cadastrado num painel: o endereço vai junto de cada cobrança criada, " +
-          "no campo `postbackUrl`. Quem monta seu checkout precisa incluí-lo.",
+          "no campo “postbackUrl”. Quem monta seu checkout precisa incluí-lo.",
       },
       {
         titulo: "Trate este endereço como uma senha",
@@ -256,7 +259,7 @@ export const REGISTRO: Record<string, GatewayDef> = {
         texto:
           "Ela não devolve o clique nem os códigos de campanha junto da venda. O faturamento fica exato, " +
           "mas a venda não é atribuída à campanha e o país aparece estimado. Se quem monta seu checkout " +
-          "conseguir repassar o `click_id` no campo `metadata`, a atribuição volta a funcionar.",
+          "conseguir repassar o “click_id” no campo “metadata”, a atribuição volta a funcionar.",
         atencao: true,
       },
     ],

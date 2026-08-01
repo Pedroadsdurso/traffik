@@ -8,7 +8,7 @@ import { sx } from "@/lib/sx";
 import { FiltroPeriodo } from "../ui/FiltroPeriodo";
 import { Icone, type NomeIcone } from "../ui/Icone";
 import { Select } from "../ui/Select";
-import { AdsActionBar, type Acao, type AlvoSelecionado, type Nivel } from "./ads/AdsActionBar";
+import { AdsActionBar, NOME_DO_NIVEL, type Acao, type AlvoSelecionado, type Nivel } from "./ads/AdsActionBar";
 import { AdsTable, type LinhaTabela } from "./ads/AdsTable";
 import { NovaCampanhaModal } from "./ads/NovaCampanhaModal";
 import type { TraffikView } from "../useTraffikState";
@@ -36,6 +36,26 @@ function urlFacebook(nivel: Nivel, fbId: string, contaFb: string | null): string
 
 /** Ordem hierárquica. O que é marcado num nível filtra os de baixo. */
 const ORDEM: Aba[] = ["accounts", "campaigns", "adsets", "ads"];
+
+/**
+ * Nome de cada aba, singular e plural — usado pelos chips do drill-down e pelo
+ * resultado da ação em massa.
+ *
+ * ⚠️ Existe porque o resultado da ação dizia `"3 item(ns) atualizados"`. O
+ * parêntese é gambiarra de código vazando na tela, e é justamente o que o
+ * `plural()` de `lib/format` existe para eliminar.
+ *
+ * ⚠️ Os três níveis vêm de `NOME_DO_NIVEL`, não de uma cópia: o diálogo de
+ * confirmação das ações em massa usa os mesmos nomes, e duas listas para a
+ * mesma pergunta divergem. Só "contas" é acrescentado aqui — a aba Contas não
+ * tem `Nivel` porque não há ação em massa para conta.
+ */
+const ROTULO_NIVEL: Record<Aba, { um: string; varios: string; genero: "a" | "o" }> = {
+  accounts: { um: "conta", varios: "contas", genero: "a" },
+  campaigns: NOME_DO_NIVEL.campaign,
+  adsets: NOME_DO_NIVEL.adset,
+  ads: NOME_DO_NIVEL.ad,
+};
 
 export function AdsManagerView({ v }: { v: TraffikView }) {
   /**
@@ -237,7 +257,14 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
         const falhas = data.resultados?.filter((r) => !r.ok) ?? [];
         setResultado(
           falhas.length === 0
-            ? `✓ ${data.sucessos} item(ns) atualizados no Facebook.`
+            ? (() => {
+                const r = ROTULO_NIVEL[v.adsSub];
+                return `✓ ${plural(
+                  data.sucessos ?? 0,
+                  `${r.um} atualizad${r.genero}`,
+                  `${r.varios} atualizad${r.genero}s`,
+                )} no Facebook.`;
+              })()
             : `${data.sucessos} ok · ${plural(falhas.length, "falhou", "falharam")}: ${falhas.map((f) => `${f.nome} (${f.erro})`).join("; ")}`,
         );
         // Limpa só o nível em que a ação foi feita — a marcação das abas
@@ -409,10 +436,6 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
           (aba === "accounts" ? raw?.accounts.find((x) => x.id === id)?.name
             : aba === "campaigns" ? raw?.campaigns.find((x) => x.id === id)?.name
             : raw?.adSets.find((x) => x.id === id)?.name) ?? id;
-        const rotulo: Record<Aba, [string, string]> = {
-          accounts: ["conta", "contas"], campaigns: ["campanha", "campanhas"],
-          adsets: ["conjunto", "conjuntos"], ads: ["anúncio", "anúncios"],
-        };
         return (
           <div style={sx("display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:8px 11px;border-radius:var(--radius-md);background:color-mix(in srgb, var(--color-accent) 11%, transparent);border:1px solid color-mix(in srgb, var(--color-accent) 32%, transparent)")}>
             <span style={sx("font-size:12px;font-weight:600")}>Mostrando só o que pertence a:</span>
@@ -420,9 +443,9 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
               [...marcados[aba]].map((id) => (
                 <span key={`${aba}:${id}`}
                   style={sx("display:inline-flex;align-items:center;gap:5px;font-size:11.5px;padding:2px 4px 2px 9px;border-radius:999px;background:var(--color-surface-2);border:1px solid var(--color-border)")}>
-                  <span className="text-muted">{rotulo[aba][0]}</span>
+                  <span className="text-muted">{ROTULO_NIVEL[aba].um}</span>
                   {nomeDe(aba, id)}
-                  <button type="button" aria-label={`Remover ${rotulo[aba][0]} ${nomeDe(aba, id)}`}
+                  <button type="button" aria-label={`Remover ${ROTULO_NIVEL[aba].um} ${nomeDe(aba, id)}`}
                     onClick={() => marcar(aba, (f) => { const n = new Set(f); n.delete(id); return n; })}
                     style={sx("background:none;border:0;cursor:pointer;color:var(--color-text-muted);padding:0 4px;font-size:13px;line-height:1")}>
                     ✕

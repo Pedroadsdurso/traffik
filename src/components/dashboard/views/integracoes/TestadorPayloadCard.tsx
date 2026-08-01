@@ -85,7 +85,10 @@ export function TestadorPayloadCard() {
   return (
     <div className="card">
       <div className="card-kicker">Gateways</div>
-      <div className="card-title">Testar um payload</div>
+      {/* "payload" está na lista de fora junto com POST, endpoint e cabeçalho:
+          é o vocabulário de quem escreveu o parser, não de quem lê esta tela.
+          O que se cola aqui é o aviso que o gateway manda a cada venda. */}
+      <div className="card-title">Testar um aviso de venda</div>
       <p className="card-body" style={sx("margin:4px 0 0;max-width:70ch")}>
         Cole o exemplo de webhook da documentação do gateway e veja o que a Traffik entenderia dele.
         Nada é salvo — nenhuma venda é criada.
@@ -114,7 +117,7 @@ export function TestadorPayloadCard() {
         className="input"
         value={json}
         onChange={(e) => setJson(e.target.value)}
-        placeholder='Cole aqui o JSON do webhook, por exemplo: {"event":"purchase_approved","data":{…}}'
+        placeholder='Cole aqui o que o gateway envia, por exemplo: {"event":"purchase_approved","data":{…}}'
         rows={8}
         style={sx("margin-top:var(--space-2);font-family:ui-monospace,monospace;font-size:12px;resize:vertical")}
       />
@@ -140,7 +143,7 @@ function Resultado({ d }: { d: Diagnostico }) {
       ? "lista (disparo agrupado)"
       : d.forma === "objeto"
         ? "objeto (disparo individual)"
-        : "sem o campo `data`";
+        : "sem o campo “data”";
 
   return (
     <div style={sx("margin-top:var(--space-3);border-top:1px solid var(--color-divider);padding-top:var(--space-3)")}>
@@ -156,7 +159,7 @@ function Resultado({ d }: { d: Diagnostico }) {
         <Resumo
           rotulo="Conversões"
           valor={String(d.pedidos)}
-          nota={d.itens > d.pedidos ? `${d.itens - d.pedidos} item(ns) do mesmo carrinho` : undefined}
+          nota={d.itens > d.pedidos ? `${plural(d.itens - d.pedidos, "item do mesmo carrinho", "itens do mesmo carrinho")}` : undefined}
         />
       </div>
 
