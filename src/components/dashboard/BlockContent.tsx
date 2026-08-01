@@ -394,7 +394,7 @@ export function BlockContent({ id, v }: { id: string; v: TraffikView }) {
       return (
         <Bloco>
           <div className="card-kicker">Funil de conversão</div>
-          <Funnel etapas={v.funnelStages} ticketMedio={v.ticketMedio} bots={v.bots} />
+          <Funnel etapas={v.funnelStages} ticketMedio={v.ticketMedio} bots={v.bots} ambientesDeTeste={v.ambientesDeTeste} />
         </Bloco>
       );
 

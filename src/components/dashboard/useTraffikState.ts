@@ -1375,6 +1375,7 @@ export function useTraffikState(
      * bots" seria uma afirmação que ele teria de aceitar no escuro.
      */
     bots: d?.bots ?? [],
+    ambientesDeTeste: d?.ambientesDeTeste ?? [],
     sparklines: d?.chart.sparklines ?? {},
     /**
      * Botão "Atualizar" do Dashboard — **ponto único de sincronização manual**.

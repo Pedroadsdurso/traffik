@@ -788,6 +788,17 @@ model PixelEvent {
   /// servidor (o `InitiateCheckout` que nasce do webhook do gateway). Não é
   /// "detector vazio" — é "não informado".
   detectores String?
+  /// Ambiente de origem, derivado da `url` (ver `lib/pixel/ambiente.ts`):
+  /// `preview` · `local` · `tunel`.
+  ///
+  /// ⚠️ NULO = **produção, ou não sabemos** — e é o padrão de propósito. O
+  /// evento server-side (o InitiateCheckout que nasce do webhook do gateway)
+  /// não tem URL, e marcar por omissão o tiraria do funil.
+  ///
+  /// Evento marcado **continua gravado**: sai do funil e do feed, e a tela diz
+  /// quantos foram. Marcar em vez de apagar é o que torna um erro de detecção
+  /// visível e reversível, em vez de perda silenciosa.
+  ambiente  String?
   timestamp DateTime @default(now())
 
   userId        String

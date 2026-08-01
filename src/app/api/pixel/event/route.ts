@@ -4,6 +4,7 @@ import { ipDaRequisicao } from "@/lib/geo/clientIp";
 import { decryptSecretSafe } from "@/lib/crypto/secrets";
 import { sendServerEvent, type CapiEventName } from "@/lib/facebook/capi";
 import { prisma } from "@/lib/prisma";
+import { ambienteDaUrl } from "@/lib/pixel/ambiente";
 import { traffikEnvia } from "@/lib/pixel/donos";
 import type { PixelEventType } from "@/generated/prisma/enums";
 
@@ -137,6 +138,17 @@ export async function POST(req: NextRequest) {
   // `ON CONFLICT DO NOTHING` resolve isso no banco, sem `try/catch` engolindo
   // erro de verdade — mesmo padrão do upsert monotônico de vendas e da trava do
   // auto-sync: quem decide o vencedor é o banco.
+  const urlDoEvento = typeof body.url === "string" ? body.url.slice(0, 500) : null;
+  /**
+   * 🔴 Ambiente de origem, derivado da URL — o usuário não configura nada.
+   *
+   * Ele cola o snippet e pronto: deploy preview, localhost e túnel de
+   * desenvolvimento se identificam pelo **formato reservado do host**
+   * (`<hash>--<site>.netlify.app`, `-git-…vercel.app`, `localhost`), não por
+   * palpite sobre o hospedeiro. Ver `lib/pixel/ambiente.ts`.
+   */
+  const { ambiente } = ambienteDaUrl(urlDoEvento);
+
   try {
     await prisma.pixelEvent.createMany({
       data: [
@@ -145,16 +157,33 @@ export async function POST(req: NextRequest) {
           pixelConfigId: config.id,
           event: eventKey,
           eventId: idDoEvento,
-          url: typeof body.url === "string" ? body.url.slice(0, 500) : null,
+          url: urlDoEvento,
           fbclid: typeof body.fbclid === "string" ? body.fbclid : null,
           espelho,
           detectores: lerDetectores(body.det),
+          ambiente,
         },
       ],
       skipDuplicates: true,
     });
   } catch (e) {
     console.error("[pixel/event] falha ao persistir evento:", e);
+  }
+
+  /**
+   * ⛔ Ambiente efêmero NÃO vai para a Meta.
+   *
+   * Um Purchase de `localhost` ensina a otimização a procurar ninguém, e é a
+   * metade cara do problema — o número na tela se conserta relendo o banco, o
+   * sinal já entregue à Meta não. É o único ponto em que a detecção tem efeito
+   * irreversível, e é justamente onde os formatos são mais inequívocos:
+   * nenhuma loja atende em `localhost`.
+   *
+   * O evento **fica gravado** (linha acima), marcado e contável. Se a detecção
+   * errar, aparece na contagem da tela e um `UPDATE` desfaz.
+   */
+  if (ambiente) {
+    return json({ ok: true, registrado: true, enviado: false, motivo: "ambiente de teste", ambiente });
   }
 
   // 🔴 O evento JÁ FOI GRAVADO acima — o funil e o Dashboard contam do nosso

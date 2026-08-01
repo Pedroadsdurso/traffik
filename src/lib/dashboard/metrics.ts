@@ -109,6 +109,8 @@ export interface DashboardData {
    * usuário poder conferir se o filtro exagera ou falha.
    */
   bots: { motivo: string; total: number }[];
+  /** Eventos de pixel fora do funil por virem de ambiente efêmero. */
+  ambientesDeTeste: { ambiente: string; total: number }[];
   /** Vendas aprovadas por país (ISO-2), ordenado por faturamento — Bloco 5. */
   /** `code: ""` = não identificado. Nunca é descartado — ver `paisMap`. */
   byCountry: { code: string; sales: number; revenue: number; estimadas: number }[];
@@ -233,7 +235,7 @@ async function windowAggregate(
   // (coluna `@db.Date`, um dia de calendário) tem de ser filtrada.
   const startKey = dayKeyInTz(start, tz);
   const endKey = dayKeyInTz(end, tz);
-  const [sales, clicks, botsPorMotivo, metrics, expenses, pixelEvents, initiateCheckouts] = await Promise.all([
+  const [sales, clicks, botsPorMotivo, metrics, expenses, pixelEvents, initiateCheckouts, ambientesDeTeste] = await Promise.all([
     prisma.sale.findMany({
       where: {
         userId,
@@ -315,9 +317,12 @@ async function windowAggregate(
     // Feed de atividade: TODOS os eventos do pixel, cada um com seu badge.
     // Antes esta consulta filtrava `event: "InitiateCheckout"`, então Lead e
     // AddToCart eram gravados mas nunca apareciam na tela.
+    // ⚠️ `ambiente: null` = produção. Evento de deploy preview, localhost ou
+    // túnel fica GRAVADO e sai daqui — ver `lib/pixel/ambiente.ts`.
     prisma.pixelEvent.findMany({
       where: {
         userId,
+        ambiente: null,
         timestamp: { gte: start, lte: end },
       },
       select: { id: true, event: true, url: true, fbclid: true, timestamp: true, pixelConfigId: true },
@@ -336,9 +341,18 @@ async function windowAggregate(
       where: {
         userId,
         event: "InitiateCheckout",
+        ambiente: null,
         timestamp: { gte: start, lte: end },
       },
       select: { id: true, fbclid: true, eventId: true, pixelConfigId: true },
+    }),
+    // Quantos ficaram FORA por serem de ambiente efêmero. Existe para a tela
+    // dizer o número: uma detecção que silencia o que removeu é indistinguível
+    // de um bug que come eventos.
+    prisma.pixelEvent.groupBy({
+      by: ["ambiente"],
+      where: { userId, ambiente: { not: null }, timestamp: { gte: start, lte: end } },
+      _count: { _all: true },
     }),
   ]);
 
@@ -399,6 +413,9 @@ async function windowAggregate(
     // `utm_campaign` atribuível, então filtrá-lo por área o esconderia justamente
     // de quem precisa auditá-lo. É diagnóstico da conta, não métrica de operação.
     bots: botsPorMotivo.map((b) => ({ motivo: b.botMotivo ?? "Robô", total: b._count._all })),
+    // Mesma razão do `bots`: NÃO passa pelo escopo de área. É diagnóstico da
+    // conta — esconder por área tiraria o número de quem precisa auditá-lo.
+    ambientesDeTeste: ambientesDeTeste.map((a) => ({ ambiente: a.ambiente ?? "teste", total: a._count._all })),
     janela: { start, end, startKey, endKey, tz },
   };
 }
@@ -464,6 +481,7 @@ export async function computeDashboard(userId: string, filters: DashboardFilters
     payments: summary.payments,
     funnel: summary.funnel,
     bots: current.bots,
+    ambientesDeTeste: current.ambientesDeTeste,
     byCountry: summary.byCountry,
     approval: summary.approval,
     byHour: summary.byHour,

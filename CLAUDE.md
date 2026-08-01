@@ -5386,60 +5386,94 @@ recarregar a página, mudar de rota na SPA, e dois cliques reais a 3 s.
 > gerador antigo até recolar. Ids antigos e novos não colidem, então a mudança é
 > segura em qualquer ordem.
 
-### 🌐 URL de PREVIEW (Netlify/Vercel) poluindo os eventos — NÃO vamos filtrar
+### 🌐 AMBIENTE DE TESTE detectado sozinho — o usuário cola o snippet e pronto
 
-Cada deploy gera um host único (`6a6d6a40…--sigmatoolsd.netlify.app`), então os
-eventos de preview se misturam aos de produção e nem dá para filtrar por um
-hostname só.
+**Migration `20260801000000_pixel_event_ambiente`** — `PixelEvent.ambiente`
+nullable + índice `(userId, ambiente, timestamp)`. Aditiva, sem backfill: toda
+linha antiga continua contando, então aplicar não muda número nenhum na tela.
 
-> ### ⛔ Detectar "preview" por padrão de hostname seria heurística que MENTE
-> Muita gente roda **produção** em `*.netlify.app` e `*.vercel.app`. Uma regra
-> por hostname descartaria evento real dessas contas **em silêncio** — perda de
-> conversão sem erro e sem log, que é o pior modo de falha deste projeto.
-> Mesmo princípio de `PROXIES_CONFIAVEIS`: não adivinhe, **declare**.
+> ### ⛔ EU RECUSEI ISSO ANTES, E ESTAVA ERRADO
+> Meu argumento foi *"muita gente roda produção em `*.netlify.app`"* — e é
+> verdade. Mas a proposta nunca foi `*.netlify.app`: era
+> **`<hash>--<site>.netlify.app`**, que é um **formato RESERVADO** pela
+> plataforma para deploy efêmero. O `--` é o separador que a Netlify usa; um
+> domínio de produção não o tem. Eu conflatei "hospedeiro" com "formato" e
+> recusei a coisa certa pelo motivo errado.
+>
+> **Ao recusar uma detecção por ser "heurística frágil", verifique se o que foi
+> proposto é um formato garantido pela plataforma.** Palpite sobre o hospedeiro
+> é frágil; formato reservado é contrato.
 
-**O conserto certo é na origem, e é do lado de quem monta a página:** não
-instalar/ativar o snippet em deploy de preview (`process.env.CONTEXT === "production"`
-no Netlify, `NEXT_PUBLIC_VERCEL_ENV` na Vercel). Um `if`. Filtrar depois seria
-tarde — o evento **já foi enviado à CAPI** e já influenciou a otimização.
+> ### 🔴 E o que tornou o risco aceitável foi MARCAR, não apagar
+> A objeção real — perda silenciosa de conversão — morre quando o evento
+> **continua gravado**. Ele sai do funil, não vai para a Meta, e a tela diz
+> quantos foram. Se a detecção errar, o dado está lá, o número aparece e
+> `npm run eventos:marcar -- --limpar --aplicar` desfaz. Erro visível e
+> reversível em vez de irreversível e invisível.
 
-Se um dia virar problema de produto, a forma é **domínio de produção declarado**
-no `PixelConfig`, e evento de outro host fica **MARCADO, nunca descartado** — o
-funil exclui e o usuário vê por quê. Não foi construído: com o `if` na origem, o
-problema não existe.
+**Zero configuração, por exigência do usuário.** Nada de `if` na página do
+cliente, nada de declarar domínio, nada de ele saber que o problema existe.
+`lib/pixel/ambiente.ts` classifica pelo **formato do host**:
 
-### 🧹 `npm run eventos:limpar` — apagar o que a construção já sujou
+| Ambiente | Formato |
+|---|---|
+| `preview` | `<algo>--<site>.netlify.app` · `*.netlify.live` · `<projeto>-git-<branch>.vercel.app` |
+| `local` | `localhost` · `*.localhost` · `127.*` · `[::1]` · `*.local` · faixas privadas (10/172.16-31/192.168) |
+| `tunel` | `*.ngrok*` · `*.loca.lt` · `*.trycloudflare.com` |
 
-Limpeza do estrago que ficou **antes** do `if` na origem. Apaga só `PixelEvent`
-de deploy preview e localhost; nenhuma venda, nenhum clique, nenhuma
-configuração.
+> ⚠️ **O preview de hash aleatório da Vercel NÃO entra.** `projeto-a1b2c3d4-escopo.vercel.app`
+> tem o mesmo desenho de um projeto chamado `loja-verao-brasil`, e o falso
+> positivo aqui tira evento real do funil **e da CAPI**. Só o `-git-`, que é
+> reservado.
+>
+> ⚠️ **URL ausente ou ilegível → PRODUÇÃO**, nunca teste. O `InitiateCheckout`
+> que nasce do webhook do gateway não tem URL; marcar por omissão o tiraria do
+> funil.
 
-```bash
-npm run eventos:limpar -- --url '<conn>' --email voce@exemplo.com          # SIMULA
-npm run backup -- --url '<conn>'                                           # obrigatório
-ALLOW_PROD_WRITES=EU_QUERO_MESMO_ESCREVER_EM_PRODUCAO \
-  npm run eventos:limpar -- --url '<conn>' --email voce@exemplo.com --aplicar
-```
+**Ambiente efêmero não vai para a CAPI.** É o único efeito irreversível da
+detecção — e é onde os formatos são mais inequívocos (nenhuma loja atende em
+`localhost`). Um Purchase de localhost ensina a otimização a procurar ninguém:
+o número na tela se conserta relendo o banco, o sinal entregue à Meta não.
 
-> ### ⛔ Ele imprime as URLs que vai MANTER, não só as que vai apagar
-> Conferir só a lista de exclusão responde *"entrou alguma legítima?"* e deixa
-> passar a outra metade: *"faltou alguma que eu queria fora?"*. Um host de teste
-> que os padrões não cobrem (`127.0.0.1`, um preview da Vercel, `https://localhost`)
-> **só aparece se as duas listas forem impressas**.
+**A linha na tela** fica no funil, ao lado do aviso de robô e pela mesma razão
+(o rodapé daquele bloco é cortado na altura padrão do grid): *"N eventos de
+teste fora do funil"*, com o detalhamento por ambiente no `title`. **Uma
+detecção que silencia o que removeu é indistinguível de um bug que come
+eventos.**
 
-> ### ⚠️ O impacto no funil é calculado por VISITANTES DISTINTOS, não por linhas
-> `dashboard/metrics.ts` deduplica o Initiate Checkout por
-> `fbclid → eventId → id`. Um relatório que contasse linhas **superestimaria a
-> queda** e assustaria à toa. O script reproduz a mesma deduplicação e, depois
-> do `--aplicar`, **confere se o número bateu com o previsto** — se divergir,
-> ele avisa em vermelho.
+**`npm run eventos:marcar`** classifica o histórico — simula por padrão,
+`ALLOW_PROD_WRITES`, `--email` obrigatório, imprime as duas listas (a que marca
+e a que fica) e `--limpar --aplicar` desfaz.
 
-> ⚠️ `%--%.netlify.app%` exige o `--` **antes** de `.netlify.app`, que é a forma
-> do preview (`<hash>--<site>.netlify.app`). O domínio de produção
-> (`https://site.netlify.app/`) não casa. **Exercitado no banco de dev** com as
-> URLs reais do usuário: as 4 de preview/localhost saíram, e
-> `https://sigmatoolsd.netlify.app/`, `…/checkout?qty=1` e as duas de
-> `moldes.tiarosi.online` sobreviveram. Linhas de teste removidas por id depois.
+> ⛔ Ele usa a **mesma `ambienteDaUrl()`** da ingestão. A 1ª versão tinha o
+> padrão escrito em SQL (`url LIKE '%--%.netlify.app%'`) — duas implementações
+> da mesma pergunta, que divergem no primeiro formato novo. O `eventos:limpar`
+> que apagava foi **removido**: marcar é melhor em tudo.
+
+> ### 🐛 A autoconferência pegou um bug NO PRÓPRIO VERIFICADOR
+> Depois do `--aplicar` ele comparou o funil com o previsto e acusou
+> `previsto 10, obtido 12`. A marcação estava certa; a **conferência** é que
+> contava sem `AND ambiente IS NULL` — lia as linhas recém-marcadas, que
+> continuam no banco justamente porque não apagamos nada.
+>
+> É o argumento a favor de toda verificação pós-escrita: ela falhou onde
+> deveria, e o erro era dela. Sem ela, o script teria dito "pronto" e ninguém
+> saberia se o funil mudou.
+
+**Testado:** `npm run test:ambiente` — **33 asserções**, a maioria do lado
+*"NÃO é teste"*: `sigmatoolsd.netlify.app` (produção do usuário),
+`minha-loja.netlify.app`, `loja-verao-brasil.vercel.app`,
+`loja.netlify.app/promo--relampago` (o `--` depois do domínio),
+`localhost.minhaloja.com`. E ponta a ponta no banco de DEV com as URLs reais:
+os 4 de preview/localhost marcados, os 3 de produção intactos, funil 12 → 10,
+`--limpar` desfazendo. Linhas removidas por id depois.
+
+> ### ⏳ ORDEM DE DEPLOY
+> `npx prisma migrate deploy` na produção **e só então** o push. O código novo
+> faz `SELECT` de `ambiente` em toda carga do dashboard.
+>
+> Depois do deploy, opcionalmente:
+> `npm run eventos:marcar -- --url '<conn>' --email <você>` (simula primeiro).
 
 ### 🔴 O conserto da causa 3, se ela se confirmar (histórico — CONFIRMOU)
 > Duas chamadas a 1 ms de distância caem em baldes diferentes sempre que cruzam

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { brl } from "@/lib/format";
 import { calcularFunil, type EtapaEntrada } from "@/lib/funnel";
 import { FUNIL } from "@/lib/explicacoes";
+import { ROTULO_AMBIENTE, type Ambiente } from "@/lib/pixel/ambiente";
 import { sx } from "@/lib/sx";
 import { ChartEmpty, ChartTooltip, GRAD_FUNIL, useEntrada } from "./chartKit";
 import { useTamanho } from "./useTamanho";
@@ -47,11 +48,13 @@ export function Funnel({
   etapas,
   ticketMedio = 0,
   bots = [],
+  ambientesDeTeste = [],
 }: {
   etapas: EtapaEntrada[];
   ticketMedio?: number;
   /** Robôs JÁ EXCLUÍDOS de "Visita na página". Só para conferência. */
   bots?: { motivo: string; total: number }[];
+  ambientesDeTeste?: { ambiente: string; total: number }[];
 }) {
   const pronto = useEntrada();
   const [tip, setTip] = useState<{ x: number; y: number; i: number } | null>(null);
@@ -65,6 +68,7 @@ export function Funnel({
 
   const { etapas: calc, gargalo } = calcularFunil(etapas, ticketMedio);
   const totalBots = bots.reduce((a, b) => a + b.total, 0);
+  const totalTeste = ambientesDeTeste.reduce((a, b) => a + b.total, 0);
   const n = calc.length;
 
   if (n === 0 || calc.every((e) => e.value === 0)) {
@@ -139,6 +143,34 @@ export function Funnel({
             <Icone nome="robo" tamanho={11} cor="suave" />
             <span className="text-muted">
               {num(totalBots)} {totalBots === 1 ? "acesso de robô removido" : "acessos de robô removidos"}
+            </span>
+          </div>
+        )}
+
+        {/* Eventos de ambiente efêmero — mesma posição e mesmo tom do aviso de
+            robô, e pelo mesmo motivo: o rodapé deste bloco é cortado na altura
+            padrão do grid.
+            ⚠️ A linha existe para o número ser CONFERÍVEL. Uma detecção que
+            silencia o que removeu é indistinguível de um bug que come eventos —
+            e é ela que permite dizer "errou, corrige" em vez de descobrir meses
+            depois que o funil estava baixo. */}
+        {totalTeste > 0 && (
+          <div
+            style={sx("display:flex;align-items:center;justify-content:flex-end;gap:5px;font-size:10.5px;margin-bottom:2px")}
+            title={[
+              "Eventos fora do funil por virem de ambiente de desenvolvimento:",
+              ...ambientesDeTeste.map((a) => `• ${a.total} — ${ROTULO_AMBIENTE[a.ambiente as Ambiente] ?? a.ambiente}`),
+              "",
+              "Detectado pelo FORMATO do endereço — deploy preview",
+              "(<algo>--<site>.netlify.app), localhost, túnel de desenvolvimento.",
+              "O domínio de produção não casa com nenhum deles.",
+              "",
+              "Os eventos continuam gravados: saem do funil e não vão para a Meta.",
+            ].join("\n")}
+          >
+            <Icone nome="ajustes" tamanho={11} cor="suave" />
+            <span className="text-muted">
+              {num(totalTeste)} {totalTeste === 1 ? "evento de teste fora do funil" : "eventos de teste fora do funil"}
             </span>
           </div>
         )}
