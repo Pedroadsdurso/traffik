@@ -34,6 +34,7 @@ import { Checkbox } from "../../ui/Checkbox";
 import { Icone } from "../../ui/Icone";
 import { InfoTip } from "../../ui/InfoTip";
 import { Drawer } from "../../ui/Drawer";
+import { Secao as SecaoBase, type SeloDeRegiao } from "../../ui/Secao";
 import { SnippetBox } from "../../ui/SnippetBox";
 
 /** `savedToken` marca um pixel já persistido cujo token fica no servidor (nunca volta ao cliente). */
@@ -110,44 +111,29 @@ function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
 }
 
 /**
- * ## 🔴 O selo é da REGIÃO, nunca do campo
+ * Os dois selos de região desta gaveta. O componente é o `ui/Secao`
+ * compartilhado — ver lá a regra de que **o selo é da REGIÃO, nunca do campo**.
  *
- * Marcar campo a campo produziria ~15 selos numa gaveta de 5 blocos — poluição
- * que se aprende a ignorar, que é o oposto do objetivo. Com um selo por região,
- * a regra fica legível de uma olhada: **tudo que muda o script está junto, e o
- * script vem logo abaixo.**
- *
- * ⚠️ Isso é uma restrição de layout, não decoração: se um campo que muda o
- * script for parar num bloco `hora`, o selo passa a mentir. Ao mover campo de
- * lugar, confira em qual lado ele cai.
+ * ⚠️ Ao mover um campo de bloco, confira em qual lado ele cai: um campo que
+ * muda o script parado num bloco `hora` faz o selo mentir.
  */
+const SELO: Record<"script" | "hora", SeloDeRegiao> = {
+  script: {
+    texto: "⟳ muda o script",
+    ajuda: "Mexer aqui muda o código do script. Depois de salvar, copie e substitua o que está no seu site.",
+    tom: "aviso",
+  },
+  hora: {
+    texto: "⚡ vale na hora",
+    ajuda: "Vale assim que você salvar. Não precisa mexer no script instalado.",
+  },
+};
+
 function Secao({ titulo, selo, children }: { titulo: string; selo?: "script" | "hora"; children: ReactNode }) {
   return (
-    <section style={sx("display:flex;flex-direction:column;gap:var(--space-2);padding-top:var(--space-3);border-top:1px solid var(--color-divider)")}>
-      <header style={sx("display:flex;align-items:baseline;justify-content:space-between;gap:var(--space-2);flex-wrap:wrap")}>
-        <span style={sx("font-weight:600;font-size:12px;letter-spacing:.04em;text-transform:uppercase;opacity:.75")}>
-          {titulo}
-        </span>
-        {selo === "script" && (
-          <span
-            title="Mexer aqui muda o código do script. Depois de salvar, copie e substitua o que está no seu site."
-            style={sx("font-size:11px;color:var(--color-warning,#fbbf24);white-space:nowrap")}
-          >
-            ⟳ muda o script
-          </span>
-        )}
-        {selo === "hora" && (
-          <span
-            title="Vale assim que você salvar. Não precisa mexer no script instalado."
-            className="text-muted"
-            style={sx("font-size:11px;white-space:nowrap")}
-          >
-            ⚡ vale na hora
-          </span>
-        )}
-      </header>
+    <SecaoBase titulo={titulo} selo={selo && SELO[selo]}>
       {children}
-    </section>
+    </SecaoBase>
   );
 }
 

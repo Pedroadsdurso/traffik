@@ -205,7 +205,14 @@ export function FeesView({ v }: { v: TraffikView }) {
           <div className="card-title">Taxas por forma de pagamento</div>
           <div style={sx("display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-3)")}>
             {v.gatewayExpenses.length === 0 && (
-              <div className="text-muted" style={sx("font-size:13px")}>Nenhuma taxa de gateway cadastrada.</div>
+              <div className="text-muted" style={sx("font-size:13px;line-height:1.5")}>
+                Nenhuma taxa cadastrada — o que o gateway cobra não está saindo do seu
+                Faturamento Líquido, então ele aparece maior do que é. Cadastre abaixo uma taxa
+                por forma de pagamento.
+                <br />
+                Gateway que informa a taxa em cada venda já entra sozinho; a taxa daqui cobre as
+                vendas em que ele não informa.
+              </div>
             )}
             {v.gatewayExpenses.map((g) => (
               <div key={g.id} style={sx("display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)")}>
@@ -251,7 +258,11 @@ export function FeesView({ v }: { v: TraffikView }) {
           <div className="card-title">Alíquotas sobre o faturamento</div>
           <div style={sx("display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-3)")}>
             {v.taxExpenses.length === 0 && (
-              <div className="text-muted" style={sx("font-size:13px")}>Nenhum imposto cadastrado.</div>
+              <div className="text-muted" style={sx("font-size:13px;line-height:1.5")}>
+                Nenhum imposto cadastrado — o Faturamento Líquido está sendo calculado como se
+                você não pagasse nenhum. Cadastre abaixo a alíquota que incide sobre o seu
+                faturamento.
+              </div>
             )}
             {v.taxExpenses.map((t) => (
               <div key={t.id} style={sx("display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)")}>
@@ -288,7 +299,11 @@ export function FeesView({ v }: { v: TraffikView }) {
           <div className="card-title">Comissões sobre a venda</div>
           <div style={sx("display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-3)")}>
             {v.coproducaoExpenses.length === 0 && (
-              <div className="text-muted" style={sx("font-size:13px")}>Nenhuma comissão cadastrada.</div>
+              <div className="text-muted" style={sx("font-size:13px;line-height:1.5")}>
+                Nenhuma comissão cadastrada. Se você divide a venda com coprodutor ou afiliado,
+                essa parte ainda está contando como sua — cadastre abaixo o percentual que sai
+                para eles.
+              </div>
             )}
             {v.coproducaoExpenses.map((c) => (
               <div key={c.id} style={sx("display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)")}>
@@ -323,7 +338,11 @@ export function FeesView({ v }: { v: TraffikView }) {
           <div className="card-title">Custo por venda realizada</div>
           <div style={sx("display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-3)")}>
             {v.custoProdutoExpenses.length === 0 && (
-              <div className="text-muted" style={sx("font-size:13px")}>Nenhum custo de produto cadastrado.</div>
+              <div className="text-muted" style={sx("font-size:13px;line-height:1.5")}>
+                Nenhum custo cadastrado. Se cada venda tem um custo seu — impressão, envio,
+                plataforma de aulas —, ele ainda não está saindo do lucro. Produto 100% digital
+                sem custo por venda pode deixar em branco.
+              </div>
             )}
             {v.custoProdutoExpenses.map((c) => (
               <div key={c.id} style={sx("display:flex;align-items:center;justify-content:space-between;gap:var(--space-3)")}>
@@ -358,7 +377,11 @@ export function FeesView({ v }: { v: TraffikView }) {
           <div className="card-title">Custos fixos por mês</div>
           <div style={sx("display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-3)")}>
             {v.despesaRows.length === 0 && (
-              <div className="text-muted" style={sx("font-size:13px")}>Nenhuma despesa cadastrada.</div>
+              <div className="text-muted" style={sx("font-size:13px;line-height:1.5")}>
+                Nenhuma despesa cadastrada. Custos fixos do mês — ferramentas, equipe, aluguel —
+                entram no <strong>Lucro</strong>, depois do gasto com anúncios. Sem eles, o lucro
+                do painel aparece maior do que é.
+              </div>
             )}
             {v.despesaRows.map((d) => (
               <div key={d.id} style={sx("display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);padding:var(--space-2) 0")}>

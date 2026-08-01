@@ -10,8 +10,10 @@ import { brl } from "@/lib/format";
 import { sx } from "@/lib/sx";
 import { Checkbox } from "../../ui/Checkbox";
 import { Drawer } from "../../ui/Drawer";
+import { Icone } from "../../ui/Icone";
 import { InfoTip, type ConteudoInfo } from "../../ui/InfoTip";
 import { ListaSelecionavel } from "../../ui/ListaSelecionavel";
+import { Secao, type SeloDeRegiao } from "../../ui/Secao";
 import { Select } from "../../ui/Select";
 
 /**
@@ -76,6 +78,35 @@ const FREQUENCIAS = [
 const HORAS = [{ value: "", label: "Qualquer hora" }].concat(
   Array.from({ length: 24 }, (_, h) => ({ value: String(h), label: `${String(h).padStart(2, "0")}:00` })),
 );
+
+/**
+ * ## Os dois selos de região desta gaveta
+ *
+ * A gaveta tinha os dois grupos **intercalados**, e um deles move dinheiro
+ * real: a regra pausa campanha e altera orçamento sozinha, de madrugada, sem
+ * ninguém olhando. O outro só escolhe o horário e o ritmo.
+ *
+ * 🔴 **A condição entra no lado que mexe na conta, não no lado do ritmo.** Ela
+ * parece configuração de leitura, mas é o mecanismo de segurança da regra — e
+ * já falhou em silêncio: `gasto ≤ 999999` é visualmente idêntica a
+ * `gasto ≥ 999999`, e foi um operador invertido que fez a regra agir sobre tudo
+ * o que estava no escopo. Errar a condição é errar o que a Meta recebe.
+ *
+ * ⚠️ Ver `ui/Secao`: o selo é da REGIÃO. Ao mover um campo de bloco, confira em
+ * qual lado ele cai — do lado errado, o selo mente.
+ */
+const SELO_CONTA: SeloDeRegiao = {
+  texto: "⚠ mexe na sua conta do Facebook",
+  ajuda:
+    "Estes campos decidem o que a regra faz nas suas campanhas: pausar e alterar orçamento, sozinha. A Meta não oferece desfazer.",
+  tom: "aviso",
+};
+
+const SELO_RITMO: SeloDeRegiao = {
+  texto: "⚡ só decide quando roda",
+  ajuda:
+    "Estes campos mudam o horário e o ritmo da automação. Nenhum deles muda o que ela faz nas suas campanhas.",
+};
 
 /** " campanha" / " campanhas" conforme o nível e a quantidade. */
 function nivelPlural(level: string, n: number): string {
@@ -166,6 +197,27 @@ export function deRegra(r: RuleDTO): RascunhoRegra {
 /** Ações que mexem em dinheiro ou desligam entrega — exigem confirmação. */
 export const acaoSensivel = (a: AcaoUI) => a !== "ativar";
 
+/**
+ * A regra já usa algum campo do avançado?
+ *
+ * 🔴 Esconder controle com padrão sensato é bom; esconder um valor que a pessoa
+ * **já configurou** é armadilha — ela abriria a gaveta de uma regra que só roda
+ * das 8h às 18h e não veria nada sobre isso. Quando há valor fora do padrão, a
+ * seção nasce ABERTA.
+ *
+ * ⚠️ Compara com `RASCUNHO_REGRA`, não com literais soltos: um padrão que mude
+ * lá e não aqui faria a seção abrir sozinha para todo mundo.
+ */
+function usaAvancado(d: RascunhoRegra): boolean {
+  return (
+    d.calcPeriod !== RASCUNHO_REGRA.calcPeriod ||
+    d.windowStart !== "" ||
+    d.windowEnd !== "" ||
+    d.semLimiteDiario ||
+    d.dailyRunLimit !== RASCUNHO_REGRA.dailyRunLimit
+  );
+}
+
 /** Traduz o rascunho para o formato que a server action espera. */
 export function paraInput(d: RascunhoRegra, workspaceId: string | null): CreateRuleInput {
   const n = parseFloat(d.valor.replace(",", ".")) || 0;
@@ -252,6 +304,9 @@ export function RuleDrawer({
   const d = rascunho;
   const patch = (p: Partial<RascunhoRegra>) => setRascunho({ ...d, ...p });
   const [confirmando, setConfirmando] = useState(false);
+  // Inicializador, não efeito: a gaveta é montada do zero a cada abertura
+  // (`{rascunho && <RuleDrawer …>}`), então isto roda uma vez por abertura.
+  const [avancado, setAvancado] = useState(() => usaAvancado(rascunho));
 
   // ── Prévia: "esta condição bate em quantas, agora?" ──────────────────────
   //
@@ -371,37 +426,124 @@ export function RuleDrawer({
         />
       </Campo>
 
-      <Campo label="Produtos" dica="Vazio = todos os produtos. A lista traz o que já teve venda rastreada.">
-        <ListaSelecionavel
-          itens={produtos.map((p) => ({ id: p, label: p }))}
-          selecionados={d.produtos}
-          onChange={(produtos) => patch({ produtos })}
-          altura={140}
-          vazio="Nenhuma venda registrada ainda — a regra valerá para todos os produtos."
-        />
-      </Campo>
+      {/* ═══ Região 1 — mexe na conta do Facebook ═══════════════════════════
+          A ação vem primeiro porque, numa regra, **escolher a ação é a
+          decisão**. E os campos dela (valor, teto) ficam logo abaixo: antes
+          moravam depois do construtor de condições, então marcar "Aumentar
+          orçamento" fazia o campo do valor nascer do outro lado de um bloco
+          inteiro de outra coisa. */}
+      <Secao titulo="A ação" selo={SELO_CONTA}>
+        <div style={sx("display:flex;gap:var(--space-3);flex-wrap:wrap")}>
+          <Campo label="Ação">
+            <Select label="" value={d.acao} options={ACOES} onChange={(v) => patch({ acao: v as AcaoUI })} minWidth={210} />
+          </Campo>
+          <Campo label="Aplicar em">
+            <Select label="" value={d.level} options={NIVEIS} onChange={(level) => patch({ level })} minWidth={150} />
+          </Campo>
+        </div>
 
-      <Campo label="Contas de anúncio" info={AJUDA.regraContas}>
-        <ListaSelecionavel
-          itens={contas}
-          selecionados={d.contas}
-          onChange={(contas) => patch({ contas })}
-          altura={140}
-          vazio="Nenhuma conta de anúncio nesta área."
-        />
-      </Campo>
+        {mexeOrcamento && (
+          <Campo
+            label={d.acao === "definir" ? "Novo orçamento" : `Quanto ${d.acao === "aumentar" ? "aumentar" : "diminuir"}`}
+            dica={
+              d.acao === "definir"
+                ? d.sobreGasto
+                  ? "Percentual sobre o GASTO do período de cálculo."
+                  : "Valor absoluto, em reais."
+                : d.unidade === "%"
+                  ? "Percentual sobre o orçamento atual."
+                  : "Valor absoluto somado ou subtraído."
+            }
+          >
+            <div style={sx("display:flex;gap:6px;align-items:center")}>
+              <input
+                className="input"
+                style={sx("width:120px")}
+                inputMode="decimal"
+                value={d.valor}
+                onChange={(e) => patch({ valor: e.target.value })}
+              />
+              {d.acao === "definir" ? (
+                <Select
+                  label=""
+                  value={d.sobreGasto ? "pct" : "abs"}
+                  options={[
+                    { value: "abs", label: "R$ (absoluto)" },
+                    { value: "pct", label: "% do gasto" },
+                  ]}
+                  onChange={(v) => patch({ sobreGasto: v === "pct" })}
+                  minWidth={150}
+                />
+              ) : (
+                <Select
+                  label=""
+                  value={d.unidade}
+                  options={[
+                    { value: "%", label: "%" },
+                    { value: "R$", label: "R$" },
+                  ]}
+                  onChange={(v) => patch({ unidade: v as "%" | "R$" })}
+                  minWidth={90}
+                />
+              )}
+            </div>
+          </Campo>
+        )}
 
-      <div style={sx("display:flex;gap:var(--space-3);flex-wrap:wrap")}>
-        <Campo label="Ação">
-          <Select label="" value={d.acao} options={ACOES} onChange={(v) => patch({ acao: v as AcaoUI })} minWidth={210} />
+        {(d.acao === "aumentar" || d.acao === "definir") && (
+          <Campo label={`Teto de orçamento${exigeTeto ? " (obrigatório)" : " (opcional)"}`} info={AJUDA.regraTeto}>
+            <input
+              className="input"
+              style={sx(`width:160px${tetoFaltando ? ";border-color:#ef4444" : ""}`)}
+              inputMode="decimal"
+              placeholder="Ex.: 300"
+              value={d.maxBudget}
+              onChange={(e) => patch({ maxBudget: e.target.value })}
+            />
+            {tetoFaltando && (
+              <div style={sx("font-size:11.5px;color:#ef4444")}>
+                Informe o teto — sem ele a Traffik recusa o aumento e a regra nunca age.
+              </div>
+            )}
+          </Campo>
+        )}
+      </Secao>
+
+      {/* ═══ Região 1 — o alcance ═══════════════════════════════════════════
+          Contas antes de produtos: é a conta que limita o estrago. Uma regra de
+          orçamento com a conta errada alcança campanhas de outra operação. */}
+      <Secao titulo="Onde ela age" selo={SELO_CONTA}>
+        <Campo label="Contas de anúncio" info={AJUDA.regraContas}>
+          <ListaSelecionavel
+            itens={contas}
+            selecionados={d.contas}
+            onChange={(contas) => patch({ contas })}
+            altura={140}
+            vazio="Nenhuma conta de anúncio nesta área. Conecte um perfil em Integrações › Anúncios, de dentro desta área — sem conta, a regra alcança as campanhas de todas elas."
+          />
         </Campo>
-        <Campo label="Aplicar em">
-          <Select label="" value={d.level} options={NIVEIS} onChange={(level) => patch({ level })} minWidth={150} />
-        </Campo>
-      </div>
 
-      {/* ── Condições ─────────────────────────────────────────────────────── */}
-      <Campo label="Condições" dica="Todas precisam ser verdadeiras ao mesmo tempo (E).">
+        <Campo label="Produtos" dica="Vazio = todos os produtos. A lista traz o que já teve venda rastreada.">
+          <ListaSelecionavel
+            itens={produtos.map((p) => ({ id: p, label: p }))}
+            selecionados={d.produtos}
+            onChange={(produtos) => patch({ produtos })}
+            altura={140}
+            vazio="Nenhuma venda registrada ainda — a regra valerá para todos os produtos."
+          />
+        </Campo>
+      </Secao>
+
+      {/* ═══ Região 1 — a condição É o mecanismo de segurança ════════════════
+          Ela parece leitura e não é: foi um operador invertido que fez a regra
+          agir sobre tudo. Por isso mora deste lado, não no do ritmo. */}
+      <Secao titulo="Quando ela dispara" selo={SELO_CONTA}>
+        <Campo
+          label="Condições"
+          dica={`Todas precisam ser verdadeiras ao mesmo tempo (E). As métricas são medidas em: ${
+            PERIODOS.find((p) => p.value === d.calcPeriod)?.label.toLowerCase() ?? d.calcPeriod
+          }.`}
+        >
         <div style={sx("display:flex;flex-direction:column;gap:7px")}>
           {d.condicoes.map((c, i) => (
             <div key={i} style={sx("display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap")}>
@@ -582,118 +724,68 @@ export function RuleDrawer({
             </div>
           )}
         </div>
-      </Campo>
-
-      {/* ── Campos condicionais da ação ───────────────────────────────────── */}
-      {mexeOrcamento && (
-        <>
-          <div style={sx("height:1px;background:var(--color-divider)")} />
-
-          <Campo
-            label={d.acao === "definir" ? "Novo orçamento" : `Quanto ${d.acao === "aumentar" ? "aumentar" : "diminuir"}`}
-            dica={
-              d.acao === "definir"
-                ? d.sobreGasto
-                  ? "Percentual sobre o GASTO do período de cálculo."
-                  : "Valor absoluto, em reais."
-                : d.unidade === "%"
-                  ? "Percentual sobre o orçamento atual."
-                  : "Valor absoluto somado ou subtraído."
-            }
-          >
-            <div style={sx("display:flex;gap:6px;align-items:center")}>
-              <input
-                className="input"
-                style={sx("width:120px")}
-                inputMode="decimal"
-                value={d.valor}
-                onChange={(e) => patch({ valor: e.target.value })}
-              />
-              {d.acao === "definir" ? (
-                <Select
-                  label=""
-                  value={d.sobreGasto ? "pct" : "abs"}
-                  options={[
-                    { value: "abs", label: "R$ (absoluto)" },
-                    { value: "pct", label: "% do gasto" },
-                  ]}
-                  onChange={(v) => patch({ sobreGasto: v === "pct" })}
-                  minWidth={150}
-                />
-              ) : (
-                <Select
-                  label=""
-                  value={d.unidade}
-                  options={[
-                    { value: "%", label: "%" },
-                    { value: "R$", label: "R$" },
-                  ]}
-                  onChange={(v) => patch({ unidade: v as "%" | "R$" })}
-                  minWidth={90}
-                />
-              )}
-            </div>
-          </Campo>
-
-          {(d.acao === "aumentar" || d.acao === "definir") && (
-            <Campo
-              label={`Teto de orçamento${exigeTeto ? " (obrigatório)" : " (opcional)"}`}
-              info={AJUDA.regraTeto}
-            >
-              <input
-                className="input"
-                style={sx(`width:160px${tetoFaltando ? ";border-color:#ef4444" : ""}`)}
-                inputMode="decimal"
-                placeholder="Ex.: 300"
-                value={d.maxBudget}
-                onChange={(e) => patch({ maxBudget: e.target.value })}
-              />
-              {tetoFaltando && (
-                <div style={sx("font-size:11.5px;color:#ef4444")}>
-                  Informe o teto — sem ele a Traffik recusa o aumento e a regra nunca age.
-                </div>
-              )}
-            </Campo>
-          )}
-        </>
-      )}
-
-      <div style={sx("height:1px;background:var(--color-divider)")} />
-
-      <div style={sx("display:flex;gap:var(--space-3);flex-wrap:wrap")}>
-        <Campo label="Período de cálculo" info={AJUDA.regraPeriodo}>
-          <Select label="" value={d.calcPeriod} options={PERIODOS} onChange={(calcPeriod) => patch({ calcPeriod })} minWidth={175} />
         </Campo>
+      </Secao>
+
+      {/* ═══ Região 2 — só decide QUANDO ════════════════════════════════════
+          Nada aqui muda o que a regra faz nas campanhas. Os três controles com
+          padrão sensato ficam atrás de "Configuração avançada": quem cria uma
+          regra decide a ação e a condição, não o intervalo de execução. */}
+      <Secao titulo="Ritmo" selo={SELO_RITMO}>
         <Campo label="Frequência" info={AJUDA.regraFrequencia}>
           <Select label="" value={d.frequencyMin} options={FREQUENCIAS} onChange={(frequencyMin) => patch({ frequencyMin })} minWidth={185} />
         </Campo>
-      </div>
 
-      <Campo label="Intervalo de execução" info={AJUDA.regraJanela}>
-        <div style={sx("display:flex;gap:6px;align-items:center")}>
-          <Select label="" value={d.windowStart} options={HORAS} onChange={(windowStart) => patch({ windowStart })} minWidth={140} />
-          <span className="text-muted" style={sx("font-size:12px")}>até</span>
-          <Select label="" value={d.windowEnd} options={HORAS} onChange={(windowEnd) => patch({ windowEnd })} minWidth={140} />
-        </div>
-      </Campo>
+        <button
+          type="button"
+          onClick={() => setAvancado((v) => !v)}
+          style={sx(
+            "display:flex;align-items:center;gap:6px;align-self:flex-start;" +
+              "background:transparent;border:0;padding:0;cursor:pointer;color:inherit;font-size:12.5px",
+          )}
+        >
+          <Icone nome={avancado ? "chevronCima" : "chevronBaixo"} tamanho={14} />
+          Configuração avançada
+        </button>
 
-      <Campo label="Limite de execuções diárias" info={AJUDA.regraLimite}>
-        <div style={sx("display:flex;gap:10px;align-items:center")}>
-          <input
-            className="input"
-            style={sx("width:96px")}
-            inputMode="numeric"
-            disabled={d.semLimiteDiario}
-            value={d.semLimiteDiario ? "" : d.dailyRunLimit}
-            onChange={(e) => patch({ dailyRunLimit: e.target.value })}
-          />
-          <Checkbox
-            checked={d.semLimiteDiario}
-            onChange={(semLimiteDiario) => patch({ semLimiteDiario })}
-            label="Sem limite"
-          />
-        </div>
-      </Campo>
+        {avancado && (
+          <div style={sx("display:flex;flex-direction:column;gap:var(--space-3)")}>
+            {/* ⚠️ O período de cálculo não é só agendamento — ele decide o que
+                "CPA > 50" significa. Fica aqui porque tem padrão sensato
+                ("hoje"), mas o valor escolhido aparece na dica das Condições,
+                para a regra nunca ser lida sem a janela dela. */}
+            <Campo label="Período de cálculo" info={AJUDA.regraPeriodo}>
+              <Select label="" value={d.calcPeriod} options={PERIODOS} onChange={(calcPeriod) => patch({ calcPeriod })} minWidth={175} />
+            </Campo>
+
+            <Campo label="Intervalo de execução" info={AJUDA.regraJanela}>
+              <div style={sx("display:flex;gap:6px;align-items:center")}>
+                <Select label="" value={d.windowStart} options={HORAS} onChange={(windowStart) => patch({ windowStart })} minWidth={140} />
+                <span className="text-muted" style={sx("font-size:12px")}>até</span>
+                <Select label="" value={d.windowEnd} options={HORAS} onChange={(windowEnd) => patch({ windowEnd })} minWidth={140} />
+              </div>
+            </Campo>
+
+            <Campo label="Limite de execuções diárias" info={AJUDA.regraLimite}>
+              <div style={sx("display:flex;gap:10px;align-items:center")}>
+                <input
+                  className="input"
+                  style={sx("width:96px")}
+                  inputMode="numeric"
+                  disabled={d.semLimiteDiario}
+                  value={d.semLimiteDiario ? "" : d.dailyRunLimit}
+                  onChange={(e) => patch({ dailyRunLimit: e.target.value })}
+                />
+                <Checkbox
+                  checked={d.semLimiteDiario}
+                  onChange={(semLimiteDiario) => patch({ semLimiteDiario })}
+                  label="Sem limite"
+                />
+              </div>
+            </Campo>
+          </div>
+        )}
+      </Secao>
 
       <Checkbox
         checked={d.active}

@@ -69,7 +69,11 @@ function ProfilePanel({ p }: { p: Profile }) {
 
       <div style={sx("display:flex;flex-direction:column;gap:6px")}>
         {p.accounts.length === 0 ? (
-          <div className="text-muted" style={sx("font-size:13px;padding:var(--space-2)")}>Nenhuma conta de anúncio neste perfil.</div>
+          <div className="text-muted" style={sx("font-size:13px;line-height:1.5;padding:var(--space-2)")}>
+            Nenhuma conta de anúncio neste perfil. Confira se este é o Facebook que administra as
+            suas contas — conta criada agora no Gerenciador de Negócios aparece aqui sozinha, na
+            próxima sincronização.
+          </div>
         ) : (
           p.accounts.map((ac) => (
             <div key={ac.id} style={sx("display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);padding:var(--space-2) var(--space-3);border-radius:var(--radius-md);background:var(--color-bg);flex-wrap:wrap")}>

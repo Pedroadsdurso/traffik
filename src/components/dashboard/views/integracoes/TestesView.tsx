@@ -471,17 +471,29 @@ function TrackingTestCard() {
 
 // ───────────────────────── 4. Checklist ─────────────────────────
 
-function ChecklistCard() {
+/**
+ * O indicador de progresso de configuração da área ativa.
+ *
+ * 🔴 **Recebe o `workspaceId` em vez de deixar o servidor cair no
+ * `getLastWorkspaceId()`.** Sem ele, trocar de área com esta aba aberta deixava
+ * o checklist mostrando a área ANTERIOR: `trocarWorkspace` faz `router.refresh()`,
+ * que re-renderiza o servidor mas **preserva o estado de componente cliente** —
+ * e este efeito rodava uma vez só, na montagem. O card dizia "4 de 5 prontos"
+ * sobre uma área que o usuário já tinha deixado.
+ *
+ * Com a prop na lista de dependências, a troca de área refaz a consulta.
+ */
+function ChecklistCard({ workspaceId }: { workspaceId: string | null }) {
   const [items, setItems] = useState<ChecklistItemDTO[]>([]);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
     setBusy(true);
-    getInstallChecklist()
+    getInstallChecklist(workspaceId)
       .then(setItems)
       .catch(() => {})
       .finally(() => setBusy(false));
-  }, []);
+  }, [workspaceId]);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect -- `load` busca no servidor e guarda o resultado
   useEffect(load, [load]);
@@ -564,12 +576,12 @@ function TituloColuna({ children }: { children: string }) {
  * A divisão também equilibra a altura: as listas que crescem sem teto (20 logs
  * de webhook, um detalhamento por evento) ficam todas de um lado só.
  */
-export function TestesView() {
+export function TestesView({ workspaceId }: { workspaceId: string | null }) {
   return (
     <div style={sx("display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:var(--space-4);align-items:start")}>
       <div style={sx(COLUNA)}>
         <TituloColuna>Como está agora</TituloColuna>
-        <ChecklistCard />
+        <ChecklistCard workspaceId={workspaceId} />
         <EspelhoCard />
         <WebhookLogsCard />
       </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { useTheme } from "@/components/theme/ThemeProvider";
@@ -71,7 +72,14 @@ export function Header() {
                   )}
                 </div>
                 {v.notifItems.length === 0 ? (
-                  <div className="text-muted" style={sx("font-size:13px;padding:var(--space-3) 0;text-align:center")}>Nenhuma notificação ainda.</div>
+                  <div
+                    className="text-muted"
+                    style={sx("font-size:12.5px;line-height:1.5;padding:var(--space-3) var(--space-2);text-align:center")}
+                  >
+                    Nenhuma notificação ainda. Elas chegam aqui quando uma venda entra, uma regra
+                    age sozinha ou o relatório do dia fica pronto — você escolhe quais em{" "}
+                    <Link href="/dashboard/notificacoes" onClick={v.closeNotif}>Notificações</Link>.
+                  </div>
                 ) : (
                   v.notifItems.map((n) => (
                     <div key={n.id} style={sx(`display:flex;gap:10px;padding:var(--space-2) var(--space-3);border-radius:var(--radius-md);${n.read ? "" : "background:var(--color-bg);"}`)}>
