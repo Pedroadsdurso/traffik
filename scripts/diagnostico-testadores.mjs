@@ -297,12 +297,16 @@ async function main() {
       `SELECT s.id, s.product, s.value, s.platform, s.fbc, s.fbp,
               to_char(s.timestamp AT TIME ZONE 'UTC' AT TIME ZONE $2, 'DD/MM HH24:MI') AS quando,
               (s."rawPayload"::text ~* '"(click_id|clickId|trk_click_id)"')  AS "payloadClickId",
-              -- ⚠️ A regex casa a CHAVE, não o valor: `"fbc": null` casaria e o
-              -- veredito diria "fbc presente" para uma venda que não tinha nenhum.
-              -- Foi assim que a primeira execução marcou uma venda como
-              -- "deveria ter casado". O que vale é a COLUNA, que só é gravada
-              -- quando o parser leu um valor de verdade.
-              (s."rawPayload"::text ~* '"(fbc|_fbc)"\s*:\s*"')                AS "payloadFbc",
+              -- ATENCAO: a regex casa a CHAVE, nao o valor. Um "fbc" com valor
+              -- nulo casaria e o veredito diria "fbc presente" para uma venda
+              -- que nao tinha nenhum. Foi assim que a primeira execucao marcou
+              -- uma venda como "deveria ter casado". O que vale e a COLUNA, que
+              -- so e gravada quando o parser leu um valor de verdade.
+              --
+              -- Sem crase e sem acento AQUI DENTRO de proposito: este SQL vive
+              -- num template literal de JS, e uma crase no comentario FECHA a
+              -- string. Foi exatamente esse o erro de sintaxe.
+              (s."rawPayload"::text ~* '"(fbc|_fbc)"\\s*:\\s*"')              AS "payloadFbc",
               (s."rawPayload"::text ~* '"(ip|buyer_ip|ip_address)"')         AS "payloadIp",
               (SELECT count(*)::int FROM "Click" k
                 WHERE k."userId" = s."userId" AND NOT k.bot
@@ -407,7 +411,7 @@ async function main() {
       [u.id],
     );
 
-    console.log(`\n  ${C.b}3. UTM com template não substituído${C.x}  ${C.d}(histórico completo)${C.x}`);
+    console.log(`\n  ${C.b}4. UTM com template não substituído${C.x}  ${C.d}(histórico completo)${C.x}`);
     console.log(`     Cliques afetados ............. ${C.b}${tpl.total}${C.x} de ${totalCliques.n}  ${C.d}${pct(tpl.total, totalCliques.n)}${C.x}`);
     console.log(`       ${C.d}· utm_campaign: ${tpl.campanha} · utm_content: ${tpl.conteudo} · já marcados como robô: ${tpl.robos}${C.x}`);
     console.log(`     ${C.a}Se reclassificados como tráfego direto:${C.x}`);
