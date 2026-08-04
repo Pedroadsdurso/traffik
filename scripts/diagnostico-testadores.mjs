@@ -311,7 +311,23 @@ async function main() {
               (SELECT count(*)::int FROM "Click" k
                 WHERE k."userId" = s."userId" AND NOT k.bot
                   AND k.timestamp BETWEEN s.timestamp - interval '12 hours' AND s.timestamp)
-                                                                             AS "cliquesNaJanela"
+                                                                             AS "cliquesNaJanela",
+              -- O fbclid que fbclidDoFbc extrairia: tudo depois do 3o ponto.
+              -- Sem barra invertida na regex de proposito -- ela vive num
+              -- template literal de JS, e [.] evita a classe inteira de erro.
+              substring(s.fbc from '^fb[.][^.]*[.][^.]*[.](.+)$')             AS "fbclidDoFbc",
+              -- As tres recusas possiveis da via do fbc, separadas:
+              --   fbclid nulo      -> o fbc nao tem o formato fb.N.TS.<id>
+              --   0 cliques        -> ninguem no banco tem esse fbclid
+              --   so cliques bot   -> existe, e o filtro bot:false descartou
+              (SELECT count(*)::int FROM "Click" k
+                WHERE k."userId" = s."userId"
+                  AND k.fbclid = substring(s.fbc from '^fb[.][^.]*[.][^.]*[.](.+)$'))
+                                                                             AS "cliquesComEsseFbclid",
+              (SELECT count(*)::int FROM "Click" k
+                WHERE k."userId" = s."userId" AND NOT k.bot
+                  AND k.fbclid = substring(s.fbc from '^fb[.][^.]*[.][^.]*[.](.+)$'))
+                                                                             AS "cliquesComEsseFbclidNaoBot"
          FROM "Sale" s
         WHERE s."userId" = $1 AND s.status = 'APROVADA' AND s."clickId" IS NULL
           AND (s.timestamp AT TIME ZONE 'UTC' AT TIME ZONE $2)::date
@@ -340,8 +356,33 @@ async function main() {
           console.log(`       ${C.r}→ o gateway não devolveu NENHUM identificador. Nem havia como casar.${C.x}`);
         } else if (o.cliquesNaJanela === 0) {
           console.log(`       ${C.a}→ havia identificador, e ZERO cliques seus na janela: o comprador não passou pelo site.${C.x}`);
+        } else if (o.fbc) {
+          // A via do fbc nao tem janela de tempo -- so o filtro de robo. Se ela
+          // nao casou, a causa e uma destas tres, e cada uma tem conserto
+          // diferente. Dizer so "INVESTIGAR" mandava abrir o banco a mao.
+          if (!o.fbclidDoFbc) {
+            console.log(
+              `       ${C.r}→ o fbc gravado NAO tem o formato fb.N.TS.<fbclid>: "${String(o.fbc).slice(0, 40)}".` +
+                ` fbclidDoFbc devolve null e a via nem e tentada.${C.x}`,
+            );
+          } else if (o.cliquesComEsseFbclid === 0) {
+            console.log(
+              `       ${C.a}→ fbclid "${o.fbclidDoFbc.slice(0, 24)}…" nao existe em NENHUM clique seu.` +
+                ` O comprador clicou no anuncio mas nao chegou a sua pagina, ou o cookie veio de outra visita.${C.x}`,
+            );
+          } else if (o.cliquesComEsseFbclidNaoBot === 0) {
+            console.log(
+              `       ${C.r}→ 🔴 BUG NOSSO: existe(m) ${o.cliquesComEsseFbclid} clique(s) com esse fbclid,` +
+                ` e TODOS estao marcados como robo. O filtro bot:false descartou a venda.${C.x}`,
+            );
+          } else {
+            console.log(
+              `       ${C.r}→ 🔴 BUG NOSSO: ${o.cliquesComEsseFbclidNaoBot} clique(s) validos com esse fbclid` +
+                ` e o match nao aconteceu. A venda provavelmente foi ingerida ANTES de a via do fbc existir.${C.x}`,
+            );
+          }
         } else {
-          console.log(`       ${C.r}→ havia identificador E havia cliques na janela: o match deveria ter acontecido. INVESTIGAR.${C.x}`);
+          console.log(`       ${C.a}→ havia identificador no payload e cliques na janela, mas nada foi gravado na venda.${C.x}`);
         }
       }
     }
@@ -373,9 +414,17 @@ async function main() {
          FROM "AutomationRule" WHERE "userId" = $1`,
       [u.id],
     );
-    if (regras.total > 0) {
+    {
+      // ⛔ Imprime SEMPRE, inclusive com zero regras.
+      //
+      // Antes era `if (total > 0)`, e a secao sumia — o que e indistinguivel de
+      // "o bloco nao rodou". Foi exatamente a duvida que isso gerou: nao dava
+      // para saber se o usuario tinha zero regras ou se o diagnostico estava
+      // quebrado. E a mesma regra do estado `sem-dados` do teste de pixel:
+      // **diagnostico que fica calado nao e diagnostico**.
       console.log(`
   ${C.b}3b. Regras com filtro de produto${C.x}`);
+      if (regras.total === 0) console.log(`     ${C.d}Nenhuma regra cadastrada.${C.x}`);
       console.log(`     ${regras.total} regra(s) · ${regras.comFiltro} com produto escolhido · ${C.b}${regras.comFiltroAtivas} dessas ATIVAS${C.x}`);
       console.log(`     ${C.d}campo legado que o motor realmente lê, preenchido em: ${regras.legadoPreenchido}${C.x}`);
       if (regras.comFiltroAtivas > 0) {
