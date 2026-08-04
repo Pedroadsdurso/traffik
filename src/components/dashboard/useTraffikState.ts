@@ -1054,6 +1054,31 @@ export function useTraffikState(
        */
       erroSync: explicarErroDeConta(ac.lastSyncError, ac.accountStatus),
       falhasSeguidas: ac.syncErrorCount,
+      /**
+       * A mensagem CRUA da Meta, para o detalhe tecnico.
+       *
+       * ⚠️ Ela existe na tela, mas ESCONDIDA. A traducao existe justamente
+       * para o usuario nao precisar ler ingles truncado com URL de
+       * documentacao no meio — e mostrar as duas ao mesmo tempo desfaz o
+       * ganho. Some quando a traducao ja disse tudo (mensagem desconhecida ja
+       * mostra o texto cru como conteudo principal).
+       */
+      erroCru: ac.lastSyncError,
+      /**
+       * O erro desta conta e o MESMO do perfil?
+       *
+       * 🔴 Quando o token perde permissao, as N contas falham pela mesma causa
+       * e a tela repetia o mesmo bloco N+1 vezes (uma por conta + a do perfil).
+       * Com 5 contas eram 6 blocos identicos. A causa e uma so; o lugar de
+       * dizer isso e o topo.
+       */
+      mesmoErroDoPerfil:
+        p.lastDiscoveryError != null &&
+        ac.lastSyncError != null &&
+        // Compara a CAUSA traduzida, nao o texto cru: a Meta acrescenta o nome
+        // da conta e a URL da doc, entao as strings nunca sao identicas.
+        explicarErroDeConta(ac.lastSyncError, ac.accountStatus)?.mensagem ===
+          explicarErroDeConta(p.lastDiscoveryError, null)?.mensagem,
       trackingOn: ac.trackingEnabled,
       syncBusy: s.accountSync[ac.id]?.busy ?? false,
       syncMsg: s.accountSync[ac.id]?.msg ?? null,

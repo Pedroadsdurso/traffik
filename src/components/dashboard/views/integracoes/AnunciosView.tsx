@@ -117,7 +117,16 @@ function ProfilePanel({ p }: { p: Profile }) {
                 <div className="card-meta">act_{ac.fbAccountId} · {ac.currency}</div>
               </div>
               <div style={sx("display:flex;align-items:center;gap:12px;flex-shrink:0")}>
-                {ac.syncMsg && <span className="text-muted" style={sx("font-size:11px")}>{ac.syncMsg}</span>}
+                {/*
+                  ⚠️ A mensagem crua da Meta NAO fica solta aqui. Ela vinha em
+                  ingles, truncada e com URL de documentacao no meio, LADO A
+                  LADO com a traducao — o que desfaz o ganho de ter traduzido.
+                  Sucesso continua visivel; falha vira detalhe tecnico dentro do
+                  bloco de erro, atras de um clique.
+                */}
+                {ac.syncMsg && !ac.syncMsg.startsWith("✗") && (
+                  <span className="text-muted" style={sx("font-size:11px")}>{ac.syncMsg}</span>
+                )}
                 <button className="btn btn-secondary" type="button" onClick={ac.sync} disabled={ac.syncBusy} style={sx("font-size:12px;padding:5px 9px")}>
                   {ac.syncBusy ? "Sincronizando…" : "Sincronizar"}
                 </button>
@@ -137,7 +146,26 @@ function ProfilePanel({ p }: { p: Profile }) {
                 explica sozinho — conta desabilitada não precisa ter falhado
                 ainda para ser avisada.
               */}
-              {ac.erroSync && (
+              {/*
+                🔴 Conta que falha pela MESMA causa do perfil ganha uma LINHA,
+                nao um bloco. Com 5 contas e um token sem permissao, a tela
+                mostrava 6 blocos identicos — a causa e uma so, e o lugar de
+                explica-la e o topo.
+              */}
+              {ac.erroSync && ac.mesmoErroDoPerfil && (
+                <div
+                  className="text-muted"
+                  style={sx("flex-basis:100%;display:flex;gap:6px;align-items:center;margin-top:2px;font-size:11.5px")}
+                >
+                  <Icone nome="erro" tamanho={12} cor="perigo" />
+                  Não sincroniza — mesmo motivo do aviso acima.
+                  {ac.falhasSeguidas > 1 && (
+                    <span>· {plural(ac.falhasSeguidas, "tentativa", "tentativas")}</span>
+                  )}
+                </div>
+              )}
+
+              {ac.erroSync && !ac.mesmoErroDoPerfil && (
                 <div
                   style={sx(
                     "flex-basis:100%;display:flex;gap:8px;align-items:flex-start;margin-top:2px;padding:8px 10px;" +
@@ -161,6 +189,21 @@ function ProfilePanel({ p }: { p: Profile }) {
                         {plural(ac.falhasSeguidas, "tentativa seguida sem sucesso", "tentativas seguidas sem sucesso")}
                         {ac.trackingOn && " · desligue o rastreamento para parar de tentar"}
                       </div>
+                    )}
+                    {/*
+                      O texto CRU da Meta continua acessivel — escondido, nao
+                      apagado. A lista de traducoes e incompleta por natureza, e
+                      quem for depurar precisa do original.
+                    */}
+                    {ac.erroCru && (
+                      <details style={sx("margin-top:4px")}>
+                        <summary style={sx("cursor:pointer;font-size:11px;color:var(--color-text-muted)")}>
+                          ver detalhe técnico
+                        </summary>
+                        <code style={sx("display:block;margin-top:3px;font-size:10.5px;line-height:1.4;word-break:break-word;opacity:.75")}>
+                          {ac.erroCru}
+                        </code>
+                      </details>
                     )}
                   </div>
                 </div>
