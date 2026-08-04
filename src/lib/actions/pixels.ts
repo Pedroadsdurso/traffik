@@ -15,7 +15,7 @@ import type { PixelEventType, PurchaseSendMode, PurchaseValueMode } from "@/gene
 import { lerDonos, type MapaDeDonos } from "@/lib/pixel/donos";
 import { assinaturaDetectores, avisoDeVersao, diferencasDeDetectores } from "@/lib/pixel/detectores";
 import { EVENTOS_DO_PIXEL, donoDoEvento } from "@/lib/pixel/donos";
-import { donosDoPreset, lerPreset, type PresetPixel } from "@/lib/pixel/preset";
+import { PRESET_PADRAO, donosDoPreset, lerPreset, type PresetPixel } from "@/lib/pixel/preset";
 
 export type DetectionType = "clique_checkout" | "contem_texto" | "contem_css" | "contem_url";
 
@@ -222,7 +222,7 @@ export async function createPixel(input: PixelFormInput): Promise<PixelConfigDTO
       // e escrever os campos aqui também impede que uma propriedade nova do
       // preset vá parar no banco sem ninguém decidir.
       setup: input.preset ? { temPixelNativo: input.preset.temPixelNativo } : undefined,
-      eventOwners: input.eventOwners ?? donosDoPreset(input.preset ?? { temPixelNativo: true }),
+      eventOwners: input.eventOwners ?? donosDoPreset(input.preset ?? PRESET_PADRAO),
       metaPixels: { create: metaPixels },
       eventRules: { create: rulesFromForm(input) },
     },

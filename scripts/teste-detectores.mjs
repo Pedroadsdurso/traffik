@@ -82,7 +82,19 @@ verdade(
 );
 verdade(
   "trocar o dono de OUTRO evento também muda",
-  a({}) !== a({ donos: { ...DONOS_PADRAO, Purchase: "gateway" } }),
+  a({}) !== a({ donos: { ...DONOS_PADRAO, InitiateCheckout: "gateway" } }),
+);
+// 🔴 A asserção acima era com `Purchase`, e ela INVERTEU na v3 — de propósito.
+//
+// A assinatura mede uma coisa só: "o script instalado se comporta como a
+// configuração salva?". O `Purchase` nunca sai do script (é server-side, pelo
+// webhook; `/api/pixel/event` o recusa), então ele não muda uma linha do
+// snippet. Enquanto ele entrava no hash, trocar o dono dele fazia a gaveta
+// mandar regerar e recolar o script à toa — e aviso que às vezes mente treina o
+// usuário a ignorar todos, inclusive os certos.
+verdade(
+  "trocar o dono do Purchase NÃO muda (ele não sai do script)",
+  a({}) === a({ donos: { ...DONOS_PADRAO, Purchase: "gateway" } }),
 );
 
 // ───────────────────── 2. A assinatura NÃO muda à toa ─────────────────────

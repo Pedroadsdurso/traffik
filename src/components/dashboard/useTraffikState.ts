@@ -1482,6 +1482,43 @@ export function useTraffikState(
     adsBusyId: s.adsBusyId,
     setAdsSub: (k: "campaigns" | "adsets" | "ads" | "accounts") => set({ adsSub: k }),
     toggleAdsEntity: (type: "campaign" | "adset" | "ad", id: string) => toggleEntity(type, id)(),
+    /**
+     * Liga/desliga o RASTREAMENTO de uma conta de anúncio, a partir da aba
+     * Contas do Gerenciador.
+     *
+     * 🐛 A aba Contas tem `nivel: null` (conta não é entidade da Meta que se
+     * pausa), e o handler da tabela era `if (nivel) v.toggleAdsEntity(...)` —
+     * então **clicar no toggle ali não fazia absolutamente nada, sem erro
+     * nenhum**. O controle existia, refletia o estado certo, e era inerte.
+     *
+     * ⚠️ É outra ação que a das outras abas, não a mesma com outro argumento:
+     * lá o toggle pausa/ativa NA META; aqui ele decide se a Traffik sincroniza
+     * esta conta. Por isso a server action é outra (`toggleAccountTracking`).
+     *
+     * ⚠️ Atualiza as DUAS fontes: `adProfiles` (o que Integrações › Anúncios
+     * mostra) e o overview do Gerenciador, via `adsRefreshKey`. Elas são
+     * consultas diferentes sobre a mesma coluna — mexer em uma só faria as duas
+     * telas discordarem até o próximo recarregamento.
+     */
+    toggleAdsAccountTracking: async (id: string) => {
+      setS((st) => ({ ...st, adsBusyId: id }));
+      try {
+        const updated = await toggleAccountTracking(id);
+        setS((st) => ({
+          ...st,
+          adsBusyId: null,
+          adsRefreshKey: st.adsRefreshKey + 1,
+          adProfiles: st.adProfiles.map((pr) => ({
+            ...pr,
+            accounts: pr.accounts.map((a) =>
+              a.id === id ? { ...a, trackingEnabled: updated.trackingEnabled } : a,
+            ),
+          })),
+        }));
+      } catch {
+        setS((st) => ({ ...st, adsBusyId: null }));
+      }
+    },
     /** Força um recarregamento do overview (após ação em massa ou sync). */
     refreshAds: () => setS((st) => ({ ...st, adsRefreshKey: st.adsRefreshKey + 1 })),
     adsSearch: s.adsSearch,

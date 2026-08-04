@@ -28,7 +28,7 @@ import {
   type DonoDoEvento,
   type MapaDeDonos,
 } from "@/lib/pixel/donos";
-import { donosDoPreset, seguePreset } from "@/lib/pixel/preset";
+import { donosDoPreset, seguePreset, type PresetPixel } from "@/lib/pixel/preset";
 import { Select } from "../../ui/Select";
 import { Checkbox } from "../../ui/Checkbox";
 import { Icone } from "../../ui/Icone";
@@ -44,6 +44,8 @@ type Form = {
   metaPixels: MetaDraft[];
   /** A pergunta do preset. Decide os donos E o comportamento do script. */
   temPixelNativo: boolean;
+  /** 2ª pergunta do preset: alguem mais ja envia o Purchase? Decide so o dono. */
+  outroEnviaPurchase: boolean;
   lead: boolean;
   addToCart: boolean;
   ic: { enabled: boolean; type: DetectionType; value: string };
@@ -61,7 +63,8 @@ const EMPTY_FORM: Form = {
   addToCart: false,
   ic: { enabled: true, type: "clique_checkout", value: "" },
   purchase: { enabled: true, sendMode: "APENAS_APROVADAS", valueMode: "VALOR_DA_VENDA", fixedValue: "", targetProduct: "" },
-  donos: donosDoPreset({ temPixelNativo: true }),
+  outroEnviaPurchase: false,
+  donos: donosDoPreset({ temPixelNativo: true, outroEnviaPurchase: false }),
 };
 
 function formToInput(f: Form): PixelFormInput {
@@ -81,7 +84,7 @@ function formToInput(f: Form): PixelFormInput {
       targetProduct: f.purchase.targetProduct || null,
     },
     eventOwners: f.donos,
-    preset: { temPixelNativo: f.temPixelNativo },
+    preset: { temPixelNativo: f.temPixelNativo, outroEnviaPurchase: f.outroEnviaPurchase },
   };
 }
 
@@ -92,6 +95,7 @@ function dtoToForm(px: PixelConfigDTO): Form {
     name: px.name,
     metaPixels: px.metaPixels.map((m) => ({ pixelId: m.pixelId, accessToken: "", nickname: m.nickname ?? "", savedToken: m.hasToken })),
     temPixelNativo: px.preset.temPixelNativo,
+    outroEnviaPurchase: px.preset.outroEnviaPurchase,
     lead: px.rules.find((r) => r.eventType === "LEAD")?.enabled ?? false,
     addToCart: px.rules.find((r) => r.eventType === "ADD_TO_CART")?.enabled ?? false,
     ic: { enabled: ic?.enabled ?? false, type: (ic?.detectionType as DetectionType) ?? "clique_checkout", value: ic?.detectionValue ?? "" },
@@ -280,8 +284,15 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
    * exatamente o estado que esta reforma existe para eliminar. O caminho de
    * volta é o `↩ voltar ao padrão` do avançado.
    */
-  function responderPreset(temPixelNativo: boolean) {
-    setForm((f) => ({ ...f, temPixelNativo, donos: donosDoPreset({ temPixelNativo }) }));
+  function responderPreset(patch: Partial<PresetPixel>) {
+    setForm((f) => {
+      const preset: PresetPixel = {
+        temPixelNativo: f.temPixelNativo,
+        outroEnviaPurchase: f.outroEnviaPurchase,
+        ...patch,
+      };
+      return { ...f, ...preset, donos: donosDoPreset(preset) };
+    });
   }
 
   function addMeta() {
@@ -351,7 +362,10 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
   }
 
   const primeiro = form.metaPixels[0];
-  const noPadrao = seguePreset({ temPixelNativo: form.temPixelNativo }, form.donos);
+  const noPadrao = seguePreset(
+    { temPixelNativo: form.temPixelNativo, outroEnviaPurchase: form.outroEnviaPurchase },
+    form.donos,
+  );
 
   return (
     <div style={sx("display:flex;flex-direction:column;gap:var(--space-4)")}>
@@ -524,14 +538,14 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
               <Checkbox
                 tipo="radio"
                 checked={form.temPixelNativo}
-                onChange={() => responderPreset(true)}
+                onChange={() => responderPreset({ temPixelNativo: true })}
                 label="Sim, já tenho o pixel do Facebook no site"
                 dica="Deixamos a visita (PageView) com ele e mandamos os outros eventos pelo nosso servidor, com o mesmo identificador. Assim a Meta conta uma conversão, não duas."
               />
               <Checkbox
                 tipo="radio"
                 checked={!form.temPixelNativo}
-                onChange={() => responderPreset(false)}
+                onChange={() => responderPreset({ temPixelNativo: false })}
                 label="Não, só a Traffik vai enviar"
                 dica="Enviamos tudo pelo nosso servidor, inclusive a visita. Chega mesmo com bloqueador de anúncios."
               />
@@ -606,6 +620,16 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
         </Secao>
 
         {/* ─────────────── 4. Purchase — vale na hora ─────────────── */}
+        {/*
+          A 2ª pergunta do preset mora AQUI, e não junto da 1ª, por dois motivos:
+
+          1. **O selo tem de continuar verdadeiro.** O bloco "Como é o seu site"
+             é `⟳ muda o script`; o dono do Purchase NÃO muda o script (ele nunca
+             sai do navegador). Colocá-lo lá faria o selo pedir "recole o
+             snippet" para uma escolha que não mexe em uma linha do snippet.
+          2. É a mesma pergunta que esta seção já faz — "quem avisa a Meta da
+             venda?" —, só que respondida do outro lado.
+        */}
         <Secao titulo="Envio das vendas" selo="hora">
           <Checkbox
             checked={form.purchase.enabled}
@@ -613,6 +637,64 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
             label="Enviar a venda para a Meta quando ela for aprovada"
             dica="Sai do nosso servidor, a partir do webhook do gateway — não depende do navegador do comprador. Vale já na próxima venda, sem recolar o script."
           />
+
+          {form.purchase.enabled && (
+            <div style={sx("margin-top:var(--space-2)")}>
+              <div style={sx("font-size:13px;font-weight:600;margin-bottom:6px")}>
+                Alguém mais já avisa o Facebook quando a venda é aprovada?
+              </div>
+              <div style={sx("display:flex;flex-direction:column;gap:4px")}>
+                <Checkbox
+                  tipo="radio"
+                  checked={!form.outroEnviaPurchase}
+                  onChange={() => responderPreset({ outroEnviaPurchase: false })}
+                  label="Não — quem avisa é a Traffik"
+                  dica="Enviamos a venda pelo nosso servidor, só quando ela é aprovada de verdade. É o recomendado: chega mesmo com bloqueador de anúncios e não dispara em PIX que ninguém pagou."
+                />
+                <Checkbox
+                  tipo="radio"
+                  checked={form.outroEnviaPurchase}
+                  onChange={() => responderPreset({ outroEnviaPurchase: true })}
+                  label="Sim — a página de obrigado ou o checkout do meu gateway já envia"
+                  dica="A Traffik para de enviar a venda para a Meta. Continua registrando tudo aqui: faturamento, funil e Gerenciador não mudam."
+                />
+              </div>
+
+              {/*
+                ⚠️ O aviso aparece na resposta PADRÃO, não na exceção — ao
+                contrário de quase todo aviso do produto. A razão: é a resposta
+                padrão que produz contagem dobrada quando está errada, e o
+                usuário não tem como saber que o checkout do gateway dele dispara
+                Purchase sem ir olhar. Um aviso só na outra opção deixaria o caso
+                caro em silêncio.
+              */}
+              <div
+                style={sx(
+                  "margin-top:var(--space-2);display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border-radius:var(--radius-sm);" +
+                    "border-left:3px solid #f59e0b;background:color-mix(in srgb, #f59e0b 7%, var(--color-surface))",
+                )}
+              >
+                <Icone nome="aviso" tamanho={15} cor="aviso" />
+                <div style={sx("font-size:12px;line-height:1.55")} className="text-muted">
+                  {form.outroEnviaPurchase ? (
+                    <>
+                      Confira no <strong>Gerenciador de Eventos</strong> da Meta que a venda continua
+                      chegando. Se o outro lado parar de enviar, ela some — e nada aqui vai avisar,
+                      porque do nosso lado está tudo certo.
+                    </>
+                  ) : (
+                    <>
+                      <strong>Só marque “Não” se ninguém mais envia.</strong> Se a sua página de
+                      obrigado ou o checkout do gateway também disparar a venda, a Meta vai contar{" "}
+                      <strong>duas conversões para cada venda</strong> e otimizar a campanha com o
+                      número inflado. Este é o único evento em que não dá para combinar os dois
+                      lados: ou nós enviamos, ou ele.
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </Secao>
 
         {/* ─────────────── 5. Avançado ─────────────── */}
@@ -636,7 +718,7 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
                 {!noPadrao && (
                   <button
                     type="button"
-                    onClick={() => responderPreset(form.temPixelNativo)}
+                    onClick={() => responderPreset({})}
                     className="btn btn-ghost"
                     style={sx("align-self:flex-start;padding:4px 0;font-size:12px")}
                   >

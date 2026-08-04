@@ -467,8 +467,18 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
         selecionadas={selecao}
         onSelecionar={alternar}
         onSelecionarTodas={alternarTodas}
+        /**
+         * 🐛 O `if (nivel)` sozinho fazia o toggle da aba **Contas** ser um
+         * no-op silencioso: ali `nivel` é `null` (conta não é entidade que se
+         * pausa na Meta) e a chamada simplesmente não acontecia.
+         *
+         * Os dois ramos são ações DIFERENTES, e é por isso que não dá para
+         * unificar: nas outras abas o toggle pausa/ativa **no Facebook**; aqui
+         * ele liga/desliga o **rastreamento da conta na Traffik**.
+         */
         onToggleStatus={(id) => {
           if (nivel) v.toggleAdsEntity(nivel, id);
+          else void v.toggleAdsAccountTracking(id);
         }}
         onSalvarOrcamento={salvarOrcamento}
         fixadas={fixadas}

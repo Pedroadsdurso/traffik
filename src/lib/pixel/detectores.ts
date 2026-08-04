@@ -77,7 +77,7 @@ export interface Detectores {
  * comparação usa só os campos que a versão reportada conhece. Ver
  * `diferencasDeDetectores` e `avisoDeVersao`.
  */
-const VERSAO = "v2";
+const VERSAO = "v3";
 
 /**
  * FNV-1a em base36 — o MESMO algoritmo do `eid()` do script.
@@ -118,8 +118,21 @@ function normalizarValor(tipo: string | null, valor: string | null): string {
   return v;
 }
 
-/** Ordem fixa dos eventos no hash dos donos — mudá-la invalida toda assinatura. */
-const ORDEM_EVENTOS = ["PageView", "Lead", "AddToCart", "InitiateCheckout", "Purchase"];
+/**
+ * Ordem fixa dos eventos no hash dos donos — mudá-la invalida toda assinatura.
+ *
+ * > ### 🔴 `Purchase` saiu daqui na v3, e a razão é o que este módulo mede
+ * > A assinatura existe para responder **"o script instalado se comporta como a
+ * > configuração salva?"**. O `Purchase` nunca sai do script: ele é server-side,
+ * > disparado pelo webhook. Trocar o dono dele mudava o hash e a gaveta mandava
+ * > **regerar e recolar o snippet à toa** — e aviso que às vezes mente treina o
+ * > usuário a ignorar todos, inclusive os certos.
+ * >
+ * > ⚠️ Só entra aqui o que o script REALMENTE assa e usa. Se um dia o
+ * > `Purchase` passar a sair do navegador, ele volta — junto com um bump de
+ * > versão.
+ */
+const ORDEM_EVENTOS = ["PageView", "Lead", "AddToCart", "InitiateCheckout"];
 
 function hashDonos(donos: Record<string, string>): string {
   return fnv36(ORDEM_EVENTOS.map((e) => `${e}=${donos[e] ?? "?"}`).join(";"));
@@ -234,7 +247,17 @@ export function diferencasDeDetectores(instalado: string, esperado: string): str
         : "Você respondeu que NÃO tem o pixel do Facebook na página, mas o script instalado fica esperando por ele em toda visita.",
     );
   }
-  if (inst.hashDonos !== null && esp.hashDonos !== null && inst.hashDonos !== esp.hashDonos) {
+  // ⚠️ O hash dos donos só é comparável DENTRO da mesma versão: a v3 tirou o
+  // `Purchase` da conta (ver `ORDEM_EVENTOS`), então um script v2 reporta um
+  // hash calculado sobre outro conjunto de eventos. Compará-los acusaria
+  // divergência em 100% dos scripts v2 instalados, inclusive nos corretos —
+  // exatamente o alarme falso que este módulo existe para não produzir.
+  if (
+    inst.versao === esp.versao &&
+    inst.hashDonos !== null &&
+    esp.hashDonos !== null &&
+    inst.hashDonos !== esp.hashDonos
+  ) {
     out.push(
       "Quem envia cada evento mudou depois que este script foi gerado — e essa escolha também fica gravada nele.",
     );

@@ -68,7 +68,25 @@ export async function dispatchPurchaseEvents(saleId: string): Promise<void> {
           accessToken,
           value,
           currency: sale.currency,
-          eventId: sale.id, // dedup com o pixel do navegador
+          /**
+           * 🔴 Isto NÃO deduplica com o pixel do navegador — e o comentário que
+           * estava aqui afirmava que sim, desde o primeiro commit do pixel
+           * (`f62d2db`, Fase 10).
+           *
+           * `sale.id` é um cuid do NOSSO banco. Nenhum pixel de navegador — nem
+           * o do usuário, nem o do gateway — consegue gerar esse id, e o nosso
+           * script nunca dispara `Purchase` (a rota `/api/pixel/event` o recusa).
+           * Então nunca houve par para a Meta juntar: **a dedup do Purchase
+           * jamais funcionou.** Não é regressão, é defeito de origem.
+           *
+           * O `event_id` continua sendo enviado porque serve para outra coisa,
+           * essa sim real: a **idempotência do nosso lado**. Reentrega do mesmo
+           * webhook reenvia o mesmo id, e a Meta descarta a repetição.
+           *
+           * Quem resolve a contagem dobrada é a PARTIÇÃO — `traffikEnvia` acima,
+           * alimentada pela pergunta do preset. Ver `lib/pixel/preset.ts`.
+           */
+          eventId: sale.id,
           email: sale.buyerEmail,
           phone: sale.buyerPhone,
           country: sale.country,

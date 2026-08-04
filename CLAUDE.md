@@ -4919,6 +4919,185 @@ desligada.** Nenhuma dessas ferramentas pergunta "alguém chama isto?".
 > Ao criar rota de cron, **agende no mesmo commit**. Ao criar consulta de
 > manutenção, **rode contra linhas semeadas no dev** antes de dizer que funciona.
 
+## 🔴 TESTES COM USUÁRIOS REAIS (04/08/2026) — as TRÊS RAÍZES
+
+Primeira rodada com testadores de verdade. Os ~16 problemas relatados não são
+16 causas: são **três**, e cada uma aparece em telas diferentes com cara
+diferente. Classificar por raiz é o que evita consertar o mesmo defeito quatro
+vezes e deixar a quinta ocorrência de pé.
+
+### Raiz 1 — MAIS DE UMA IMPLEMENTAÇÃO DA MESMA CONTA
+
+Já conhecida (foi assim que a tela de Áreas passou a dizer "Sem webhook" para
+uma área com webhook), mas ainda não estava valendo para o **dinheiro**.
+
+**Existem TRÊS "ROI" e TRÊS "lucro" no produto:**
+
+| Onde | ROI | Lucro |
+|---|---|---|
+| Dashboard | `lucro líquido ÷ custoTotal` (`lib/financeiro.ts`) | líquido − anúncios − recorrentes |
+| Gerenciador | `(faturamento − gasto) ÷ gasto` (`lib/ads/metrics.ts`) | bruto, sem taxas |
+| Taxas e Despesas | — | `revenue − spend − expenses.total` (`useTraffikState`) |
+
+> ⚠️ **A terceira reimplementa o cálculo e erra**: `expenses.total` é
+> `fin.totalDescontos`, que **exclui as despesas recorrentes**. O painel mostra
+> a linha "Despesas − R$ X" e **não a subtrai** do Lucro exibido. O mesmo erro
+> está no tooltip do ROI (`spend + expenses.total`). Só não aparece para quem
+> tem despesa zerada. E o painel não tem linha de coprodução nem custo de
+> produto, então com esses cadastrados ele deixa de fechar visualmente.
+
+### Raiz 2 — ATRIBUIÇÃO INCOMPLETA, tratada de 4 jeitos diferentes
+
+A venda que não cola numa campanha existe, e **cada tela decide sozinha o que
+fazer com ela**:
+
+| Tela | O que faz com o não atribuível |
+|---|---|
+| Dashboard | soma tudo (correto: é nível de conta) |
+| Gerenciador, nível campanha | ignora, e **herda dos filhos** com `\|\| agg.X` |
+| Gerenciador, conjunto e anúncio | 🔴 `results: 0, revenue: 0` **fixos no código** |
+| Funil | conta em etapas de fontes diferentes |
+
+> ### 🔴 Conjunto e anúncio NUNCA tiveram faturamento
+> `overview.ts` monta `adRows` e `adSetRows` com `results: 0, revenue: 0`
+> literais. Não é o drill-down que "perde as métricas" — é que naquele nível o
+> número nunca existiu. O drill-down só levou o usuário até onde o zero mora.
+
+> ### ⚠️ `splitPipe` rejeita o ID e ACEITA o NOME
+> `{{campaign.name}}|{{campaign.id}}` vira `campaignId: null` (bom, o id não é
+> numérico) e `campaignName: "{{campaign.name}}"` (ruim: entra no balde de
+> atribuição por nome). **Não existe verificação de chaves duplas nem de `%7B`
+> em lugar nenhum** — nem no parser, nem em `/api/track/click`, nem na ingestão.
+> Template não substituído significa que o clique **não veio de entrega de
+> anúncio** (preview, crawler, link colado): o destino certo dele é tráfego
+> direto.
+
+### 🔴 Raiz 3 — CONTROLE QUE NÃO CONTROLA NADA
+
+**A mais perigosa das três**, e a que motivou a varredura: são controles que o
+usuário mexe acreditando ter mudado alguma coisa. Não há erro, não há log, e a
+tela **confirma** a escolha — só o comportamento não muda.
+
+> ### ⛔ É pior que código morto, e por um motivo específico
+> Código inerte (os casos anteriores do PROCEDIMENTO) não faz nada e ninguém
+> depende dele. Um **controle** inerte é pior: ele produz uma crença. O usuário
+> desliga o rastreamento de uma conta, vê o toggle desligado, e **decide com
+> base nisso**. A tela virou a fonte de uma informação falsa.
+>
+> **Ao entregar um controle, o teste não é "salva?" — é "quem LÊ o que ele
+> salvou?".** É o mesmo `grep` do PROCEDIMENTO, aplicado do lado da escrita.
+
+### Varredura completa dos controles (04/08/2026)
+
+Todo `<Checkbox>`, `<Select>` e `role="switch"` do produto, rastreado até o
+consumidor. **4 inertes de ~40.**
+
+| Controle | Onde | Veredito |
+|---|---|---|
+| 🔴 **Toggle da aba Contas** | Gerenciador | **no-op absoluto** — `nivel` é `null` e o handler era `if (nivel) …`. ✅ **corrigido** |
+| 🔴 **Rastreamento da conta** | Integrações › Anúncios | salva `trackingEnabled`, e **nada em `computeAdsOverview`/`computeDashboard` filtra por ele**. Desligar só afeta sincronizações futuras; a listagem e o gasto continuam |
+| 🔴 **Produtos da regra** | Regras | a gaveta grava `targetProducts` (plural) e o motor lê `targetProduct` (**singular**, legado), que a gaveta nunca preenche. **Uma regra restrita a um produto age sobre TODOS** — e o card ainda escreve o nome do produto escolhido. Move dinheiro |
+| 🔴 **"Nome do dashboard"** | Notificações | `showDashboardName` é salvo, viaja no DTO e `dispatchNotification` usa os outros três `show*` e **não usa este** |
+| ⚠️ "Fixar" | Gerenciador | inerte por decisão declarada (só de sessão) — não conta |
+| ✅ demais ~35 | — | rastreados até um consumidor real |
+
+> ⚠️ **Os dois primeiros são a mesma coluna vista dos dois lados**: um não
+> chamava a action, o outro chamava e ninguém lia o resultado. Consertar só o
+> toggle teria deixado o usuário com um controle que agora responde e continua
+> sem efeito — que é pior, porque passa a parecer que funciona.
+
+> ⚠️ **`targetProducts` é o mais caro dos quatro** e não foi corrigido nesta
+> sessão: exige decidir se o filtro passa a valer (muda o comportamento de
+> regras já cadastradas, que hoje agem em tudo) ou se a UI passa a dizer a
+> verdade. **Não ligue o filtro sem avisar o usuário** — uma regra que ele
+> criou achando que era global e que passa a ser restrita também é uma
+> mudança de escopo silenciosa, só que para o outro lado.
+
+### 🔴 7º caso do PROCEDIMENTO: comentário que afirma o CONTRÁRIO do código
+
+`dispatchPixel.ts` enviava `eventId: sale.id` com o comentário
+`// dedup com o pixel do navegador`. **A dedup do Purchase nunca funcionou** —
+e não é regressão: está assim desde `f62d2db`, o primeiro commit do pixel.
+
+`sale.id` é um cuid do nosso banco. Nenhum pixel de navegador consegue
+reproduzi-lo, e o **nosso script nunca dispara `Purchase`** (é server-side; a
+rota `/api/pixel/event` o recusa explicitamente). Nunca houve par para a Meta
+juntar.
+
+> ### ⛔ Os casos anteriores eram código INERTE. Este era código ATIVO com uma
+> ### legenda falsa.
+> Ele rodava, em toda venda, fazendo exatamente o que o código dizia — e o
+> comentário descrevia um efeito que não existia. Todo mundo que leu aquela
+> linha (inclusive eu, em três sessões) concluiu que a duplicata estava
+> resolvida e foi procurar o problema em outro lugar.
+>
+> **Comentário que afirma um efeito é uma afirmação testável.** Se ele diz
+> "isto deduplica", tem que existir o outro lado do par — e o `grep` que
+> procura o outro lado leva 10 segundos.
+
+**A correção é PARTIÇÃO**, não coordenação — não existe id compartilhável aqui.
+Ver `lib/pixel/preset.ts`: o preset ganhou uma **segunda pergunta** ("alguém
+mais já avisa o Facebook quando a venda é aprovada?") que decide o dono do
+`Purchase`.
+
+> ### ⛔ São DUAS perguntas porque são DUAS páginas
+> `temPixelNativo` fala da **página de vendas**; o `Purchase` é disparado na
+> **página de obrigado ou no checkout do gateway**, que quase nunca é do
+> usuário. Derivar uma da outra erra nos dois sentidos: "tem pixel ⇒ ele manda
+> o Purchase" faz quem só tem pixel na página de vendas **perder toda venda na
+> Meta, em silêncio**; o contrário é o bug atual.
+
+> ⚠️ **O padrão continua sendo "a Traffik envia"**, e é escolha: não enviar
+> perde conversão sem nada denunciar; enviar duplicado aparece no Gerenciador
+> de Eventos. Mesma regra do `lerDonos`. Por isso o **aviso âmbar aparece na
+> resposta PADRÃO**, ao contrário de quase todo aviso do produto — é ela que
+> custa caro quando está errada, e o usuário não tem como saber o que o
+> checkout do gateway dele faz sem ir olhar.
+
+> ### ⚠️ `Purchase` saiu da assinatura do script (detectores v3)
+> O dono do Purchase **não muda o script** (ele nunca sai do navegador), mas
+> entrava em `ORDEM_EVENTOS` e em `eventosAlheios` — então trocá-lo mudava o
+> hash e a gaveta mandava **regerar e recolar o snippet à toa**. Aviso que às
+> vezes mente treina o usuário a ignorar todos.
+>
+> `VERSAO` foi para `v3` e a comparação de `hashDonos` passou a exigir
+> **mesma versão** nos dois lados: um script v2 instalado reporta um hash
+> calculado sobre outro conjunto de eventos, e compará-lo acusaria divergência
+> em 100% dos scripts v2 corretos.
+
+### 🔍 `npm run diag:testadores` — só leitura, pode rodar em produção
+
+```
+npm run diag:testadores -- --url "<conn>"
+npm run diag:testadores -- --url "<conn>" --dias 7 --email alguem@exemplo.com
+```
+
+Responde três perguntas que só o dado de produção responde: **quanto do
+faturamento está atribuído a campanha** (é o que explica o ROI divergente),
+**o estado do sync de cada testador** (`lastSyncedAt` × `lastMetricsAt` ×
+última métrica GRAVADA × token expirado) e **quantos cliques têm template não
+substituído**, com o impacto da reclassificação medido antes de decidir.
+
+> ⚠️ **Tudo recortado por `userId`, e não existe total do banco no relatório** —
+> é a regra que o `origem-venda.mjs` custou para aprender.
+>
+> ⚠️ Ele imprime `lastMetricsAt` **e** a última linha de `DailyAdMetric`
+> gravada. São perguntas diferentes: a primeira diz que TENTAMOS sincronizar, a
+> segunda que CHEGOU dado. `autoSyncSeNecessario` devolve `modo: "erro"` e **a
+> tela descarta** — um token expirado faz o sync falhar a cada 20s para sempre
+> sem nada aparecer no painel.
+
+### 🐛 Conta nova nasce com um webhook
+
+`signupAction` (`app/(auth)/actions.ts`) cria explicitamente um
+`Webhook principal` da plataforma `CUSTOM` em toda conta nova, e a tela de
+cadastro anuncia isso ("Seu webhook de vendas já sai configurado").
+
+⚠️ Como `CUSTOM` tem `auth.exigir: false`, esse webhook é um **endpoint de
+ingestão sem segredo**, criado para todo usuário sem que ele peça. Quem
+conhecer o token consegue inserir venda na conta. Decidir se ele deixa de
+nascer ou se passa a exigir chave.
+
 ## 🚦 COMECE AQUI — fila de UX: (f) e (g) fechados (01/08/2026)
 
 ### (g) Regras em duas regiões — o grupo que move dinheiro parou de ser intercalado

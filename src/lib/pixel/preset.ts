@@ -38,9 +38,42 @@ export interface PresetPixel {
    * ⚠️ Decide **os donos E o comportamento do script**. Ver a tabela acima.
    */
   temPixelNativo: boolean;
+  /**
+   * Alguém MAIS já avisa o Facebook quando a venda é aprovada?
+   *
+   * ## 🔴 Por que isto é uma SEGUNDA pergunta, e não derivado da primeira
+   *
+   * São **páginas diferentes**. `temPixelNativo` fala da página de vendas; o
+   * `Purchase` é disparado na página de obrigado ou pelo checkout do gateway —
+   * que na maioria dos casos **não é do usuário**. Ter o código do Facebook no
+   * site não diz nada sobre o que o checkout da Kirvano faz.
+   *
+   * Derivar uma da outra erraria nos dois sentidos, e os dois são caros:
+   *
+   * | Se derivasse | Consequência |
+   * |---|---|
+   * | "tem pixel ⇒ ele manda o Purchase" | quem tem pixel só na página de vendas **perde toda venda** na Meta, em silêncio |
+   * | "tem pixel ⇒ nós mandamos mesmo assim" | é o bug atual: **a Meta conta cada venda duas vezes** |
+   *
+   * ## ⚠️ O `Purchase` é o ÚNICO evento que não tem como deduplicar
+   *
+   * Nos demais, o nosso script espelha no `fbq` com o mesmo `event_id` e a Meta
+   * junta os dois. **O `Purchase` nunca sai do nosso script** — ele é
+   * server-side, disparado pelo webhook, e o `event_id` que mandamos é o `id` da
+   * venda no nosso banco. Nenhum pixel de navegador no mundo gera esse id.
+   * Então aqui não existe coordenação possível: ou nós enviamos, ou o outro.
+   *
+   * ## ⚠️ O padrão é `false` (nós enviamos), e isso é escolha
+   *
+   * Errar para "não enviar" perde conversão **em silêncio** — nada na tela
+   * denuncia. Errar para "enviar" produz contagem dobrada, que aparece no
+   * Gerenciador de Eventos da Meta. Mesma regra de `lerDonos`: aqui o risco não
+   * é permissão indevida, é perder venda.
+   */
+  outroEnviaPurchase: boolean;
 }
 
-export const PRESET_PADRAO: PresetPixel = { temPixelNativo: true };
+export const PRESET_PADRAO: PresetPixel = { temPixelNativo: true, outroEnviaPurchase: false };
 
 /**
  * O mapa de donos que cada resposta produz.
@@ -53,10 +86,17 @@ export const PRESET_PADRAO: PresetPixel = { temPixelNativo: true };
  * > dele.** Sem pixel nativo não existe segundo emissor, e a CAPI é o único
  * > caminho — aí o PageView volta a ser nosso.
  * >
- * > ⚠️ Os demais eventos são **sempre da Traffik**, nas duas respostas. Eles só
- * > saem do navegador se alguém chamar `fbq('track', …)` explicitamente, então
- * > não há emissor automático concorrendo. Rebaixá-los perderia conversão em
- * > silêncio, que é o erro caro.
+ * > ⚠️ `Lead`, `AddToCart` e `InitiateCheckout` são **sempre da Traffik**, em
+ * > qualquer resposta. Eles só saem do navegador se alguém chamar
+ * > `fbq('track', …)` explicitamente, e quando isso acontece o nosso script
+ * > espelha com o mesmo `event_id` — a Meta junta os dois. Rebaixá-los perderia
+ * > conversão em silêncio, que é o erro caro.
+ *
+ * > ### 🔴 `Purchase` responde à SEGUNDA pergunta, e por um motivo estrutural
+ * > Ele é o único evento sem contraparte de navegador do nosso lado: é enviado
+ * > pelo webhook, com `event_id = Sale.id`, que nenhum pixel de navegador
+ * > consegue reproduzir. **Não há dedup possível** — só partição. Ver
+ * > `PresetPixel.outroEnviaPurchase`.
  */
 export function donosDoPreset(preset: PresetPixel): MapaDeDonos {
   return {
@@ -64,7 +104,7 @@ export function donosDoPreset(preset: PresetPixel): MapaDeDonos {
     Lead: "traffik",
     AddToCart: "traffik",
     InitiateCheckout: "traffik",
-    Purchase: "traffik",
+    Purchase: preset.outroEnviaPurchase ? "gateway" : "traffik",
   };
 }
 
@@ -79,13 +119,30 @@ export function donosDoPreset(preset: PresetPixel): MapaDeDonos {
  *
  * Só cai em `false` quem trocou o PageView para Traffik na mão — e aí `false` é
  * a leitura certa, porque é o que essa escolha significa.
+ *
+ * ⚠️ O mesmo vale para `outroEnviaPurchase`: o padrão do projeto é
+ * `Purchase: "traffik"`, então todo pixel existente infere `false` — que é
+ * exatamente o que ele faz hoje. Quem tiver mexido no dono do Purchase à mão
+ * infere `true`, e continua sem receber envio nosso.
+ *
+ * ⚠️ Cada campo é lido de forma INDEPENDENTE. Um `setup` gravado antes de
+ * `outroEnviaPurchase` existir tem `temPixelNativo` e não tem o outro — exigir
+ * os dois faria a resposta antiga ser descartada inteira e o PageView voltar
+ * ao padrão sem ninguém pedir.
  */
 export function lerPreset(setup: unknown, eventOwners: unknown): PresetPixel {
-  if (setup && typeof setup === "object" && !Array.isArray(setup)) {
-    const v = (setup as Record<string, unknown>).temPixelNativo;
-    if (typeof v === "boolean") return { temPixelNativo: v };
-  }
-  return { temPixelNativo: donoDoEvento(eventOwners, "PageView") === "navegador" };
+  const obj =
+    setup && typeof setup === "object" && !Array.isArray(setup)
+      ? (setup as Record<string, unknown>)
+      : {};
+  const nativo = obj.temPixelNativo;
+  const outro = obj.outroEnviaPurchase;
+  return {
+    temPixelNativo:
+      typeof nativo === "boolean" ? nativo : donoDoEvento(eventOwners, "PageView") === "navegador",
+    outroEnviaPurchase:
+      typeof outro === "boolean" ? outro : donoDoEvento(eventOwners, "Purchase") !== "traffik",
+  };
 }
 
 /**

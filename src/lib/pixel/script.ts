@@ -47,8 +47,16 @@ function jsStr(v: string): string {
  * InitiateCheckout não pode apagar uma etapa inteira do funil como efeito
  * colateral invisível de uma decisão sobre pixel.
  */
+/**
+ * ⚠️ `Purchase` fica de FORA da lista, sempre.
+ *
+ * O script nunca o dispara — ele é server-side, sai do `dispatchPixel` no
+ * webhook, e `/api/pixel/event` recusa `Purchase` explicitamente. Incluí-lo aqui
+ * não mudava comportamento nenhum e **mudava a string assada no snippet**, o que
+ * fazia trocar o dono do Purchase pedir "regere e recole o script" à toa.
+ */
 function eventosAlheios(donos: unknown): string[] {
-  return EVENTOS_DO_PIXEL.filter((e) => !traffikEnvia(donos, e));
+  return EVENTOS_DO_PIXEL.filter((e) => e !== "Purchase" && !traffikEnvia(donos, e));
 }
 
 /**
