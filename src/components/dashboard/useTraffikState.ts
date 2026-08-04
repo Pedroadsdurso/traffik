@@ -15,6 +15,7 @@ import type { PixelConfigDTO } from "@/lib/actions/pixels";
 import { corFinanceira } from "@/lib/financeiro";
 import { estadoDaConta, podeRastrear } from "@/lib/facebook/contaStatus";
 import { explicarErroDeConta } from "@/lib/facebook/erroMeta";
+import { rotuloDaEspera } from "@/lib/facebook/backoff";
 import { gatewayPorId, gatewaysParaEscolher, rotuloDoGateway } from "@/lib/gateways/registro";
 
 /** Primeiro gateway ATIVO do registro — nada de nome cravado aqui. */
@@ -1064,6 +1065,14 @@ export function useTraffikState(
        * mostra o texto cru como conteudo principal).
        */
       erroCru: ac.lastSyncError,
+      /**
+       * "nova tentativa em ~28 min", quando a conta esta em backoff.
+       *
+       * ⚠️ Existe para a espera nao parecer abandono. Uma conta que para de
+       * tentar sem dizer que vai voltar a tentar e indistinguivel de uma conta
+       * esquecida.
+       */
+      esperaLabel: rotuloDaEspera(ac.syncErrorCount, ac.lastSyncErrorAt),
       /**
        * O erro desta conta e o MESMO do perfil?
        *

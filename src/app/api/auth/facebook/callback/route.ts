@@ -113,6 +113,23 @@ export async function GET(req: NextRequest) {
       });
     }
 
+    /**
+     * ⛔ Reconectar ZERA o backoff das contas deste perfil.
+     *
+     * Sem isto, quem acabou de arrumar a permissão ficaria até 2h esperando a
+     * próxima tentativa — e concluiria que reconectar não resolveu, indo mexer
+     * de novo no que já estava certo. O ato de reconectar é a evidência de que
+     * a causa mudou; o contador antigo deixa de valer.
+     */
+    await prisma.adAccount.updateMany({
+      where: { userId, adProfileId: profile.id },
+      data: { lastSyncError: null, lastSyncErrorAt: null, syncErrorCount: 0 },
+    });
+    await prisma.adProfile.updateMany({
+      where: { id: profile.id },
+      data: { lastDiscoveryError: null, lastDiscoveryErrorAt: null },
+    });
+
     return dash("connected");
   } catch (e) {
     console.error("[facebook/callback]", e);

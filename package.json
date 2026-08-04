@@ -63,7 +63,8 @@
     "scripts:sintaxe": "node scripts/checar-sintaxe.mjs",
     "test:metricas-lote": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-metricas-lote.mjs",
     "test:conta-meta": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-conta-meta.mjs",
-    "db:gerar": "node scripts/prisma-gerar.mjs"
+    "db:gerar": "node scripts/prisma-gerar.mjs",
+    "test:backoff": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-backoff.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

@@ -62,12 +62,20 @@ const CONHECIDOS: { re: RegExp; erro: ErroTraduzido }[] = [
     re: /\(#?(200|10|294)\)|ads_management|ads_read|permission/i,
     erro: {
       mensagem: "Sem permissão para ler esta conta de anúncio.",
-      // ⚠️ As DUAS possibilidades aparecem porque a mensagem da Meta não
-      // distingue: conta desabilitada produz exatamente este mesmo erro.
+      // ⚠️ TRES hipoteses, e a ordem e do mais provavel para o mais raro. A
+      // terceira entrou depois de um caso real (04/08/2026): a conta de
+      // DESENVOLVEDOR do usuario foi restringida pela Meta, o token inteiro
+      // parou, e a Graph respondeu (#200) por conta — a mesma mensagem de
+      // permissao. Reconectar nao resolve enquanto a restricao durar, e sem
+      // esta linha a pessoa fica sem saida: tenta reconectar, falha, e nao tem
+      // o que olhar em seguida.
       acao:
         "Peça ao dono da conta acesso de Anunciante no Business Manager. " +
         "Se você já tem acesso, confira se a conta não está desabilitada no Facebook — " +
-        "conta desabilitada devolve este mesmo erro.",
+        "conta desabilitada devolve este mesmo erro. " +
+        "E se reconectar não resolver, veja se a sua conta de desenvolvedor ou o app " +
+        "estão com alguma restrição em developers.facebook.com — restrição lá derruba " +
+        "todas as contas de uma vez, com esta mesma mensagem.",
       temporario: false,
       tom: "erro",
     },

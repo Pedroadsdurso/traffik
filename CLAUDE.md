@@ -5122,6 +5122,71 @@ Agora é `gravarMetricas()`: **uma instrução por lote de 500 linhas**.
 atualização pelo `ON CONFLICT` (a que o `skipDuplicates` não faria), `id` e
 `updatedAt` preenchidos, lote com conflito no meio, e nenhuma linha perdida.
 
+### 🔴 RISCO: uma restrição no APP derruba TODOS os usuários de uma vez
+
+Descoberto em 04/08/2026 num testador: a **conta de desenvolvedor** dele foi
+restringida pela Meta. O token inteiro parou, e a Graph passou a responder
+`(#200) … permission` **por conta** — a mensagem imprecisa de sempre.
+
+> ### ⛔ Reconectar NÃO resolve enquanto a restrição durar
+> É a única das três causas do `(#200)` em que o caminho óbvio falha. Quem
+> tenta reconectar, vê falhar e não tem o que olhar em seguida fica sem saída —
+> por isso a terceira hipótese entrou no texto de `erroMeta.ts`.
+
+**O risco maior é estrutural e ainda não aconteceu.** Hoje cada testador precisa
+de conta de desenvolvedor porque o app está em modo desenvolvimento. Aberto ao
+público, os clientes não terão — mas **o nosso app pode ser restringido, e aí
+todos param simultaneamente**.
+
+| | Hoje (modo dev) | Aberto |
+|---|---|---|
+| Quem precisa de conta de desenvolvedor | cada testador | ninguém |
+| Restrição derruba | um usuário | 🔴 **todos, ao mesmo tempo** |
+| O que a tela diz | erro por perfil | o mesmo — e cada um acha que é problema dele |
+
+⚠️ **O que falta:** quando N usuários falham com a mesma mensagem na mesma
+janela, a causa é nossa, não deles. A ferramenta precisa dizer isso — hoje ela
+manda cada um conferir o próprio Business Manager. Não implementado; o sinal já
+existe no banco (`AdProfile.lastDiscoveryError` + `AdAccount.lastSyncError`),
+então é consulta de agregação, não coluna nova.
+
+### ⏳ Backoff das tentativas — `lib/facebook/backoff.ts`
+
+A conta do testador acumulou **50 tentativas** contra um erro que não passa
+sozinho. Erro de permissão não se resolve tentando de novo em 20 s.
+
+| Falhas seguidas | Espera |
+|---|---|
+| 0–2 | nenhuma (pode ser rede, blip da Meta) |
+| 3–9 | 5 min |
+| 10–29 | 30 min |
+| 30+ | 2 h (teto) |
+
+> ### ⚠️ O motivo NÃO é economizar chamada
+> O rate limit da Graph é **por APP**. Uma conta em repetição queima cota que é
+> de todos — com N clientes, um token quebrado degrada a sincronização dos
+> outros.
+
+> ### ⛔ Três coisas que NÃO podem mudar
+> 1. **O botão "Sincronizar" ignora o backoff.** Quem acabou de arrumar precisa
+>    conferir na hora; 2 h de espera no clique manual faria a correção parecer
+>    que não funcionou. (`syncSingleAccount` não passa pelos laços.)
+> 2. **Reconectar ZERA os contadores** — inclusive o erro do perfil. O ato de
+>    reconectar é a evidência de que a causa mudou.
+> 3. **Estar em espera não esconde a conta nem o erro.** A linha continua na
+>    tela, com o motivo e um "nova tentativa em ~28 min". Conta que para de
+>    tentar sem dizer que vai voltar é indistinguível de conta esquecida.
+>
+> ⚠️ O teto de 2 h existe para a volta ser detectada **sozinha**: liberada a
+> restrição, o sync retoma em no máximo duas horas sem ninguém clicar.
+>
+> ⚠️ `emEspera` entra no `SyncSummary` para `accounts: 0` não parecer "não achou
+> conta nenhuma" quando o que houve foi backoff.
+
+`npm run test:backoff` — 16 asserções, incluindo o estado inconsistente
+(contador sem data) que erra para o lado de TENTAR: travar uma conta para
+sempre por causa de dado incompleto seria pior que uma tentativa a mais.
+
 ### 🔍 `npm run diag:testadores` — só leitura, pode rodar em produção
 
 ```

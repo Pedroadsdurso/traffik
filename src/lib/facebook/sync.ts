@@ -2,6 +2,7 @@ import { getUserTimezone } from "@/lib/userTimezone";
 import { GRAPH_URL, getAdAccounts, mapAccountStatus } from "@/lib/facebook/graph";
 import { prisma } from "@/lib/prisma";
 import { addDaysToKey, todayKey } from "@/lib/timezone";
+import { deveTentar } from "@/lib/facebook/backoff";
 import { Prisma } from "@/generated/prisma/client";
 import type { EntityStatus } from "@/generated/prisma/enums";
 
@@ -237,6 +238,14 @@ export interface SyncSummary {
   removidos?: number;
   /** Contas de anúncio detectadas agora, que ainda não existiam no banco. */
   contasNovas?: number;
+  /**
+   * Contas PULADAS por estarem em espera depois de falhas seguidas.
+   *
+   * ⚠️ Existe para `accounts: 0` não parecer "não achou conta nenhuma" quando o
+   * que houve foi backoff. Cron que mente sobre o próprio resultado esconde o
+   * erro justamente onde se vai olhar.
+   */
+  emEspera?: number;
   /**
    * Linhas de insight cujo `ad_id` não existe localmente — quase sempre gasto de
    * anúncio EXCLUÍDO na Meta, que não vem em `/ads` de forma alguma. Fica
@@ -559,11 +568,17 @@ export async function syncUserMetrics(userId: string, days = 2): Promise<SyncSum
   const summary: SyncSummary = { accounts: 0, campaigns: 0, adSets: 0, ads: 0, metrics: 0, errors: [] };
   const accounts = await prisma.adAccount.findMany({
     where: { userId, trackingEnabled: true, adProfile: { isNot: null } },
-    select: { id: true, userId: true, fbAccountId: true, name: true, adProfile: { select: { accessToken: true } } },
+    select: { id: true, userId: true, fbAccountId: true, name: true, syncErrorCount: true, lastSyncErrorAt: true, adProfile: { select: { accessToken: true } } },
   });
   for (const acc of accounts) {
     const token = acc.adProfile?.accessToken;
     if (!token) continue;
+    // ⚠️ Conta em espera é PULADA, não escondida: a linha continua na tela com
+    // o erro e o contador. O que muda é só a frequência. Ver `backoff.ts`.
+    if (!deveTentar(acc.syncErrorCount, acc.lastSyncErrorAt)) {
+      summary.emEspera = (summary.emEspera ?? 0) + 1;
+      continue;
+    }
     try {
       await syncAccountMetrics({ id: acc.id, userId: acc.userId, fbAccountId: acc.fbAccountId }, token, summary, days);
       summary.accounts++;
@@ -697,7 +712,7 @@ export async function syncSingleAccount(userId: string, accountId: string, days 
   const summary: SyncSummary = { accounts: 0, campaigns: 0, adSets: 0, ads: 0, metrics: 0, errors: [] };
   const acc = await prisma.adAccount.findFirst({
     where: { id: accountId, userId },
-    select: { id: true, userId: true, fbAccountId: true, name: true, adProfile: { select: { accessToken: true } } },
+    select: { id: true, userId: true, fbAccountId: true, name: true, syncErrorCount: true, lastSyncErrorAt: true, adProfile: { select: { accessToken: true } } },
   });
   if (!acc) {
     summary.errors.push("Conta não encontrada.");
@@ -810,12 +825,16 @@ export async function syncUser(userId: string, days = 30): Promise<SyncSummary> 
 
   const accounts = await prisma.adAccount.findMany({
     where: { userId, trackingEnabled: true, adProfile: { isNot: null } },
-    select: { id: true, userId: true, fbAccountId: true, name: true, adProfile: { select: { accessToken: true } } },
+    select: { id: true, userId: true, fbAccountId: true, name: true, syncErrorCount: true, lastSyncErrorAt: true, adProfile: { select: { accessToken: true } } },
   });
 
   for (const acc of accounts) {
     const token = acc.adProfile?.accessToken;
     if (!token) continue;
+    if (!deveTentar(acc.syncErrorCount, acc.lastSyncErrorAt)) {
+      summary.emEspera = (summary.emEspera ?? 0) + 1;
+      continue;
+    }
     try {
       await syncAccount({ id: acc.id, userId: acc.userId, fbAccountId: acc.fbAccountId }, token, summary, days);
       summary.accounts++;

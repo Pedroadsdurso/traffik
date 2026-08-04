@@ -15,6 +15,8 @@ export interface AdAccountDTO {
   accountStatus: number | null;
   /** Ultimo erro CRU da Graph API para esta conta. */
   lastSyncError: string | null;
+  /** Quando a ultima falha aconteceu. Alimenta o backoff e o "nova tentativa em". */
+  lastSyncErrorAt: Date | null;
   /** Falhas consecutivas. Distingue "falhou agora" de "falha ha dois dias". */
   syncErrorCount: number;
   trackingEnabled: boolean;
@@ -79,6 +81,7 @@ export async function listAdProfiles(workspaceId?: string | null): Promise<AdPro
       status: a.status,
       accountStatus: a.accountStatus,
       lastSyncError: a.lastSyncError,
+      lastSyncErrorAt: a.lastSyncErrorAt,
       syncErrorCount: a.syncErrorCount,
       trackingEnabled: a.trackingEnabled,
     })),
@@ -101,6 +104,7 @@ export async function toggleAccountTracking(accountId: string): Promise<AdAccoun
     status: updated.status,
     accountStatus: updated.accountStatus,
     lastSyncError: updated.lastSyncError,
+    lastSyncErrorAt: updated.lastSyncErrorAt,
     syncErrorCount: updated.syncErrorCount,
     trackingEnabled: updated.trackingEnabled,
   };

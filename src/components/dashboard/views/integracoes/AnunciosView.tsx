@@ -162,6 +162,7 @@ function ProfilePanel({ p }: { p: Profile }) {
                   {ac.falhasSeguidas > 1 && (
                     <span>· {plural(ac.falhasSeguidas, "tentativa", "tentativas")}</span>
                   )}
+                  {ac.esperaLabel && <span>· {ac.esperaLabel}</span>}
                 </div>
               )}
 
@@ -187,6 +188,12 @@ function ProfilePanel({ p }: { p: Profile }) {
                     {!ac.erroSync.temporario && ac.falhasSeguidas > 1 && (
                       <div className="text-muted" style={sx("margin-top:2px;font-size:11px")}>
                         {plural(ac.falhasSeguidas, "tentativa seguida sem sucesso", "tentativas seguidas sem sucesso")}
+                        {/*
+                          ⚠️ Dizer que vai tentar de novo evita que a espera
+                          pareça abandono — e evita o clique repetido em
+                          "Sincronizar", que ignora o backoff de propósito.
+                        */}
+                        {ac.esperaLabel && ` · ${ac.esperaLabel}`}
                         {ac.trackingOn && " · desligue o rastreamento para parar de tentar"}
                       </div>
                     )}
