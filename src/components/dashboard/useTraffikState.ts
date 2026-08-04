@@ -1037,8 +1037,23 @@ export function useTraffikState(
             body: JSON.stringify({ accountId: ac.id }),
           });
           const json = await res.json();
+          /**
+           * 🔴 Aqui estava `" (erro)"` — a MENSAGEM da Meta era descartada.
+           *
+           * `syncUserMetrics` faz `try/catch` por conta e empilha o erro em
+           * `summary.errors`, então uma conta que falha não derruba as outras:
+           * o ciclo termina "com sucesso", `lastMetricsAt` avança e a conta
+           * quebrada fica **invisível**. O único lugar que exibia isso mostrava
+           * um "(erro)" mudo, e a única forma de ler a causa era chamar a rota
+           * de cron com o `CRON_SECRET`.
+           *
+           * É o mesmo defeito do `affected: 1` das regras: o produto sabia o
+           * que houve e escolhia não dizer.
+           */
           const msg = res.ok
-            ? `${json.campaigns || 0} camp. · ${json.ads || 0} anúncios · ${json.metrics || 0} dias${json.errors?.length ? " (erro)" : ""}`
+            ? json.errors?.length
+              ? `✗ ${json.errors.join(" · ")}`
+              : `${json.campaigns || 0} camp. · ${json.ads || 0} anúncios · ${json.metrics || 0} dias`
             : json.error || "Falha na sincronização.";
           setS((st) => ({ ...st, accountSync: { ...st.accountSync, [ac.id]: { busy: false, msg } }, adsRefreshKey: st.adsRefreshKey + 1 }));
         } catch {

@@ -58,7 +58,8 @@
     "test:detectores": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-detectores.mjs",
     "test:utm-venda": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-utm-venda.mjs",
     "backfill:utms": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/backfill-utms.mjs",
-    "diag:testadores": "node scripts/diagnostico-testadores.mjs"
+    "diag:testadores": "node scripts/diagnostico-testadores.mjs",
+    "test:guarda-template": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-guarda-template.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

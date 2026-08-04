@@ -1,0 +1,23 @@
+import { splitPipe, parseUtms, ehTemplateNaoSubstituido } from "@/lib/utm/parse";
+let ok = 0, mau = 0;
+const eq = (n, a, b) => {
+  const bom = JSON.stringify(a) === JSON.stringify(b);
+  console.log(`  ${bom ? "\x1b[32m✓" : "\x1b[31m✗"}\x1b[0m ${n}`);
+  if (!bom) console.log(`      obtido ${JSON.stringify(a)}\n      esperado ${JSON.stringify(b)}`);
+  bom ? ok++ : mau++;
+};
+console.log("\nGuarda de template não substituído\n");
+eq("template cru nos dois lados", splitPipe("{{campaign.name}}|{{campaign.id}}"), { name: null, id: null });
+eq("template percent-encoded", splitPipe("%7B%7Bcampaign.name%7D%7D|%7B%7Bcampaign.id%7D%7D"), { name: null, id: null });
+eq("só o id é template — o nome REAL fica", splitPipe("CA 1 MARIA|{{campaign.id}}"), { name: "CA 1 MARIA", id: null });
+eq("sem pipe, template puro", splitPipe("{{ad.name}}"), { name: null, id: null });
+eq("caso normal intacto", splitPipe("Meu Anúncio|120210999"), { name: "Meu Anúncio", id: "120210999" });
+eq("nome com pipe legítimo intacto", splitPipe("Oferta A|B|120210999"), { name: "Oferta A|B", id: "120210999" });
+eq("sem id, nome comum", splitPipe("Campanha X"), { name: "Campanha X", id: null });
+eq("placement template vira null", parseUtms({ utmTerm: "%7B%7Bplacement%7D%7D" }).placement, null);
+eq("placement real intacto", parseUtms({ utmTerm: "Instagram_Feed" }).placement, "Instagram_Feed");
+eq("detector: chave dupla", ehTemplateNaoSubstituido("{{x}}"), true);
+eq("detector: texto normal", ehTemplateNaoSubstituido("Campanha { promo }"), false);
+eq("detector: nulo", ehTemplateNaoSubstituido(null), false);
+console.log(`\n\x1b[1m${ok + mau} asserções, ${mau} falha(s)\x1b[0m\n`);
+process.exitCode = mau ? 1 : 0;

@@ -297,7 +297,12 @@ async function main() {
       `SELECT s.id, s.product, s.value, s.platform, s.fbc, s.fbp,
               to_char(s.timestamp AT TIME ZONE 'UTC' AT TIME ZONE $2, 'DD/MM HH24:MI') AS quando,
               (s."rawPayload"::text ~* '"(click_id|clickId|trk_click_id)"')  AS "payloadClickId",
-              (s."rawPayload"::text ~* '"(fbc|_fbc)"')                       AS "payloadFbc",
+              -- ⚠️ A regex casa a CHAVE, não o valor: `"fbc": null` casaria e o
+              -- veredito diria "fbc presente" para uma venda que não tinha nenhum.
+              -- Foi assim que a primeira execução marcou uma venda como
+              -- "deveria ter casado". O que vale é a COLUNA, que só é gravada
+              -- quando o parser leu um valor de verdade.
+              (s."rawPayload"::text ~* '"(fbc|_fbc)"\s*:\s*"')                AS "payloadFbc",
               (s."rawPayload"::text ~* '"(ip|buyer_ip|ip_address)"')         AS "payloadIp",
               (SELECT count(*)::int FROM "Click" k
                 WHERE k."userId" = s."userId" AND NOT k.bot
@@ -317,14 +322,16 @@ async function main() {
       for (const o of orfas) {
         const vias = [
           o.payloadClickId ? `${C.v}click_id no payload${C.x}` : `${C.d}sem click_id${C.x}`,
-          o.fbc || o.payloadFbc ? `${C.v}fbc${C.x}` : `${C.d}sem fbc${C.x}`,
+          o.fbc ? `${C.v}fbc GRAVADO${C.x}` : o.payloadFbc ? `${C.a}fbc no payload mas NÃO gravado${C.x}` : `${C.d}sem fbc${C.x}`,
           o.payloadIp ? `${C.v}ip${C.x}` : `${C.d}sem ip${C.x}`,
         ].join(" · ");
         console.log(`     ${o.quando}  ${brl(o.value)}  ${C.d}${(o.platform ?? "—")}${C.x}  ${o.product.slice(0, 28)}`);
         console.log(`       payload: ${vias}   ${C.d}· ${o.cliquesNaJanela} clique(s) seus nas 12h anteriores${C.x}`);
         // O veredito por venda. É a diferença entre "conserte o checkout" e
         // "esta pessoa nunca passou pelo seu site".
-        const nada = !o.payloadClickId && !o.payloadFbc && !o.fbc && !o.payloadIp;
+        // O veredito usa só o que foi REALMENTE lido — coluna gravada, não
+        // chave presente no JSON.
+        const nada = !o.payloadClickId && !o.fbc && !o.payloadIp;
         if (nada) {
           console.log(`       ${C.r}→ o gateway não devolveu NENHUM identificador. Nem havia como casar.${C.x}`);
         } else if (o.cliquesNaJanela === 0) {

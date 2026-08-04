@@ -155,7 +155,14 @@ function parseTransacao(d: Json, evento: string, avisos: string[]): VendaNormali
     documento: toStr(pick(d, ["customer.document"]), 64),
     // 🔴 Nem país nem IP. A geografia destas vendas depende do CLIQUE.
     pais: toStr(pick(d, ["customer.country", "address.country"]), 8),
-    ipDoComprador: toStr(pick(d, ["customer.ip", "ip", "buyer_ip", "ip_address"]), 64),
+    // ⚠️ Procura no `d` E no `trk`. O `d` cobre o que a OnyxPag mandaria por
+    // conta própria (`customer.ip`); o `trk` cobre o checkout PRÓPRIO, que pode
+    // pôr o IP do comprador no `tracking` que ele mesmo monta. Sem o segundo,
+    // quem controla o checkout não tinha como fornecer o IP de jeito nenhum —
+    // e este gateway não manda IP sozinho.
+    ipDoComprador:
+      toStr(pick(d, ["customer.ip", "ip", "buyer_ip", "ip_address"]), 64) ??
+      toStr(pick(trk, ["customer_ip", "buyer_ip", "ip", "ip_address"]), 64),
 
     // Defensivo: a doc não promete nenhum destes de volta. Se vierem, valem.
     clickId: toStr(pick(trk, ["click_id", "clickId", "trk_click_id"]), 191),
