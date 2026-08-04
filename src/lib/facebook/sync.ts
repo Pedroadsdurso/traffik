@@ -806,8 +806,16 @@ export async function syncUser(userId: string, days = 30): Promise<SyncSummary> 
     try {
       await syncAccount({ id: acc.id, userId: acc.userId, fbAccountId: acc.fbAccountId }, token, summary, days);
       summary.accounts++;
+      await marcarSucesso(acc.id);
     } catch (e) {
-      summary.errors.push(`${acc.name}: ${e instanceof Error ? e.message : String(e)}`);
+      const msg = e instanceof Error ? e.message : String(e);
+      summary.errors.push(`${acc.name}: ${msg}`);
+      // ⚠️ MESMO tratamento do ciclo de métricas, e não por simetria estética:
+      // são os DOIS caminhos que podem falhar numa conta. Registrar só num
+      // deles deixaria o erro do outro invisível — e "corrigir uma saída de
+      // duas" é pior que não corrigir nenhuma, porque a parte certa dá falsa
+      // garantia de que o módulo inteiro foi coberto.
+      await registrarErro(acc.id, msg);
     }
   }
   return summary;
