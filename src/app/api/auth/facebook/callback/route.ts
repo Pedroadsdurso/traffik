@@ -91,6 +91,9 @@ export async function GET(req: NextRequest) {
           currency: a.currency,
           timezone: a.timezone_name ?? null,
           status: mapAccountStatus(a.account_status),
+            // Codigo CRU da Meta, ao lado do enum reduzido. E ele que diz
+            // DESABILITADA vs PAUSADA -- o enum colapsa os dois.
+            accountStatus: a.account_status ?? null,
           adProfileId: profile.id,
         },
         create: {
@@ -100,6 +103,9 @@ export async function GET(req: NextRequest) {
           currency: a.currency,
           timezone: a.timezone_name ?? null,
           status: mapAccountStatus(a.account_status),
+            // Codigo CRU da Meta, ao lado do enum reduzido. E ele que diz
+            // DESABILITADA vs PAUSADA -- o enum colapsa os dois.
+            accountStatus: a.account_status ?? null,
           adProfileId: profile.id,
           trackingEnabled: true,
           workspaceId: jaExistiam.has(a.account_id) ? null : areaDestino,

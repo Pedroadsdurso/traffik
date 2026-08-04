@@ -94,6 +94,45 @@ function ProfilePanel({ p }: { p: Profile }) {
                   <button className="sw" role="switch" aria-checked={ac.trackingOn} onClick={ac.toggleTracking} />
                 </div>
               </div>
+
+              {/*
+                A explicação ocupa a linha inteira (`flex-basis:100%`) em vez de
+                virar tooltip: uma conta que não sincroniza há dois dias é
+                exatamente o que ninguém vai passar o mouse para descobrir. Foi
+                assim que duas contas de um testador ficaram invisíveis.
+
+                ⚠️ Aparece quando há erro guardado OU quando o status já
+                explica sozinho — conta desabilitada não precisa ter falhado
+                ainda para ser avisada.
+              */}
+              {ac.erroSync && (
+                <div
+                  style={sx(
+                    "flex-basis:100%;display:flex;gap:8px;align-items:flex-start;margin-top:2px;padding:8px 10px;" +
+                      "border-radius:var(--radius-sm);font-size:12px;line-height:1.5;" +
+                      `border-left:3px solid ${ac.erroSync.tom === "erro" ? "#f87171" : "#f59e0b"};` +
+                      `background:color-mix(in srgb, ${ac.erroSync.tom === "erro" ? "#f87171" : "#f59e0b"} 7%, var(--color-surface))`,
+                  )}
+                >
+                  <Icone nome={ac.erroSync.tom === "erro" ? "erro" : "aviso"} tamanho={15} cor={ac.erroSync.tom === "erro" ? "perigo" : "aviso"} />
+                  <div>
+                    <strong>{ac.erroSync.mensagem}</strong>
+                    {ac.erroSync.acao && <div className="text-muted" style={sx("margin-top:2px")}>{ac.erroSync.acao}</div>}
+                    {/*
+                      O contador separa "falhou agora" de "falha há dias", que é
+                      a diferença entre esperar e agir. Erro temporário (rate
+                      limit) não mostra: ele passa sozinho e o número assustaria
+                      à toa.
+                    */}
+                    {!ac.erroSync.temporario && ac.falhasSeguidas > 1 && (
+                      <div className="text-muted" style={sx("margin-top:2px;font-size:11px")}>
+                        {plural(ac.falhasSeguidas, "tentativa seguida sem sucesso", "tentativas seguidas sem sucesso")}
+                        {ac.trackingOn && " · desligue o rastreamento para parar de tentar"}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           ))
         )}

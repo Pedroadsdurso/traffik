@@ -61,7 +61,8 @@
     "diag:testadores": "node scripts/diagnostico-testadores.mjs",
     "test:guarda-template": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-guarda-template.mjs",
     "scripts:sintaxe": "node scripts/checar-sintaxe.mjs",
-    "test:metricas-lote": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-metricas-lote.mjs"
+    "test:metricas-lote": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-metricas-lote.mjs",
+    "test:conta-meta": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-conta-meta.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

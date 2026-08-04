@@ -301,6 +301,34 @@ model AdAccount {
   currency    String       @default("BRL")
   timezone    String?
   status      EntityStatus @default(ACTIVE)
+  /// `account_status` CRU da Meta (1 ativa, 2 desabilitada, 101 encerrada...).
+  ///
+  /// 🔴 `Int?` e nao enum, pelo mesmo motivo de `Campaign.effectiveStatus`: a
+  /// Meta acrescenta codigo sem avisar, e um enum faria o SYNC FALHAR num valor
+  /// novo em vez de apenas exibi-lo sem traducao. Quem traduz e
+  /// `lib/facebook/contaStatus.ts`.
+  ///
+  /// ⚠️ NULO = conta sincronizada antes desta coluna existir. NAO e "com
+  /// problema": se nulo alarmasse, toda conta apareceria em vermelho no dia do
+  /// deploy. Mesma licao do `effectiveStatus`.
+  accountStatus Int?
+  /// Ultima mensagem de erro da Graph API para ESTA conta, crua.
+  ///
+  /// 🔴 `syncUserMetrics` faz try/catch POR CONTA: uma conta que falha nao
+  /// derruba as outras, o ciclo termina "com sucesso", `lastMetricsAt` avanca e
+  /// a conta quebrada fica INVISIVEL. Foi assim que duas contas de um testador
+  /// passaram dois dias sem gravar metrica sem nada na tela.
+  ///
+  /// Guardamos o texto CRU. A traducao para linguagem de tela vive em
+  /// `lib/facebook/erroMeta.ts` e a lista dela e necessariamente incompleta —
+  /// apagar o original tornaria o erro real irrecuperavel.
+  lastSyncError    String?
+  lastSyncErrorAt  DateTime?
+  /// Falhas consecutivas. Zera no primeiro sucesso.
+  ///
+  /// ⚠️ Existe para a tela poder distinguir "falhou agora" de "falha ha dois
+  /// dias" sem ninguem precisar clicar em Sincronizar.
+  syncErrorCount   Int      @default(0)
   /// Toggle individual de rastreamento na tela de Contas.
   trackingEnabled Boolean  @default(true)
   createdAt   DateTime     @default(now())

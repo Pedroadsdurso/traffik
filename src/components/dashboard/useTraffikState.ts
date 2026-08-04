@@ -13,6 +13,8 @@ import {
 } from "@/lib/actions/facebook";
 import type { PixelConfigDTO } from "@/lib/actions/pixels";
 import { corFinanceira } from "@/lib/financeiro";
+import { estadoDaConta, podeRastrear } from "@/lib/facebook/contaStatus";
+import { explicarErroDeConta } from "@/lib/facebook/erroMeta";
 import { gatewayPorId, gatewaysParaEscolher, rotuloDoGateway } from "@/lib/gateways/registro";
 
 /** Primeiro gateway ATIVO do registro — nada de nome cravado aqui. */
@@ -1012,12 +1014,37 @@ export function useTraffikState(
       name: ac.name,
       fbAccountId: ac.fbAccountId,
       currency: ac.currency,
-      statusTag: ac.status === "ACTIVE" ? "tag tag-accent" : "tag tag-neutral",
-      statusLabel: ac.status === "ACTIVE" ? "Ativa" : ac.status === "PAUSED" ? "Desabilitada" : "—",
+      /**
+       * ⚠️ O rotulo vem do `account_status` CRU, nao do enum `status`.
+       *
+       * O enum colapsa DESABILITADA (2) e PAGAMENTO PENDENTE (3) no mesmo
+       * `PAUSED` — e as duas coisas pedem acoes opostas do usuario. Foi por
+       * isso que uma conta desabilitada apareceu como se fosse normal por dois
+       * dias. Ver `lib/facebook/contaStatus.ts`.
+       */
+      statusTag:
+        estadoDaConta(ac.accountStatus).tom === "ok" ? "tag tag-accent"
+        : estadoDaConta(ac.accountStatus).tom === "erro" ? "tag tag-danger"
+        : "tag tag-neutral",
+      statusLabel: estadoDaConta(ac.accountStatus).rotulo,
+      /** O que fazer a respeito, quando ha algo a fazer. */
+      statusAcao: estadoDaConta(ac.accountStatus).acao,
+      /** A conta consegue ser lida pela API? Decide o bloqueio do toggle. */
+      podeRastrear: podeRastrear(ac.accountStatus),
+      /**
+       * A explicacao de por que esta conta nao sincroniza, cruzando o erro
+       * guardado com o status. O status VENCE o erro quando ja explica — a
+       * mensagem da Meta diz "permission" para conta desabilitada.
+       */
+      erroSync: explicarErroDeConta(ac.lastSyncError, ac.accountStatus),
+      falhasSeguidas: ac.syncErrorCount,
       trackingOn: ac.trackingEnabled,
       syncBusy: s.accountSync[ac.id]?.busy ?? false,
       syncMsg: s.accountSync[ac.id]?.msg ?? null,
       toggleTracking: async () => {
+        // ⛔ Nao bloqueia o clique — AVISA. Bloquear impediria de DESLIGAR o
+        // rastreamento de uma conta desabilitada, que e exatamente o que o
+        // usuario quer fazer quando descobre o problema. O aviso fica no card.
         const updated = await toggleAccountTracking(ac.id);
         setS((st) => ({
           ...st,

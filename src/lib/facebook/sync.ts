@@ -188,6 +188,45 @@ interface FbInsight {
   date_start?: string;
 }
 
+/**
+ * Zera o erro da conta apos uma sincronizacao bem-sucedida.
+ *
+ * ⚠️ Nunca lanca: marcar o estado nao pode derrubar uma sincronizacao que deu
+ * certo. Mesma regra do `logWebhook`.
+ */
+async function marcarSucesso(adAccountId: string): Promise<void> {
+  try {
+    // `updateMany` com o contador no `where`: sem isso, TODA conta que
+    // sincroniza com sucesso faria um UPDATE por ciclo, a cada 20s, para
+    // reescrever os mesmos zeros.
+    await prisma.adAccount.updateMany({
+      where: { id: adAccountId, OR: [{ syncErrorCount: { gt: 0 } }, { lastSyncError: { not: null } }] },
+      data: { lastSyncError: null, lastSyncErrorAt: null, syncErrorCount: 0 },
+    });
+  } catch {
+    // silencioso de proposito — ver o aviso acima
+  }
+}
+
+/** Guarda o erro na conta e conta as falhas consecutivas. */
+async function registrarErro(adAccountId: string, mensagem: string): Promise<void> {
+  try {
+    await prisma.adAccount.update({
+      where: { id: adAccountId },
+      data: {
+        // Texto CRU. A traducao vive em `lib/facebook/erroMeta.ts`, e a lista
+        // dela e incompleta por natureza — apagar o original tornaria o erro
+        // real irrecuperavel.
+        lastSyncError: mensagem.slice(0, 500),
+        lastSyncErrorAt: new Date(),
+        syncErrorCount: { increment: 1 },
+      },
+    });
+  } catch {
+    // idem
+  }
+}
+
 export interface SyncSummary {
   accounts: number;
   campaigns: number;
@@ -528,8 +567,14 @@ export async function syncUserMetrics(userId: string, days = 2): Promise<SyncSum
     try {
       await syncAccountMetrics({ id: acc.id, userId: acc.userId, fbAccountId: acc.fbAccountId }, token, summary, days);
       summary.accounts++;
+      await marcarSucesso(acc.id);
     } catch (e) {
-      summary.errors.push(`${acc.name}: ${e instanceof Error ? e.message : String(e)}`);
+      const msg = e instanceof Error ? e.message : String(e);
+      summary.errors.push(`${acc.name}: ${msg}`);
+      // 🔴 O erro passa a FICAR na conta. Antes ele so existia dentro de
+      // `summary.errors`, que a tela descartava — e uma conta sem permissao
+      // falhava a cada 20s para sempre sem nada aparecer.
+      await registrarErro(acc.id, msg);
     }
   }
   return summary;
@@ -712,6 +757,9 @@ export async function descobrirContas(userId: string, summary: SyncSummary): Pro
             currency: a.currency,
             timezone: a.timezone_name ?? null,
             status: mapAccountStatus(a.account_status),
+            // Codigo CRU da Meta, ao lado do enum reduzido. E ele que diz
+            // DESABILITADA vs PAUSADA -- o enum colapsa os dois.
+            accountStatus: a.account_status ?? null,
             adProfileId: p.id,
           },
           create: {
@@ -721,6 +769,9 @@ export async function descobrirContas(userId: string, summary: SyncSummary): Pro
             currency: a.currency,
             timezone: a.timezone_name ?? null,
             status: mapAccountStatus(a.account_status),
+            // Codigo CRU da Meta, ao lado do enum reduzido. E ele que diz
+            // DESABILITADA vs PAUSADA -- o enum colapsa os dois.
+            accountStatus: a.account_status ?? null,
             adProfileId: p.id,
             trackingEnabled: true,
           },

@@ -11,6 +11,12 @@ export interface AdAccountDTO {
   name: string;
   currency: string;
   status: string;
+  /** `account_status` cru da Meta. Traduzido por `lib/facebook/contaStatus.ts`. */
+  accountStatus: number | null;
+  /** Ultimo erro CRU da Graph API para esta conta. */
+  lastSyncError: string | null;
+  /** Falhas consecutivas. Distingue "falhou agora" de "falha ha dois dias". */
+  syncErrorCount: number;
   trackingEnabled: boolean;
 }
 
@@ -62,6 +68,9 @@ export async function listAdProfiles(workspaceId?: string | null): Promise<AdPro
       name: a.name,
       currency: a.currency,
       status: a.status,
+      accountStatus: a.accountStatus,
+      lastSyncError: a.lastSyncError,
+      syncErrorCount: a.syncErrorCount,
       trackingEnabled: a.trackingEnabled,
     })),
   }));
@@ -81,6 +90,9 @@ export async function toggleAccountTracking(accountId: string): Promise<AdAccoun
     name: updated.name,
     currency: updated.currency,
     status: updated.status,
+    accountStatus: updated.accountStatus,
+    lastSyncError: updated.lastSyncError,
+    syncErrorCount: updated.syncErrorCount,
     trackingEnabled: updated.trackingEnabled,
   };
 }
