@@ -67,6 +67,38 @@ function ProfilePanel({ p }: { p: Profile }) {
         </div>
       </div>
 
+      {/*
+        🔴 O erro do PERFIL, e não de uma conta.
+
+        `descobrirContas` chama `/me/adaccounts` uma vez por perfil. Se o token
+        perde `ads_read`, essa chamada falha e **nenhuma conta recebe
+        `accountStatus`** — o sintoma é "Status não informado" em TODAS elas,
+        sem nada explicando. Era o terceiro caminho de falha que o produto
+        engolia, depois do erro por conta nos dois ciclos de sync.
+
+        Fica ACIMA da lista porque a causa é do perfil: repeti-lo em cada conta
+        faria parecer que são cinco problemas diferentes.
+      */}
+      {p.erroDescoberta && (
+        <div
+          style={sx(
+            "display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border-radius:var(--radius-sm);" +
+              "font-size:12px;line-height:1.5;border-left:3px solid #f87171;" +
+              "background:color-mix(in srgb, #f87171 7%, var(--color-surface))",
+          )}
+        >
+          <Icone nome="erro" tamanho={15} cor="perigo" />
+          <div>
+            <strong>{p.erroDescoberta.mensagem}</strong>
+            {p.erroDescoberta.acao && <div className="text-muted" style={sx("margin-top:2px")}>{p.erroDescoberta.acao}</div>}
+            <div className="text-muted" style={sx("margin-top:2px;font-size:11px")}>
+              Enquanto isto durar, o status das contas abaixo fica em branco — não conseguimos
+              perguntar ao Facebook como elas estão.
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={sx("display:flex;flex-direction:column;gap:6px")}>
         {p.accounts.length === 0 ? (
           <div className="text-muted" style={sx("font-size:13px;line-height:1.5;padding:var(--space-2)")}>

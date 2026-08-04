@@ -25,6 +25,10 @@ export interface AdProfileDTO {
   name: string;
   email: string | null;
   pictureUrl: string | null;
+  /** Erro CRU da descoberta de contas. Explica `accountStatus` nulo em massa. */
+  lastDiscoveryError: string | null;
+  /** `true` enquanto o perfil nunca completou uma sincronizacao. */
+  nuncaSincronizou: boolean;
   accounts: AdAccountDTO[];
 }
 
@@ -62,6 +66,11 @@ export async function listAdProfiles(workspaceId?: string | null): Promise<AdPro
     name: p.name,
     email: p.email,
     pictureUrl: p.pictureUrl,
+    lastDiscoveryError: p.lastDiscoveryError,
+    // ⚠️ Distingue "ainda nao sincronizamos" de "a Meta nao informou". Sem
+    // isso, `accountStatus` nulo dizia "Status nao informado" nos dois casos —
+    // e so um deles pede acao.
+    nuncaSincronizou: p.lastSyncedAt == null,
     accounts: p.adAccounts.map((a) => ({
       id: a.id,
       fbAccountId: a.fbAccountId,

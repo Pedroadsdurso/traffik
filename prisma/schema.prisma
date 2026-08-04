@@ -285,6 +285,15 @@ model AdProfile {
   /// polling roda a cada poucos segundos em várias abas, e sem isso cada
   /// requisição dispararia uma sincronização concorrente contra a Graph API.
   syncLockedAt   DateTime?
+  /// Erro da DESCOBERTA de contas (`/me/adaccounts`), cru.
+  ///
+  /// 🔴 Terceiro caminho de falha que era descartado. `descobrirContas` tem
+  /// try/catch POR PERFIL: se o token perde `ads_read`, a chamada falha, o erro
+  /// vai para `summary.errors` (que a tela ignora) e **nenhuma conta recebe
+  /// `accountStatus`**. O sintoma e "Status nao informado" em TODAS as contas
+  /// do perfil, sem nada dizendo por que.
+  lastDiscoveryError   String?
+  lastDiscoveryErrorAt DateTime?
 
   userId     String
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)

@@ -778,10 +778,23 @@ export async function descobrirContas(userId: string, summary: SyncSummary): Pro
         });
         if (!existente) novas++;
       }
+      // Deu certo: limpa o erro anterior, se havia.
+      await prisma.adProfile.updateMany({
+        where: { id: p.id, lastDiscoveryError: { not: null } },
+        data: { lastDiscoveryError: null, lastDiscoveryErrorAt: null },
+      }).catch(() => {});
     } catch (e) {
       // Falhar a descoberta não pode impedir a sincronização das contas que já
       // existem — token de UM perfil expirado não derruba os outros.
-      summary.errors.push(`Contas de ${p.name}: ${e instanceof Error ? e.message : String(e)}`);
+      const msg = e instanceof Error ? e.message : String(e);
+      summary.errors.push(`Contas de ${p.name}: ${msg}`);
+      // 🔴 E agora o erro FICA. Sem isto, um token sem `ads_read` fazia toda
+      // conta do perfil ficar com `accountStatus` nulo — a tela dizia "Status
+      // não informado" nas cinco contas e não havia como saber por quê.
+      await prisma.adProfile.update({
+        where: { id: p.id },
+        data: { lastDiscoveryError: msg.slice(0, 500), lastDiscoveryErrorAt: new Date() },
+      }).catch(() => {});
     }
   }
   return novas;

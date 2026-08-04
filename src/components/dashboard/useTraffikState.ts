@@ -1009,6 +1009,13 @@ export function useTraffikState(
       await disconnectProfile(p.id);
       setS((st) => ({ ...st, adProfiles: st.adProfiles.filter((x) => x.id !== p.id) }));
     },
+    /**
+     * Erro da DESCOBERTA de contas deste perfil, ja traduzido.
+     *
+     * Passa `null` como status porque isto e do PERFIL, nao de uma conta — nao
+     * ha `account_status` para cruzar. Cai direto na traducao da mensagem.
+     */
+    erroDescoberta: explicarErroDeConta(p.lastDiscoveryError, null),
     accounts: p.accounts.map((ac) => ({
       id: ac.id,
       name: ac.name,
@@ -1026,7 +1033,16 @@ export function useTraffikState(
         estadoDaConta(ac.accountStatus).tom === "ok" ? "tag tag-accent"
         : estadoDaConta(ac.accountStatus).tom === "erro" ? "tag tag-danger"
         : "tag tag-neutral",
-      statusLabel: estadoDaConta(ac.accountStatus).rotulo,
+      /**
+       * ⚠️ TRES estados, nao dois. `accountStatus` nulo pode ser "o perfil
+       * ainda nao sincronizou" ou "a Meta nao informou" — e so o segundo e
+       * motivo de estranheza. Sem a distincao, uma conta recem-conectada
+       * aparecia com o mesmo rotulo de uma conta cujo perfil perdeu permissao.
+       */
+      statusLabel:
+        ac.accountStatus == null && p.nuncaSincronizou
+          ? "Aguardando 1ª sincronização"
+          : estadoDaConta(ac.accountStatus).rotulo,
       /** O que fazer a respeito, quando ha algo a fazer. */
       statusAcao: estadoDaConta(ac.accountStatus).acao,
       /** A conta consegue ser lida pela API? Decide o bloqueio do toggle. */
