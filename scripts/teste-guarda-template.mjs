@@ -4,7 +4,7 @@ const eq = (n, a, b) => {
   const bom = JSON.stringify(a) === JSON.stringify(b);
   console.log(`  ${bom ? "\x1b[32m✓" : "\x1b[31m✗"}\x1b[0m ${n}`);
   if (!bom) console.log(`      obtido ${JSON.stringify(a)}\n      esperado ${JSON.stringify(b)}`);
-  bom ? ok++ : mau++;
+  if (bom) ok++; else mau++;
 };
 console.log("\nGuarda de template não substituído\n");
 eq("template cru nos dois lados", splitPipe("{{campaign.name}}|{{campaign.id}}"), { name: null, id: null });

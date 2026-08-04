@@ -3501,11 +3501,19 @@ Toda campanha, conjunto e anúncio da conta entrava no escopo — inclusive
 | **Pausar** | inofensivo: o laço pula quem não está `ACTIVE` ("já pausada") |
 | **Ativar** | 🔴 arquivada **não é** `ACTIVE`, então **não era pulada** — o motor chamava `setEntityStatus(ARCHIVED, "ACTIVE")` e tentava **ressuscitar o que o usuário já tinha apagado** |
 
-**O que impediu o estrago foi sorte, não desenho.** As duas regras cadastradas
-em produção são `ATIVAR`, com escopo **"todas as contas"** e condição `cpa > 50`
-— e estavam **desativadas**. Zero execuções no `AutomationRuleLog`. Ligar
-qualquer uma delas teria alcançado as 12 campanhas arquivadas da CA 1 MARIA,
-mais as das outras 5 contas.
+**O que impediu o estrago foi sorte, não desenho.** As duas regras que existiam
+em produção **naquele dia** eram `ATIVAR`, com escopo **"todas as contas"** e
+condição `cpa > 50` — e estavam **desativadas**. Zero execuções no
+`AutomationRuleLog`. Ligar qualquer uma delas teria alcançado as 12 campanhas
+arquivadas da CA 1 MARIA, mais as das outras 5 contas.
+
+> ⚠️ **Aquelas duas regras não existem mais.** Eram as dos testes de automação
+> de 31/07 e foram apagadas depois. Medido em 04/08/2026 com o
+> `diag:testadores`: **zero regras cadastradas**, nos dois usuários.
+>
+> Isto é registro histórico do incidente, não o estado atual — e a diferença
+> importou: foi por não haver regra nenhuma que ligar o filtro de produto pôde
+> ser feito sem migração e sem aviso.
 
 ### ⛔ A variação NOVA do padrão: código ATIVO com escopo largo demais
 
@@ -4996,7 +5004,7 @@ consumidor. **4 inertes de ~40.**
 |---|---|---|
 | 🔴 **Toggle da aba Contas** | Gerenciador | **no-op absoluto** — `nivel` é `null` e o handler era `if (nivel) …`. ✅ **corrigido** |
 | 🔴 **Rastreamento da conta** | Integrações › Anúncios | salva `trackingEnabled`, e **nada em `computeAdsOverview`/`computeDashboard` filtra por ele**. Desligar só afeta sincronizações futuras; a listagem e o gasto continuam |
-| 🔴 **Produtos da regra** | Regras | a gaveta grava `targetProducts` (plural) e o motor lê `targetProduct` (**singular**, legado), que a gaveta nunca preenche. **Uma regra restrita a um produto age sobre TODOS** — e o card ainda escreve o nome do produto escolhido. Move dinheiro |
+| ✅ **Produtos da regra** | Regras | a gaveta gravava `targetProducts` (plural) e o motor lia `targetProduct` (**singular**, legado), que a gaveta nunca preenche. **Uma regra restrita a um produto agia sobre TODOS** — com o card escrevendo o nome escolhido. **Corrigido em 04/08/2026**: `produtosDaRegra()` une as duas colunas, e a prévia usa a mesma função |
 | 🔴 **"Nome do dashboard"** | Notificações | `showDashboardName` é salvo, viaja no DTO e `dispatchNotification` usa os outros três `show*` e **não usa este** |
 | ⚠️ "Fixar" | Gerenciador | inerte por decisão declarada (só de sessão) — não conta |
 | ✅ demais ~35 | — | rastreados até um consumidor real |
@@ -5006,12 +5014,25 @@ consumidor. **4 inertes de ~40.**
 > toggle teria deixado o usuário com um controle que agora responde e continua
 > sem efeito — que é pior, porque passa a parecer que funciona.
 
-> ⚠️ **`targetProducts` é o mais caro dos quatro** e não foi corrigido nesta
-> sessão: exige decidir se o filtro passa a valer (muda o comportamento de
-> regras já cadastradas, que hoje agem em tudo) ou se a UI passa a dizer a
-> verdade. **Não ligue o filtro sem avisar o usuário** — uma regra que ele
-> criou achando que era global e que passa a ser restrita também é uma
-> mudança de escopo silenciosa, só que para o outro lado.
+> ✅ **`targetProducts` foi ligado em 04/08/2026, e o que tornou isso barato foi
+> a MEDIÇÃO.** O risco era mudar o escopo de regras já cadastradas em silêncio —
+> nos dois sentidos, porque uma regra criada achando que era global e que passa
+> a ser restrita também é mudança silenciosa. O `diag:testadores` respondeu
+> **zero regras nos dois usuários**, então não havia comportamento existente
+> para quebrar: sem migração, sem aviso, sem backfill.
+>
+> ⚠️ **Se houvesse regra ativa, o caminho seria outro** — avisar antes, ou fazer
+> a UI dizer a verdade em vez de mudar o motor. Não repita o atalho sem refazer
+> a contagem.
+
+> ### 🔴 O que ESCONDEU este bug: `rule as unknown as RuleRow`
+> O motor carrega as regras com `findMany` (sem `select`, então todas as colunas
+> vêm) e converte com um **cast duplo**. É ele que fez `targetProducts` faltar
+> na interface `RuleRow` sem o compilador dizer nada.
+>
+> **Coluna nova no schema precisa ser acrescentada à `RuleRow` à mão.** O cast
+> não avisa — é a mesma família da armadilha do `pedidoId` fora do `select`,
+> só que do lado do tipo em vez do lado da consulta.
 
 ### 🔴 7º caso do PROCEDIMENTO: comentário que afirma o CONTRÁRIO do código
 
@@ -5064,6 +5085,42 @@ mais já avisa o Facebook quando a venda é aprovada?") que decide o dono do
 > **mesma versão** nos dois lados: um script v2 instalado reporta um hash
 > calculado sobre outro conjunto de eventos, e compará-lo acusaria divergência
 > em 100% dos scripts v2 corretos.
+
+### ⚡ O N+1 do sync saiu (04/08/2026)
+
+`syncAccountMetrics` e `syncAccount` faziam **um `upsert` por linha de insight**,
+em série. Conta com 48 anúncios × 2 dias = **96 idas ao Supabase**: a ~99 ms de
+latência, ~9,5 s só de rede, dentro de um `after()` com `maxDuration`.
+
+Medido em produção: as contas de **48 e 28 anúncios nunca gravaram métrica
+nenhuma**; a de **4 anúncios** funcionava. É a assinatura de estouro de tempo —
+a função morre, a reserva do `autoSync` fica presa até expirar (10 min), tenta
+de novo e morre de novo.
+
+Agora é `gravarMetricas()`: **uma instrução por lote de 500 linhas**.
+
+> ### ⛔ `createMany({ skipDuplicates: true })` NÃO serve aqui
+> Ele pula a linha que já existe — e a linha de HOJE sempre existe, porque o
+> gasto do dia corrente é reescrito a cada ciclo enquanto a campanha entrega.
+> **O gasto congelaria no primeiro valor do dia**, com o número continuando
+> plausível. Tem de ser `ON CONFLICT DO UPDATE`.
+
+> ### ⚠️ As duas colunas que o Prisma preenche e o SQL cru não
+> | Coluna | Por que quebraria |
+> |---|---|
+> | `id` | `@default(cuid())` é gerado na APLICAÇÃO; no banco é `NOT NULL` **sem default** |
+> | `updatedAt` | `@updatedAt` também é do cliente; o INSERT violaria `NOT NULL` e o UPDATE deixaria o valor velho |
+>
+> `timezone('UTC', now())` e não `now()`: a coluna é `timestamp WITHOUT time
+> zone` guardando UTC, e `now()` seria convertido pelo fuso da SESSÃO.
+>
+> ⚠️ O dia viaja como **string `YYYY-MM-DD`** até o `::date` do SQL. O
+> `new Date(ins.date_start)` que existia transformava o dia num instante — a
+> origem clássica de bug de fuso neste projeto.
+
+`npm run test:metricas-lote` — 16 asserções contra o banco de DEV: inserção,
+atualização pelo `ON CONFLICT` (a que o `skipDuplicates` não faria), `id` e
+`updatedAt` preenchidos, lote com conflito no meio, e nenhuma linha perdida.
 
 ### 🔍 `npm run diag:testadores` — só leitura, pode rodar em produção
 

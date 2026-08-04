@@ -2,6 +2,7 @@ import { getUserTimezone } from "@/lib/userTimezone";
 import { GRAPH_URL, getAdAccounts, mapAccountStatus } from "@/lib/facebook/graph";
 import { prisma } from "@/lib/prisma";
 import { addDaysToKey, todayKey } from "@/lib/timezone";
+import { Prisma } from "@/generated/prisma/client";
 import type { EntityStatus } from "@/generated/prisma/enums";
 
 // ─────────────────── Helpers de Graph API ───────────────────
@@ -417,14 +418,20 @@ async function syncAccount(
     },
     accessToken,
   );
+  const linhas: LinhaDeMetrica[] = [];
   for (const ins of insights) {
     const adId = ins.ad_id ? adIdMap.get(ins.ad_id) : undefined;
     if (!adId || !ins.date_start) {
       summary.metricasOrfas = (summary.metricasOrfas ?? 0) + 1;
       continue;
     }
-    const date = new Date(ins.date_start);
-    const metric = {
+    linhas.push({
+      adId,
+      // ⚠️ A data segue como STRING `YYYY-MM-DD`, do jeito que a Meta manda.
+      // `new Date(ins.date_start)` transformava o dia num instante, que é a
+      // origem clássica de bug de fuso neste projeto. O `::date` do SQL recebe
+      // a string direto e não há instante nenhum no caminho.
+      dia: ins.date_start,
       spend: Number(ins.spend ?? 0),
       impressions: parseInt(ins.impressions ?? "0", 10),
       clicks: parseInt(ins.clicks ?? "0", 10),
@@ -433,14 +440,9 @@ async function syncAccount(
       cpm: Number(ins.cpm ?? 0),
       reach: parseInt(ins.reach ?? "0", 10),
       frequency: Number(ins.frequency ?? 0),
-    };
-    await prisma.dailyAdMetric.upsert({
-      where: { adId_date: { adId, date } },
-      update: metric,
-      create: { adId, date, ...metric },
     });
-    summary.metrics++;
   }
+  summary.metrics += await gravarMetricas(linhas);
 }
 
 /**
@@ -486,14 +488,20 @@ export async function syncAccountMetrics(
     accessToken,
   );
 
+  const linhas: LinhaDeMetrica[] = [];
   for (const ins of insights) {
     const adId = ins.ad_id ? adIdMap.get(ins.ad_id) : undefined;
     if (!adId || !ins.date_start) {
       summary.metricasOrfas = (summary.metricasOrfas ?? 0) + 1;
       continue;
     }
-    const date = new Date(ins.date_start);
-    const metric = {
+    linhas.push({
+      adId,
+      // ⚠️ A data segue como STRING `YYYY-MM-DD`, do jeito que a Meta manda.
+      // `new Date(ins.date_start)` transformava o dia num instante, que é a
+      // origem clássica de bug de fuso neste projeto. O `::date` do SQL recebe
+      // a string direto e não há instante nenhum no caminho.
+      dia: ins.date_start,
       spend: Number(ins.spend ?? 0),
       impressions: parseInt(ins.impressions ?? "0", 10),
       clicks: parseInt(ins.clicks ?? "0", 10),
@@ -502,14 +510,9 @@ export async function syncAccountMetrics(
       cpm: Number(ins.cpm ?? 0),
       reach: parseInt(ins.reach ?? "0", 10),
       frequency: Number(ins.frequency ?? 0),
-    };
-    await prisma.dailyAdMetric.upsert({
-      where: { adId_date: { adId, date } },
-      update: metric,
-      create: { adId, date, ...metric },
     });
-    summary.metrics++;
   }
+  summary.metrics += await gravarMetricas(linhas);
 }
 
 /** Atualiza só as métricas de todas as contas rastreadas de um usuário. */
@@ -530,6 +533,99 @@ export async function syncUserMetrics(userId: string, days = 2): Promise<SyncSum
     }
   }
   return summary;
+}
+
+export interface LinhaDeMetrica {
+  adId: string;
+  /** Dia de calendário como `YYYY-MM-DD`, exatamente como a Meta manda. */
+  dia: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  reach: number;
+  frequency: number;
+}
+
+/** Máximo de linhas por instrução. Ver a nota sobre o teto de parâmetros. */
+const LOTE_METRICAS = 500;
+
+/**
+ * Grava as métricas do período em LOTE.
+ *
+ * ## 🔴 O que isto substitui
+ *
+ * Era um `prisma.dailyAdMetric.upsert()` **por linha de insight**, dentro do
+ * laço — nos DOIS caminhos de sincronização (o completo e o só-métricas). Uma
+ * conta com 48 anúncios × 2 dias são **96 idas ao Supabase em série**: a ~99 ms
+ * de latência, ~9,5 s só de rede, dentro de um `after()` com `maxDuration`.
+ *
+ * Contas grandes estouravam o tempo, a função morria, a reserva do `autoSync`
+ * ficava presa até expirar (10 min) e **a métrica nunca era gravada**; contas
+ * pequenas passavam. É exatamente o padrão observado em produção em 04/08/2026:
+ * as contas de 48 e 28 anúncios sem métrica nenhuma, a de 4 anúncios normal.
+ *
+ * Agora é **uma instrução por lote de 500 linhas**.
+ *
+ * ## ⛔ `createMany({ skipDuplicates: true })` NÃO serve aqui
+ *
+ * Ele pula a linha que já existe — e a linha de HOJE sempre existe, porque o
+ * gasto do dia corrente é reescrito a cada ciclo enquanto a campanha entrega.
+ * O gasto congelaria no primeiro valor do dia, e o número continuaria
+ * plausível. É preciso `ON CONFLICT DO UPDATE`: upsert de verdade.
+ *
+ * ## ⚠️ As duas colunas que o Prisma preenche e o SQL cru não
+ *
+ * | Coluna | Por que quebraria |
+ * |---|---|
+ * | `id` | `@default(cuid())` é gerado na APLICAÇÃO. No banco a coluna é `NOT NULL` **sem default** — um INSERT cru violaria a restrição |
+ * | `updatedAt` | `@updatedAt` também é do cliente. Sem preencher à mão, o INSERT viola `NOT NULL` e o UPDATE deixaria o valor velho |
+ *
+ * `timezone('UTC', now())` e não `now()` seco: a coluna é `timestamp WITHOUT
+ * time zone` guardando UTC, e `now()` seria convertido pelo fuso da SESSÃO.
+ *
+ * ⚠️ O lote existe pelo teto de **65535 parâmetros** do Postgres. São 10
+ * parâmetros por linha, o que dá um limite real perto de 6500; 500 é folgado.
+ */
+export async function gravarMetricas(linhas: LinhaDeMetrica[]): Promise<number> {
+  if (linhas.length === 0) return 0;
+
+  let gravadas = 0;
+  for (let i = 0; i < linhas.length; i += LOTE_METRICAS) {
+    const parte = linhas.slice(i, i + LOTE_METRICAS);
+    const values = parte.map(
+      (m) => Prisma.sql`(
+        gen_random_uuid()::text, ${m.adId}, ${m.dia}::date,
+        ${m.spend}::numeric, ${m.impressions}::int, ${m.clicks}::int,
+        ${m.ctr}::double precision, ${m.cpc}::numeric, ${m.cpm}::numeric,
+        ${m.reach}::int, ${m.frequency}::double precision,
+        timezone('UTC', now()), timezone('UTC', now())
+      )`,
+    );
+
+    // `$executeRaw` devolve as linhas AFETADAS, que com `ON CONFLICT DO UPDATE`
+    // inclui inserção e atualização — que é o que `summary.metrics` sempre
+    // significou ("linhas de DailyAdMetric gravadas").
+    gravadas += await prisma.$executeRaw`
+      INSERT INTO "DailyAdMetric"
+        ("id", "adId", "date", "spend", "impressions", "clicks", "ctr", "cpc", "cpm",
+         "reach", "frequency", "createdAt", "updatedAt")
+      VALUES ${Prisma.join(values)}
+      ON CONFLICT ("adId", "date") DO UPDATE SET
+        "spend"       = EXCLUDED."spend",
+        "impressions" = EXCLUDED."impressions",
+        "clicks"      = EXCLUDED."clicks",
+        "ctr"         = EXCLUDED."ctr",
+        "cpc"         = EXCLUDED."cpc",
+        "cpm"         = EXCLUDED."cpm",
+        "reach"       = EXCLUDED."reach",
+        "frequency"   = EXCLUDED."frequency",
+        "updatedAt"   = timezone('UTC', now())
+    `;
+  }
+  return gravadas;
 }
 
 /**

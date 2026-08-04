@@ -110,10 +110,43 @@ function conditionsMet(conds: RuleCondition[], m: EntityMetrics): boolean {
   });
 }
 
+/**
+ * Produtos que a regra mira. Vazio = todos.
+ *
+ * ⚠️ Une as DUAS colunas de propósito. `targetProducts` é o que a gaveta grava
+ * hoje; `targetProduct` é o legado do formulário antigo. Ler só uma deixaria um
+ * dos dois grupos de regras com escopo errado — e foi ler só o legado que fez o
+ * filtro inteiro ser inerte.
+ */
+function produtosDaRegra(rule: Pick<RuleRow, "targetProduct" | "targetProducts">): string[] {
+  const out = new Set<string>();
+  for (const p of rule.targetProducts ?? []) if (p?.trim()) out.add(p.trim());
+  if (rule.targetProduct?.trim()) out.add(rule.targetProduct.trim());
+  return [...out];
+}
+
 interface RuleRow {
   id: string;
   userId: string;
+  /**
+   * Produto único — campo LEGADO, do formulário antigo.
+   *
+   * ⚠️ A gaveta atual não o preenche mais; ela grava `targetProducts`. Ele
+   * continua sendo lido porque regra criada no formulário antigo pode tê-lo.
+   */
   targetProduct: string | null;
+  /**
+   * Produtos escolhidos na gaveta. Vazio = todos.
+   *
+   * 🔴 **Esta coluna era ESCRITA e nunca LIDA.** A gaveta gravava aqui, o card
+   * escrevia o nome do produto escolhido, e o motor lia só o `targetProduct`
+   * singular — que a gaveta não preenche. Resultado: uma regra restrita a um
+   * produto **agia sobre todos**, com a tela afirmando o contrário, num código
+   * que pausa campanha e mexe em orçamento real.
+   *
+   * É o caso mais caro da raiz "controle que não controla nada" (04/08/2026).
+   */
+  targetProducts: string[];
   adAccountIds: string[];
   /**
    * Área dona da regra. NULO = regra GLOBAL, age sobre todas as contas.
@@ -171,7 +204,9 @@ async function loadEntities(rule: RuleRow, start: Date, startKey: string) {
       userId: rule.userId,
       status: "APROVADA",
       timestamp: { gte: start },
-      ...(rule.targetProduct ? { product: rule.targetProduct } : {}),
+      // Une o campo novo (plural, da gaveta) com o legado (singular). Lista
+      // vazia = todos os produtos, que é o padrão e o comportamento de antes.
+      ...(produtosDaRegra(rule).length ? { product: { in: produtosDaRegra(rule) } } : {}),
     },
     select: { value: true, click: { select: { utmCampaign: true, utmContent: true } } },
   });
@@ -626,6 +661,10 @@ export async function runUserRules(userId: string): Promise<{ evaluated: number;
   for (const rule of rules) {
     if (rule.lastRunAt && now - rule.lastRunAt.getTime() < rule.frequencyMin * 60_000) continue;
     evaluated++;
+    // ⚠️ O `as unknown as` é o que escondeu o filtro de produto inerte: sem ele
+    // o compilador teria acusado `targetProducts` faltando em `RuleRow`. Toda
+    // coluna nova do schema precisa ser acrescentada à interface À MÃO — este
+    // cast não avisa.
     const result = await evaluateRule(rule as unknown as RuleRow);
     await prisma.$transaction([
       prisma.automationRuleLog.create({

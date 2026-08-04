@@ -315,6 +315,11 @@ export async function previewRuleConditions(
     id: "preview",
     userId,
     targetProduct: input.targetProduct?.trim() || null,
+    // ⚠️ A prévia é a PROMESSA do que o motor vai fazer. Esquecer o filtro de
+    // produto aqui a faria prometer um escopo maior do que o real — e uma
+    // prévia que mente é pior que nenhuma, porque cria confiança falsa num
+    // código que pausa campanha.
+    targetProducts: input.targetProducts ?? [],
     adAccountIds: input.adAccountIds ?? [],
     workspaceId: input.workspaceId ?? null,
     level: input.level,
