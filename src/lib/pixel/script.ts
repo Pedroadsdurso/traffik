@@ -162,6 +162,26 @@ export function pixelScript(cfg: PixelScriptConfig): string {
   // esperar por um \`fbq\` que nunca vem produziria alarme numa instalação certa.
   var NATIVO = ${cfg.temPixelNativo !== false};
 
+  // O click_id da JORNADA, do mesmo cookie de onde o fbclid ja saia.
+  //
+  // Ele sempre esteve aqui e era JOGADO NO LIXO: o t.js grava
+  // {click_id, fbclid, utm_*} no cookie traffik_track, e a funcao abaixo lia so
+  // o fbclid. Como fbclid so existe para trafego de anuncio do Facebook, em
+  // trafego direto o evento chegava ao servidor sem chave de jornada nenhuma — e
+  // era isso que fazia o checkout contar duas vezes (uma pelo navegador, uma
+  // pelo webhook do gateway).
+  function clickId() {
+    try {
+      if (window.traffik && typeof window.traffik.getData === "function") { var d = window.traffik.getData(); if (d && d.click_id) return d.click_id; }
+      // \\\\s e nao \\s: estamos DENTRO de um template literal, entao a barra
+      // precisa sobreviver a ele. Com uma barra so, o JS gerado sai com
+      // /traffik_tracks*=s*/ — que casa por acidente e nao e o que se quer.
+      var m = document.cookie.match(/traffik_track\\s*=\\s*([^;]+)/);
+      if (m) { var j = JSON.parse(decodeURIComponent(m[1])); if (j.click_id) return j.click_id; }
+      return new URLSearchParams(location.search).get("click_id");
+    } catch (e) { return null; }
+  }
+
   function fbclid() {
     try {
       if (window.traffik && typeof window.traffik.getData === "function") { var d = window.traffik.getData(); if (d && d.fbclid) return d.fbclid; }
@@ -334,7 +354,7 @@ export function pixelScript(cfg: PixelScriptConfig): string {
     // ⚠️ O espelho vem ANTES do payload: o estado dele viaja junto do evento, e
     // é o que permite responder "os espelhos estao saindo?" sem abrir o console.
     var espelho = espelhar(event, id);
-    var payload = { pixelConfigId: CONFIG, event: event, eventId: id, url: location.href, fbclid: fbclid(), espelho: espelho, det: DET };
+    var payload = { pixelConfigId: CONFIG, event: event, eventId: id, url: location.href, fbclid: fbclid(), click_id: clickId(), espelho: espelho, det: DET };
     if (extra) for (var k in extra) payload[k] = extra[k];
     enviar(payload);
   }
@@ -363,10 +383,30 @@ export function pixelScript(cfg: PixelScriptConfig): string {
       // de vendas. É o único modo que funciona com checkout hospedado pelo
       // gateway (pay.kirvano.com e afins), onde não dá para instalar script.
       document.addEventListener("click", function (e) {
+        /**
+         * 🔴 Exigir \`<a href>\` deixava o detector CEGO — e em silêncio.
+         *
+         * A versão anterior subia a árvore procurando só \`el.tagName === "A"\` com
+         * \`href\`. Construtor de página moderno raramente entrega isso: o botão de
+         * compra costuma ser \`<button>\`, um \`<a>\` sem \`href\`, \`href="#"\` com
+         * navegação por JS, ou um \`<div data-href>\`. Em todos esses casos \`href\`
+         * ficava vazio, o \`return\` acontecia, e **nada era registrado nem logado**
+         * — o usuário só via "InitiateCheckout nunca recebido", sem causa.
+         *
+         * Agora qualquer atributo que CARREGUE uma URL vale. O que NÃO mudou é o
+         * teste do que conta como checkout: a URL ainda precisa casar com a lista
+         * de domínios. Ampliar de onde a URL vem não afrouxa o critério — só para
+         * de perder o clique.
+         */
         var el = e.target, href = "";
-        // Sobe até o <a>: o clique costuma cair num <span>/<img> dentro do link.
+        var ATRIBUTOS = ["href", "data-href", "data-url", "data-link", "action"];
         while (el && el !== document.body) {
-          if (el.tagName === "A" && el.getAttribute("href")) { href = el.getAttribute("href"); break; }
+          for (var a = 0; a < ATRIBUTOS.length; a++) {
+            var v = el.getAttribute && el.getAttribute(ATRIBUTOS[a]);
+            // \`#\` e \`javascript:\` sao ancora e no-op: nao carregam destino.
+            if (v && v.charAt(0) !== "#" && v.toLowerCase().indexOf("javascript:") !== 0) { href = v; break; }
+          }
+          if (href) break;
           el = el.parentElement;
         }
         if (!href) return;

@@ -325,7 +325,9 @@ async function windowAggregate(
         bot: false,
         ...(fontes ? { utmSource: { in: fontes } } : {}),
       },
-      select: { id: true, utmSource: true, utmCampaign: true, fbclid: true, timestamp: true, workspaceId: true },
+      // ⚠️ `checkoutAt` vem daqui: a etapa "Initiate Checkout" do funil é do
+      // RASTREAMENTO, não do pixel. Ver `lib/funil/checkoutDaJornada.ts`.
+      select: { id: true, utmSource: true, utmCampaign: true, fbclid: true, timestamp: true, workspaceId: true, checkoutAt: true, checkoutSource: true },
       orderBy: { timestamp: "desc" },
     }),
     // Contagem de bot do MESMO período e recorte. Existe para o usuário poder
@@ -372,7 +374,7 @@ async function windowAggregate(
         ambiente: null,
         timestamp: { gte: start, lte: end },
       },
-      select: { id: true, event: true, url: true, fbclid: true, timestamp: true, pixelConfigId: true },
+      select: { id: true, event: true, url: true, fbclid: true, timestamp: true, pixelConfigId: true, clickId: true },
       orderBy: { timestamp: "desc" },
       take: 200,
     }),
@@ -391,7 +393,9 @@ async function windowAggregate(
         ambiente: null,
         timestamp: { gte: start, lte: end },
       },
-      select: { id: true, fbclid: true, eventId: true, pixelConfigId: true },
+      // `clickId` separa as duas populações: com jornada (já contado pelo
+      // `Click.checkoutAt`) e sem jornada (só existe aqui).
+      select: { id: true, fbclid: true, eventId: true, pixelConfigId: true, clickId: true },
     }),
     // Quantos ficaram FORA por serem de ambiente efêmero. Existe para a tela
     // dizer o número: uma detecção que silencia o que removeu é indistinguível
@@ -444,14 +448,31 @@ async function windowAggregate(
   const pixelEventsEscopo = pixelEvents.filter(doArea);
   const icsEscopo = initiateCheckouts.filter(doArea);
 
-  // Visitantes distintos que iniciaram checkout. A chave é o `fbclid` (o mesmo
-  // visitante clicando várias vezes carrega o mesmo), caindo no `eventId` e por
-  // fim no id da linha quando não há como identificar — sem fbclid não dá para
-  // afirmar que dois eventos são a mesma pessoa, e contar a mais é melhor do
-  // que fundir visitantes diferentes num só.
-  const checkoutsDistintos = new Set(
-    icsEscopo.map((e) => e.fbclid || e.eventId || `row:${e.id}`),
+  /**
+   * ## Checkout iniciado = JORNADAS que chegaram ao checkout
+   *
+   * > ### 🔴 Antes isto contava EVENTOS, e a chave era `fbclid`
+   * > `new Set(icsEscopo.map((e) => e.fbclid || e.eventId || ...))`. Sem `fbclid`
+   * > — ou seja, em todo tráfego que não veio de anúncio do Facebook — a chave
+   * > caía no `eventId`, que é `InitiateCheckout-<hash>` no navegador e
+   * > `gw:<pedido>` no gateway. **Chaves diferentes por construção**, então a
+   * > mesma jornada contava duas vezes.
+   *
+   * Hoje a fonte é `Click.checkoutAt`: as duas pontas escrevem na mesma linha, e
+   * o funil só conta linhas. Duplicar deixou de ser possível.
+   *
+   * ⚠️ **A segunda parcela não é opcional.** Checkout de venda que não casou
+   * jornada nenhuma (comprador que nunca passou pelo nosso script) continua
+   * existindo, e sem ele o funil perderia o checkout de quem não é rastreável —
+   * exatamente o número que o usuário usa para descobrir que o rastreamento não
+   * está instalado. São somados porque são populações DISJUNTAS: um tem jornada,
+   * o outro não.
+   */
+  const comJornada = clicksEscopo.filter((c) => c.checkoutAt != null).length;
+  const semJornada = new Set(
+    icsEscopo.filter((e) => e.clickId == null).map((e) => e.eventId || `row:${e.id}`),
   ).size;
+  const checkoutsDistintos = comJornada + semJornada;
 
   return {
     sales: salesEscopo, clicks: clicksEscopo, metrics, expenses, pixelEvents: pixelEventsEscopo,
@@ -1107,7 +1128,39 @@ function buildActivity(w: Window) {
       ts: c.timestamp.getTime(),
     });
   }
+  /**
+   * ## O checkout do feed vem da JORNADA, não de `PixelEvent`
+   *
+   * > ### 🔴 Era isto que o usuário VIA duas vezes
+   * > ```
+   * > Checkout · Gateway · 31s
+   * > Checkout · Pixel   · sigmatools.shop/ · 2min
+   * > ```
+   * > Duas linhas para a mesma jornada, porque o feed listava um item por
+   * > `PixelEvent` e havia dois eventos — um do navegador, um do webhook. Corrigir
+   * > só a CONTAGEM do funil e deixar o feed assim resolveria o número e manteria
+   * > o sintoma na tela.
+   *
+   * `Lead`, `AddToCart` e `PageView` continuam saindo de `PixelEvent`: eles são
+   * eventos de PIXEL, não etapas de funil, e cada um é um fato próprio.
+   */
+  for (const c of w.clicks.filter((x) => x.checkoutAt != null).slice(0, 40)) {
+    items.push({
+      id: "co-" + c.id,
+      type: "checkout",
+      // A fonte diz QUEM detectou — é o que permite ver, no próprio feed, se o
+      // detector do script está vivo ou se só o gateway está reportando.
+      source: c.checkoutSource === "gateway" ? "Gateway" : "Pixel",
+      campaign: c.checkoutSource === "gateway" ? "Checkout no gateway" : "Clique no botão de compra",
+      value: null,
+      ts: c.checkoutAt!.getTime(),
+    });
+  }
   for (const e of w.pixelEvents.slice(0, 40)) {
+    // ⚠️ IC COM jornada já apareceu acima. Sem jornada continua aqui: é checkout
+    // de quem não é rastreável, e sumir dele esconderia justamente o caso que
+    // denuncia rastreamento não instalado.
+    if (e.event === "InitiateCheckout" && e.clickId != null) continue;
     items.push({
       id: "p-" + e.id,
       type:

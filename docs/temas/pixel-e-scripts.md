@@ -631,3 +631,122 @@ comprimento.
 **SHA-256** ✅; `client_ip_address` e `client_user_agent` em texto claro —
 **exigência da Meta**, que recusa esses dois hasheados. Nome do comprador **não
 é enviado**.
+
+---
+
+## 🔴 O FUNIL É DO RASTREAMENTO; O PIXEL É DESPACHANTE (05/08/2026)
+
+Relatado: dois checkouts para a MESMA jornada na Atividade Recente.
+
+```
+Venda pendente · Direto · R$ 92,81 · 31s
+Checkout · Gateway ·                 31s
+Checkout · Pixel · sigmatools.shop/ · 2min
+Clique · Direto ·                    2min
+```
+
+### A causa: `fbclid` era a chave de jornada, e ela não existe em tráfego direto
+
+A dedup existia em DOIS lugares, e os dois chaveavam nela:
+
+| Onde | Como era | Em tráfego direto |
+|---|---|---|
+| `checkoutEvent.ts` | `if (fbclid) { …procura o evento do navegador em 6h… }` | 🔴 o bloco inteiro era **pulado** |
+| `metrics.ts` (funil) | chave `fbclid \|\| eventId \|\| row:id` | 🔴 caía no `eventId`, que é `InitiateCheckout-<hash>` no navegador e `gw:<pedido>` no gateway — **diferentes por construção** |
+
+> ### ⛔ Não era janela curta demais. Era CHAVE AUSENTE.
+> `fbclid` só existe para tráfego de anúncio do Facebook. Aumentar a janela de 6h
+> não consertaria nada — não havia o que comparar.
+
+### O `click_id` sempre esteve disponível, e era jogado no lixo
+
+O `t.js` grava `{click_id, fbclid, utm_*}` no cookie `traffik_track`. O `px.js`
+lia **esse mesmo cookie** e extraía só o `fbclid`, descartando o `click_id` que
+estava do lado.
+
+### A separação, e por que ela torna duplicar IMPOSSÍVEL
+
+**Migration `20260805200000_checkout_na_jornada`** (aditiva): `Click.checkoutAt`,
+`Click.checkoutSource`, `PixelEvent.clickId`.
+
+| Responsabilidade | Dono |
+|---|---|
+| Funil (clique, visita, **checkout**) | **`Click` — o rastreamento** |
+| Despachar `IC`/`Purchase`/`Lead`/`AddToCart` para a Meta | **o pixel** |
+
+As duas fontes agora escrevem na **mesma linha** (`Click.checkoutAt`). Não há
+janela de dedup para acertar nem chave para faltar — é o mesmo princípio do
+upsert monotônico de vendas: **quem resolve o conflito é o banco**.
+
+- `/api/pixel/event` resolve a jornada com **`matchClick`** (`click_id` → `fbclid`
+  → IP), a MESMA função das vendas. Reusá-la é o que impede as duas resoluções de
+  divergirem — e o caminho por **IP** cobre quem ainda não recolou o snippet.
+- `checkoutEvent.ts` marca via `sale.clickId`.
+
+> ### ⚠️ Vence o instante MAIS ANTIGO
+> O clique no botão vem antes de o gateway gerar o PIX. Se o webhook
+> sobrescrevesse, a etapa andaria para a frente no tempo e, num período curto,
+> sairia da janela em que a visita que a gerou está.
+
+> ### ⚠️ `PixelEvent` NÃO deixou de existir — deixou de ser fonte do funil
+> Ele é o registro do que foi **despachado**, com `espelho`, `detectores` e
+> `ambiente`, e é disso que o diagnóstico da gaveta vive. `Lead`, `AddToCart` e
+> `PageView` continuam saindo dele no feed: são eventos de pixel, não etapas de
+> funil.
+
+> ### ⚠️ Checkout SEM jornada continua contando
+> Venda que não casou clique nenhum (comprador que nunca passou pelo script) vira
+> `PixelEvent` com `gw:<pedido>` e é **somada** ao funil. As duas populações são
+> disjuntas. Sem isso, o checkout de quem não é rastreável desapareceria — e é
+> justamente o número que denuncia rastreamento não instalado.
+
+### O que MELHOROU de quebra
+
+- **O Gerenciador perdeu uma consulta ao banco** e ganhou precisão: o IC era
+  atribuído por `fbclid → Click → UTM`, com `if (!e.fbclid) continue`. Todo
+  checkout de tráfego direto **nunca chegava à coluna IC nem ao CPI**. Agora o
+  clique já traz `checkoutAt` e os UTMs na mesma linha.
+- O feed credita **quem detectou** (`Pixel` ou `Gateway`), o que permite ver na
+  tela se o detector do script está vivo.
+
+⚠️ **O número do funil VAI MUDAR:** sobe onde havia tráfego direto perdido, desce
+onde havia duplicata. É correção, não regressão — mas é visível.
+
+⚠️ **Histórico não foi reprocessado.** `PixelEvent` antigo fica com `clickId`
+nulo, então conta como "sem jornada" — o total histórico não se perde, mas as
+duplicatas que já existem continuam lá. Um backfill só recuperaria a metade do
+gateway (`gw:<pedido>` → `Sale` → `clickId`); o evento do navegador em tráfego
+direto não tem como ser religado, porque `PixelEvent` não guarda IP.
+
+## 🔴 O DETECTOR DE CHECKOUT ERA CEGO A BOTÃO QUE NÃO É `<a href>`
+
+O testador usa **Cakto**, recolou o snippet, e o `InitiateCheckout` não aparecia.
+
+**O domínio não era o problema:** `pay.cakto.com.br` casa com `cakto`, que está em
+`CHECKOUT_PADRAO`. E o tipo resolvido é `clique_checkout`, o padrão correto.
+
+O detector subia a árvore procurando **só `<a>` com `href`**. Construtor de página
+moderno raramente entrega isso: o botão de compra costuma ser `<button>`, um `<a>`
+sem `href`, `href="#"` com navegação por JS, ou `<div data-href>`. Em todos esses
+casos `href` ficava vazio, o `return` acontecia, e **nada era registrado nem
+logado**.
+
+Hoje vale qualquer atributo que CARREGUE uma URL: `href`, `data-href`, `data-url`,
+`data-link`, `action` — descartando `#` e `javascript:`, que não são destino.
+
+> ### ⛔ Ampliar de ONDE a URL vem não afrouxa QUAL URL conta
+> O teste do domínio é o mesmo. Metade das asserções de `test:checkout-detector`
+> é do lado *"NÃO deve disparar"* justamente para impedir que a correção vire um
+> detector que dispara em tudo — inclusive a que prova que **texto "comprar"
+> sozinho não basta**.
+
+**`VERSAO` do detector foi para `v4`**, porque as duas mudanças (mandar `click_id`,
+ver botão sem `<a>`) são invisíveis na assinatura. Sem subir a versão, um snippet
+`v3` continuaria reportando "✓ corresponde" enquanto duplica checkout e não vê o
+botão. A gaveta agora pede para recolar.
+
+**Testes:** `npm run test:checkout-jornada` (14 asserções, banco de DEV — as duas
+ordens de chegada, o feed com UMA linha, e o CONTROLE de que jornadas diferentes
+não fundem) · `npm run test:checkout-detector` (17, puro — exercita o script
+GERADO num DOM falso; falsificabilidade verificada reintroduzindo o `<a href>`:
+4 asserções ficam vermelhas).

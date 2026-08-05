@@ -142,7 +142,7 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
   // uma conta concreta, e as contas da área são um conjunto fechado.
   const accountWhere = { id: { in: contas } };
 
-  const [accounts, campaigns, adSets, ads, metrics, sales, cliquesNossos, icEvents] = await Promise.all([
+  const [accounts, campaigns, adSets, ads, metrics, sales, cliquesNossos] = await Promise.all([
     prisma.adAccount.findMany({
       where: { userId, ...accountWhere },
       select: { id: true, fbAccountId: true, name: true, currency: true, trackingEnabled: true },
@@ -194,18 +194,9 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
     prisma.click.findMany({
       // ⚠️ `bot: false` — alimenta a coluna "Cliq. atr.", que é métrica.
       where: { userId, timestamp: { gte: start, lte: end }, bot: false },
-      select: { utmCampaign: true, utmContent: true, fbclid: true, workspaceId: true },
-    }),
-    // Initiate Checkout do período. O evento não carrega campanha, mas carrega
-    // o `fbclid` — e é por ele que se chega ao `Click`, que tem os UTMs. É o
-    // mesmo caminho de atribuição das vendas, só que via fbclid em vez da FK.
-    prisma.pixelEvent.findMany({
-      where: {
-        userId,
-        event: "InitiateCheckout",
-        timestamp: { gte: start, lte: end },
-      },
-      select: { id: true, fbclid: true, eventId: true, pixelConfigId: true },
+      // `checkoutAt`: a coluna IC do Gerenciador passa a sair da JORNADA, não de
+      // `PixelEvent`. Ver `lib/funil/checkoutDaJornada.ts`.
+      select: { utmCampaign: true, utmContent: true, fbclid: true, workspaceId: true, checkoutAt: true },
     }),
   ]);
 
@@ -215,52 +206,38 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
   // conta por FK). Venda, clique e IC não são: eles chegam pela atribuição, e é
   // aqui que a precedência decide de quem são.
   //
-  // ⚠️ O clique é a ponte do IC até a campanha, então ele NÃO pode ser filtrado
-  // por área antes de montar o mapa fbclid→UTM — filtrar depois, ao contar.
-  const cliquePorFbclid = new Map(
-    cliquesNossos.filter((c) => c.fbclid).map((c) => [c.fbclid as string, c]),
-  );
+  // ⚠️ O IC saiu daqui: ele agora é uma coluna da JORNADA (`Click.checkoutAt`),
+  // então a área dele é a área do próprio clique — não há mais mapa
+  // `fbclid → clique` para montar, nem consulta de `PixelEvent` para fazer.
   const vendasDaArea = sales.filter((v) => mapa.areaDaVenda(v).areaId === areaAtiva);
-  const icDaArea = icEvents.filter((e) => {
-    const cl = e.fbclid ? cliquePorFbclid.get(e.fbclid) : undefined;
-    return (
-      mapa.areaDoEvento({
-        pixelConfigId: e.pixelConfigId,
-        utmCampaign: cl?.utmCampaign ?? null,
-        clickWorkspaceId: cl?.workspaceId ?? null,
-      }).areaId === areaAtiva
-    );
-  });
 
-  // Um IC = um VISITANTE distinto, não um evento: o `px.js` dispara a cada
-  // clique no link de checkout, e quem clica duas vezes gerava dois eventos.
-  const icPorFbclid = new Map<string, Set<string>>();
-  for (const e of icDaArea) {
-    if (!e.fbclid) continue; // sem fbclid não há como ligar a uma campanha
-    const visitante = e.fbclid;
-    const set = icPorFbclid.get(visitante) ?? new Set<string>();
-    set.add(e.eventId || `row:${e.id}`);
-    icPorFbclid.set(visitante, set);
-  }
-
-  const fbclids = [...icPorFbclid.keys()];
-  const cliquesDoIc = fbclids.length
-    ? await prisma.click.findMany({
-        // Bot não chega a Initiate Checkout, mas se chegasse contaminaria o CPI.
-        where: { userId, fbclid: { in: fbclids }, bot: false },
-        select: { fbclid: true, utmCampaign: true, utmContent: true },
-      })
-    : [];
-
-  // fbclid → campanha/anúncio. Cada visitante conta UMA vez por campanha.
+  /**
+   * ## IC do Gerenciador: sai da JORNADA, não de `PixelEvent`
+   *
+   * > ### 🔴 O join por `fbclid` PERDIA todo checkout de tráfego direto
+   * > O código anterior era `if (!e.fbclid) continue`, seguido de uma consulta
+   * > `Click where fbclid in (...)` para chegar aos UTMs. Como `fbclid` só existe
+   * > para tráfego de anúncio do Facebook, **checkout de tráfego direto nunca
+   * > chegava à coluna IC nem ao CPI** — e nada na tela dizia isso.
+   *
+   * Agora o clique JÁ traz `checkoutAt` e os UTMs na mesma linha: a atribuição é
+   * direta, sem join, sem `fbclid`, e **com uma consulta a menos** ao banco.
+   *
+   * ⚠️ Continua sendo "uma jornada conta uma vez": a contagem é por linha de
+   * `Click`, então quem clicou duas vezes no botão de compra segue valendo 1.
+   *
+   * ⚠️ Checkout SEM jornada (venda que não casou clique) fica de fora daqui, e
+   * está certo: sem clique não há UTM, logo não há campanha a que atribuir. Ele
+   * conta no funil do Dashboard, que é nível de conta. Por isso o total do
+   * Gerenciador pode ser menor — mesma ressalva que já valia antes.
+   */
   const icByCampaignId = new Map<string, number>();
   const icByCampaignName = new Map<string, number>();
   const icByContentId = new Map<string, number>();
   const icByContentName = new Map<string, number>();
-  const jaContado = new Set<string>();
-  for (const c of cliquesDoIc) {
-    if (!c.fbclid || jaContado.has(c.fbclid)) continue;
-    jaContado.add(c.fbclid);
+  for (const c of cliquesNossos) {
+    if (c.checkoutAt == null) continue;
+    if (mapa.areaDoClique(c).areaId !== areaAtiva) continue;
     const camp = splitPipe(c.utmCampaign);
     const cont = splitPipe(c.utmContent);
     const inc = (m: Map<string, number>, k: string) => m.set(k, (m.get(k) ?? 0) + 1);

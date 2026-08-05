@@ -77,7 +77,21 @@ export interface Detectores {
  * comparação usa só os campos que a versão reportada conhece. Ver
  * `diferencasDeDetectores` e `avisoDeVersao`.
  */
-const VERSAO = "v3";
+/**
+ * `v4` (05/08/2026): o script passou a mandar `click_id` no payload e o detector
+ * de `clique_checkout` deixou de exigir `<a href>`.
+ *
+ * As duas mudanças são invisíveis na assinatura — ela cobre os DONOS e os
+ * detectores, não o payload nem a árvore de atributos — então subir a versão é o
+ * que faz a gaveta pedir para recolar. Sem isso, um snippet `v3` continuaria
+ * reportando "✓ corresponde" enquanto (a) não manda a chave de jornada, e por
+ * isso duplica o checkout, e (b) não vê botão de compra que não seja `<a href>`.
+ *
+ * ⚠️ Subir a versão **não** marca todo script instalado como divergente: a
+ * comparação usa só os campos que a versão reportada conhece, e `avisoDeVersao`
+ * devolve uma nota CINZA, não um alarme. Ver `diferencasDeDetectores`.
+ */
+const VERSAO = "v4";
 
 /**
  * FNV-1a em base36 — o MESMO algoritmo do `eid()` do script.

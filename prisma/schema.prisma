@@ -596,9 +596,38 @@ model Click {
   /// script — coletado agora porque não dá para voltar no tempo.
   timezone       String?
 
+  /// Quando ESTA jornada chegou ao checkout. `null` = não chegou.
+  ///
+  /// 🔴 É AQUI que a etapa "Initiate Checkout" do funil vive, e **não** em
+  /// `PixelEvent`. O funil é do RASTREAMENTO; o pixel só despacha para a Meta.
+  ///
+  /// Antes, o navegador (`px.js`) e o webhook do gateway criavam cada um o seu
+  /// `PixelEvent`, e a dedup era chaveada em `fbclid` — que **só existe para
+  /// tráfego de anúncio do Facebook**. Em tráfego direto a chave era ausente, as
+  /// duas camadas de dedup eram puladas, e a MESMA jornada aparecia duas vezes no
+  /// funil e no feed, com origens diferentes.
+  ///
+  /// Com o checkout marcado na JORNADA, duplicar é estruturalmente impossível:
+  /// as duas fontes escrevem na mesma linha. Não há janela de dedup para acertar.
+  ///
+  /// ⚠️ Vence o instante MAIS ANTIGO. O clique no botão de compra acontece antes
+  /// de o gateway gerar o PIX, e é ele que marca o começo do checkout — deixar o
+  /// webhook sobrescrever jogaria a etapa para a frente no tempo e, num período
+  /// curto, para fora da janela.
+  checkoutAt     DateTime?
+  /// Quem detectou: `navegador` (clique no link) ou `gateway` (webhook).
+  ///
+  /// Existe para o feed dizer a origem e para o diagnóstico saber qual das duas
+  /// pontas está viva: uma conta sem nenhum `navegador` tem script instalado sem
+  /// detector funcionando — que é exatamente o caso que ficava invisível.
+  checkoutSource String?
+
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   sales  Sale[]
+  /// Eventos de pixel desta jornada. `SetNull`: apagar o clique não pode apagar
+  /// o evento que já foi despachado para a Meta.
+  pixelEvents PixelEvent[]
   /// Área DECLARADA pelo script de UTM instalado na página (`ws` no payload).
   ///
   /// ⚠️ Ela **não vence a conta de anúncio**. Se o clique tem `utm_campaign`
@@ -620,6 +649,7 @@ model Click {
   @@index([ip])
   @@index([workspaceId])
   @@index([userId, bot, timestamp])
+  @@index([userId, checkoutAt])
 }
 
 model Sale {
@@ -907,9 +937,18 @@ model PixelEvent {
 
   userId        String
   user          User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// A JORNADA a que este evento pertence, resolvida no `/api/pixel/event` pela
+  /// mesma precedência das vendas (`click_id` > `fbclid` > IP, via `matchClick`).
+  ///
+  /// ⚠️ Guardar a jornada na LINHA é o que permite ao funil contar jornadas em
+  /// vez de eventos. Derivar por `fbclid` na leitura era o defeito: sem `fbclid`
+  /// (tráfego direto) não havia como ligar o evento a nada.
+  clickId       String?
+  click         Click?  @relation(fields: [clickId], references: [id], onDelete: SetNull)
   pixelConfigId String?
 
   @@index([userId, event, timestamp])
+  @@index([clickId])
   /// Deduplicação, possível só desde que o `eventId` virou determinístico.
   /// PARCIAL (`WHERE "eventId" IS NOT NULL`) — ver a migration
   /// `20260731040000_pixel_event_dedup`; o Prisma não expressa índice parcial,

@@ -6,6 +6,8 @@ import { sendServerEvent, type CapiEventName } from "@/lib/facebook/capi";
 import { prisma } from "@/lib/prisma";
 import { ambienteDaUrl, ambientePorPadraoAprovado, lerPadroes } from "@/lib/pixel/ambiente";
 import { traffikEnvia } from "@/lib/pixel/donos";
+import { marcarCheckoutDaJornada } from "@/lib/funil/checkoutDaJornada";
+import { matchClick } from "@/lib/webhook/matchClick";
 import type { PixelEventType } from "@/generated/prisma/enums";
 
 // Chamado a partir do script instalado em sites de terceiros → CORS liberado.
@@ -163,6 +165,30 @@ export async function POST(req: NextRequest) {
       ? porFormato
       : ambientePorPadraoAprovado(urlDoEvento, lerPadroes(config.user?.testHostPatterns));
 
+  /**
+   * A JORNADA deste evento, pela MESMA precedência das vendas.
+   *
+   * > ### 🔴 `fbclid` era a chave errada, e é a causa raiz do checkout duplicado
+   * > Ele **só existe para tráfego de anúncio do Facebook**. Em tráfego direto o
+   * > evento do navegador ficava sem chave nenhuma, a dedup contra o evento do
+   * > gateway era pulada, e a MESMA jornada aparecia duas vezes no funil.
+   * >
+   * > `matchClick` resolve por `click_id` (o id que o NOSSO `t.js` guarda no
+   * > cookie) → `fbclid` → IP. Reusar a função das vendas, em vez de escrever uma
+   * > segunda resolução aqui, é o que impede as duas de divergirem.
+   *
+   * ⚠️ **O `click_id` sempre esteve disponível e era jogado no lixo:** o `px.js`
+   * lê o cookie `traffik_track` para pegar o `fbclid` e descartava o `click_id`
+   * que estava do lado. Agora ele manda — e o caminho por IP cobre quem ainda não
+   * recolou o snippet.
+   */
+  const jornada = await matchClick(
+    config.userId,
+    typeof body.click_id === "string" ? body.click_id : null,
+    ipDaRequisicao(req),
+    typeof body.fbclid === "string" ? `fb.1.0.${body.fbclid}` : null,
+  );
+
   try {
     await prisma.pixelEvent.createMany({
       data: [
@@ -173,6 +199,9 @@ export async function POST(req: NextRequest) {
           eventId: idDoEvento,
           url: urlDoEvento,
           fbclid: typeof body.fbclid === "string" ? body.fbclid : null,
+          // A jornada vai na LINHA. Derivá-la por `fbclid` na leitura era o
+          // defeito: sem `fbclid` não havia como ligar o evento a nada.
+          clickId: jornada.clickId,
           espelho,
           detectores: lerDetectores(body.det),
           ambiente,
@@ -182,6 +211,25 @@ export async function POST(req: NextRequest) {
     });
   } catch (e) {
     console.error("[pixel/event] falha ao persistir evento:", e);
+  }
+
+  /**
+   * ⛔ AQUI o pixel para de ser dono do funil.
+   *
+   * O `PixelEvent` acima é o registro do que foi **despachado** (com `espelho`,
+   * `detectores`, `ambiente`) — é disso que o diagnóstico da gaveta vive. A etapa
+   * do FUNIL é marcada na jornada, que é território do rastreamento.
+   *
+   * ⚠️ **Ambiente efêmero não marca o funil**, pela mesma razão que não vai para a
+   * Meta: um checkout de `localhost` não é checkout de cliente. O evento fica
+   * gravado e contável; só não entra no relatório.
+   *
+   * ⚠️ Sem jornada resolvida não há o que marcar. O evento continua gravado, e o
+   * funil tem um caminho separado para checkout não atribuível — ver
+   * `lib/funil/checkoutDaJornada.ts`.
+   */
+  if (eventKey === "InitiateCheckout" && jornada.clickId && !ambiente) {
+    await marcarCheckoutDaJornada(jornada.clickId, new Date(), "navegador");
   }
 
   /**

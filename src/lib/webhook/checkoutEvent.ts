@@ -7,9 +7,7 @@ import {
   mensagemCurta,
 } from "@/lib/webhook/efeitos";
 import { marcarEfeito } from "@/lib/webhook/marcarEfeito";
-
-/** Janela para considerar que o clique no site e o pedido no gateway são o mesmo checkout. */
-const JANELA_DEDUP_MS = 6 * 60 * 60 * 1000;
+import { marcarCheckoutDaJornada } from "@/lib/funil/checkoutDaJornada";
 
 /**
  * Marca, no lugar da URL, o InitiateCheckout que **não veio do navegador**.
@@ -37,13 +35,20 @@ export const SENTINELA_CHECKOUT_GATEWAY = "gateway:webhook";
  * já chegam APROVADAS não geram checkout aqui: elas entram no funil como venda,
  * e criar os dois inflaria o estágio.
  *
- * **Dedup em duas camadas**, porque o mesmo checkout pode ser visto duas vezes:
- *  1. `eventId = "gw:<externalId>"` — a Kirvano reentrega o mesmo evento (foi
- *     observado em produção: dois `PIX_GENERATED` do mesmo pedido no mesmo dia).
- *     Como o id é derivado do pedido, a reentrega não vira evento novo.
- *  2. `fbclid` do clique casado — se o visitante já disparou o InitiateCheckout
- *     clicando no link de checkout no site de vendas, o evento do webhook é
- *     ignorado dentro de 6h. Sem isso o mesmo checkout contaria em dobro.
+ * ## Duas saídas, e a primeira acabou com o checkout duplicado
+ *
+ * | Venda | O que acontece |
+ * |---|---|
+ * | **com jornada casada** (`clickId`) | marca `Click.checkoutAt`. Se o navegador já marcou, não move nada → `duplicado`. **Duplicar é impossível por estrutura** |
+ * | sem jornada | `PixelEvent` com `eventId = gw:<pedido>` — a reentrega do gateway não vira evento novo, porque o id deriva do pedido |
+ *
+ * > ### ⛔ A dedup por `fbclid` FOI REMOVIDA — não a traga de volta
+ * > Ela era `if (fbclid) { ...procura evento do navegador em 6h... }`, e `fbclid`
+ * > **só existe para tráfego de anúncio do Facebook**. Em tráfego direto o bloco
+ * > inteiro era pulado e o checkout contava em dobro — foi o bug relatado em
+ * > 05/08/2026. O problema não era a janela de 6h: era a chave ausente.
+ * >
+ * > Marcar na jornada não tem janela nem chave para faltar.
  *
  * Nunca lança: registrar o evento não pode derrubar a ingestão da venda.
  */
@@ -82,10 +87,32 @@ async function decidir(
         externalId: true,
         pedidoId: true,
         timestamp: true,
+        clickId: true,
         click: { select: { fbclid: true } },
       },
     });
     if (!sale) return { status: CHECKOUT_IGNORADO };
+
+    /**
+     * 🔴 A JORNADA é a chave, e é o que acabou com o checkout duplicado.
+     *
+     * Antes, a dedup contra o evento do navegador era `if (fbclid) { ... }` — e
+     * `fbclid` **só existe para tráfego de anúncio do Facebook**. Em tráfego
+     * direto o bloco inteiro era pulado, o evento do gateway era criado sempre, e
+     * a mesma jornada aparecia duas vezes no funil e no feed.
+     *
+     * Marcar na jornada torna duplicar **impossível por estrutura**: se o
+     * navegador já marcou, esta chamada não move nada (o `WHERE` monotônico
+     * recusa) e o veredicto é `duplicado`. Se ninguém marcou, esta marca — e é a
+     * ÚNICA. Não há janela de dedup, não há chave para faltar.
+     *
+     * ⚠️ A precedência de instante é a do módulo: vence o mais ANTIGO, porque o
+     * clique no botão vem antes de o gateway gerar o PIX.
+     */
+    if (sale.clickId) {
+      const moveu = await marcarCheckoutDaJornada(sale.clickId, sale.timestamp, "gateway");
+      return { status: moveu ? CHECKOUT_CRIADO : CHECKOUT_DUPLICADO };
+    }
 
     // ⚠️ A chave é o PEDIDO, não o item. Com order bump, um único checkout vira
     // N linhas de venda — e uma chave por linha geraria N InitiateCheckout para
@@ -96,34 +123,30 @@ async function decidir(
     const eventId = chave ? `gw:${chave}` : null;
     if (!eventId) return { status: CHECKOUT_IGNORADO };
 
+    /**
+     * ── Daqui para baixo: venda SEM jornada casada ────────────────────────────
+     *
+     * Não houve `click_id`, `fbclid` nem IP que ligassem a venda a um clique
+     * nosso — o comprador nunca passou pelo nosso script, ou o casamento falhou.
+     * O checkout **aconteceu** (o gateway gerou cobrança), então ele precisa
+     * contar; só não há jornada onde marcá-lo.
+     *
+     * Continua como `PixelEvent` com `eventId = gw:<pedido>`, que é o que o funil
+     * soma como "checkout sem jornada identificada".
+     *
+     * ⚠️ Aqui **não existe risco de duplicar com o navegador**: sem jornada
+     * casada, o evento do navegador (se houve) também ficou sem jornada, e o
+     * funil conta os dois separadamente — mas esse é o caso em que não há como
+     * afirmar que são a mesma pessoa. Fundi-los é que seria o erro.
+     */
     const jaExiste = await prisma.pixelEvent.findFirst({
       where: { userId: sale.userId, event: "InitiateCheckout", eventId },
       select: { id: true },
     });
+    // A reentrega do gateway é o caso comum: `gw:<pedido>` é derivado do pedido,
+    // então o mesmo `PIX_GENERATED` reentregue não vira evento novo.
     if (jaExiste) return { status: CHECKOUT_DUPLICADO };
-
-    // Camada 2: o mesmo visitante já pode ter disparado o evento pelo clique.
     const fbclid = sale.click?.fbclid ?? null;
-    if (fbclid) {
-      const peloClique = await prisma.pixelEvent.findFirst({
-        where: {
-          userId: sale.userId,
-          event: "InitiateCheckout",
-          fbclid,
-          // ⚠️ A janela tem as DUAS pontas. Só com `gte` ela era "de 6h antes da
-          // venda até o fim dos tempos", o que basta em tempo real (o clique
-          // sempre veio antes) e é errado ao reprocessar uma venda antiga: um
-          // checkout de meses depois, do mesmo visitante, contaria como
-          // duplicata e apagaria o evento que o backfill existe para criar.
-          timestamp: {
-            gte: new Date(sale.timestamp.getTime() - JANELA_DEDUP_MS),
-            lte: new Date(sale.timestamp.getTime() + JANELA_DEDUP_MS),
-          },
-        },
-        select: { id: true },
-      });
-      if (peloClique) return { status: CHECKOUT_DUPLICADO };
-    }
 
     await prisma.pixelEvent.create({
       data: {

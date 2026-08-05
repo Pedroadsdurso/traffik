@@ -754,10 +754,21 @@ qualquer resize, leia `innerWidth` e compare. `innerWidth === screen.availWidth`
 
 Tudo até `12c25ac` está no `origin/main`.
 
-### ✅ Migrations: nenhuma pendente
+### 🔴 UMA MIGRATION PENDENTE: `20260805200000_checkout_na_jornada`
 
-Conferido pelo usuário em 05/08/2026: **`No pending migrations to apply`, 45
-aplicadas.** As duas que este arquivo listava como pendentes
+**`npx prisma migrate deploy` ANTES do push.** Aditiva (3 colunas nullable + 2
+índices + 1 FK `SetNull`), então o build antigo continua funcionando — mas o
+código novo faz `SELECT` de `Click.checkoutAt` em toda carga de dashboard.
+
+O que ela habilita: o funil passa a ser do RASTREAMENTO, e o checkout duplicado
+da mesma jornada deixa de ser possível. Ver `docs/temas/pixel-e-scripts.md`.
+
+⚠️ Depois do deploy, o número do funil MUDA: sobe onde havia tráfego direto
+perdido, desce onde havia duplicata.
+
+### Antes disso, conferido pelo usuário em 05/08/2026
+
+**`No pending migrations to apply`, 45 aplicadas.** As duas que este arquivo listava como pendentes
 (`20260805100000_venda_efeitos` e `20260805110000_imposto_anuncios`) **já
 estavam em produção**.
 
@@ -854,6 +865,8 @@ npm run test:espelho     # 39 asserções, espelho no fbq em DOM falso (puro)
 npm run test:detectores  # 56 asserções, assinatura v2 + preset do pixel (puro)
 npm run test:utm-venda   # 25 asserções, UTMs copiadas para Sale (banco de DEV)
 npm run test:utm-orfa    # 14 asserções, venda ORFA de clique: a copia sustenta ROAS/CPA? (DEV)
+npm run test:checkout-jornada    # 14 asserções, checkout duplicado da mesma jornada (DEV)
+npm run test:checkout-detector   # 17 asserções, o px.js ve o botao de compra? (puro)
 npm run test:fusos       # 15 asserções, fuso da conta x fuso do aparelho (puro)
 npm run backfill:utms    # copia os UTMs do clique. SIMULA; --aplicar escreve
 npm run test:veiculacao  # 40 asserções, status configurado × veiculação (puro)
