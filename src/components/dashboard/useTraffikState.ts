@@ -2,8 +2,8 @@
 
 import { useRouter } from "next/navigation";
 
-import { useCallback, useEffect, useState } from "react";
-import { saveDashboardPrefs, type DashboardPrefsDTO } from "@/lib/actions/dashboardPrefs";
+import { useEffect, useState } from "react";
+import type { DashboardPrefsDTO } from "@/lib/actions/dashboardPrefs";
 import {
   disconnectProfile,
   listAdProfiles,
@@ -39,14 +39,6 @@ import {
   type NotificationSettingsDTO,
 } from "@/lib/actions/notifications";
 import {
-  createRule,
-  deleteRule,
-  listRules,
-  toggleRule,
-  type RuleDTO,
-} from "@/lib/actions/rules";
-import type { RuleAction, RuleLevel } from "@/generated/prisma/enums";
-import {
   createWebhook,
   deleteWebhook,
   toggleWebhook,
@@ -66,7 +58,7 @@ import type { DashboardData } from "@/lib/dashboard/metrics";
 import { brl, brl0, buildPoints, elapsed, multFmt, pct, plural, roasFmt } from "@/lib/format";
 import { setLastWorkspaceId, type WorkspaceDTO } from "@/lib/actions/workspaces";
 import { DEFAULT_TIMEZONE } from "@/lib/timezone";
-import type { MetricKey, TabKey } from "./types";
+import type { MetricKey } from "./types";
 
 /**
  * ⚠️ Vem de `lib/periodo.ts`. Era uma união local de 4 valores, uma TERCEIRA
@@ -75,21 +67,6 @@ import type { MetricKey, TabKey } from "./types";
  */
 type DashPeriod = PeriodoNome;
 
-interface RuleForm {
-  name: string;
-  product: string;
-  account: string;
-  level: "campanha" | "conjunto" | "anuncio";
-  metric: string;
-  op: string;
-  value: string;
-  window: string;
-  action: string;
-  budgetPct: string;
-  freq: string;
-  dailyLimit: string;
-  active: boolean;
-}
 
 const DEFAULT_NOTIF_SETTINGS: NotificationSettingsDTO = {
   notifyPendingSale: true,
@@ -106,15 +83,12 @@ const DEFAULT_NOTIF_SETTINGS: NotificationSettingsDTO = {
 };
 
 interface State {
-  activeTab: TabKey;
   adsSub: "campaigns" | "adsets" | "ads" | "accounts";
-  fbSub: "contas" | "webhooks" | "pixel" | "testes";
   fbConnected: boolean;
   adProfiles: AdProfileDTO[];
   expandedProfiles: Record<string, boolean>;
   accountSync: Record<string, { busy: boolean; msg: string | null }>;
   pixels: PixelConfigDTO[];
-  editDashOpen: boolean;
   /** Última sincronização concluída (ISO) e se há uma em andamento. */
   syncLastAt: string | null;
   syncRodando: boolean;
@@ -194,22 +168,10 @@ interface State {
   revealedKeys: Record<string, string>;
   copiedCredId: string | null;
   credError: string | null;
-  rules: RuleDTO[];
-  ruleBusy: boolean;
-  ruleRunBusy: boolean;
-  ruleRunResult: string | null;
-  ruleForm: RuleForm;
   notifSettings: NotificationSettingsDTO;
   notifications: NotificationDTO[];
   notifUnread: number;
   notifOpen: boolean;
-  utmUrl: string;
-  utmSource: string;
-  utmMedium: string;
-  utmCampaign: string;
-  utmContent: string;
-  snippetCopied: boolean;
-  linkCopied: boolean;
 }
 
 const DEFAULT_METRIC_ORDER: MetricKey[] = [
@@ -233,7 +195,6 @@ function initialState(
   prefs?: DashboardPrefsDTO | null,
   initialProfiles: AdProfileDTO[] = [],
   initialPixels: PixelConfigDTO[] = [],
-  initialRulesDTO: RuleDTO[] = [],
   initialNotifSettings: NotificationSettingsDTO = DEFAULT_NOTIF_SETTINGS,
   initialNotifications: NotificationDTO[] = [],
   initialExpenses: ExpenseDTO[] = [],
@@ -247,15 +208,12 @@ function initialState(
   const visible = { ...DEFAULT_METRIC_VISIBLE, ...(prefs?.visible ?? {}) } as Record<MetricKey, boolean>;
 
   return {
-    activeTab: "dashboard",
     adsSub: "campaigns",
-    fbSub: "contas",
     fbConnected: initialProfiles.length > 0,
     adProfiles: initialProfiles,
     expandedProfiles: {},
     accountSync: {},
     pixels: initialPixels,
-    editDashOpen: false,
     syncLastAt: null,
     syncRodando: false,
     workspaces: [],
@@ -326,46 +284,14 @@ function initialState(
     revealedKeys: {},
     copiedCredId: null,
     credError: null,
-    rules: initialRulesDTO,
-    ruleBusy: false,
-    ruleRunBusy: false,
-    ruleRunResult: null,
-    ruleForm: { name: "", product: "todos", account: "todas", level: "campanha", metric: "CPA", op: ">", value: "50", window: "hoje", action: "pausar", budgetPct: "20", freq: "30", dailyLimit: "10", active: true },
     notifSettings: initialNotifSettings,
     notifications: initialNotifications,
     notifUnread: initialNotifications.filter((n) => !n.read).length,
     notifOpen: false,
-    utmUrl: "",
-    utmSource: "facebook",
-    utmMedium: "cpc",
-    utmCampaign: "",
-    utmContent: "",
-    snippetCopied: false,
-    linkCopied: false,
   };
 }
 
-const NAV_DEF: Record<TabKey, [string, string]> = {
-  dashboard: ["Dashboard", "M40 40 h72 v72 h-72 Z M144 40 h72 v72 h-72 Z M40 144 h72 v72 h-72 Z M144 144 h72 v72 h-72 Z"],
-  ads: ["Gerenciador de Anúncios", "M128 40 a88 88 0 100 176 a88 88 0 100 -176 M128 80 a48 48 0 100 96 a48 48 0 100 -96"],
-  creatives: ["Criativos", "M32 56 h192 v144 h-192 Z M32 176 L92 128 L140 160 L176 120 L224 164"],
-  rules: ["Regras", "M144 24 L48 144 h64 l-16 88 96 -128 h-64 Z"],
-  notifications: ["Notificações", "M128 32 a56 56 0 00-56 56 c0 46 -24 58 -24 72 h160 c0 -14 -24 -26 -24 -72 a56 56 0 00-56 -56 Z M104 216 a24 24 0 0048 0"],
-  fees: ["Taxas e Despesas", "M72 184 L184 72 M80 56 a24 24 0 100 48 a24 24 0 100 -48 M176 152 a24 24 0 100 48 a24 24 0 100 -48"],
-  facebook: ["Facebook Ads", "M96 72 a56 56 0 100 112 a56 56 0 100 -112 M160 72 a56 56 0 100 112 a56 56 0 100 -112"],
-  utm: ["Rastreamento UTM", "M88 72 L32 128 L88 184 M168 72 L224 128 L168 184"],
-};
 
-const TITLES: Record<TabKey, [string, string]> = {
-  dashboard: ["Dashboard", "Visão geral do tráfego, vendas e retorno em tempo real"],
-  ads: ["Gerenciador de Anúncios", "Administre campanhas, conjuntos e anúncios do Facebook Ads"],
-  creatives: ["Ranking de Criativos", "Os anúncios com melhor performance hoje"],
-  rules: ["Regras de Automação", "Automatize pausas, escalas e alertas por condição"],
-  notifications: ["Notificações", "Alertas de venda e relatórios programados"],
-  fees: ["Taxas e Despesas", "Configure custos para um cálculo de lucro preciso"],
-  facebook: ["Facebook Ads", "Contas, webhooks, pixel e testes de integração"],
-  utm: ["Rastreamento UTM", "Instale o pixel e gere links com parâmetros UTM"],
-};
 
 const UP_PATH = "M32 176 L96 112 L136 144 L224 64 M176 64 L224 64 L224 112";
 const DOWN_PATH = "M32 80 L96 144 L136 112 L224 192 M176 192 L224 192 L224 144";
@@ -429,7 +355,6 @@ export function useTraffikState(
     dashboardPrefs?: DashboardPrefsDTO | null;
     initialProfiles?: AdProfileDTO[];
     initialPixels?: PixelConfigDTO[];
-    initialRules?: RuleDTO[];
     initialNotifSettings?: NotificationSettingsDTO;
     initialNotifications?: NotificationDTO[];
     initialExpenses?: ExpenseDTO[];
@@ -455,7 +380,7 @@ export function useTraffikState(
   const ultimaArea = opts.lastWorkspaceId ?? null;
 
   const router = useRouter();
-  const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks, opts.dashboardPrefs, opts.initialProfiles, opts.initialPixels, opts.initialRules, opts.initialNotifSettings, opts.initialNotifications, opts.initialExpenses, opts.initialApiCredentials));
+  const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks, opts.dashboardPrefs, opts.initialProfiles, opts.initialPixels, opts.initialNotifSettings, opts.initialNotifications, opts.initialExpenses, opts.initialApiCredentials));
 
   // Semeia as áreas vindas do servidor. Só quando MUDAM de verdade: o layout
   // remonta a cada navegação e reescrever o estado igual derrubaria a área
@@ -511,7 +436,6 @@ export function useTraffikState(
       if (mudou(st.webhooks, opts.initialWebhooks)) patch.webhooks = opts.initialWebhooks;
       if (mudou(st.adProfiles, opts.initialProfiles)) patch.adProfiles = opts.initialProfiles;
       if (mudou(st.pixels, opts.initialPixels)) patch.pixels = opts.initialPixels;
-      if (mudou(st.rules, opts.initialRules)) patch.rules = opts.initialRules;
       if (mudou(st.expenses, opts.initialExpenses)) patch.expenses = opts.initialExpenses;
       if (mudou(st.apiCredentials, opts.initialApiCredentials)) patch.apiCredentials = opts.initialApiCredentials;
       return Object.keys(patch).length ? { ...st, ...patch } : st;
@@ -520,16 +444,12 @@ export function useTraffikState(
     opts.initialWebhooks,
     opts.initialProfiles,
     opts.initialPixels,
-    opts.initialRules,
     opts.initialExpenses,
     opts.initialApiCredentials,
   ]);
 
   function set(patch: Partial<State>) {
     setS((st) => ({ ...st, ...patch }));
-  }
-  function setNested<K extends keyof State>(key: K, sub: string, val: unknown) {
-    setS((st) => ({ ...st, [key]: { ...(st[key] as object), [sub]: val } }));
   }
 
   // Busca as métricas reais e faz polling a cada 15s; refaz ao mudar um filtro.
@@ -677,9 +597,6 @@ export function useTraffikState(
     return () => { active = false; controller.abort(); stop(); };
   }, [liveUpdates, s.workspaceAtiva]);
 
-  const persistPrefs = useCallback((order: MetricKey[], visible: Record<MetricKey, boolean>) => {
-    saveDashboardPrefs({ order, visible }).catch(() => {});
-  }, []);
 
   const d = s.dashData;
   const k = d?.kpis;
@@ -816,30 +733,6 @@ export function useTraffikState(
     chargeback: { label: "Taxa de chargeback", value: pct(chargebackRate), delta: null, invertido: false, trendColor: A, trendPath: UP_PATH, trendLabel: "sobre eventos de venda" },
   };
   const kpiCards = s.metricOrder.filter((key) => s.metricVisible[key]).map((key) => reg[key]);
-  const metricList = s.metricOrder.map((key, i) => ({
-    key,
-    label: reg[key].label,
-    on: !!s.metricVisible[key],
-    toggle: () => {
-      const visible = { ...s.metricVisible, [key]: !s.metricVisible[key] };
-      set({ metricVisible: visible });
-      persistPrefs(s.metricOrder, visible);
-    },
-    moveUp: () => {
-      if (i === 0) return;
-      const o = [...s.metricOrder];
-      [o[i - 1], o[i]] = [o[i], o[i - 1]];
-      set({ metricOrder: o });
-      persistPrefs(o, s.metricVisible);
-    },
-    moveDown: () => {
-      if (i === s.metricOrder.length - 1) return;
-      const o = [...s.metricOrder];
-      [o[i + 1], o[i]] = [o[i], o[i + 1]];
-      set({ metricOrder: o });
-      persistPrefs(o, s.metricVisible);
-    },
-  }));
 
   const W = 600, H = 180, PAD = 12;
   const cr = d?.chart.revenue?.length ? d.chart.revenue : [0, 0];
@@ -1323,55 +1216,7 @@ export function useTraffikState(
     checked: s.adsSub === k,
     go: () => set({ adsSub: k }),
   }));
-  const fbTabs = (["contas", "webhooks", "pixel", "testes"] as const).map((k, i) => ({
-    key: k,
-    label: ["Contas", "Webhooks", "Pixel", "Testes"][i],
-    checked: s.fbSub === k,
-    go: () => set({ fbSub: k }),
-  }));
 
-  const LEVEL_LABEL: Record<RuleLevel, string> = { CAMPAIGN: "Campanha", ADSET: "Conjunto", AD: "Anúncio" };
-  const RULE_STATUS_LABEL: Record<string, string> = { SUCESSO: "Executou", SEM_ACAO: "Sem ação", ERRO: "Erro" };
-  // Regras da ÁREA ATIVA. Uma regra é configuração, não métrica: o recorte é
-  // pelas contas de anúncio que ela mira.
-  //
-  // ⚠️ Regra **sem conta escolhida vale para todas** — então aparece em toda
-  // área, e isso é correto: ela realmente age sobre as campanhas desta área
-  // também. Escondê-la faria o usuário achar que ninguém está pausando as
-  // campanhas dele, enquanto uma regra global as pausa.
-  const contasDaArea = s.workspaceAtiva
-    ? s.workspaces.find((w) => w.id === s.workspaceAtiva)?.accountIds ?? []
-    : [];
-  const rules = s.rules
-    .filter((r) =>
-      contasDaArea.length === 0 || r.adAccountIds.length === 0
-        ? true
-        : r.adAccountIds.some((id) => contasDaArea.includes(id)),
-    )
-    .map((r) => ({
-    id: r.id,
-    name: r.name,
-    summary: r.summary,
-    levelLabel: LEVEL_LABEL[r.level],
-    freq: `A cada ${r.frequencyMin} min`,
-    on: r.active,
-    lastRunLabel: r.lastRunAt ? elapsed(new Date(r.lastRunAt).getTime()) : "nunca",
-    logs: r.logs.map((l) => ({
-      id: l.id,
-      statusLabel: RULE_STATUS_LABEL[l.status] ?? l.status,
-      statusTag: l.status === "SUCESSO" ? "tag tag-accent" : l.status === "ERRO" ? "tag tag-neutral" : "tag tag-neutral",
-      message: l.message ?? "",
-      timeLabel: elapsed(new Date(l.ranAt).getTime()),
-    })),
-    toggle: async () => {
-      const res = await toggleRule(r.id);
-      setS((st) => ({ ...st, rules: st.rules.map((x) => (x.id === r.id ? { ...x, active: res.active } : x)) }));
-    },
-    remove: async () => {
-      await deleteRule(r.id);
-      setS((st) => ({ ...st, rules: st.rules.filter((x) => x.id !== r.id) }));
-    },
-  }));
 
   // ── Notificações (Fase 12) ──
   const ns = s.notifSettings;
@@ -1421,44 +1266,10 @@ export function useTraffikState(
     timeLabel: elapsed(new Date(n.timestamp).getTime()),
   }));
 
-  // Monta a URL preservando a query já existente e ignorando UTMs vazios.
-  const generatedLink = (() => {
-    const base = (s.utmUrl || "").trim();
-    if (!base) return "";
-    const utmPairs: [string, string][] = [
-      ["utm_source", s.utmSource],
-      ["utm_medium", s.utmMedium],
-      ["utm_campaign", s.utmCampaign],
-      ["utm_content", s.utmContent],
-    ];
-    try {
-      const url = new URL(base);
-      for (const [k, val] of utmPairs) {
-        if (val && val.trim()) url.searchParams.set(k, val.trim());
-      }
-      return url.toString();
-    } catch {
-      // Fallback quando a URL ainda está incompleta enquanto o usuário digita.
-      const query = utmPairs
-        .filter(([, val]) => val && val.trim())
-        .map(([k, val]) => `${k}=${encodeURIComponent(val.trim())}`)
-        .join("&");
-      const sep = base.includes("?") ? "&" : "?";
-      return query ? `${base}${sep}${query}` : base;
-    }
-  })();
-
-  const snippetText = `<script src="${appUrl}/pixel.js" data-account="${trackingId}" async></script>`;
 
   return {
     brandName,
     brandInitial: brandName.charAt(0),
-    navAnalise: (["dashboard", "ads", "creatives"] as TabKey[]).map((key) => ({ key, label: NAV_DEF[key][0], icon: NAV_DEF[key][1], active: key === s.activeTab, go: () => set({ activeTab: key }) })),
-    navAuto: (["rules", "notifications"] as TabKey[]).map((key) => ({ key, label: NAV_DEF[key][0], icon: NAV_DEF[key][1], active: key === s.activeTab, go: () => set({ activeTab: key }) })),
-    navConfig: (["fees", "facebook", "utm"] as TabKey[]).map((key) => ({ key, label: NAV_DEF[key][0], icon: NAV_DEF[key][1], active: key === s.activeTab, go: () => set({ activeTab: key }) })),
-    pageTitle: TITLES[s.activeTab][0],
-    pageSubtitle: TITLES[s.activeTab][1],
-    activeTab: s.activeTab,
 
     fbConnected: s.adProfiles.length > 0,
     activeAccountCount: trackedAccounts + " contas",
@@ -1481,9 +1292,9 @@ export function useTraffikState(
     /** Aplica o intervalo do calendário e já muda o período para "custom". */
     setDashRange: (from: string, to: string) => set({ dashPeriod: "custom", dashFrom: from, dashTo: to }),
 
-    kpiCards, chart, chartPeriodLabel, products, sources, placements, placementSemDados, payments, funnel, feed, metricList,
     // Registro por chave: o grid do Bloco 2 renderiza cada KPI como bloco
     // independente, então precisa acessar a métrica pelo id e não pela ordem.
+    kpiCards, chart, chartPeriodLabel, products, sources, placements, placementSemDados, payments, funnel, feed,
     metricCards: reg,
     // Séries do Bloco 4 (por horário / por dia), já filtradas no servidor.
     // Bloco 5: séries brutas para os gráficos novos (o front formata).
@@ -1660,9 +1471,6 @@ export function useTraffikState(
     filterProducts: filterOptions.products,
     filterSources: filterOptions.sources,
 
-    editDashOpen: s.editDashOpen,
-    openEditDash: () => set({ editDashOpen: true }),
-    closeEditDash: () => set({ editDashOpen: false }),
 
     adsTabs,
     adsSub: s.adsSub,
@@ -1820,8 +1628,6 @@ export function useTraffikState(
         set({ syncBusy: false, syncResult: "Erro de rede: " + String(e) });
       }
     },
-    fbTabs,
-    fbSub: s.fbSub,
 
     // ───────────── Webhooks (bloco esquerdo) ─────────────
     webhooks: s.webhooks,
@@ -2106,75 +1912,6 @@ export function useTraffikState(
       temCustoProduto: (fin?.custoProduto ?? 0) > 0,
     },
 
-    rules,
-    ruleBusy: s.ruleBusy,
-    ruleRunBusy: s.ruleRunBusy,
-    ruleRunResult: s.ruleRunResult,
-    ruleAccountOptions: (ao?.accounts ?? []).map((a) => ({ id: a.id, name: a.name })),
-    addRule: async () => {
-      const f = s.ruleForm;
-      const levelMap: Record<string, RuleLevel> = { campanha: "CAMPAIGN", conjunto: "ADSET", anuncio: "AD" };
-      const actionMap: Record<string, RuleAction> = { pausar: "PAUSAR", ativar: "ATIVAR", aumentar: "AJUSTAR_ORCAMENTO", reduzir: "AJUSTAR_ORCAMENTO" };
-      const metricMap: Record<string, "cpa" | "roas" | "ctr" | "gasto" | "vendas"> = { CPA: "cpa", ROAS: "roas", CTR: "ctr", Gasto: "gasto", Vendas: "vendas" };
-      const action = actionMap[f.action];
-      const pct = parseFloat(f.budgetPct) || 0;
-      const actionParams =
-        action === "AJUSTAR_ORCAMENTO" ? { tipo: "percentual", valor: f.action === "reduzir" ? -Math.abs(pct) : Math.abs(pct) } : null;
-      set({ ruleBusy: true });
-      try {
-        const created = await createRule({
-          name: f.name || `${f.metric} ${f.op} ${f.value}`,
-          targetProduct: f.product === "todos" ? null : f.product,
-          adAccountIds: f.account === "todas" ? [] : [f.account],
-          // A regra nasce vinculada à área ATIVA. Sem isto toda regra nasceria
-          // global e o escopo do motor nunca teria efeito.
-          workspaceId: s.workspaceAtiva,
-          level: levelMap[f.level],
-          action,
-          actionParams,
-          conditions: [{ metrica: metricMap[f.metric], operador: f.op as ">" | "<" | "=", valor: parseFloat(f.value) || 0 }],
-          calcPeriod: f.window,
-          frequencyMin: parseInt(f.freq, 10) || 30,
-          dailyRunLimit: parseInt(f.dailyLimit, 10) || 10,
-          active: f.active,
-        });
-        setS((st) => ({ ...st, rules: [created, ...st.rules], ruleBusy: false, ruleForm: { ...st.ruleForm, name: "", value: "" } }));
-      } catch {
-        set({ ruleBusy: false });
-      }
-    },
-    runRules: async () => {
-      set({ ruleRunBusy: true, ruleRunResult: null });
-      try {
-        const res = await fetch("/api/rules/run", { method: "POST" });
-        const json = await res.json();
-        if (res.ok) {
-          // Recarrega as regras para trazer os logs novos.
-          const fresh = await listRules(s.workspaceAtiva);
-          setS((st) => ({ ...st, ruleRunBusy: false, rules: fresh, ruleRunResult: `${plural(json.evaluated, "regra avaliada", "regras avaliadas")}, ${json.acted} com ação.` }));
-        } else {
-          set({ ruleRunBusy: false, ruleRunResult: json.error ?? "Falha ao executar." });
-        }
-      } catch {
-        set({ ruleRunBusy: false, ruleRunResult: "Erro de rede." });
-      }
-    },
-    ruleForm: s.ruleForm,
-    onRuleLevelCampanha: () => setNested("ruleForm", "level", "campanha"),
-    onRuleLevelConjunto: () => setNested("ruleForm", "level", "conjunto"),
-    onRuleLevelAnuncio: () => setNested("ruleForm", "level", "anuncio"),
-    onRuleName: (e: React.ChangeEvent<HTMLInputElement>) => setNested("ruleForm", "name", e.target.value),
-    onRuleProduct: (e: React.ChangeEvent<HTMLSelectElement>) => setNested("ruleForm", "product", e.target.value),
-    onRuleAccount: (e: React.ChangeEvent<HTMLSelectElement>) => setNested("ruleForm", "account", e.target.value),
-    onRuleMetric: (e: React.ChangeEvent<HTMLSelectElement>) => setNested("ruleForm", "metric", e.target.value),
-    onRuleOp: (e: React.ChangeEvent<HTMLSelectElement>) => setNested("ruleForm", "op", e.target.value),
-    onRuleValue: (e: React.ChangeEvent<HTMLInputElement>) => setNested("ruleForm", "value", e.target.value),
-    onRuleWindow: (e: React.ChangeEvent<HTMLSelectElement>) => setNested("ruleForm", "window", e.target.value),
-    onRuleAction: (e: React.ChangeEvent<HTMLSelectElement>) => setNested("ruleForm", "action", e.target.value),
-    onRuleBudgetPct: (e: React.ChangeEvent<HTMLInputElement>) => setNested("ruleForm", "budgetPct", e.target.value),
-    onRuleFreq: (e: React.ChangeEvent<HTMLSelectElement>) => setNested("ruleForm", "freq", e.target.value),
-    onRuleDailyLimit: (e: React.ChangeEvent<HTMLInputElement>) => setNested("ruleForm", "dailyLimit", e.target.value),
-    onRuleActive: () => setS((st) => ({ ...st, ruleForm: { ...st.ruleForm, active: !st.ruleForm.active } })),
 
     notif: {
       notifyPendingSale: ns.notifyPendingSale,
@@ -2206,29 +1943,9 @@ export function useTraffikState(
       await markAllNotificationsRead();
     },
 
-    snippetText,
     trackingId,
     appUrl,
     timezone,
-    snippetCopyLabel: s.snippetCopied ? "Copiado!" : "Copiar snippet",
-    copySnippet: () => {
-      navigator.clipboard.writeText(snippetText);
-      set({ snippetCopied: true });
-      setTimeout(() => set({ snippetCopied: false }), 1500);
-    },
-    utmUrl: s.utmUrl, utmSource: s.utmSource, utmMedium: s.utmMedium, utmCampaign: s.utmCampaign, utmContent: s.utmContent,
-    onUtmUrl: (e: React.ChangeEvent<HTMLInputElement>) => set({ utmUrl: e.target.value }),
-    onUtmSource: (e: React.ChangeEvent<HTMLSelectElement>) => set({ utmSource: e.target.value }),
-    onUtmMedium: (e: React.ChangeEvent<HTMLInputElement>) => set({ utmMedium: e.target.value }),
-    onUtmCampaign: (e: React.ChangeEvent<HTMLInputElement>) => set({ utmCampaign: e.target.value }),
-    onUtmContent: (e: React.ChangeEvent<HTMLInputElement>) => set({ utmContent: e.target.value }),
-    generatedLink,
-    linkCopyLabel: s.linkCopied ? "Copiado!" : "Copiar link",
-    copyLink: () => {
-      navigator.clipboard.writeText(generatedLink);
-      set({ linkCopied: true });
-      setTimeout(() => set({ linkCopied: false }), 1500);
-    },
   };
 }
 

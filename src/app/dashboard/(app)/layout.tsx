@@ -9,7 +9,6 @@ import { listAdProfiles } from "@/lib/actions/facebook";
 import { getNotificationSettings, listNotifications } from "@/lib/actions/notifications";
 import { listPixels } from "@/lib/actions/pixels";
 import { getMyTimezone } from "@/lib/actions/profile";
-import { listRules } from "@/lib/actions/rules";
 import { listWebhooks } from "@/lib/actions/webhooks";
 import { getLastWorkspaceId, listWorkspaces } from "@/lib/actions/workspaces";
 import { getAppUrl } from "@/lib/appUrl";
@@ -19,14 +18,13 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const session = await auth();
   // Tudo em paralelo: o layout é o caminho crítico de todo carregamento de
   // página, então nenhuma dessas leituras pode virar uma cadeia sequencial.
-  const [webhooks, apiCredentials, prefs, profiles, pixels, rules, notifSettings, notifications, expenses, timezone, workspaces, lastWorkspaceId] =
+  const [webhooks, apiCredentials, prefs, profiles, pixels, notifSettings, notifications, expenses, timezone, workspaces, lastWorkspaceId] =
     await Promise.all([
       listWebhooks(),
       listApiCredentials(),
       loadDashboardPrefs(),
       listAdProfiles(),
       listPixels(),
-      listRules(),
       getNotificationSettings(),
       listNotifications(),
       listExpenses(),
@@ -46,7 +44,6 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       dashboardPrefs={prefs}
       initialProfiles={profiles}
       initialPixels={pixels}
-      initialRules={rules}
       initialNotifSettings={notifSettings}
       initialNotifications={notifications.items}
       initialExpenses={expenses}

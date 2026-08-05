@@ -10,11 +10,9 @@ import type { AdProfileDTO } from "@/lib/actions/facebook";
 import type { NotificationDTO, NotificationSettingsDTO } from "@/lib/actions/notifications";
 import type { PixelConfigDTO } from "@/lib/actions/pixels";
 import type { ApiCredentialDTO } from "@/lib/actions/apiCredentials";
-import type { RuleDTO } from "@/lib/actions/rules";
 import type { WebhookRowDTO } from "@/lib/actions/webhooks";
 import type { WorkspaceDTO } from "@/lib/actions/workspaces";
 import { sx } from "@/lib/sx";
-import { EditDashboardDrawer } from "./EditDashboardDrawer";
 import { Header } from "./Header";
 import { Sidebar, type SidebarUser } from "./Sidebar";
 import { TraffikProvider } from "./TraffikContext";
@@ -30,7 +28,6 @@ export function DashboardShell({
   dashboardPrefs,
   initialProfiles,
   initialPixels,
-  initialRules,
   initialNotifSettings,
   initialNotifications,
   initialExpenses,
@@ -49,7 +46,6 @@ export function DashboardShell({
   dashboardPrefs?: DashboardPrefsDTO | null;
   initialProfiles?: AdProfileDTO[];
   initialPixels?: PixelConfigDTO[];
-  initialRules?: RuleDTO[];
   initialNotifSettings?: NotificationSettingsDTO;
   initialNotifications?: NotificationDTO[];
   initialExpenses?: ExpenseDTO[];
@@ -72,7 +68,6 @@ export function DashboardShell({
     dashboardPrefs,
     initialProfiles,
     initialPixels,
-    initialRules,
     initialNotifSettings,
     initialNotifications,
     initialExpenses,
@@ -112,7 +107,6 @@ export function DashboardShell({
             {children}
           </div>
         </div>
-        <EditDashboardDrawer v={v} />
       </div>
     </TraffikProvider>
   );
