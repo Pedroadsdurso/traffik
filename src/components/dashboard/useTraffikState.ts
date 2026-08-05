@@ -1074,6 +1074,13 @@ export function useTraffikState(
        */
       esperaLabel: rotuloDaEspera(ac.syncErrorCount, ac.lastSyncErrorAt),
       /**
+       * 🔴 "sem gasto no periodo" e "ainda nao buscamos o historico" eram
+       * INDISTINGUIVEIS: as duas mostravam zero. Foi por isso que um testador
+       * viu tres contas vazias e so descobriu o motivo porque mandaram clicar
+       * em Sincronizar.
+       */
+      buscandoHistorico: ac.backfillFeitoEm == null,
+      /**
        * O erro desta conta e o MESMO do perfil?
        *
        * 🔴 Quando o token perde permissao, as N contas falham pela mesma causa

@@ -17,6 +17,8 @@ export interface AdAccountDTO {
   lastSyncError: string | null;
   /** Quando a ultima falha aconteceu. Alimenta o backoff e o "nova tentativa em". */
   lastSyncErrorAt: Date | null;
+  /** NULO = o historico desta conta ainda nao foi buscado. Ver o schema. */
+  backfillFeitoEm: Date | null;
   /** Falhas consecutivas. Distingue "falhou agora" de "falha ha dois dias". */
   syncErrorCount: number;
   trackingEnabled: boolean;
@@ -82,6 +84,7 @@ export async function listAdProfiles(workspaceId?: string | null): Promise<AdPro
       accountStatus: a.accountStatus,
       lastSyncError: a.lastSyncError,
       lastSyncErrorAt: a.lastSyncErrorAt,
+      backfillFeitoEm: a.backfillFeitoEm,
       syncErrorCount: a.syncErrorCount,
       trackingEnabled: a.trackingEnabled,
     })),
@@ -105,6 +108,7 @@ export async function toggleAccountTracking(accountId: string): Promise<AdAccoun
     accountStatus: updated.accountStatus,
     lastSyncError: updated.lastSyncError,
     lastSyncErrorAt: updated.lastSyncErrorAt,
+    backfillFeitoEm: updated.backfillFeitoEm,
     syncErrorCount: updated.syncErrorCount,
     trackingEnabled: updated.trackingEnabled,
   };

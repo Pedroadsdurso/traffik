@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, after, type NextRequest } from "next/server";
 
 import { auth } from "@/auth";
 import { getAppUrl } from "@/lib/appUrl";
@@ -11,6 +11,7 @@ import {
   mapAccountStatus,
 } from "@/lib/facebook/graph";
 import { prisma } from "@/lib/prisma";
+import { syncUser } from "@/lib/facebook/sync";
 
 export async function GET(req: NextRequest) {
   const appUrl = getAppUrl();
@@ -128,6 +129,28 @@ export async function GET(req: NextRequest) {
     await prisma.adProfile.updateMany({
       where: { id: profile.id },
       data: { lastDiscoveryError: null, lastDiscoveryErrorAt: null },
+    });
+
+    /**
+     * Dispara o primeiro ciclo completo AGORA, sem esperar o polling.
+     *
+     * Conectar é exatamente o momento em que a pessoa está olhando a tela — e
+     * o auto-sync só roda quando há requisição do painel. Sem isto, quem
+     * conecta e fecha a aba fica dependendo do cron (15 min, best-effort).
+     *
+     * ⚠️ Vai no `after()`: são 4 chamadas à Graph por conta e o usuário não
+     * pode esperar isso no redirect.
+     *
+     * ⚠️ Se estourar o tempo e morrer aqui, **nada se perde**:
+     * `backfillFeitoEm` continua nulo e o próximo ciclo (painel ou cron) refaz.
+     * É o que torna esta chamada uma otimização, não uma dependência.
+     */
+    after(async () => {
+      try {
+        await syncUser(userId, 30);
+      } catch (e) {
+        console.error("[facebook/callback] primeira sincronização:", e);
+      }
     });
 
     return dash("connected");

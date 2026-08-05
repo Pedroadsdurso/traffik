@@ -338,6 +338,21 @@ model AdAccount {
   /// ⚠️ Existe para a tela poder distinguir "falhou agora" de "falha ha dois
   /// dias" sem ninguem precisar clicar em Sincronizar.
   syncErrorCount   Int      @default(0)
+  /// Quando o HISTORICO desta conta foi buscado pela primeira vez.
+  ///
+  /// 🔴 O auto-sync pede so `DIAS_AUTO = 2`. Conta sem gasto nas ultimas 48h
+  /// nunca recebe linha nenhuma — e o usuario ve zero, conclui que a ferramenta
+  /// nao funciona, e nao tem como saber que o historico simplesmente nao foi
+  /// buscado. Aconteceu com um testador em 04/08/2026: tres contas com zero
+  /// metrica, e ele so descobriu porque foi instruido a clicar em Sincronizar.
+  ///
+  /// NULO = ainda nao buscamos. O proximo ciclo COMPLETO usa a janela larga em
+  /// vez de 2 dias e carimba aqui. Acontece uma vez por conta.
+  ///
+  /// ⚠️ A coluna serve a DUAS coisas, e a segunda e a que mais importa: ela e o
+  /// que permite a tela distinguir "sem gasto no periodo" de "ainda nao
+  /// buscamos o historico". Hoje as duas mostram zero e sao indistinguiveis.
+  backfillFeitoEm DateTime?
   /// Toggle individual de rastreamento na tela de Contas.
   trackingEnabled Boolean  @default(true)
   createdAt   DateTime     @default(now())

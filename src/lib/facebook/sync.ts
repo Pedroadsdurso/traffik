@@ -238,6 +238,8 @@ export interface SyncSummary {
   removidos?: number;
   /** Contas de anúncio detectadas agora, que ainda não existiam no banco. */
   contasNovas?: number;
+  /** Contas que tiveram o histórico buscado pela primeira vez neste ciclo. */
+  historicoBuscado?: number;
   /**
    * Contas PULADAS por estarem em espera depois de falhas seguidas.
    *
@@ -568,7 +570,7 @@ export async function syncUserMetrics(userId: string, days = 2): Promise<SyncSum
   const summary: SyncSummary = { accounts: 0, campaigns: 0, adSets: 0, ads: 0, metrics: 0, errors: [] };
   const accounts = await prisma.adAccount.findMany({
     where: { userId, trackingEnabled: true, adProfile: { isNot: null } },
-    select: { id: true, userId: true, fbAccountId: true, name: true, syncErrorCount: true, lastSyncErrorAt: true, adProfile: { select: { accessToken: true } } },
+    select: { id: true, userId: true, fbAccountId: true, name: true, syncErrorCount: true, lastSyncErrorAt: true, backfillFeitoEm: true, adProfile: { select: { accessToken: true } } },
   });
   for (const acc of accounts) {
     const token = acc.adProfile?.accessToken;
@@ -608,6 +610,16 @@ export interface LinhaDeMetrica {
   reach: number;
   frequency: number;
 }
+
+/**
+ * Janela da PRIMEIRA busca de histórico de uma conta.
+ *
+ * ⚠️ Pedir 30 dias em vez de 2 **não muda o número de chamadas** — são as
+ * mesmas 4 por conta, só com resposta maior. E acontece uma vez por conta, na
+ * vida. O custo é desprezível perto de o usuário ver zero e concluir que a
+ * ferramenta não funciona.
+ */
+const DIAS_BACKFILL = 30;
 
 /** Máximo de linhas por instrução. Ver a nota sobre o teto de parâmetros. */
 const LOTE_METRICAS = 500;
@@ -712,7 +724,7 @@ export async function syncSingleAccount(userId: string, accountId: string, days 
   const summary: SyncSummary = { accounts: 0, campaigns: 0, adSets: 0, ads: 0, metrics: 0, errors: [] };
   const acc = await prisma.adAccount.findFirst({
     where: { id: accountId, userId },
-    select: { id: true, userId: true, fbAccountId: true, name: true, syncErrorCount: true, lastSyncErrorAt: true, adProfile: { select: { accessToken: true } } },
+    select: { id: true, userId: true, fbAccountId: true, name: true, syncErrorCount: true, lastSyncErrorAt: true, backfillFeitoEm: true, adProfile: { select: { accessToken: true } } },
   });
   if (!acc) {
     summary.errors.push("Conta não encontrada.");
@@ -825,7 +837,7 @@ export async function syncUser(userId: string, days = 30): Promise<SyncSummary> 
 
   const accounts = await prisma.adAccount.findMany({
     where: { userId, trackingEnabled: true, adProfile: { isNot: null } },
-    select: { id: true, userId: true, fbAccountId: true, name: true, syncErrorCount: true, lastSyncErrorAt: true, adProfile: { select: { accessToken: true } } },
+    select: { id: true, userId: true, fbAccountId: true, name: true, syncErrorCount: true, lastSyncErrorAt: true, backfillFeitoEm: true, adProfile: { select: { accessToken: true } } },
   });
 
   for (const acc of accounts) {
@@ -835,10 +847,22 @@ export async function syncUser(userId: string, days = 30): Promise<SyncSummary> 
       summary.emEspera = (summary.emEspera ?? 0) + 1;
       continue;
     }
+    // Conta que nunca teve o histórico buscado ganha a janela larga NESTE ciclo.
+    // ⚠️ `Math.max`: um `syncUser(30)` do cron não pode ser ESTREITADO por isto.
+    const semHistorico = acc.backfillFeitoEm == null;
+    const diasDaConta = semHistorico ? Math.max(days, DIAS_BACKFILL) : days;
     try {
-      await syncAccount({ id: acc.id, userId: acc.userId, fbAccountId: acc.fbAccountId }, token, summary, days);
+      await syncAccount({ id: acc.id, userId: acc.userId, fbAccountId: acc.fbAccountId }, token, summary, diasDaConta);
       summary.accounts++;
       await marcarSucesso(acc.id);
+      if (semHistorico) {
+        // ⚠️ Carimba só DEPOIS do sucesso. Marcar antes faria uma conta cujo
+        // backfill falhou pular a busca para sempre — silenciosamente.
+        await prisma.adAccount
+          .updateMany({ where: { id: acc.id, backfillFeitoEm: null }, data: { backfillFeitoEm: new Date() } })
+          .catch(() => {});
+        summary.historicoBuscado = (summary.historicoBuscado ?? 0) + 1;
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       summary.errors.push(`${acc.name}: ${msg}`);

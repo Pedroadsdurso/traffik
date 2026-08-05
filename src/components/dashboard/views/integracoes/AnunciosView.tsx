@@ -114,7 +114,22 @@ function ProfilePanel({ p }: { p: Profile }) {
                   {ac.name}
                   <span className={ac.statusTag}>{ac.statusLabel}</span>
                 </div>
-                <div className="card-meta">act_{ac.fbAccountId} · {ac.currency}</div>
+                <div className="card-meta">
+                  act_{ac.fbAccountId} · {ac.currency}
+                  {/*
+                    🔴 "sem gasto no período" e "ainda não buscamos o histórico"
+                    eram indistinguíveis — as duas mostravam zero. Um testador
+                    viu três contas vazias e só soube o motivo porque mandaram
+                    clicar em Sincronizar.
+
+                    ⚠️ Só aparece quando NÃO há erro: uma conta que está falhando
+                    já tem o bloco explicando, e dizer "buscando histórico" ao
+                    lado dele sugeriria que está tudo em andamento.
+                  */}
+                  {ac.buscandoHistorico && !ac.erroSync && (
+                    <span style={sx("color:var(--color-accent-300)")}> · buscando histórico…</span>
+                  )}
+                </div>
               </div>
               <div style={sx("display:flex;align-items:center;gap:12px;flex-shrink:0")}>
                 {/*
