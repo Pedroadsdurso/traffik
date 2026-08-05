@@ -1,4 +1,12 @@
 import { prisma } from "@/lib/prisma";
+import {
+  CHECKOUT_CRIADO,
+  CHECKOUT_DUPLICADO,
+  CHECKOUT_ERRO,
+  CHECKOUT_IGNORADO,
+  mensagemCurta,
+} from "@/lib/webhook/efeitos";
+import { marcarEfeito } from "@/lib/webhook/marcarEfeito";
 
 /** Janela para considerar que o clique no site e o pedido no gateway são o mesmo checkout. */
 const JANELA_DEDUP_MS = 6 * 60 * 60 * 1000;
@@ -42,12 +50,29 @@ export const SENTINELA_CHECKOUT_GATEWAY = "gateway:webhook";
 export async function registrarCheckoutDoGateway(
   saleId: string,
   gerouCheckout: boolean,
-): Promise<"criado" | "duplicado" | "ignorado"> {
+): Promise<VerdictoCheckout> {
+  const veredicto = await decidir(saleId, gerouCheckout);
+  await marcarEfeito(saleId, "checkout", veredicto.status, veredicto.erro);
+  return veredicto.status;
+}
+
+type VerdictoCheckout = typeof CHECKOUT_CRIADO | typeof CHECKOUT_DUPLICADO | typeof CHECKOUT_IGNORADO | typeof CHECKOUT_ERRO;
+
+/**
+ * ⛔ A decisão vive numa função separada de propósito: o registro acontece em
+ * UM lugar, no chamador acima. Espalhar `marcarEfeito` pelos sete pontos de
+ * saída faria a próxima saída nova nascer sem registro — e uma saída sem
+ * registro é exatamente o silêncio que estas colunas existem para acabar.
+ */
+async function decidir(
+  saleId: string,
+  gerouCheckout: boolean,
+): Promise<{ status: VerdictoCheckout; erro?: string }> {
   // ⚠️ Quem decide é o EVENTO, não o status. Antes era `status === "PENDENTE"`,
   // e a suposição quebrou ao separar ABANDONADA de PENDENTE: um carrinho
   // abandonado chegou ao checkout, mas deixaria de gerar InitiateCheckout — o
   // funil encolheria como efeito colateral invisível de uma correção de KPI.
-  if (!gerouCheckout) return "ignorado";
+  if (!gerouCheckout) return { status: CHECKOUT_IGNORADO };
   try {
     const sale = await prisma.sale.findUnique({
       where: { id: saleId },
@@ -60,7 +85,7 @@ export async function registrarCheckoutDoGateway(
         click: { select: { fbclid: true } },
       },
     });
-    if (!sale) return "ignorado";
+    if (!sale) return { status: CHECKOUT_IGNORADO };
 
     // ⚠️ A chave é o PEDIDO, não o item. Com order bump, um único checkout vira
     // N linhas de venda — e uma chave por linha geraria N InitiateCheckout para
@@ -69,13 +94,13 @@ export async function registrarCheckoutDoGateway(
     // sendo a chave, exatamente como antes.
     const chave = sale.pedidoId ?? sale.externalId;
     const eventId = chave ? `gw:${chave}` : null;
-    if (!eventId) return "ignorado";
+    if (!eventId) return { status: CHECKOUT_IGNORADO };
 
     const jaExiste = await prisma.pixelEvent.findFirst({
       where: { userId: sale.userId, event: "InitiateCheckout", eventId },
       select: { id: true },
     });
-    if (jaExiste) return "duplicado";
+    if (jaExiste) return { status: CHECKOUT_DUPLICADO };
 
     // Camada 2: o mesmo visitante já pode ter disparado o evento pelo clique.
     const fbclid = sale.click?.fbclid ?? null;
@@ -97,7 +122,7 @@ export async function registrarCheckoutDoGateway(
         },
         select: { id: true },
       });
-      if (peloClique) return "duplicado";
+      if (peloClique) return { status: CHECKOUT_DUPLICADO };
     }
 
     await prisma.pixelEvent.create({
@@ -133,9 +158,18 @@ export async function registrarCheckoutDoGateway(
         timestamp: sale.timestamp,
       },
     });
-    return "criado";
+    return { status: CHECKOUT_CRIADO };
   } catch (e) {
     console.error("[checkoutEvent] falha ao registrar InitiateCheckout do gateway:", e);
-    return "ignorado";
+    /**
+     * 🔴 Antes isto devolvia `"ignorado"` — o MESMO valor de "esta venda não
+     * gera checkout", que é um desfecho perfeitamente correto.
+     *
+     * Colapsar os dois tornava a falha indistinguível do caso normal, inclusive
+     * para quem fosse investigar depois: um funil menor do que deveria e nada,
+     * em lugar nenhum, dizendo que houve erro. É a regra do `NULL` que não
+     * significa a mesma coisa em toda coluna, aplicada a um valor de retorno.
+     */
+    return { status: CHECKOUT_ERRO, erro: mensagemCurta(e) };
   }
 }

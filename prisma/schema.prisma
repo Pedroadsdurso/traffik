@@ -684,6 +684,31 @@ model Sale {
   /// que o NOSSO script viu no navegador do comprador.
   fbclid      String?
 
+  /// O que aconteceu com o **Purchase na CAPI** desta venda.
+  ///
+  /// 🔴 Era `console.error` e mais nada. O webhook respondia 200, a venda
+  /// entrava certa, e a conversao nunca chegava ao Facebook — sem erro na tela,
+  /// sem log que alguem leia. Vocabulario e traducao em `lib/webhook/efeitos.ts`.
+  ///
+  /// ⚠️ NULO = venda anterior a esta coluna, NUNCA "falhou". Se nulo alarmasse,
+  /// todo o historico apareceria quebrado no dia do deploy.
+  ///
+  /// ⚠️ Guarda o texto CRU em `capiErro`. A traducao e necessariamente
+  /// incompleta; apagar o original tornaria o erro real irrecuperavel.
+  capiStatus     String?
+  capiErro       String?
+  /// O que aconteceu com o **InitiateCheckout gerado pelo webhook do gateway**.
+  /// `duplicado` e `ignorado` sao desfechos CORRETOS, nao falhas — ver efeitos.ts.
+  checkoutStatus String?
+  checkoutErro   String?
+  /// O que aconteceu com a **notificacao** desta venda.
+  ///
+  /// 🔴 `sem_config` e o caso mudo que motivou a coluna: sem linha em
+  /// `NotificationSettings` a funcao dava `return` e NENHUM aviso saia, nunca,
+  /// para nenhuma venda.
+  notifStatus    String?
+  notifErro      String?
+
   rawPayload    Json?
   timestamp     DateTime      @default(now())
   approvedAt    DateTime?
@@ -713,6 +738,9 @@ model Sale {
   @@index([userId, platform])
   @@index([status])
   @@index([buyerEmail])
+  @@index([userId, capiStatus])
+  @@index([userId, checkoutStatus])
+  @@index([userId, notifStatus])
 }
 
 // ─────────────────── Integrações ───────────────────

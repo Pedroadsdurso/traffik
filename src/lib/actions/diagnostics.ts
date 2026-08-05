@@ -15,6 +15,7 @@ import { prisma } from "@/lib/prisma";
 import { estadoDasRotinas } from "@/lib/cronBatimento";
 import { lerPadroes } from "@/lib/pixel/ambiente";
 import { ordemDoEspelho } from "@/lib/pixel/espelho";
+import { STATUS_PROBLEMA } from "@/lib/webhook/efeitos";
 import { parseTrackingCodes } from "@/lib/utm/parse";
 import type { WebhookLogStatus } from "@/generated/prisma/enums";
 
@@ -123,6 +124,137 @@ export async function resumoEspelhos(dias = 7): Promise<EspelhoResumoDTO> {
       }))
       .sort((a, b) => b.total - a.total),
   };
+}
+
+// ──────────────── O que aconteceu depois que a venda entrou ────────────────
+
+export interface EfeitoResumoDTO {
+  chave: "capi" | "checkout" | "notif";
+  porStatus: { status: string; n: number }[];
+}
+
+export interface ProblemaDeEfeitoDTO {
+  saleId: string;
+  produto: string;
+  valor: number;
+  quando: string;
+  efeito: "capi" | "checkout" | "notif";
+  status: string;
+  /** Mensagem CRUA. A tradução é da tela; o original nunca é descartado. */
+  erro: string | null;
+}
+
+export interface EfeitosResumoDTO {
+  dias: number;
+  /** Vendas na janela, com ou sem registro. */
+  total: number;
+  /**
+   * Vendas anteriores a estas colunas.
+   *
+   * ⚠️ Aparece na tela de propósito. Sem esse número, "0 problemas" seria lido
+   * como "está tudo certo" quando na verdade é "não sabemos" — a mesma
+   * distinção entre "sem gasto" e "não buscamos ainda".
+   */
+  semRegistro: number;
+  efeitos: EfeitoResumoDTO[];
+  problemas: ProblemaDeEfeitoDTO[];
+}
+
+/**
+ * "A venda entrou — e o que aconteceu com ela depois?"
+ *
+ * Os três efeitos pós-venda (Purchase na CAPI, InitiateCheckout do gateway e a
+ * notificação) rodavam com `console.error` e mais nada: o webhook respondia
+ * 200, a venda entrava certa, e o efeito falhava sem aparecer em lugar nenhum.
+ * Este resumo é a tela que faltava.
+ *
+ * ⚠️ Recortado por `userId`, e **não existe total do banco aqui**. Um relatório
+ * que soma o banco inteiro está medindo outra coisa — a lição do
+ * `origem-venda.mjs`, que quase justificou apagar venda de verdade.
+ */
+export async function resumoEfeitos(dias = 7): Promise<EfeitosResumoDTO> {
+  const userId = await requireUserId();
+  const janela = Math.min(Math.max(Math.trunc(dias), 1), 90);
+  const desde = new Date(Date.now() - janela * 24 * 60 * 60 * 1000);
+  const where = { userId, timestamp: { gte: desde } };
+
+  const [total, semRegistro, capi, checkout, notif] = await Promise.all([
+    prisma.sale.count({ where }),
+    prisma.sale.count({ where: { ...where, capiStatus: null } }),
+    prisma.sale.groupBy({ by: ["capiStatus"], where, _count: { _all: true } }),
+    prisma.sale.groupBy({ by: ["checkoutStatus"], where, _count: { _all: true } }),
+    prisma.sale.groupBy({ by: ["notifStatus"], where, _count: { _all: true } }),
+  ]);
+
+  // NULO fica de fora da contagem por situação: ele não é um desfecho, é
+  // ausência de registro, e vai separado em `semRegistro`.
+  const contar = (linhas: { _count: { _all: number } }[], valor: (l: never) => string | null) =>
+    linhas
+      .map((l) => ({ status: valor(l as never), n: l._count._all }))
+      .filter((x): x is { status: string; n: number } => x.status !== null)
+      .sort((a, b) => b.n - a.n);
+
+  const efeitos: EfeitoResumoDTO[] = [
+    { chave: "capi", porStatus: contar(capi, (l: { capiStatus: string | null }) => l.capiStatus) },
+    { chave: "checkout", porStatus: contar(checkout, (l: { checkoutStatus: string | null }) => l.checkoutStatus) },
+    { chave: "notif", porStatus: contar(notif, (l: { notifStatus: string | null }) => l.notifStatus) },
+  ];
+
+  /**
+   * As vendas que pedem ação, com a mensagem crua.
+   *
+   * ⛔ `STATUS_PROBLEMA` é **derivado das tabelas de `efeitos.ts`** — a mesma
+   * fonte de onde a tela tira o tom de cada chip. Reescrever a lista aqui faria
+   * as duas divergirem no primeiro status novo, e de forma invisível: a tela
+   * pintaria de vermelho um caso que esta consulta não traz.
+   */
+  const linhas = await prisma.sale.findMany({
+    where: {
+      ...where,
+      OR: [
+        { capiStatus: { in: STATUS_PROBLEMA.capi } },
+        { checkoutStatus: { in: STATUS_PROBLEMA.checkout } },
+        { notifStatus: { in: STATUS_PROBLEMA.notif } },
+      ],
+    },
+    select: {
+      id: true,
+      product: true,
+      value: true,
+      timestamp: true,
+      capiStatus: true,
+      capiErro: true,
+      checkoutStatus: true,
+      checkoutErro: true,
+      notifStatus: true,
+      notifErro: true,
+    },
+    orderBy: { timestamp: "desc" },
+    take: 30,
+  });
+
+  const problemas: ProblemaDeEfeitoDTO[] = [];
+  for (const s of linhas) {
+    const base = {
+      saleId: s.id,
+      produto: s.product,
+      valor: Number(s.value),
+      quando: s.timestamp.toISOString(),
+    };
+    // Uma venda pode falhar em mais de um efeito: cada um vira uma linha, senão
+    // consertar o primeiro esconderia o segundo.
+    if (s.capiStatus && STATUS_PROBLEMA.capi.includes(s.capiStatus)) {
+      problemas.push({ ...base, efeito: "capi", status: s.capiStatus, erro: s.capiErro });
+    }
+    if (s.checkoutStatus && STATUS_PROBLEMA.checkout.includes(s.checkoutStatus)) {
+      problemas.push({ ...base, efeito: "checkout", status: s.checkoutStatus, erro: s.checkoutErro });
+    }
+    if (s.notifStatus && STATUS_PROBLEMA.notif.includes(s.notifStatus)) {
+      problemas.push({ ...base, efeito: "notif", status: s.notifStatus, erro: s.notifErro });
+    }
+  }
+
+  return { dias: janela, total, semRegistro, efeitos, problemas };
 }
 
 // ─────────────────────────── Teste de Tracking ───────────────────────────

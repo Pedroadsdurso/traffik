@@ -12,7 +12,9 @@ import {
   listarPadroesDeTeste,
   removerPadraoDeTeste,
   resumoEspelhos,
+  resumoEfeitos,
   type ChecklistItemDTO,
+  type EfeitosResumoDTO,
   type EspelhoResumoDTO,
   type PadraoAprovadoDTO,
   type PixelOptionDTO,
@@ -20,6 +22,7 @@ import {
   type WebhookLogDTO,
 } from "@/lib/actions/diagnostics";
 import { estadoDoEspelho, type TomDoEspelho } from "@/lib/pixel/espelho";
+import { EFEITOS, type TomDoEfeito } from "@/lib/webhook/efeitos";
 import { sx } from "@/lib/sx";
 import { TestadorPayloadCard } from "./TestadorPayloadCard";
 import { Select } from "../../ui/Select";
@@ -743,6 +746,148 @@ function PadroesDeTesteCard() {
   );
 }
 
+// ───────────── O que aconteceu depois que a venda entrou ─────────────
+
+const COR_DO_EFEITO: Record<TomDoEfeito, string> = {
+  ok: "var(--color-success,#4ade80)",
+  problema: "var(--color-danger,#f87171)",
+  neutro: "var(--color-text-muted,#9ca3af)",
+};
+
+/**
+ * A venda entrou — e o Purchase chegou ao Facebook? O checkout entrou no funil?
+ * O aviso tocou?
+ *
+ * Os três rodavam com `console.error` e mais nada: o gateway recebia 200, a
+ * venda entrava certa, o número no dashboard continuava plausível, e o efeito
+ * falhava sem aparecer em lugar nenhum. Este card é a tela que faltava.
+ */
+function EfeitosCard() {
+  const [dados, setDados] = useState<EfeitosResumoDTO | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    setBusy(true);
+    resumoEfeitos(7)
+      .then(setDados)
+      .catch(() => {})
+      .finally(() => setBusy(false));
+  }, []);
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- `load` busca no servidor e guarda o resultado
+  useEffect(load, [load]);
+
+  return (
+    <div className="card">
+      <div style={sx("display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-2)")}>
+        <div>
+          <div className="card-kicker">Depois da venda</div>
+          <div className="card-title">O que aconteceu com cada venda</div>
+          <p className="card-body" style={sx("margin:4px 0 0")}>
+            Registrar a venda é só o começo: ela ainda precisa chegar ao Facebook, entrar no funil e
+            virar um aviso para você. Quando um desses passos falha, a venda continua certa na tela —
+            e é por isso que ele precisa aparecer aqui.
+          </p>
+        </div>
+        <button className="btn btn-secondary" type="button" onClick={load} disabled={busy} style={sx("white-space:nowrap")}>
+          {busy ? "Atualizando…" : "Atualizar"}
+        </button>
+      </div>
+
+      {!dados ? (
+        <p className="card-body text-muted" style={sx("margin:var(--space-3) 0 0")}>Verificando…</p>
+      ) : dados.total === 0 ? (
+        <p className="card-body text-muted" style={sx("margin:var(--space-3) 0 0")}>
+          Nenhuma venda nos últimos {dados.dias} dias. Assim que a primeira entrar, o que aconteceu
+          com ela aparece aqui.
+        </p>
+      ) : (
+        <>
+          {EFEITOS.map(({ chave, titulo, ler }) => {
+            const bloco = dados.efeitos.find((e) => e.chave === chave);
+            if (!bloco || bloco.porStatus.length === 0) return null;
+            return (
+              <div key={chave} style={sx("margin-top:var(--space-3)")}>
+                <div style={sx("font-size:12px;font-weight:600;margin-bottom:6px")}>{titulo}</div>
+                <div style={sx("display:flex;gap:6px;flex-wrap:wrap")}>
+                  {bloco.porStatus.map(({ status, n }) => {
+                    const s = ler(status);
+                    if (!s) return null;
+                    return (
+                      <span
+                        key={status}
+                        title={s.acao ?? s.rotulo}
+                        style={sx(
+                          "display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:4px 10px;" +
+                            `border-radius:999px;border:1px solid var(--color-border);color:${COR_DO_EFEITO[s.tom]}`,
+                        )}
+                      >
+                        <strong style={sx("font-variant-numeric:tabular-nums")}>{n}</strong>
+                        {s.rotulo}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* ⚠️ "Não sabemos" tem de aparecer. Sem esta linha, uma tela sem chip
+              vermelho seria lida como "está tudo certo" quando na verdade é
+              "estas vendas são anteriores à checagem" — a mesma distinção entre
+              "sem gasto" e "ainda não buscamos o histórico". */}
+          {dados.semRegistro > 0 && (
+            <p className="card-body text-muted" style={sx("margin:var(--space-3) 0 0;font-size:11.5px")}>
+              {plural(dados.semRegistro, "venda entrou", "vendas entraram")} antes desta checagem
+              existir, então não sabemos o que aconteceu com {dados.semRegistro === 1 ? "ela" : "elas"}.
+              As próximas são registradas.
+            </p>
+          )}
+
+          {/* O aviso só aparece com problema de verdade — alerta permanente vira
+              ruído que se aprende a ignorar, inclusive quando muda de texto. */}
+          {dados.problemas.length > 0 && (
+            <div
+              style={sx(
+                "margin-top:var(--space-3);border-left:2px solid var(--color-danger,#f87171);padding-left:10px",
+              )}
+            >
+              <div style={sx("font-size:12px;font-weight:600;color:var(--color-danger,#f87171);margin-bottom:6px")}>
+                {plural(dados.problemas.length, "venda precisa", "vendas precisam")} de atenção
+              </div>
+              {dados.problemas.map((p, i) => {
+                const efeito = EFEITOS.find((e) => e.chave === p.efeito);
+                const s = efeito?.ler(p.status);
+                return (
+                  <div key={`${p.saleId}-${p.efeito}-${i}`} style={sx("font-size:11.5px;line-height:1.5;margin-bottom:8px")}>
+                    <div>
+                      <strong>{s?.rotulo ?? p.status}</strong>
+                      <span className="text-muted"> · {p.produto} · {fmtDate(p.quando)}</span>
+                    </div>
+                    {s?.acao && <div className="text-muted">{s.acao}</div>}
+                    {/* A mensagem CRUA. A tradução acima pode estar incompleta —
+                        apagar o original tornaria o erro real irrecuperável. */}
+                    {p.erro && (
+                      <div
+                        style={sx(
+                          "font-family:var(--font-mono,monospace);font-size:10.5px;opacity:.75;" +
+                            "margin-top:2px;word-break:break-word",
+                        )}
+                      >
+                        {p.erro}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export function TestesView({ workspaceId }: { workspaceId: string | null }) {
   return (
     <div style={sx("display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:var(--space-4);align-items:start")}>
@@ -751,6 +896,7 @@ export function TestesView({ workspaceId }: { workspaceId: string | null }) {
         <ChecklistCard workspaceId={workspaceId} />
         <RotinasCard />
         <PadroesDeTesteCard />
+        <EfeitosCard />
         <EspelhoCard />
         <WebhookLogsCard />
       </div>
