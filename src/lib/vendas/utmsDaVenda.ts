@@ -27,6 +27,37 @@
  * passa a importar quando o clique é apagado, que hoje só acontece por ação
  * explícita do usuário ("apagar dados" na exclusão de área, atrás de duas
  * travas). É por isso que ela é barata: não muda número nenhum hoje.
+ *
+ * ---
+ *
+ * ## Quem consulta (05/08/2026) — antes, NINGUÉM consultava
+ *
+ * A cópia era gravada desde a migration `20260731080000` e **nenhum leitor a
+ * lia**: toda a atribuição fazia `sale.click.utmCampaign` direto. Ou seja, o
+ * seguro existia, era pago em toda ingestão, e não cobria nada.
+ *
+ * | Consumidor | O que a cópia sustenta |
+ * |---|---|
+ * | `areas/precedencia.ts` | de qual ÁREA a venda é (passo 1, conta de anúncio) |
+ * | `ads/overview.ts` | ROAS, CPA e faturamento por campanha |
+ * | `ads/creatives.ts` | ranking de criativos |
+ * | `dashboard/metrics.ts` | fonte, origem, posicionamento e o feed |
+ * | `rules/engine.ts` | 🔴 CPA/ROAS de regra que PAUSA campanha sozinha |
+ *
+ * **Provado no-op sobre os dados reais:** no backup de produção de 01/08, 27
+ * vendas examinadas e **0** com `clickId` nulo e cópia preenchida. Ligar o
+ * fallback não mexeu em número nenhum — só fechou o buraco.
+ *
+ * ⚠️ **Não copiamos `Click.workspaceId`** (a área que o script da página
+ * declarou, passo 2 da precedência). Não é esquecimento: o único caminho que
+ * apaga clique é "apagar dados" na exclusão de área, e ali a área declarada
+ * está sendo excluída junto — `valida()` a recusaria de todo jeito. Copiá-la
+ * seria peso morto.
+ *
+ * ⚠️ Os TRÊS efeitos pós-venda (`dispatchPixel`, `checkoutEvent`,
+ * `dispatchNotification`) seguem lendo o clique direto, de propósito: rodam no
+ * `after()` do próprio request de ingestão, microssegundos depois do match, e
+ * não têm caminho de reprocessamento. Ali o clique não pode ter sumido.
  */
 
 export interface UtmsDaVenda {
@@ -37,6 +68,41 @@ export interface UtmsDaVenda {
   utmTerm: string | null;
   fbclid: string | null;
 }
+
+/**
+ * As 6 colunas de UTM, para espalhar num `select` do Prisma.
+ *
+ * > ### ⛔ Existe para a cópia não poder ser ESQUECIDA
+ * > Coluna fora do `select` chega `undefined`, `utmsDaVenda` cai na resposta
+ * > vazia e a venda perde a campanha — **sem `tsc`, `lint` ou `build` acusarem**.
+ * > É a armadilha do `pedidoId`, e ela já morde este projeto duas vezes.
+ * >
+ * > Uma constante espalhada é estrutura; lembrar de listar seis campos em nove
+ * > consultas é disciplina. A diferença aparece na décima consulta.
+ *
+ * Use nas DUAS pontas, com os MESMOS campos:
+ *
+ * ```ts
+ * select: { ...CAMPOS_UTM, click: { select: { ...CAMPOS_UTM, workspaceId: true } } }
+ * ```
+ *
+ * ⚠️ **Selecionar menos no clique do que na venda faz a `fonte` MENTIR.** Um
+ * clique com `utmSource` preenchido e `utmCampaign` nulo, lido com um `select`
+ * que só trouxe `utmCampaign`, reprova o `temAlgum()` e cai na cópia. Os valores
+ * saem iguais (a cópia veio daquele clique), mas o diagnóstico passa a dizer
+ * "cópia" onde a fonte estava viva.
+ *
+ * ⚠️ Custo: 4 colunas de texto curto a mais por linha. Contra ~99 ms de ida e
+ * volta ao Supabase, é ruído — e é o lado seguro de errar.
+ */
+export const CAMPOS_UTM = {
+  utmSource: true,
+  utmMedium: true,
+  utmCampaign: true,
+  utmContent: true,
+  utmTerm: true,
+  fbclid: true,
+} as const;
 
 /** De onde a resposta veio. Existe para o diagnóstico poder dizer. */
 export type FonteDosUtms = "clique" | "copia" | "nenhuma";

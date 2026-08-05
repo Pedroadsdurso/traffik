@@ -1,5 +1,6 @@
 import { carregarMapaDeAreas } from "@/lib/areas/atribuicao";
 import { prisma } from "@/lib/prisma";
+import { CAMPOS_UTM } from "@/lib/vendas/utmsDaVenda";
 
 /**
  * Núcleo da exclusão de Área de Trabalho — **sem `"use server"` e sem `auth()`**.
@@ -71,7 +72,10 @@ async function linhasDoUsuario(userId: string) {
       where: { userId },
       select: {
         id: true, value: true, status: true, product: true, webhookId: true, apiCredentialId: true,
-        click: { select: { utmCampaign: true, workspaceId: true } },
+        // Cópia + fonte: é a prévia da exclusão que decide o que vai ser
+        // apagado, e ela não pode discordar do que as métricas mostram.
+        ...CAMPOS_UTM,
+        click: { select: { ...CAMPOS_UTM, workspaceId: true } },
       },
     }),
     prisma.click.findMany({ where: { userId }, select: { id: true, utmCampaign: true, workspaceId: true, fbclid: true } }),

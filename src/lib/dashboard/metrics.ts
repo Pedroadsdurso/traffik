@@ -15,6 +15,7 @@ import {
 import { chaveDoPedido, contarPedidos, umPorPedido } from "@/lib/pedidos";
 import { nomeDaFonte } from "@/lib/fontes";
 import { ehTemplateNaoSubstituido } from "@/lib/utm/parse";
+import { CAMPOS_UTM, utmsDaVenda } from "@/lib/vendas/utmsDaVenda";
 import { getImpostoAnunciosPct } from "@/lib/impostoAnuncios";
 import { calcularFinanceiro, type Composicao } from "@/lib/financeiro";
 import { janelaAnterior, janelaDoPeriodo, type PeriodoNome } from "@/lib/periodo";
@@ -306,11 +307,11 @@ async function windowAggregate(
         // O resolvedor de área precisa destes três para aplicar a precedência.
         webhookId: true,
         apiCredentialId: true,
-        // ⚠️ O `utmTerm` vem das DUAS pontas de propósito: a cadeia
-        // `Sale -> Click` é a fonte, e a cópia na venda é o seguro para quando
-        // o clique some (`clickId` é `SetNull`). Ver `lib/vendas/utmsDaVenda`.
-        utmTerm: true,
-        click: { select: { utmSource: true, utmCampaign: true, country: true, workspaceId: true, utmTerm: true } },
+        // ⚠️ Os UTMs vêm das DUAS pontas de propósito: a cadeia `Sale -> Click`
+        // é a fonte, e a cópia na venda é o seguro para quando o clique some
+        // (`clickId` é `SetNull`). Ver `lib/vendas/utmsDaVenda`.
+        ...CAMPOS_UTM,
+        click: { select: { ...CAMPOS_UTM, country: true, workspaceId: true } },
       },
       orderBy: { timestamp: "desc" },
     }),
@@ -414,7 +415,7 @@ async function windowAggregate(
   // contado duas vezes. O modelo antigo (interseção de listas) não tinha essa
   // garantia e perdia 12 de 14 vendas no backup real de produção.
   const salesEscopo = sales.filter(
-    (v) => mapa.areaDaVenda(v).areaId === areaAtiva && naContaDaTela(v.click?.utmCampaign),
+    (v) => mapa.areaDaVenda(v).areaId === areaAtiva && naContaDaTela(utmsDaVenda(v).utms.utmCampaign),
   );
   const clicksEscopo = clicks.filter(
     (c) => mapa.areaDoClique(c).areaId === areaAtiva && naContaDaTela(c.utmCampaign),
@@ -696,8 +697,21 @@ function summarize(w: Window, impostoAnunciosPct = 0) {
   const origem = { campanha: 0, direto: 0, semOrigem: 0 };
   for (const s of approved) {
     const v = num(s.value);
-    if (!s.click) origem.semOrigem += v;
-    else if (s.click.utmCampaign?.trim()) origem.campanha += v;
+    const { utms, fonte } = utmsDaVenda(s);
+    /**
+     * ⚠️ `fonte === "copia"` **prova que houve clique** — a cópia só é gravada a
+     * partir de um clique casado. Consultá-la aqui não é detalhe: sem isso, uma
+     * venda cujo clique foi apagado cairia em `semOrigem`, que é a ÚNICA das três
+     * que pede ação. A tela mandaria o usuário investigar o rastreamento por
+     * causa de uma linha que rastreou corretamente.
+     *
+     * ⚠️ **Limite honesto:** clique de tráfego DIRETO que foi apagado tem cópia
+     * toda nula, então continua caindo em `semOrigem`. Não há o que preserve a
+     * existência dele — e inventar a distinção seria pior que perdê-la.
+     */
+    const houveClique = s.click != null || fonte === "copia";
+    if (!houveClique) origem.semOrigem += v;
+    else if (utms.utmCampaign?.trim()) origem.campanha += v;
     else origem.direto += v;
   }
 
@@ -725,7 +739,7 @@ function summarize(w: Window, impostoAnunciosPct = 0) {
      * gravado no clique continua intocado, porque `utm_source=FB` já está
      * colado no painel dos gateways de quem gerou os códigos.
      */
-    const src = nomeDaFonte(s.click?.utmSource);
+    const src = nomeDaFonte(utmsDaVenda(s).utms.utmSource);
     srcMap.set(src, (srcMap.get(src) ?? 0) + num(s.value));
   }
   const sources = [...srcMap.entries()]
@@ -756,7 +770,7 @@ function summarize(w: Window, impostoAnunciosPct = 0) {
   const placeMap = new Map<string, { total: number; sales: number }>();
   const pedidosPorPlacement = new Set<string>();
   for (const s of approved) {
-    const bruto = s.click?.utmTerm ?? s.utmTerm;
+    const bruto = utmsDaVenda(s).utms.utmTerm;
     const place = ehTemplateNaoSubstituido(bruto) ? null : bruto?.trim() || null;
     if (!place) continue;
     const cur = placeMap.get(place) ?? { total: 0, sales: 0 };
@@ -1070,14 +1084,15 @@ function buildActivity(w: Window) {
       : s.status === "REEMBOLSADA" ? "reembolso"
       : s.status === "CHARGEBACK" ? "chargeback"
       : "venda_pendente";
+    const { utms: feedUtms } = utmsDaVenda(s);
     items.push({
       id: "s-" + s.id,
       type: tipo,
       // ⚠️ MESMA tradução do donut e do filtro. Sem ela a coluna ORIGEM do feed
       // mostrava "FB" enquanto o gráfico ao lado já dizia "Meta Ads" — a mesma
       // fonte com dois nomes na mesma tela.
-      source: s.click?.utmSource ? nomeDaFonte(s.click.utmSource) : "Direto",
-      campaign: s.click?.utmCampaign ?? s.product,
+      source: feedUtms.utmSource ? nomeDaFonte(feedUtms.utmSource) : "Direto",
+      campaign: feedUtms.utmCampaign ?? s.product,
       value: num(s.value),
       ts: s.timestamp.getTime(),
     });

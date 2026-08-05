@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { carregarMapaDeAreas } from "@/lib/areas/atribuicao";
 import { excluirArea, exportarDados, exportarHistoricoDasRegras, preverExclusao, type OpcoesExclusao as OpcoesExclusaoTipo } from "@/lib/areas/exclusao";
 import { prisma } from "@/lib/prisma";
+import { CAMPOS_UTM } from "@/lib/vendas/utmsDaVenda";
 
 export interface WorkspaceDTO {
   id: string;
@@ -401,7 +402,10 @@ export async function produtosDescobertos(dias = 30): Promise<Record<string, Pro
       status: true,
       webhookId: true,
       apiCredentialId: true,
-      click: { select: { utmCampaign: true, workspaceId: true } },
+      // Cópia + fonte: os produtos descobertos por área são agrupados pela
+      // precedência, e ela não pode mudar de resposta se o clique for apagado.
+      ...CAMPOS_UTM,
+      click: { select: { ...CAMPOS_UTM, workspaceId: true } },
     },
   });
 

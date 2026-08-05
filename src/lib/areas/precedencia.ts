@@ -1,4 +1,5 @@
 import { splitPipe } from "@/lib/utm/parse";
+import { utmsDaVenda, type UtmsDaVenda } from "@/lib/vendas/utmsDaVenda";
 
 /**
  * # Atribuição de área — quem é o dono de cada linha
@@ -138,12 +139,19 @@ export interface MapaDeAreas {
   contaDoUtm(utmCampaign: string | null | undefined): string | null;
 }
 
-export interface VendaParaAtribuir {
+/**
+ * ⚠️ Os UTMs vêm das DUAS pontas: a relação `click` é a fonte, e as colunas na
+ * própria venda são a cópia gravada na ingestão. `Sale.clickId` é `SetNull`, e
+ * sem a cópia apagar o clique tiraria a venda da área da campanha que a pagou —
+ * mandando faturamento para a Principal sem nada denunciar. Quem escolhe entre
+ * as duas é `utmsDaVenda`; espalhe `CAMPOS_UTM` nos dois `select`.
+ */
+export interface VendaParaAtribuir extends Partial<UtmsDaVenda> {
   product: string;
   webhookId: string | null;
   apiCredentialId?: string | null;
   /** `workspaceId` = a área que o script da página declarou (pode ser nula). */
-  click: { utmCampaign: string | null; workspaceId?: string | null } | null;
+  click: (Partial<UtmsDaVenda> & { workspaceId?: string | null }) | null;
 }
 
 export interface EventoParaAtribuir {
@@ -233,7 +241,9 @@ export function construirMapa(d: DadosDoMapa): MapaDeAreas {
 
     areaDaVenda(v) {
       // 1. Conta de anúncio — segue o dinheiro que pagou pelo clique.
-      const c = porConta(v.click?.utmCampaign);
+      //    A cadeia `Sale → Click` é a fonte; a cópia na venda entra quando o
+      //    clique já não existe. Ver `lib/vendas/utmsDaVenda`.
+      const c = porConta(utmsDaVenda(v).utms.utmCampaign);
       if (c) return { areaId: c, motivo: "conta" };
       // 2. Área do script na página onde o comprador entrou. Vem antes do
       //    webhook porque é evidência DAQUELA compra; o webhook é uma regra do

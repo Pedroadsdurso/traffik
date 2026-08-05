@@ -5,6 +5,7 @@ import { carregarMapaDeAreas } from "@/lib/areas/atribuicao";
 import { prisma } from "@/lib/prisma";
 import { addDaysToKey, dayKeyInTz, dayStart, hourInTz, keyToDateColumn, todayKey } from "@/lib/timezone";
 import type { RuleLevel } from "@/generated/prisma/enums";
+import { CAMPOS_UTM, utmsDaVenda } from "@/lib/vendas/utmsDaVenda";
 
 export interface RuleCondition {
   metrica: "cpa" | "roas" | "ctr" | "gasto" | "vendas";
@@ -208,13 +209,17 @@ async function loadEntities(rule: RuleRow, start: Date, startKey: string) {
       // vazia = todos os produtos, que é o padrão e o comportamento de antes.
       ...(produtosDaRegra(rule).length ? { product: { in: produtosDaRegra(rule) } } : {}),
     },
-    select: { value: true, click: { select: { utmCampaign: true, utmContent: true } } },
+    // 🔴 Estas linhas alimentam CPA e ROAS de uma regra que PAUSA campanha e
+    // altera orçamento sozinha. Clique apagado não pode zerar o faturamento de
+    // uma campanha aqui: seria uma regra de "CPA alto" agindo por falta de dado.
+    select: { value: true, ...CAMPOS_UTM, click: { select: { ...CAMPOS_UTM } } },
   });
   const byCampaign = new Map<string, { results: number; revenue: number }>();
   const byContent = new Map<string, { results: number; revenue: number }>();
   for (const s of sales) {
-    const camp = s.click?.utmCampaign?.toLowerCase();
-    const cont = s.click?.utmContent?.toLowerCase();
+    const { utms } = utmsDaVenda(s);
+    const camp = utms.utmCampaign?.toLowerCase();
+    const cont = utms.utmContent?.toLowerCase();
     if (camp) {
       const c = byCampaign.get(camp) ?? { results: 0, revenue: 0 };
       c.results += 1;

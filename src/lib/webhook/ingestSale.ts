@@ -100,7 +100,9 @@ export async function ingestSale(
     // Cópia dos UTMs do clique casado. O `clickId` é `SetNull`: sem esta cópia,
     // apagar o clique apagaria a campanha, o criativo e a fonte desta venda —
     // e é daí que saem ROAS, CPA e a atribuição por área.
-    // ⚠️ Os leitores continuam usando a cadeia `Sale → Click`; isto é o seguro.
+    // ⚠️ Os leitores consultam a cópia por `utmsDaVenda`, que PREFERE a cadeia
+    // `Sale → Click` e só cai aqui quando o clique já não existe. Enquanto ele
+    // existir as duas respondem igual — a cópia veio dele.
     ...(match.utms ?? {}),
     approvedAt: data.status === "APROVADA" ? new Date() : null,
     rawPayload: rawPayload as object,

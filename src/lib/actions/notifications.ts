@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getLastWorkspaceId } from "@/lib/actions/workspaces";
 import { carregarMapaDeAreas } from "@/lib/areas/atribuicao";
+import { CAMPOS_UTM } from "@/lib/vendas/utmsDaVenda";
 import type { ReportPattern } from "@/generated/prisma/enums";
 
 export interface NotificationSettingsDTO {
@@ -122,7 +123,9 @@ export async function listNotifications(workspaceId?: string | null): Promise<{ 
   // A venda vem junto porque a precedência precisa dela: sem `product`,
   // `webhookId` e o UTM do clique não dá para dizer de que área a notificação é.
   const selectSale = {
-    select: { product: true, webhookId: true, apiCredentialId: true, click: { select: { utmCampaign: true, workspaceId: true } } },
+    // Cópia + fonte, para o recorte por área da notificação não depender de o
+    // clique ainda existir. Ver `lib/vendas/utmsDaVenda`.
+    select: { product: true, webhookId: true, apiCredentialId: true, ...CAMPOS_UTM, click: { select: { ...CAMPOS_UTM, workspaceId: true } } },
   } as const;
 
   // ⚠️ Busca ampla e recorta em memória — a atribuição passa pelo

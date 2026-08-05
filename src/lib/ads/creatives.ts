@@ -5,6 +5,7 @@ import { janelaDoPeriodo, type PeriodoNome } from "@/lib/periodo";
 import { dayEnd, dayKeyInTz, dayStart, keyToDateColumn } from "@/lib/timezone";
 import { chaveDoPedido } from "@/lib/pedidos";
 import { splitPipe } from "@/lib/utm/parse";
+import { CAMPOS_UTM, utmsDaVenda } from "@/lib/vendas/utmsDaVenda";
 
 /** ⚠️ Alias de `PeriodoNome` — mesma união do Dashboard e do Gerenciador. */
 export type CreativePeriod = PeriodoNome;
@@ -92,7 +93,9 @@ export async function computeCreatives(
         status: "APROVADA",
         timestamp: { gte: start, lte: end },
       },
-      select: { id: true, pedidoId: true, value: true, product: true, webhookId: true, apiCredentialId: true, click: { select: { utmContent: true, utmCampaign: true, workspaceId: true } } },
+      // `CAMPOS_UTM` nas duas pontas: `click` é a fonte, as colunas na venda são
+      // a cópia para quando o clique some (`clickId` é `SetNull`).
+      select: { id: true, pedidoId: true, value: true, product: true, webhookId: true, apiCredentialId: true, ...CAMPOS_UTM, click: { select: { ...CAMPOS_UTM, workspaceId: true } } },
     }),
   ]);
 
@@ -116,7 +119,7 @@ export async function computeCreatives(
   // Ver a mesma decisão em `ads/overview.ts` e `lib/pedidos.ts`.
   const pedidosPorChave = new Map<string, Set<string>>();
   for (const s of vendasDaArea) {
-    const { name, id } = splitPipe(s.click?.utmContent);
+    const { name, id } = splitPipe(utmsDaVenda(s).utms.utmContent);
     const bump = (map: Map<string, { sales: number; revenue: number }>, key: string, prefixo: string) => {
       const cur = map.get(key) ?? { sales: 0, revenue: 0 };
       const destino = `${prefixo}:${key}`;

@@ -5,6 +5,7 @@ import { janelaDoPeriodo, type PeriodoNome } from "@/lib/periodo";
 import { dayEnd, dayKeyInTz, dayStart, keyToDateColumn } from "@/lib/timezone";
 import { chaveDoPedido } from "@/lib/pedidos";
 import { splitPipe } from "@/lib/utm/parse";
+import { CAMPOS_UTM, utmsDaVenda } from "@/lib/vendas/utmsDaVenda";
 
 export interface AdsFilters {
   /**
@@ -184,7 +185,9 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
         userId,
         timestamp: { gte: start, lte: end },
       },
-      select: { id: true, pedidoId: true, value: true, status: true, product: true, webhookId: true, apiCredentialId: true, click: { select: { utmCampaign: true, utmContent: true, workspaceId: true } } },
+      // `CAMPOS_UTM` nas duas pontas: a relação `click` é a fonte, as colunas na
+      // venda são a cópia para quando o clique some (`clickId` é `SetNull`).
+      select: { id: true, pedidoId: true, value: true, status: true, product: true, webhookId: true, apiCredentialId: true, ...CAMPOS_UTM, click: { select: { ...CAMPOS_UTM, workspaceId: true } } },
     }),
     // Cliques rastreados por NÓS, atribuídos por UTM. Chegam ao banco no
     // instante do clique (via `t.js`), sem depender do Facebook.
@@ -305,8 +308,11 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
   };
 
   for (const s of vendasDaArea) {
-    const camp = splitPipe(s.click?.utmCampaign);
-    const cont = splitPipe(s.click?.utmContent);
+    // 🔴 É daqui que saem ROAS e CPA por campanha. Apagar o clique não pode
+    // zerar a linha: a cópia responde quando a relação já não existe.
+    const { utms } = utmsDaVenda(s);
+    const camp = splitPipe(utms.utmCampaign);
+    const cont = splitPipe(utms.utmContent);
     const aprovada = s.status === "APROVADA";
     const bump = (map: Map<string, Attr>, key: string, prefixo: string) => {
       const cur = map.get(key) ?? vazio();
