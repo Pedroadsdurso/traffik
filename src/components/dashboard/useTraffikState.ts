@@ -686,16 +686,25 @@ export function useTraffikState(
   const revenue = k?.revenue ?? 0;
   const spend = k?.spend ?? 0;
   const sales = k?.sales ?? 0;
-  const ticket = k?.ticket ?? 0;
-  const cpa = k?.cpa ?? 0;
-  const arpu = k?.arpu ?? 0;
+  /**
+   * ⛔ Estas cinco NÃO levam `?? 0`.
+   *
+   * `null` aqui significa **indefinido** — sem venda não existe ticket nem CPA,
+   * sem gasto não existe ROAS, sem impressão não existe CTR, sem comprador não
+   * existe ARPU. Colapsar para 0 devolve o bug que o servidor acabou de
+   * consertar: "CPA R$ 0,00" se lê como aquisição de graça, e "0,00x" como
+   * empate. Um `?? 0` aqui é invisível e desfaz a correção inteira.
+   */
+  const ticket = k?.ticket ?? null;
+  const cpa = k?.cpa ?? null;
+  const arpu = k?.arpu ?? null;
   const buyers = k?.buyers ?? 0;
-  const roas = k?.roas ?? 0;
+  const roas = k?.roas ?? null;
   // `null` = sem custo no período, ROI indefinido. Não colapsar para 0: "0,00x"
   // se lê como empate, e empate é diferente de "não dá para calcular".
   const roi = k?.roi ?? null;
   const margin = k?.margin ?? 0;
-  const ctr = k?.ctr ?? 0;
+  const ctr = k?.ctr ?? null;
   const pendentes = k?.pendentes ?? 0;
   const pendentesValor = k?.pendentesValor ?? 0;
   const liquido = k?.liquido ?? 0;
@@ -781,12 +790,14 @@ export function useTraffikState(
     },
     gasto: { label: "Gasto total", value: brl(spend), ...trendOf("spend", true) },
     // ⚠️ Tipo "roas": o equilíbrio dele é 1x, não 0 — `0,80x` é prejuízo.
-    //    E sem GASTO não existe ROAS (a conta é faturamento ÷ gasto), então
-    //    passa `null` e a cor fica neutra em vez de vermelha num painel zerado.
-    roas: { label: "ROAS", value: roasFmt(roas), ...trendOf("roas"), cor: corFinanceira(spend > 0 ? roas : null, "roas") },
+    //    Sem GASTO não existe ROAS, e agora o servidor já devolve `null` nesse
+    //    caso — o `spend > 0 ? … : null` que havia aqui virou redundante. Ele
+    //    era a metade certa da correção: a COR já sabia que o valor era
+    //    indefinido enquanto o número continuava imprimindo "0,0x".
+    roas: { label: "ROAS", value: roasFmt(roas), ...trendOf("roas"), cor: corFinanceira(roas, "roas") },
     // Bloco 4: ROI passa a ser multiplicador (era "1331%"), com 2 casas como
     // nos exemplos do roteiro. Sem custo no período não há ROI — mostra "—".
-    roi: { label: "ROI", value: roi != null ? multFmt(roi) : "—", ...trendOf("roi"), cor: corFinanceira(roi, "roi") },
+    roi: { label: "ROI", value: multFmt(roi), ...trendOf("roi"), cor: corFinanceira(roi, "roi") },
     margem: { label: "Margem de lucro", value: pct(margin), ...trendOf("margem"), cor: corFinanceira(margin, "lucro") },
     vendas: { label: "Vendas", value: String(sales), ...trendOf("sales") },
     cpa: { label: "CPA", value: brl(cpa), ...trendOf("cpa", true) },

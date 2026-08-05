@@ -2,22 +2,43 @@ import { computeDashboard } from "@/lib/dashboard/metrics";
 import { prisma } from "@/lib/prisma";
 import type { ReportPattern } from "@/generated/prisma/enums";
 
-function brl(v: number): string {
+function brl(v: number | null): string {
+  // ⚠️ Indefinido não vira "R$ 0,00". Um relatório que diz "CPA R$ 0,00" num dia
+  // sem venda afirma aquisição de graça — e chega por notificação, onde não há
+  // tooltip nem contexto para desfazer a leitura.
+  if (v == null) return "—";
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+/** Multiplicador (ROAS). `null` = indefinido, e o relatório diz isso. */
+function mult(v: number | null): string {
+  return v == null ? "—" : `${v.toFixed(2)}x`;
+}
+
 /** Monta o conteúdo do relatório conforme o padrão escolhido pelo usuário. */
-function buildContent(pattern: ReportPattern, k: { revenue: number; spend: number; profit: number; sales: number; roas: number; margin: number; cpa: number; ticket: number }): { title: string; content: string } {
+function buildContent(
+  pattern: ReportPattern,
+  k: {
+    revenue: number;
+    spend: number;
+    profit: number;
+    sales: number;
+    roas: number | null;
+    margin: number;
+    cpa: number | null;
+    ticket: number | null;
+  },
+): { title: string; content: string } {
   if (pattern === "RESUMO_DETALHADO") {
     return {
       title: "📊 Resumo detalhado de hoje",
-      content: `Faturamento ${brl(k.revenue)} · Gasto ${brl(k.spend)} · Vendas ${k.sales} · ROAS ${k.roas.toFixed(2)}x · Ticket ${brl(k.ticket)} · CPA ${brl(k.cpa)} · Lucro ${brl(k.profit)}`,
+      content: `Faturamento ${brl(k.revenue)} · Gasto ${brl(k.spend)} · Vendas ${k.sales} · ROAS ${mult(k.roas)} · Ticket ${brl(k.ticket)} · CPA ${brl(k.cpa)} · Lucro ${brl(k.profit)}`,
     };
   }
   if (pattern === "NOTIFICACOES_CRIATIVAS") {
     return {
       title: "🎨 Performance de hoje",
-      content: `${k.sales} vendas · ROAS ${k.roas.toFixed(2)}x · margem ${k.margin.toFixed(0)}%`,
+      content: `${k.sales} vendas · ROAS ${mult(k.roas)} · margem ${k.margin.toFixed(0)}%`,
     };
   }
   // STATUS_LUCRO

@@ -72,7 +72,8 @@
     "test:regra-checkout": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-regra-checkout.mjs",
     "test:taxa-fixa": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-taxa-fixa-e2e.mjs",
     "backfill:checkout": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/backfill-checkout.mjs",
-    "test:efeitos": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-efeitos.mjs"
+    "test:efeitos": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-efeitos.mjs",
+    "test:auditoria-metricas": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-auditoria-metricas.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

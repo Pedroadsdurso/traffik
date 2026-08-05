@@ -65,19 +65,30 @@ export interface DashboardData {
     pendentesValor: number;
     reembolsadas: number;
     chargebackRate: number;
-    ticket: number;
-    cpa: number;
-    roas: number;
+    /**
+     * ⚠️ As cinco abaixo são `number | null`, e `null` significa **indefinido**,
+     * nunca zero. Sem venda não existe ticket nem CPA; sem gasto não existe
+     * ROAS; sem impressão não existe CTR; sem comprador não existe ARPU.
+     *
+     * Devolver `0` fazia a tela imprimir "R$ 0,00" e "0,00x" como se fossem
+     * medição — um CPA de zero se lê como aquisição de graça. É a mesma
+     * correção que o ROI já tinha, estendida aos irmãos dele; o Gerenciador
+     * (`lib/ads/metrics.ts`) sempre devolveu `null` aqui, então as duas telas
+     * respondiam diferente à mesma pergunta.
+     */
+    ticket: number | null;
+    cpa: number | null;
+    roas: number | null;
     /** `null` quando não houve custo nenhum — ROI é indefinido, não zero. */
     roi: number | null;
     margin: number;
-    ctr: number;
+    ctr: number | null;
     clicks: number;
     profit: number;
     /** Faturamento bruto menos gateway, coprodução, impostos e custo de produto. */
     liquido: number;
     /** Faturamento ÷ compradores únicos (Bloco 4). */
-    arpu: number;
+    arpu: number | null;
     buyers: number;
   };
   /**
@@ -522,11 +533,24 @@ function summarize(w: Window) {
   // conversão do funil, com os dois parecendo números plausíveis.
   const salesCount = contarPedidos(approved);
   const pendentesLista = w.sales.filter((s) => s.status === "PENDENTE");
-  const pendentes = pendentesLista.length;
+  /**
+   * ⚠️ CONVERSÕES, como `salesCount` — não `.length`.
+   *
+   * 🔴 Estas três contagens eram as ÚNICAS que ainda contavam itens, na mesma
+   * função em que `salesCount` já contava pedidos. Um PIX com order bump é UM
+   * pagamento esperando, não dois, e aparecia como dois.
+   *
+   * O caso caro é o `chargebackRate` logo abaixo: ele dividia uma contagem de
+   * ITENS por uma de PEDIDOS. Não é imprecisão — é razão com unidades
+   * diferentes no numerador e no denominador, que **infla a taxa** exatamente
+   * em quem vende com order bump. E o número continua entre 0 e 100, plausível.
+   */
+  const pendentes = contarPedidos(pendentesLista);
   // ⚠️ VALOR, não contagem: é o que diz quanto dinheiro está esperando pagamento.
+  // Aqui a soma é por LINHA de propósito — o dinheiro do order bump é real.
   const pendentesValor = pendentesLista.reduce((a, v) => a + num(v.value), 0);
-  const reembolsadas = w.sales.filter((s) => s.status === "REEMBOLSADA").length;
-  const chargebacks = w.sales.filter((s) => s.status === "CHARGEBACK").length;
+  const reembolsadas = contarPedidos(w.sales.filter((s) => s.status === "REEMBOLSADA"));
+  const chargebacks = contarPedidos(w.sales.filter((s) => s.status === "CHARGEBACK"));
   // Idem para o topo do funil: "vendas iniciadas" é quanta gente chegou a
   // comprar, não quantos itens foram para o carrinho.
   const totalSalesEvents = contarPedidos(w.sales);
@@ -537,10 +561,31 @@ function summarize(w: Window) {
   const adClicks = w.metrics.reduce((a, m) => a + m.clicks, 0);
   const clicksCount = w.clicks.length;
 
-  const ticket = salesCount ? revenue / salesCount : 0;
-  const cpa = salesCount ? spend / salesCount : 0;
-  const roas = spend ? revenue / spend : 0;
-  const ctr = impressions ? (adClicks / impressions) * 100 : 0;
+  /**
+   * 🔴 INDEFINIDO é `null`, não zero — e o Gerenciador já fazia isso.
+   *
+   * `lib/ads/metrics.ts` tem um `div()` que devolve `null` quando o denominador
+   * é 0, e a célula mostra "—". Aqui as mesmas quatro contas devolviam `0`, e a
+   * tela imprimia o zero como se fosse medição:
+   *
+   * | Situação | Antes | Como se lia |
+   * |---|---|---|
+   * | Nenhuma venda | `CPA R$ 0,00` | aquisição de graça |
+   * | Nenhuma venda | `Ticket R$ 0,00` | vendi por zero |
+   * | Sem gasto | `ROAS 0,00x` | não retornou nada |
+   *
+   * É exatamente a correção que o ROI já tinha recebido (`totalCost === 0`
+   * devolvia 0 e a tela dizia "0,00x", que se lê como empate) — e que os irmãos
+   * dele nunca receberam. Duas telas respondiam diferente à mesma pergunta.
+   *
+   * ⚠️ O card de ROAS já sabia disso pela METADE: `corFinanceira(spend > 0 ?
+   * roas : null, ...)` deixava a cor neutra sem gasto, enquanto o número
+   * continuava dizendo "0,0x". A cor sabia; o valor não.
+   */
+  const ticket = salesCount ? revenue / salesCount : null;
+  const cpa = salesCount ? spend / salesCount : null;
+  const roas = spend ? revenue / spend : null;
+  const ctr = impressions ? (adClicks / impressions) * 100 : null;
 
   // Faturamento por forma de pagamento (aprovadas), para taxas de gateway.
   const revenueByPayment = new Map<PaymentMethod, number>();
@@ -599,7 +644,8 @@ function summarize(w: Window) {
     else semEmail += 1;
   }
   const buyers = emails.size + semEmail;
-  const arpu = buyers ? revenue / buyers : 0;
+  // Sem comprador nenhum o ARPU é indefinido, não zero — ver a nota acima.
+  const arpu = buyers ? revenue / buyers : null;
 
   /**
    * De onde veio o faturamento — TRÊS origens, não duas.

@@ -1,4 +1,18 @@
-export function brl(n: number): string {
+/**
+ * O traço que representa **indefinido**.
+ *
+ * ⛔ Indefinido não é zero, e a diferença custa decisão de mídia: um CPA de
+ * `R$ 0,00` se lê como aquisição de graça, um ROAS de `0,00x` como "não
+ * retornou nada", quando os dois querem dizer "não dá para calcular ainda".
+ *
+ * Por isso os formatadores aceitam `null` e devolvem isto — em vez de cada
+ * chamador decidir sozinho. Um único `?? 0` esquecido num call site desfaria a
+ * correção em silêncio, e é assim que ela voltaria.
+ */
+export const TRACO = "—";
+
+export function brl(n: number | null | undefined): string {
+  if (n == null) return TRACO;
   return "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
@@ -13,7 +27,8 @@ export function brl0(n: number): string {
  * numérica da ferramenta agora mostra 2 casas: o arredondamento escondia
  * variação real entre criativos que diferem na segunda casa.
  */
-export function pct(n: number): string {
+export function pct(n: number | null | undefined): string {
+  if (n == null) return TRACO;
   return n.toFixed(2).replace(".", ",") + "%";
 }
 
@@ -27,7 +42,8 @@ export function pct(n: number): string {
  * Ambos agora são a mesma função — `roasFmt` fica como alias para não quebrar
  * os pontos que já o importavam.
  */
-export function multFmt(n: number): string {
+export function multFmt(n: number | null | undefined): string {
+  if (n == null) return TRACO;
   return n.toFixed(2).replace(".", ",") + "x";
 }
 
