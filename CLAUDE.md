@@ -5519,7 +5519,89 @@ ingestão sem segredo**, criado para todo usuário sem que ele peça. Quem
 conhecer o token consegue inserir venda na conta. Decidir se ele deixa de
 nascer ou se passa a exigir chave.
 
-## 🚦 COMECE AQUI — fila de UX: (f) e (g) fechados (01/08/2026)
+## 🚦 COMECE AQUI — sessão de 05/08/2026
+
+### 🔴🔴 DUAS MIGRATIONS PENDENTES EM PRODUÇÃO
+
+**`npx prisma migrate deploy` ANTES do push.** As duas são aditivas (colunas
+nullable ou com default), então o build antigo continua funcionando — mas o
+código novo faz `SELECT` delas em toda carga de dashboard.
+
+| Migration | O quê |
+|---|---|
+| `20260805100000_venda_efeitos` | 6 colunas em `Sale` + 3 índices |
+| `20260805110000_imposto_anuncios` | 2 colunas em `User` |
+
+### O que foi entregue
+
+| | Item |
+|---|---|
+| ✅ | **Família 1** — os 3 efeitos pós-venda que falhavam em silêncio agora têm coluna e tela |
+| ✅ | **1.4** — auditoria de métricas: unidade misturada no chargeback + indefinido virando zero |
+| ✅ | **Bloco 4** — imposto de anúncio, posicionamento, "Meta Ads", custo por venda |
+| ✅ | **Varredura** — 3 asserções agregadas passavam com a coleção vazia |
+
+### ⛔ As quatro regras que esta sessão acrescentou
+
+> #### 1. "Não se aplica" não é "falhou" — por isso vocabulário, não booleano
+> `outro_dono` é o desfecho CORRETO de quem configurou a partição do pixel.
+> Um `ok: boolean` o contaria como falha e a tela pediria para consertar o que
+> está certo. `sem_pixel` (não configurou) e `sem_token` (configurou e nada
+> sai) parecem iguais de longe e só um é bug. Ver `lib/webhook/efeitos.ts`.
+
+> #### 2. Razão com unidades diferentes nos dois lados
+> `chargebackRate` dividia **itens por pedidos**. Não é imprecisão: o
+> resultado sai dobrado em quem vende com order bump, e continua entre 0 e
+> 100 — plausível. **Ao escrever uma razão, pergunte se numerador e
+> denominador contam a mesma coisa.**
+
+> #### 3. Indefinido é `null`, e a correção precisa alcançar os IRMÃOS
+> O ROI já tinha recebido isso (`totalCost === 0` devolvia 0 e a tela dizia
+> "0,00x", que se lê como empate). `cpa`, `ticket`, `roas`, `ctr` e `arpu`
+> ficaram para trás por sessões — enquanto o Gerenciador sempre devolveu
+> `null` pelo `div()`. **Duas telas respondendo diferente à mesma pergunta.**
+>
+> ⚠️ O card de ROAS sabia pela METADE: a COR já tratava o caso como
+> indefinido (`spend > 0 ? roas : null`) e o NÚMERO continuava dizendo
+> "0,0x". Meia correção é a assinatura de que a outra metade foi esquecida —
+> **ao achar uma, procure a outra ponta.**
+>
+> Os formatadores (`brl`, `pct`, `multFmt`) passaram a aceitar `null` e
+> devolver "—". Um `?? 0` esquecido num call site desfaria tudo em silêncio.
+
+> #### 4. Contagem de violações === 0 passa com a coleção VAZIA
+> `vazios === 0` é verdade quando tudo está certo **e** quando nada foi
+> examinado — e o segundo é a regressão que importa (módulo morto, lista
+> vazia, base inerte). **Prove primeiro que houve o que examinar.**
+> Três asserções estavam nesse estado; a do `teste-pais` teria continuado
+> verde durante a sessão inteira em que a base de países ficou inerte.
+
+### ⚠️ O que NÃO foi feito
+
+- **`Sale.utmTerm` não é usado na atribuição** — a tabela de posicionamento lê
+  `click.utmTerm` com a cópia como fallback, mas nenhuma outra métrica passou
+  a usar a cópia. Continua valendo a decisão de 31/07: ligar isso mudaria
+  números sem gatilho que justifique.
+- **O imposto de anúncio não entra no Gerenciador.** Lá o lucro é bruto por
+  desenho (não há como ratear custo de conta por campanha), e o tooltip já diz
+  isso. Se um dia entrar, `roiMidia` deixa de ser comparável com o painel da
+  Meta.
+- **Free name nos 5 blocos de despesa já existia** — o item da fila estava
+  desatualizado. O que faltava era o MODO (R$ por venda), agora em coprodução
+  e custo de produto. Imposto continua só percentual: alíquota é percentual
+  por natureza.
+
+### 📋 Fila
+
+1. **Item (d) da UX** — 4 overlays `position:fixed` (o `Drawer` tem largura
+   fixa de 520/560px) + varredura de condicionais. Resolva o contorno do
+   `resize_window` antes: com a janela maximizada ele **mente**, reporta
+   sucesso e não redimensiona.
+2. Evento de TESTE da Cakto contando como venda — bloqueado até reativá-la.
+3. Import/export do Bloco 8; faxina do nav morto + `EditDashboardDrawer`
+   inalcançável.
+
+## 🚦 (histórico) fila de UX: (f) e (g) fechados (01/08/2026)
 
 ### (g) Regras em duas regiões — o grupo que move dinheiro parou de ser intercalado
 
@@ -8672,6 +8754,8 @@ npm run test:detectores  # 56 asserções, assinatura v2 + preset do pixel (puro
 npm run test:utm-venda   # 25 asserções, UTMs copiadas para Sale (banco de DEV)
 npm run backfill:utms    # copia os UTMs do clique. SIMULA; --aplicar escreve
 npm run test:veiculacao  # 40 asserções, status configurado × veiculação (puro)
+npm run test:efeitos     # 40 asserções, os 3 efeitos pós-venda (banco de DEV)
+npm run test:auditoria-metricas  # 21 asserções, contagem por pedido + indefinido != zero
 npm run test:analise-regra   # 32 asserções, avisos estáticos de condição (puro)
 npm run test:previa-regra    # 30 asserções, prévia da regra (banco de DEV)
 npm run regras:auditar -- --url '<conn>'  # o que as regras fariam e o que já fizeram
