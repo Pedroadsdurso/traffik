@@ -127,6 +127,9 @@ eq("undefined NÃO é bot", ehBot(undefined), false);
 eq("motivo é null quando não é bot", motivo("Mozilla/5.0 (Windows NT 10.0) Chrome/150 Safari/537.36"), null);
 {
   // Nenhum motivo pode ser string vazia — ele vai para a coluna e para a tela.
+  // ⛔ `vazios === 0` também é verdade com a lista VAZIA — e lista vazia
+  // significa deteccao de robo morta, que e o oposto do que se quer garantir.
+  eq("a lista de padrões não está vazia", PADROES.length > 0, true);
   const vazios = PADROES.filter((p) => !p.motivo || !p.motivo.trim()).length;
   eq("todo padrão tem motivo preenchido", vazios, 0);
 }

@@ -102,7 +102,18 @@ console.log("\n\x1b[1mTexto\x1b[0m");
     [c("gasto", ">=", 0)],
     [],
   ];
-  const vazios = casos.flatMap((k) => analisarCondicoes(k)).filter((a) => !a.texto.trim()).length;
+  const avisos = casos.flatMap((k) => analisarCondicoes(k));
+  /**
+   * ⛔ A contagem de violações sozinha passa VAZIA.
+   *
+   * `vazios === 0` é verdade tanto quando todo aviso tem texto quanto quando
+   * NÃO HÁ AVISO NENHUM — e o segundo caso é justamente a regressão que
+   * importa (o módulo parar de emitir avisos). A asserção precisa poder falhar
+   * pelo motivo que ela alega medir, então primeiro se prova que houve o que
+   * examinar.
+   */
+  eq("os casos produzem avisos (senão a checagem abaixo é vazia)", avisos.length > 0, true);
+  const vazios = avisos.filter((a) => !a.texto.trim()).length;
   eq("todo aviso tem texto", vazios, 0);
   // O rótulo da métrica vai para a tela: "Gasto", não "gasto".
   eq(

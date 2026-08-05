@@ -75,10 +75,19 @@ console.log("\n\x1b[1mBordas da cobertura\x1b[0m");
 {
   // A busca binária tem de responder em qualquer ponto do espaço, sem estourar.
   let erros = 0;
+  let resolvidos = 0;
   for (const ip of ["1.0.0.0", "223.255.255.255", "224.0.0.1", "255.255.255.254"]) {
     const r = paisDoIp(ip);
+    if (r !== null) resolvidos++;
     if (r !== null && !/^[A-Z]{2}$/.test(r)) erros++;
   }
+  /**
+   * ⛔ `erros === 0` é verdade também quando a base devolve `null` para TUDO —
+   * e "base inerte" é um estado que este projeto já viveu (ela ficou pronta,
+   * testada e commitada uma sessão inteira sem ser consultada por ninguém).
+   * Sem esta linha, a asserção abaixo passaria justamente nesse caso.
+   */
+  eq("ao menos um extremo é resolvido (a base não está inerte)", resolvidos > 0, true);
   eq("extremos devolvem país válido ou null, nunca lixo", erros, 0);
 }
 
