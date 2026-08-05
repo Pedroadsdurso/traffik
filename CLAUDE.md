@@ -1239,9 +1239,13 @@ ao perfil; a 2ª passada não duplicou nem contou como nova (idempotente); e um
 nome adulterado no banco foi corrigido pela descoberta seguinte. Usuário de teste
 removido depois. Mais 5 asserções da trava. `tsc` e `next build` limpos.
 
-**O cron do GitHub Actions continua**, e ainda importa: ele cobre a janela de 30
-dias e mantém o motor de regras rodando **com ninguém olhando a tela** — o
-auto-sync só dispara quando há requisição do painel.
+**O cron continua**, e ainda importa: ele cobre a janela de 30 dias e mantém o
+motor de regras rodando **com ninguém olhando a tela** — o auto-sync só dispara
+quando há requisição do painel.
+
+> ⚠️ **Hoje há DOIS agendadores**: o cron-job.org (configurado pelo usuário) e o
+> `.github/workflows/cron.yml`, que nunca foi removido e está ativo. Ver
+> "DOIS AGENDADORES RODANDO AO MESMO TEMPO".
 
 ## 📋 Rotas de cron: como ler os retornos
 
@@ -5217,6 +5221,51 @@ pelo botão manual.
 
 ⚠️ E hoje **"sem gasto no período" e "ainda não buscamos o histórico" são
 indistinguíveis na tela**: as duas mostram zero.
+
+### 🔴🔴 DOIS AGENDADORES RODANDO AO MESMO TEMPO (descoberto em 05/08/2026)
+
+O usuário configurou o **cron-job.org** numa sessão anterior. O
+`.github/workflows/cron.yml` **nunca foi removido** — e está ATIVO. Medido pela
+API do GitHub: `state: "active"`, **291 execuções**, a mais recente minutos
+antes da verificação.
+
+> ⚠️ **A documentação daqui dizia que o Actions era a rede de segurança e não
+> mencionava o cron-job.org.** Isso fez o usuário se preocupar com um risco que
+> não existia (o Actions desativar por 60 dias sem commit) e **não ver o que
+> existia** (os dois disparando as mesmas rotas).
+
+**Nem toda rota sofre igual** — e a diferença é a proteção que cada uma tem:
+
+| Rota | Chamada em dobro | Por quê |
+|---|---|---|
+| `/api/cron/sync-facebook` | ✅ **inofensiva** | `autoSyncSeNecessario` tem a reserva no banco e os intervalos. A segunda sai `pulado` |
+| `/api/cron/manutencao` | ⚠️ desperdício | as consultas são idempotentes |
+| `/api/cron/reports` | 🔴 **notificação duplicada** | `generate.ts` faz `notification.create` sem condição |
+| `/api/cron/run-rules` | 🔴🔴 **AÇÃO EM DOBRO** | ver abaixo |
+
+> ### 🔴 `run-rules` tem uma corrida de ler-checar-agir, e ela move dinheiro
+> ```js
+> if (rule.lastRunAt && now - rule.lastRunAt.getTime() < rule.frequencyMin * 60_000) continue;
+> const result = await evaluateRule(rule);   // ← PAUSA CAMPANHA / MUDA ORÇAMENTO
+> await prisma.$transaction([ log, update lastRunAt ]);   // ← só AGORA marca
+> ```
+> A frequência é checada, a **ação acontece**, e só depois `lastRunAt` é
+> gravado. Dois chamadores simultâneos passam os dois pela checagem.
+>
+> Numa regra de `+50%` de orçamento, execução dupla dá **+125%**. O
+> `maxBudget` limita o estrago; não o impede.
+>
+> ⚠️ **O `concurrency` do workflow não cobre isto** — ele impede o Actions de se
+> sobrepor a si mesmo, não de coincidir com o cron-job.org.
+>
+> **O conserto é o padrão que esta base já usa três vezes** (reserva do
+> auto-sync, upsert monotônico de venda, `garantirAreaPrincipal`): um
+> `updateMany` condicional que reserva a execução ANTES de agir — quem recebe
+> `count: 0` desiste. Quem decide o vencedor é o banco.
+
+⚠️ **O que NÃO dá para saber daqui:** quais rotas o cron-job.org chama e com
+qual frequência. É serviço externo, sem API configurada aqui. **Só o painel
+dele responde.**
 
 ### 🔴 `userTimezone` cai em São Paulo EM SILÊNCIO — e isso vira sistemático
 
