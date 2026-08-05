@@ -37,6 +37,25 @@ import type { PaymentMethod } from "@/generated/prisma/enums";
  * **Não remova esse campo sem antes tornar as taxas obrigatórias.**
  */
 
+/**
+ * Sentinela da opcao "Todas as formas" no cadastro de taxa de gateway.
+ *
+ * ## 🔴 Por que nao pode ser `OUTRO`
+ *
+ * `OUTRO` e uma forma de pagamento REAL do enum `PaymentMethod` — e
+ * `mapPayment` devolve `OUTRO` para tudo que ele nao reconhece. A tela oferecia
+ * `{ value: "OUTRO", label: "Todas" }`, entao uma taxa cadastrada como "Todas"
+ * incidia **so sobre as vendas classificadas como Outro**, e as vendas de
+ * metodo nao reconhecido levavam essa taxa em vez da de Pix ou cartao. Era
+ * exatamente o "a taxa de uma entra na conta da outra" relatado nos testes.
+ *
+ * O suporte a taxa global sempre existiu (`paymentMethod: null` usa o
+ * faturamento inteiro como base) — a tela e que nao tinha como produzi-lo.
+ *
+ * ⚠️ Vale so na INTERFACE. No banco continua `null`; nunca grave esta string.
+ */
+export const TODAS_AS_FORMAS = "__TODAS__";
+
 /** Uma despesa cadastrada, no formato que a conta precisa. */
 export interface DespesaEntrada {
   type: string;

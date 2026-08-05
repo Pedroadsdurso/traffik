@@ -241,6 +241,47 @@ console.log("\n\x1b[1mTaxa reportada pelo gateway\x1b[0m");
   eq("sem lista de vendas, comportamento é o de ANTES", semLista.gateway, 5);
 }
 
+// ── 1.3: "Todas as formas" incide sobre TUDO, nao so sobre OUTRO ──────────
+{
+  console.log("\n\x1b[1mTaxa por forma de pagamento (1.3)\x1b[0m\n");
+  const porPagamento = new Map([["PIX", 100], ["CARTAO", 100], ["OUTRO", 100]]);
+  const base = { bruto: 300, brutoPorPagamento: porPagamento, gastoAnuncios: 0 };
+
+  // Taxa GLOBAL (paymentMethod null) -> 10% de 300 = 30
+  const global = calcularFinanceiro({
+    ...base,
+    despesas: [{ type: "TAXA_GATEWAY", calc: "PERCENTUAL", amount: 10, paymentMethod: null }],
+  });
+  eq("taxa global incide sobre o faturamento inteiro", (global.gateway), 30);
+
+  // A MESMA taxa marcada como OUTRO -> so 10% dos 100 de OUTRO = 10
+  const soOutro = calcularFinanceiro({
+    ...base,
+    despesas: [{ type: "TAXA_GATEWAY", calc: "PERCENTUAL", amount: 10, paymentMethod: "OUTRO" }],
+  });
+  eq("a MESMA taxa como OUTRO pega so um terco (era o bug)", (soOutro.gateway), 10);
+
+  // Pix 10% + cartao 30% nao se misturam
+  const misto = calcularFinanceiro({
+    ...base,
+    despesas: [
+      { type: "TAXA_GATEWAY", calc: "PERCENTUAL", amount: 10, paymentMethod: "PIX" },
+      { type: "TAXA_GATEWAY", calc: "PERCENTUAL", amount: 30, paymentMethod: "CARTAO" },
+    ],
+  });
+  eq("Pix 10% + cartao 30% = 10 + 30, cada um sobre a propria base", (misto.gateway), 40);
+
+  // Global + especifica somam (o usuario pode ter as duas)
+  const ambas = calcularFinanceiro({
+    ...base,
+    despesas: [
+      { type: "TAXA_GATEWAY", calc: "PERCENTUAL", amount: 10, paymentMethod: null },
+      { type: "TAXA_GATEWAY", calc: "PERCENTUAL", amount: 30, paymentMethod: "CARTAO" },
+    ],
+  });
+  eq("global + especifica somam", (ambas.gateway), 60);
+}
+
 console.log(
   falhas === 0
     ? `\n\x1b[1m\x1b[32m${ok} asserções passaram, 0 falharam.\x1b[0m\n`

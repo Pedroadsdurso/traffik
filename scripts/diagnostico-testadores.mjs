@@ -432,6 +432,61 @@ async function main() {
       }
     }
 
+    // ── 3c. FORMA DE PAGAMENTO NAO RECONHECIDA (item 1.3) ───────────────────
+    //
+    // `mapPayment` devolve OUTRO para tudo que nao casa com pix/cartao/boleto.
+    // Isso importa por dois motivos que se somam:
+    //   1. a taxa de gateway e POR forma de pagamento — venda em OUTRO escapa
+    //      da taxa de Pix e da de cartao;
+    //   2. a opcao "Todas" da tela gravava justamente `OUTRO`, entao a taxa
+    //      global caia so sobre essas vendas.
+    const { rows: pagto } = await c.query(
+      `SELECT s."paymentMethod"::text AS metodo, count(*)::int AS n,
+              COALESCE(sum(s.value), 0) AS valor,
+              count(DISTINCT s.platform)::int AS gateways
+         FROM "Sale" s
+        WHERE s."userId" = $1 AND s.status = 'APROVADA'
+        GROUP BY 1 ORDER BY n DESC`,
+      [u.id],
+    );
+    if (pagto.length) {
+      console.log(`
+  ${C.b}3c. Forma de pagamento das vendas aprovadas${C.x}`);
+      for (const m of pagto) {
+        const marca = m.metodo === "OUTRO" ? `${C.a}← nao reconhecida pelo mapPayment${C.x}` : "";
+        console.log(`     ${String(m.metodo).padEnd(8)} ${String(m.n).padStart(4)} venda(s) · ${brl(m.valor)}  ${marca}`);
+      }
+      const outro = pagto.find((m) => m.metodo === "OUTRO");
+      if (outro) {
+        console.log(
+          `     ${C.a}⚠ ${outro.n} venda(s) em OUTRO: escapam da taxa de Pix e da de cartao.` +
+            ` Se voce tinha uma taxa cadastrada como "Todas", ela caia SO sobre essas.${C.x}`,
+        );
+      }
+    }
+
+    // ── 3d. TAXAS DE GATEWAY CADASTRADAS ────────────────────────────────────
+    //
+    // ⚠️ Uma taxa gravada com `paymentMethod = OUTRO` e AMBIGUA: pode ter sido
+    // "Outro" de proposito ou "Todas" pela tela antiga. O nome nao desempata
+    // (os dois viravam "Taxa Outro"), entao NAO ha backfill possivel — so
+    // reconferencia na tela.
+    const { rows: taxas } = await c.query(
+      `SELECT name, "paymentMethod"::text AS metodo, amount, calc::text AS calc
+         FROM "Expense" WHERE "userId" = $1 AND type = 'TAXA_GATEWAY' AND active
+        ORDER BY name`,
+      [u.id],
+    );
+    if (taxas.length) {
+      console.log(`
+  ${C.b}3d. Taxas de gateway cadastradas${C.x}`);
+      for (const t of taxas) {
+        const alvo = t.metodo ?? `${C.v}todas as formas${C.x}`;
+        const suspeita = t.metodo === "OUTRO" ? `  ${C.a}← confira: pode ter sido "Todas" na tela antiga${C.x}` : "";
+        console.log(`     ${t.name} · ${t.amount}${t.calc === "PERCENTUAL" ? "%" : " R$"} · ${alvo}${suspeita}`);
+      }
+    }
+
     // ── 4. UTM COM TEMPLATE NÃO SUBSTITUÍDO (Bloco B) ───────────────────────
     //
     // Cobre as duas formas: cru (`{{`) e percent-encoded (`%7B`). O `splitPipe`

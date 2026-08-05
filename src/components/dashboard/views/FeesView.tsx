@@ -6,6 +6,7 @@ import { setMyTimezone } from "@/lib/actions/profile";
 import { CONFIG } from "@/lib/explicacoes";
 import { faltamTaxas } from "@/lib/areas/taxas";
 import { sx } from "@/lib/sx";
+import { TODAS_AS_FORMAS } from "@/lib/financeiro";
 import { Icone } from "../ui/Icone";
 import { Select } from "../ui/Select";
 import { InfoTip } from "../ui/InfoTip";
@@ -242,7 +243,18 @@ export function FeesView({ v }: { v: TraffikView }) {
                     { value: "PIX", label: "Pix" },
                     { value: "CARTAO", label: "Cartão" },
                     { value: "BOLETO", label: "Boleto" },
-                    { value: "OUTRO", label: "Todas" },
+                    { value: "OUTRO", label: "Outro" },
+                    /*
+                      🔴 "Todas" era `OUTRO` — e `OUTRO` e uma forma de
+                      pagamento REAL do enum, nao um coringa. A taxa marcada
+                      como "Todas" incidia so sobre as vendas classificadas
+                      como "Outro".
+                      O sentinela vira `paymentMethod: null`, que o
+                      `financeiro.ts` ja trata como "sobre o faturamento
+                      inteiro" — o caminho existia e a tela nao tinha como
+                      produzi-lo.
+                    */
+                    { value: TODAS_AS_FORMAS, label: "Todas as formas" },
                   ]}
                 />
               </CampoForm>

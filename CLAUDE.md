@@ -5187,6 +5187,37 @@ sozinho. Erro de permissão não se resolve tentando de novo em 20 s.
 (contador sem data) que erra para o lado de TENTAR: travar uma conta para
 sempre por causa de dado incompleto seria pior que uma tentativa a mais.
 
+### ✅ Status de conta, tradução, backoff e reset — EXERCIDOS em produção (04/08)
+
+Com dado real de outro usuário, e três dos casos foram os de borda que o
+desenho previa:
+
+| Observado | O que valida |
+|---|---|
+| `"1"` → **Desabilitada**, com bloco traduzido e sem tentar mais | `account_status: 2` + backoff |
+| Conta 1 → **Pagamento pendente**, 48 anúncios, 0 métricas | `account_status: 3` |
+| Contas 2 e 3 → **Ativa** | `account_status: 1` |
+| Perfil → sem aviso | `lastDiscoveryError` limpo pelo reconectar |
+
+> ### ✅ "Pagamento pendente" prova a distinção que quase se perdeu
+> `account_status: 3` **para de veicular e continua legível pela API**. Se
+> `sincroniza` fosse `false` para ele — o que parece natural, já que a conta
+> "não está ativa" —, a ferramenta teria escondido o **gasto histórico** dela.
+> A separação entre "não veicula" e "não sincroniza" não era teoria.
+
+### 🔴 O PRODUTO AINDA DEPENDE DE ALGUÉM MANDAR CLICAR
+
+O testador só descobriu porque foi instruído a clicar em "Sincronizar".
+Sozinho, ele veria **três contas com zero métrica** e concluiria que a
+ferramenta não funciona.
+
+A causa: **o auto-sync pede só `DIAS_AUTO = 2`**. Conta sem gasto nas últimas
+48h nunca recebe linha nenhuma — e o histórico só entra pelo cron `?full=1` ou
+pelo botão manual.
+
+⚠️ E hoje **"sem gasto no período" e "ainda não buscamos o histórico" são
+indistinguíveis na tela**: as duas mostram zero.
+
 ### 🔴 `userTimezone` cai em São Paulo EM SILÊNCIO — e isso vira sistemático
 
 `src/lib/userTimezone.ts:21` tem um `catch` que devolve `DEFAULT_TIMEZONE`

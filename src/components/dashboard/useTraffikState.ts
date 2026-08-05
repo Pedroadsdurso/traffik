@@ -12,7 +12,7 @@ import {
   type AdProfileDTO,
 } from "@/lib/actions/facebook";
 import type { PixelConfigDTO } from "@/lib/actions/pixels";
-import { corFinanceira } from "@/lib/financeiro";
+import { TODAS_AS_FORMAS, corFinanceira } from "@/lib/financeiro";
 import { estadoDaConta, podeRastrear } from "@/lib/facebook/contaStatus";
 import { explicarErroDeConta } from "@/lib/facebook/erroMeta";
 import { rotuloDaEspera } from "@/lib/facebook/backoff";
@@ -913,7 +913,7 @@ export function useTraffikState(
     .map((e) => ({
       id: e.id,
       name: e.name,
-      methodLabel: PAYMENT_LABEL[e.paymentMethod ?? ""] ?? "Todas",
+      methodLabel: e.paymentMethod ? PAYMENT_LABEL[e.paymentMethod] : "todas as formas",
       amountStr: String(e.amount),
       unit: e.calc === "PERCENTUAL" ? "%" : "R$",
       onChange: (ev: React.ChangeEvent<HTMLInputElement>) => {
@@ -1883,8 +1883,10 @@ export function useTraffikState(
     addGateway: async (metodo: string, pct: string) => {
       const amount = parseFloat(pct) || 0;
       if (!amount) return;
-      const method = metodo as ExpenseDTO["paymentMethod"];
-      const label = PAYMENT_LABEL[method ?? ""] ?? "Todas";
+      // ⚠️ O sentinela vira `null` AQUI, na fronteira com o servidor. Ele nunca
+      // chega ao banco — lá `null` já significa "todas as formas".
+      const method = metodo === TODAS_AS_FORMAS ? null : (metodo as ExpenseDTO["paymentMethod"]);
+      const label = method ? PAYMENT_LABEL[method] : "todas as formas";
       const created = await createExpense({ name: `Taxa ${label}`, type: "TAXA_GATEWAY", calc: "PERCENTUAL", amount, paymentMethod: method });
       setS((st) => ({ ...st, expenses: [...st.expenses, created] }));
     },
