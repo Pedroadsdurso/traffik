@@ -1692,7 +1692,7 @@ Nada se perde e nada é contado duas vezes: as áreas particionam o total.
 
 ### Dívidas que continuam abertas
 
-- **Nav morto no `useTraffikState`** (`navAnalise`, `pageTitle`, `activeTab`, `fbTabs`…) e o gerador de link/snippet antigo (`utmUrl`, `snippetText`). Nada é renderizado. Faxina pendente desde o Bloco 1.
+- ~~**Nav morto no `useTraffikState`**~~ → ✅ **FEITO em 05/08/2026** (−283 linhas). A faxina levou o nav por estado, o gerador de link/snippet antigo, o `ruleForm` e o `EditDashboardDrawer` inalcançável. Ver a seção própria.
 - **Bloco 8 (Regras)** — único bloco do roteiro v2 ainda não feito.
 - **`DashboardLayout.workspaceId` continua nullable.** O NOT NULL só entra depois que a produção estiver rodando este código — ver a lição da `20260728120000`.
 - **Colunas do Gerenciador que a Meta tem e nós não** — lista levantada e aguardando escolha: Alcance, Frequência, Objetivo, Estratégia de lance, Início/Término (todas já no banco), mais Cliques no link e Entrega detalhada (exigem sync novo).
@@ -4419,22 +4419,24 @@ Faltava a outra metade:
 |---|---|---|
 | `Sale.webhookId` | gateway de origem | ✅ **corrigido** (`Sale.platform`) |
 | `Sale.apiCredentialId` | veio por chave de API | ✅ coberto — o backfill grava `platform: "API"` |
-| 🔴 **`Sale.clickId`** | **campanha, criativo, fonte, UTMs** | ⚠️ **ABERTO** |
+| `Sale.clickId` | campanha, criativo, fonte, UTMs | ✅ **FECHADO em 05/08/2026** |
 | `AdAccount.adProfileId` | perfil do Facebook | tolerável: a conta guarda `act_id` e nome próprios |
 | `Notification.saleId` | venda que gerou o aviso | tolerável: a notificação carrega o texto |
 | `*.workspaceId` (9×) | área | não é procedência — área é recorte, e é reatribuível |
 
-> ### 🔴 `Sale` NÃO guarda cópia dos UTMs
-> A campanha de uma venda é `sale.click.utmCampaign` — não existe
-> `Sale.utmCampaign`. Como `clickId` é `SetNull`, **apagar o clique faz a venda
-> perder a campanha para sempre**, mantendo o dinheiro. É exatamente o mesmo
-> defeito do gateway, num campo que vale mais: é dele que saem ROAS, CPA e a
-> atribuição por área.
+> ### ✅ `Sale` guarda cópia dos UTMs — e a atribuição finalmente a LÊ
+> A cópia (`Sale.utmSource/Medium/Campaign/Content/Term` + `fbclid`) existe desde
+> a migration `20260731080000`. **Mas nenhum leitor a consultava até 05/08/2026**
+> — toda a atribuição fazia `sale.click.utmCampaign` direto, então o seguro era
+> pago em toda ingestão e não cobria nada.
 >
-> Hoje o único caminho que apaga clique é "apagar dados" na exclusão de área
-> (atrás de duas travas), então o risco é baixo — mas é a **mesma classe**, e a
-> correção é a mesma: copiar `utmSource`/`utmCampaign`/`utmContent` para a
-> `Sale` na ingestão. **Não implementado; decisão do usuário pendente.**
+> Hoje quem decide é `utmsDaVenda` (a cadeia `Sale → Click` vence; a cópia entra
+> quando o clique já não existe), e os `select` espalham `CAMPOS_UTM` para a
+> coluna não poder ser esquecida. Ver "A CÓPIA DOS UTMS EXISTIA E NINGUÉM LIA".
+>
+> ⚠️ **`Click.workspaceId` continua sem cópia, de propósito** — o único caminho
+> que apaga clique é "apagar dados" na exclusão de área, e ali a área declarada
+> está sendo excluída junto, então `valida()` a recusaria de todo jeito.
 
 ### 🧪 PASSO OBRIGATÓRIO ao adicionar gateway: como ele sinaliza EVENTO DE TESTE
 
@@ -5382,11 +5384,7 @@ O usuário veria *"última execução há 30 min"* e concluiria que rodou normal
 colunas diferentes): aqui é o mesmo CÓDIGO significando coisas diferentes
 antes e depois de uma mudança de ordem.
 
-### 🔴 `userTimezone` cai em São Paulo EM SILÊNCIO — e isso vira sistemático
-
-`src/lib/userTimezone.ts:21` tem um `catch` que devolve `DEFAULT_TIMEZONE`
-(`America/Sao_Paulo`) quando a leitura falha. Hoje o efeito é invisível porque
-todo mundo está no Brasil.
+### ✅ `userTimezone` caía em São Paulo EM SILÊNCIO — resolvido em 05/08/2026
 
 > ### ⛔ Com usuário fora do Brasil, isso deixa de ser fallback e vira ERRO EM TUDO
 > O fuso decide onde o dia começa. Ele não afeta um número: afeta **todos** —
@@ -5396,12 +5394,24 @@ todo mundo está no Brasil.
 > reintroduzida por um `catch`.
 >
 > E é **sistemático, não intermitente**: quem está em Lisboa vê todo dia
-> começando 4h cedo, sempre, sem nada na tela denunciando.
+> começando 4h cedo, sempre.
 
-⚠️ **Não é urgente hoje e não pode ser esquecido amanhã.** O gatilho é o primeiro
-usuário fora do fuso do Brasil — que chega junto com abrir o app ao público.
-O conserto é o mesmo padrão do `lastSyncError`: registrar que o fallback foi
-usado, em vez de silenciá-lo.
+**A correção veio em duas etapas, e a segunda é a que importa:**
+
+| Etapa | O quê |
+|---|---|
+| `33638c4` | `console.error` nos dois casos de **DEFEITO** (string corrompida, falha de leitura) |
+| **05/08/2026** | aviso **na tela**, para o caso que não é defeito — o **padrão** |
+
+> ### 🔴 O caso perigoso nunca foi o `catch`, foi o `@default`
+> `User.timezone` é `@default("America/Sao_Paulo")` e **não é nulo nunca**, então
+> "escolhi Brasília" e "nunca abri esta tela" são **indistinguíveis no banco** —
+> não há como logar "usei o fallback", porque do ponto de vista do código não
+> houve fallback nenhum. E log de servidor não é lido por quem usa a ferramenta.
+>
+> Quem sabe a resposta é o **navegador**. O card "Fuso horário" compara com
+> `Intl.DateTimeFormat().resolvedOptions().timeZone` e oferece a troca num
+> clique. Ver "O FUSO CAI NO PADRÃO EM SILÊNCIO — agora a tela diz".
 
 ### ✅ VALIDADO EM PRODUÇÃO com dado de OUTRO usuário (04/08/2026)
 
@@ -5710,6 +5720,175 @@ código novo faz `SELECT` delas em toda carga de dashboard.
 | ✅ | **1.4** — auditoria de métricas: unidade misturada no chargeback + indefinido virando zero |
 | ✅ | **Bloco 4** — imposto de anúncio, posicionamento, "Meta Ads", custo por venda |
 | ✅ | **Varredura** — 3 asserções agregadas passavam com a coleção vazia |
+| ✅ | **A cópia dos UTMs foi LIGADA na atribuição** — o seguro existia e ninguém lia |
+| ✅ | **Fuso do usuário** — o fallback silencioso ganhou aviso na tela |
+| ✅ | **Faxina do nav morto** — −283 linhas no hook, `EditDashboardDrawer` deletado |
+| ⏳ | **Item (d)** — metade feita; a outra segue bloqueada pelo `resize_window` |
+
+---
+
+## 🔗 A CÓPIA DOS UTMS EXISTIA E NINGUÉM LIA (2ª parte de 05/08/2026)
+
+`Sale.utmSource/Medium/Campaign/Content/Term` + `fbclid` são gravados na ingestão
+**desde a migration `20260731080000`**. Nenhum leitor os consultava: toda a
+atribuição fazia `sale.click.utmCampaign` direto, e `Sale.clickId` é `SetNull`.
+
+> ### 🔴 Seguro que é PAGO em toda ingestão e não cobre nada
+> Não era um TODO esquecido — era um custo recorrente sem benefício. Apagar um
+> clique tirava da venda a campanha, o criativo e a fonte, que é de onde saem
+> ROAS, CPA e a área dela. O `tsc` passava, o dado estava lá, e a única coisa que
+> faltava era alguém perguntar.
+
+**`CAMPOS_UTM`** (em `lib/vendas/utmsDaVenda.ts`) é o conserto ESTRUTURAL: uma
+constante espalhada nos dois `select`. Lembrar de listar seis campos em nove
+consultas é disciplina; espalhar uma constante é estrutura — e a diferença
+aparece na décima consulta.
+
+| Consumidor ligado | O que a cópia sustenta |
+|---|---|
+| `areas/precedencia.ts` | de qual ÁREA a venda é (passo 1, conta de anúncio) |
+| `ads/overview.ts` | ROAS, CPA e faturamento por campanha |
+| `ads/creatives.ts` | ranking de criativos |
+| `dashboard/metrics.ts` | fonte, origem, posicionamento e o feed |
+| `rules/engine.ts` | 🔴 CPA/ROAS de regra que PAUSA campanha sozinha |
+
+> ### ✅ PROVADO no-op sobre os dados REAIS antes de mexer
+> No backup de produção de 01/08: **27 vendas examinadas, 284 cliques, 0** com
+> `clickId` nulo e cópia preenchida. Ligar o fallback não mexeu em número nenhum.
+> E 2/2 vendas com `clickId` tinham a cópia gravada — o lado da escrita funciona.
+>
+> ⚠️ **O primeiro script de verificação caiu na armadilha da regra #4 acima**:
+> reportou "0" porque o parser não achou linha nenhuma (as chaves do backup são
+> `t`/`r`, não `tabela`/`linha`). Contagem `=== 0` sobre coleção vazia, exatamente
+> o modo de falha que esta sessão documentou uma seção antes. Hoje o script
+> **aborta** se não houver venda a examinar.
+
+> ### ⚠️ `origem` foi o único lugar onde a cópia muda a LEITURA, não só o número
+> `if (!s.click) origem.semOrigem += v` — e `semOrigem` é a ÚNICA das três que
+> pede ação. Sem consultar a cópia, uma venda cujo clique foi apagado mandaria o
+> usuário investigar o rastreamento de uma venda que rastreou certo.
+> `fonte === "copia"` **prova que houve clique**.
+>
+> ⚠️ Limite honesto: clique de tráfego DIRETO apagado tem cópia toda nula, então
+> continua em `semOrigem`. Não há o que preserve a existência dele.
+
+> ### ⛔ NÃO copiamos `Click.workspaceId`, e não é esquecimento
+> É o passo 2 da precedência (a área que o script declarou). O único caminho que
+> apaga clique é "apagar dados" na exclusão de área — e ali a área declarada está
+> sendo excluída junto, então `valida()` a recusaria de todo jeito. Seria peso
+> morto.
+
+> ### ⚠️ Os TRÊS efeitos pós-venda seguem lendo o clique direto, de propósito
+> `dispatchPixel`, `checkoutEvent` e `dispatchNotification` rodam no `after()` do
+> próprio request de ingestão, microssegundos depois do match, e **não têm
+> caminho de reprocessamento** (verificado: só `ingestSale` os chama). Ali o
+> clique não pode ter sumido. Acrescentar a cópia sugeriria que ela é necessária
+> na ingestão, e isso confundiria quando ela DE FATO é.
+
+**`npm run test:utm-orfa` — 14 asserções.** Semeia clique + venda, **apaga o
+clique de verdade** e lê o número no fim da cadeia (`computeAdsOverview` e
+`computeDashboard`): faturamento da campanha 100+400 = 500, ROAS 2,5x, 2
+conversões, "Meta Ads" 500.
+
+> ### ⛔ Cada bloco carrega um CONTROLE — senão o teste não mede nada
+> Uma venda órfã atribuída certo e uma que vazou por engano dariam o mesmo
+> `revenue` total. Então existe a venda de R$ 7 **sem clique e sem cópia**, que
+> tem de continuar fora da campanha e em "Direto / Orgânico".
+>
+> ✅ **Falsificabilidade EXERCIDA:** reintroduzi o bug em `overview.ts` e o teste
+> ficou **vermelho em 4 asserções**, com os controles seguindo verdes. Um teste
+> que não foi visto falhar não provou nada.
+
+> ### 🐛 E a primeira versão do teste passava pelo caminho ERRADO
+> Usei ids de campanha com letras (`c-orfa-1`). `splitPipe` **descarta id não
+> numérico**, então a atribuição caía no fallback por NOME e a asserção passava
+> sem nunca exercer o caminho primário. Hoje os ids são numéricos (como a Meta
+> manda) **e os nomes dentro do UTM são deliberadamente diferentes** dos nomes no
+> banco — assim só o id pode casar.
+
+---
+
+## 🕐 O FUSO CAI NO PADRÃO EM SILÊNCIO — agora a tela diz (2ª parte de 05/08/2026)
+
+O `console.error` dos dois casos de DEFEITO já existia (commit `33638c4`). O que
+faltava é o caso que importa, e ele **não é defeito**: `User.timezone` é
+`@default("America/Sao_Paulo")` e **não é nulo nunca**, então no banco "escolhi
+Brasília" e "nunca abri esta tela" são **indistinguíveis**. Quem se cadastra em
+Lisboa começa com o dia virando 4h cedo, sempre.
+
+E log de servidor não é lido por quem usa a ferramenta.
+
+**Quem sabe a resposta é o navegador.** O card "Fuso horário" (Taxas e Despesas)
+compara o fuso da conta com `Intl.DateTimeFormat().resolvedOptions().timeZone` e
+oferece a troca em um clique.
+
+> ### ⚠️ Compara OFFSET, não nome — e o aviso é DISPENSÁVEL
+> `America/Sao_Paulo` × `America/Bahia` são strings diferentes e o mesmo
+> deslocamento: o dia começa no mesmo instante, nenhum número muda, não há o que
+> avisar. **Aviso que aparece sem motivo se aprende a ignorar** — e aí o legítimo
+> também é.
+>
+> E quem opera um negócio brasileiro morando fora tem razão de manter Brasília:
+> "Manter" grava a dispensa em `localStorage` **por fuso de aparelho**, então
+> quem dispensou em Lisboa e depois abre em São Paulo vê o aviso de novo.
+
+> ### ⚠️ `fusosDiscordam` sonda QUATRO instantes ao longo do ano
+> Por causa do horário de verão. Em **janeiro**, `UTC` e `Europe/London` têm o
+> mesmo offset: uma sonda única concluiria que concordam, e a divergência
+> apareceria sozinha em março, sem nada ter mudado na configuração. O teste tem
+> esse caso explícito.
+
+`npm run test:fusos` — **15 asserções**, a maioria do lado *"NÃO deve avisar"*,
+que é o risco mais caro a longo prazo.
+
+**Verificado na tela** (fuso da conta em `Europe/Lisbon`, navegador em
+`America/Sao_Paulo`): o aviso âmbar aparece nomeando os dois fusos e a
+consequência; "Usar America/Sao_Paulo" **gravou no banco** e recarregou;
+"Manter Europe/Lisbon" dispensou e a dispensa sobreviveu ao reload; sem
+divergência o aviso não existe.
+
+---
+
+## 🧹 FAXINA DO NAV MORTO — a dívida mais antiga do projeto (2ª parte de 05/08/2026)
+
+Aberta desde o **Bloco 1 (24/07/2026)**, quando a navegação por estado virou
+rotas reais. **`useTraffikState.ts`: 2235 → 1952 linhas (−283).**
+
+| Removido | Por que estava morto |
+|---|---|
+| `activeTab`, `navAnalise`, `navAuto`, `navConfig`, `pageTitle`, `pageSubtitle`, `NAV_DEF`, `TITLES` | `Sidebar`/`Header` decidem por `usePathname` desde o Bloco 1 |
+| `fbTabs`, `fbSub` | as sub-abas de Integrações são ROTAS próprias |
+| `ruleForm` + os ~17 `onRule*` + `addRule` + `runRules` + `ruleBusy`/`ruleRunBusy`/`ruleRunResult` | a `RulesView` foi reescrita autocontida no Bloco 8 |
+| `utmUrl`/`utmSource`/`utmMedium`/`utmCampaign`/`utmContent`, `generatedLink`, `snippetText`, `copySnippet`, `copyLink`, `snippetCopied`, `linkCopied` | o gerador de link/snippet antigo saiu no Bloco 11 |
+| `metricList`, `persistPrefs`, `editDashOpen`, `openEditDash`, `closeEditDash` | só o `EditDashboardDrawer` os usava |
+| **`EditDashboardDrawer.tsx` (deletado)** | montado no `DashboardShell` e **inalcançável** — nada chamava `openEditDash` |
+| `TabKey` (em `types.ts`) | o vocabulário da navegação por estado |
+| `setNested` | só os `onRule*` o usavam |
+
+> ### 🔴 A faxina achou uma CONSULTA AO BANCO alimentando nada
+> `State.rules` vinha de `initialRules`, passada pelo `DashboardShell`, que vinha
+> de **`listRules()` dentro do `Promise.all` do layout** — ou seja, uma ida ao
+> Supabase **em todo carregamento de página**, cujo único consumidor era um
+> derivado que ninguém lia.
+>
+> Isso deixa de ser dívida cosmética: o layout é o caminho crítico de toda
+> navegação. A `RulesView` busca as próprias regras desde o Bloco 8, e a página
+> **continua funcionando** com a prop removida — o que é a prova de que era peso.
+
+> ### ⛔ `newCampaign*` NÃO é código morto — não remova
+> `newCampaignOpen`/`openNewCampaign`/`createCampaign` **têm consumidor** desde
+> 31/07: `views/ads/NovaCampanhaModal.tsx`. O CLAUDE.md os listava como inertes
+> e essa entrada envelheceu. **Conte os consumidores antes de apagar** — foi o
+> `grep` que separou os 11 símbolos mortos dos 4 vivos.
+
+**Método:** contar consumidores fora do hook para cada símbolo (11 deram 0),
+remover, e deixar `tsc` + `lint` apontarem os órfãos em cascata — foram 9 numa
+passada e 11 na seguinte (imports, tipos, helpers).
+
+**Verificado:** `tsc`, `lint` (zero avisos) e `next build` limpos; **as 12 rotas
+do dashboard respondem 200** sem erro no HTML; Dashboard renderiza 46 cards e
+Regras abre o estado vazio normalmente. Suítes: 248 asserções em 9 arquivos, 0
+falhas.
 
 ### ⛔ As quatro regras que esta sessão acrescentou
 
@@ -5763,13 +5942,31 @@ código novo faz `SELECT` delas em toda carga de dashboard.
 
 ### 📋 Fila
 
-1. **Item (d) da UX** — 4 overlays `position:fixed` (o `Drawer` tem largura
-   fixa de 520/560px) + varredura de condicionais. Resolva o contorno do
-   `resize_window` antes: com a janela maximizada ele **mente**, reporta
-   sucesso e não redimensiona.
+1. 🔴 **Item (d), o que sobrou — e o BLOQUEIO é do ambiente, não do código.**
+   O `resize_window` foi exercido de novo em 05/08 e **mentiu de novo**: disse
+   *"Successfully resized … to 560x900"* e `innerWidth` ficou **2560**. A janela
+   do grupo de abas do MCP continua **maximizada** (`innerWidth ===
+   screen.availWidth`).
+   **PRECISA DO USUÁRIO:** desmaximizar (Win+Down ou duplo clique na barra de
+   título) **a janela que contém o grupo de abas do MCP** — não a janela
+   principal do Chrome. A extensão manda tecla para a PÁGINA, não para o
+   gerenciador de janelas, então eu não consigo fazer isso daqui.
+   ⛔ **O CDP não substitui:** `chrome-devtools-mcp` roda num browser SEPARADO e
+   **não autenticado**, e o cookie de sessão do NextAuth é `httpOnly` — não há
+   como transplantá-lo. Ele nunca alcança o dashboard.
+   ⏳ Falta também o **Gerenciador com filtros/estados combinados** (exige semear
+   campanhas com status variados; o banco de dev está sem campanha nenhuma).
 2. Evento de TESTE da Cakto contando como venda — bloqueado até reativá-la.
-3. Import/export do Bloco 8; faxina do nav morto + `EditDashboardDrawer`
-   inalcançável.
+3. Import/export do Bloco 8.
+
+> ✅ **A metade do item (d) que NÃO dependia de viewport foi FEITA em 05/08:**
+> os condicionais da gaveta de Integrações › Anúncios (erro de perfil, conta
+> Desabilitada + backoff *"nova tentativa em ~2 h"* + detalhe técnico cru, badge
+> Pagamento pendente) foram vistos na tela — **0 de 63 descendentes vazam** num
+> painel de 560px, sem rolagem horizontal.
+>
+> ✅ **A faxina do nav morto e o `EditDashboardDrawer` saíram desta fila** — ver
+> a seção própria.
 
 ## 🚦 (histórico) fila de UX: (f) e (g) fechados (01/08/2026)
 
@@ -9000,6 +9197,8 @@ npm run test:onyxpag     # 43 asserções, parser + testador da OnyxPag (puro)
 npm run test:espelho     # 39 asserções, espelho no fbq em DOM falso (puro)
 npm run test:detectores  # 56 asserções, assinatura v2 + preset do pixel (puro)
 npm run test:utm-venda   # 25 asserções, UTMs copiadas para Sale (banco de DEV)
+npm run test:utm-orfa    # 14 asserções, venda ORFA de clique: a copia sustenta ROAS/CPA? (DEV)
+npm run test:fusos       # 15 asserções, fuso da conta x fuso do aparelho (puro)
 npm run backfill:utms    # copia os UTMs do clique. SIMULA; --aplicar escreve
 npm run test:veiculacao  # 40 asserções, status configurado × veiculação (puro)
 npm run test:efeitos     # 40 asserções, os 3 efeitos pós-venda (banco de DEV)
@@ -9031,12 +9230,16 @@ arquivo local, de propósito.
 
 ### Pendências abertas (não são bugs)
 
-- **Nav morto no `useTraffikState`** (`navAnalise`, `pageTitle`, `activeTab`,
-  `fbTabs`…), o gerador de link/snippet antigo (`utmUrl`, `snippetText`) e o
-  `ruleForm` com ~37 handlers, órfão desde que a `RulesView` foi reescrita.
-- **`EditDashboardDrawer` + `editDashOpen`/`openEditDash`/`closeEditDash`/
-  `metricList`** — a gaveta está montada no `DashboardShell` mas **nada a abre**;
-  quem edita o dashboard é o painel inline do Bloco 2. Descoberto em 30/07/2026.
+- ~~**Nav morto no `useTraffikState`**~~ → ✅ **FEITO em 05/08/2026.** Saíram o
+  nav por estado (`activeTab`, `navAnalise`, `pageTitle`, `fbTabs`, `fbSub`,
+  `NAV_DEF`, `TITLES`, `TabKey`), o gerador de link/snippet antigo, o `ruleForm`
+  com os handlers, `metricList`/`persistPrefs` e `setNested`.
+  **−283 linhas no hook.**
+- ~~**`EditDashboardDrawer` inalcançável**~~ → ✅ **DELETADO em 05/08/2026**,
+  junto de `editDashOpen`/`openEditDash`/`closeEditDash`/`metricList`.
+  A faxina achou de quebra uma **consulta ao banco alimentando nada**:
+  `listRules()` rodava no `Promise.all` do layout, em todo carregamento de
+  página, para preencher um `State.rules` que ninguém lia.
 - ~~`createCampaign` + `newCampaign*`~~ → ✅ **resolvido em 31/07/2026**: a tela
   passou a existir (`views/ads/NovaCampanhaModal.tsx`). Foi o único caso desta
   base em que a dívida de código inerte **bloqueou trabalho**.
@@ -9497,7 +9700,7 @@ Registradas de propósito — **não são bugs esquecidos**, são decisões toma
 |---|--------|-----------------|
 | 0 | ~~**`PixelEvent.espelho` sem leitor**~~ e ~~**detector congelado sem aviso**~~ ✅ **RESOLVIDOS em 31/07/2026 (3ª parte)** — card na aba Testes e aviso na gaveta do Pixel. | Fica só a confirmação no Gerenciador de Eventos da Meta, que é do usuário. |
 | 1 | ~~**Dedup parcial dos eventos de pixel.**~~ ✅ **RESOLVIDO em 31/07/2026.** `eventId` determinístico (`057c06e`), espelho no `fbq` (`057c06e`, que **nunca rodou** até `0fa68d1`) e partição por dono do evento (`e755894`). Verificado em produção: `eid=InitiateCheckout-90whss` saindo pelo navegador com o mesmo id da CAPI, e **confirmado no Gerenciador de Eventos da Meta** — entrada única, "API de Conversões e navegador". | ✅ **Nada.** As duas pontas estão provadas: a nossa (o id sai igual dos dois lados) e a da Meta (ela juntou). O detector congelado saiu na 3ª parte de 31/07. |
-| 2 | **Nav morto no `useTraffikState`** (`navAnalise`, `navAuto`, `navConfig`, `pageTitle`, `activeTab`, `fbTabs`, `fbSub`) e o **gerador de link/snippet antigo** (`utmUrl`, `snippetText`). Nada é renderizado. | Sobrou do Bloco 1/11. Limpar num passo de faxina. |
+| 2 | ~~**Nav morto no `useTraffikState`**~~ | ✅ **FEITO em 05/08/2026** — −283 linhas. Levou também o `ruleForm`, o `EditDashboardDrawer` inalcançável e o `listRules()` que o layout fazia em todo pageview sem consumidor. |
 | 3 | **Atribuição por nome é ambígua** quando dois anúncios/campanhas têm o mesmo nome. | Limitação pré-existente; o id resolve para tráfego novo com os códigos do Bloco 11. O Teste de Tracking (Bloco 13) agora **avisa** quando o casamento foi por nome. |
 | 4 | **`WebhookLog` sem retenção nem paginação.** | Cresce indefinidamente. Falta cron de purga. |
 | 5 | **`AdProfile.accessToken` e `Webhook.secret` ainda em texto puro.** | Fora do escopo da encriptação pedida (que cobriu `MetaPixel`/`ApiCredential`). Mesmo helper serve se forem migrados. |
