@@ -260,7 +260,31 @@ for (const u of users) {
     if (wh.length > 0 && semClique.length > 0) {
       const produto = semClique[0].product;
       const areaB = "b-desempate";
-      const dados = dadosDoUsuario(u.id, { webhookDaArea: { [wh[0].id]: principal.id } });
+      /**
+       * 🔴 O webhook vai para uma area PROPRIA, nao para a Principal.
+       *
+       * Ele estava mapeado para `principal.id` — e com isso "degradou para o
+       * dono do webhook" e "caiu na Principal por engano" davam o MESMO
+       * `areaId`. A assercao nao conseguia distinguir os dois nem quando
+       * passava: ela so passava porque o `motivo` calhava de vir "webhook"
+       * para aquele webhook especifico do backup.
+       *
+       * ⚠️ Foi por isso que ela quebrou quando o conteudo do backup mudou, e
+       * quebrar foi sorte: uma assercao que nao separa o caso certo do errado
+       * e pior que assercao nenhuma, porque da confianca falsa.
+       *
+       * Com uma area propria, o `areaId` responde sozinho qual dos dois
+       * aconteceu — e o teste deixa de depender de QUAL webhook o backup traz.
+       */
+      const areaC = "c-dona-do-webhook";
+      const areaDoWebhook = { id: areaC, name: "Área C", isDefault: false, archived: false, produtosDesempate: [] };
+      // ⚠️ O webhook DA PROPRIA VENDA, nao `wh[0]`. Pegar o primeiro da lista
+      // era mais uma dependencia de conteudo: se a venda escolhida viesse de
+      // outro webhook, o mapeamento nao se aplicava e a venda caia na Principal
+      // — fazendo o teste falhar por motivo que nao e o que ele mede.
+      const webhookDaVenda = semClique[0].webhookId;
+      const dados = dadosDoUsuario(u.id, { webhookDaArea: { [webhookDaVenda]: areaC } });
+      dados.areas.push({ ...areaDoWebhook });
       dados.areas.push({ id: areaB, name: "Área B", isDefault: false, archived: false, produtosDesempate: [produto] });
       const mapa = construirMapa(dados);
       const r = mapa.areaDaVenda(vendaParaAtribuir(semClique[0]));
@@ -269,12 +293,16 @@ for (const u of users) {
 
       // Produto renomeado no gateway: o desempate para de casar e a venda cai
       // no dono do webhook — não some, não vai para a Principal por engano.
-      const dados2 = dadosDoUsuario(u.id, { webhookDaArea: { [wh[0].id]: principal.id } });
+      const dados2 = dadosDoUsuario(u.id, { webhookDaArea: { [webhookDaVenda]: areaC } });
+      dados2.areas.push({ ...areaDoWebhook });
       dados2.areas.push({ id: areaB, name: "Área B", isDefault: false, archived: false, produtosDesempate: [`${produto} 2.0`] });
       const mapa2 = construirMapa(dados2);
       const r2 = mapa2.areaDaVenda(vendaParaAtribuir(semClique[0]));
-      t("produto renomeado degrada para o dono do webhook (não se perde)",
-        r2.areaId === principal.id && r2.motivo === "webhook", `→ ${r2.motivo}`);
+      // A propriedade REAL: cai no dono do webhook (área C), NÃO na Principal.
+      // Mandar para a Principal levaria junto todas as vendas legítimas daquele
+      // gateway e esvaziaria uma área que funcionava.
+      t("produto renomeado degrada para o dono do webhook (não vai para a Principal)",
+        r2.areaId === areaC && r2.areaId !== principal.id, `→ ${r2.areaId} (${r2.motivo})`);
     }
   }
 

@@ -5267,6 +5267,78 @@ antes da verificação.
 qual frequência. É serviço externo, sem API configurada aqui. **Só o painel
 dele responde.**
 
+### 🔴🔴 TODA DESPESA CADASTRADA ERA IGNORADA NO LUCRO (05/08/2026)
+
+O maior achado desta rodada, e ele estava lá **desde sempre**.
+
+```ts
+export function whereDespesasDaArea(areaId: string) {
+  return { workspaceId: areaId };   // ← descarta as NULAS
+}
+```
+
+E `Expense.workspaceId` **NULO significa "vale para TODAS as áreas"** — não
+"sem dono". É a exceção que este arquivo já registrava. O formulário não prende
+taxa a área nenhuma, então **toda despesa cadastrada era descartada** no
+cálculo de lucro.
+
+O lucro aparecia maior que a realidade, com número plausível. Reproduzido na
+tela: cinco descontos cadastrados, painel mostrando `Taxas de gateway − R$ 0,00`
+em todos.
+
+> ### ⛔ O que o torna especialmente perigoso: estava nos DOIS filtros
+> `whereDespesasDaArea` (o cálculo) e `whereDespesas` (a listagem) tinham o
+> **mesmo erro**. Se fosse só no cálculo, o usuário veria a taxa na listagem e
+> não no lucro — e desconfiaria. **Errados juntos, a divergência que denunciaria
+> o erro não existe.**
+>
+> ### 🔴 REGRA: dois lugares que fazem o MESMO filtro compartilham a função
+> Duplicá-la não produz duas chances de acertar — produz duas chances de errar
+> **igual**, e destrói o único sinal que restaria.
+>
+> É o outro lado da regra que este arquivo já tinha ("duas fontes para a mesma
+> pergunta divergem sempre"). A divergência é ruim quando as duas deveriam
+> concordar; a **convergência** é pior quando ambas estão erradas — porque
+> nenhuma checagem cruzada é possível.
+
+### ⛔ Teste que escolhe o próprio dado no backup REAL testa outra coisa a cada dia
+
+`teste-atribuicao-areas.mjs` falhou três vezes e ficou três sessões sem
+investigação — "quebra porque o backup mudou" vira ruído, e teste ruidoso é
+teste ignorado.
+
+Investigado em 05/08/2026, e a causa é pior que dado velho: **a asserção não
+testava o que afirmava, nem quando passava.**
+
+| | |
+|---|---|
+| O que ela dizia medir | "produto renomeado degrada para o dono do webhook" |
+| Como estava montada | o webhook era mapeado para a **Principal** |
+| Consequência | "degradou para o webhook" e "caiu na Principal por engano" davam o **mesmo `areaId`** — indistinguíveis |
+
+Ela passava por coincidência (o `motivo` calhava de vir `"webhook"` naquele
+dado) e quebrou quando o backup mudou. **Quebrar foi sorte.**
+
+Havia ainda uma segunda dependência: ela mapeava `wh[0]` — o primeiro webhook
+do usuário — e atribuía uma venda escolhida à parte. Se a venda viesse de outro
+webhook, o mapeamento não se aplicava.
+
+> ### ⛔ A escolha entre congelar fixture e reescrever a asserção
+> **Congelar um backup como fixture foi RECUSADO.** Ele resolveria o sintoma
+> (parar de quebrar) e manteria o defeito: a asserção continuaria sem separar o
+> caso certo do errado, só que sobre dado que nunca muda — teste verde para
+> sempre, medindo nada.
+>
+> A asserção foi reescrita para o cenário ser **sintético e explícito**: o
+> webhook DA PRÓPRIA VENDA vai para uma área nomeada, e a asserção verifica que
+> a venda cai nela e **não** na Principal. Sem depender de qual venda ou qual
+> webhook o backup traz.
+>
+> ⚠️ **O resto da suíte continua rodando contra o backup REAL**, e deve
+> continuar: as verificações de partição (nada se perde, nada é contado duas
+> vezes) só têm valor sobre dado de verdade. O que sai do backup é a escolha do
+> CENÁRIO, não os dados do teste.
+
 ### ⛔ PADRÃO: mudar QUANDO o estado é gravado pode criar silêncio novo
 
 Descoberto em 05/08/2026, numa correção minha e no mesmo dia em que ela subiu.
