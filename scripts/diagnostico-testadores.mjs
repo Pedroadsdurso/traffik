@@ -270,7 +270,17 @@ async function main() {
             ` · última métrica ${dia} · gasto 3d ${brl(a.gasto3d)}`,
         );
       }
-      const semAnuncio = contas.filter((a) => a.rastreando && a.anuncios === 0);
+      // ⚠️ Só alarma quando há CAMPANHA e não há anúncio — aí sim o insight
+      // chega e não acha onde encostar. Conta com zero campanhas está apenas
+      // vazia (perfil pessoal, conta recém-criada), e alarmar nela era gritar
+      // pelo caso inofensivo — o que treina a ignorar o alarme do caso real.
+      const semAnuncio = contas.filter((a) => a.rastreando && a.campanhas > 0 && a.anuncios === 0);
+      const vazias = contas.filter((a) => a.rastreando && a.campanhas === 0);
+      if (vazias.length) {
+        console.log(
+          `     ${C.d}${vazias.length} conta(s) sem campanha nenhuma — vazias, não há o que sincronizar.${C.x}`,
+        );
+      }
       if (semAnuncio.length) {
         console.log(
           `     ${C.r}✗ ${semAnuncio.length} conta(s) rastreando SEM anúncio local: o ciclo de métricas monta` +

@@ -5301,6 +5301,22 @@ em todos.
 > concordar; a **convergência** é pior quando ambas estão erradas — porque
 > nenhuma checagem cruzada é possível.
 
+### ⛔ REGRA: uma asserção precisa poder FALHAR pelo motivo que ela alega medir
+
+Formulação do usuário, 05/08/2026, e é o critério que faltava:
+
+> **Se os dois desfechos possíveis produzem o mesmo valor observado, a asserção
+> não mede nada — passa por coincidência e quebra por acaso.**
+
+O caso que revelou isso: `"produto renomeado degrada para o dono do webhook"`
+mapeava o webhook para a **Principal**. Degradar para o webhook e cair na
+Principal por engano davam o **mesmo `areaId`**. Verde por anos, sem nunca ter
+exercido a distinção que dá nome ao teste.
+
+⚠️ **Ao escrever asserção, pergunte qual valor o CASO ERRADO produziria.** Se
+for igual ao do caso certo, o cenário está montado de forma que impede a falha
+— e mais dado, mais execução ou mais tempo não consertam isso.
+
 ### ⛔ Teste que escolhe o próprio dado no backup REAL testa outra coisa a cada dia
 
 `teste-atribuicao-areas.mjs` falhou três vezes e ficou três sessões sem
