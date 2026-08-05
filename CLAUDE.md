@@ -5187,6 +5187,27 @@ sozinho. Erro de permissão não se resolve tentando de novo em 20 s.
 (contador sem data) que erra para o lado de TENTAR: travar uma conta para
 sempre por causa de dado incompleto seria pior que uma tentativa a mais.
 
+### 🔴 `userTimezone` cai em São Paulo EM SILÊNCIO — e isso vira sistemático
+
+`src/lib/userTimezone.ts:21` tem um `catch` que devolve `DEFAULT_TIMEZONE`
+(`America/Sao_Paulo`) quando a leitura falha. Hoje o efeito é invisível porque
+todo mundo está no Brasil.
+
+> ### ⛔ Com usuário fora do Brasil, isso deixa de ser fallback e vira ERRO EM TUDO
+> O fuso decide onde o dia começa. Ele não afeta um número: afeta **todos** —
+> janela do período, `byHour`, `byDay`, buckets do gráfico, a janela de
+> comparação dos deltas, o `time_range` mandado à Meta, o limite diário do motor
+> de regras e a hora do relatório. É a seção "Fuso horário — causa raiz" inteira,
+> reintroduzida por um `catch`.
+>
+> E é **sistemático, não intermitente**: quem está em Lisboa vê todo dia
+> começando 4h cedo, sempre, sem nada na tela denunciando.
+
+⚠️ **Não é urgente hoje e não pode ser esquecido amanhã.** O gatilho é o primeiro
+usuário fora do fuso do Brasil — que chega junto com abrir o app ao público.
+O conserto é o mesmo padrão do `lastSyncError`: registrar que o fallback foi
+usado, em vez de silenciá-lo.
+
 ### ✅ VALIDADO EM PRODUÇÃO com dado de OUTRO usuário (04/08/2026)
 
 O testador reconectou depois que a restrição da conta de desenvolvedor dele
@@ -5217,6 +5238,36 @@ caiu, e quatro coisas foram exercidas de uma vez, com dado real que não é noss
 > ⚠️ Fica um sinal a conferir: **Conta 2 sincronizou 28 anúncios e `0` linhas de
 > métrica.** Pode ser ausência de gasto (legítimo) ou `metricasOrfas`. O
 > `diag:testadores` responde na seção "Por conta".
+
+### 📋 ORDEM DE RETOMADA aprovada em 04/08/2026
+
+Depois dos testes com usuários reais. **Atribuição saiu da frente**: o guarda de
+template está feito e o que falta (o `click_id` chegando da OnyxPag) é trabalho
+do usuário, no checkout dele.
+
+| # | O quê | Por quê nesta posição |
+|---|---|---|
+| 1 | **1.3 — taxas por forma de pagamento** | bug isolado e concreto: a opção "Todas" salva `OUTRO`, que é uma forma de pagamento REAL. Não depende de nada |
+| 2 | **1.1 — ROI único, com fórmula visível** | ver abaixo |
+| 3 | **1.2 — gasto às 00:00** | |
+| 4 | **Família 1 da varredura** (3 pontos) | `dispatchPixel`, `checkoutEvent`, `dispatchNotification` — os três afetam dinheiro em silêncio, e o padrão de conserto já está provado com o `lastSyncError` |
+| 5 | **1.4 — auditoria completa de métricas** | só depois que a fonte única de ROI/lucro existir; antes disso ela mediria o alvo errado |
+| 6 | Bloco 4 — funcionalidades novas | |
+
+> ### 🔴 O card de ROI mostra QUANTO NÃO ESTÁ ATRIBUÍDO, junto do número
+> Decisão do usuário, e é o desenho certo: medido em 04/08/2026, **49,6% do
+> faturamento dele e 100% do faturamento do testador não têm campanha**.
+>
+> A fórmula correta vai continuar mostrando número ruim enquanto a atribuição
+> não subir — e é exatamente isso que ela precisa **deixar visível**. Sem o
+> número ao lado, o usuário culpa a campanha por um problema de tracking.
+>
+> ⚠️ Esconder ou suavizar o ROI nesse caso seria o pior desfecho: decisão de
+> mídia tomada sobre um número que descreve o rastreamento, não o anúncio.
+
+⏳ **Fora da fila, sem prazo:** `capi.ts` e `rules/engine` (Família 1, os dois
+que já deixam rastro), a Família 2 inteira, e o rótulo "dias" do botão
+Sincronizar, que na verdade mostra LINHAS gravadas.
 
 ### 🔍 `npm run falha:coletiva` — "é problema dele ou é nosso?"
 
