@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { cronAutorizado, naoAutorizado } from "@/lib/cronAuth";
+import { registrarExecucao } from "@/lib/cronBatimento";
 
 import { generateReportNotification } from "@/lib/reports/generate";
 import { prisma } from "@/lib/prisma";
@@ -22,7 +23,7 @@ export const maxDuration = 60;
  * `hour12: false` o `Intl` devolve **24** à meia-noite, que não casaria com
  * nenhum campo.
  */
-export async function GET(req: NextRequest) {
+async function executar(req: NextRequest) {
   if (!cronAutorizado(req)) return naoAutorizado();
 
   const settings = await prisma.notificationSettings.findMany({
@@ -75,4 +76,36 @@ export async function GET(req: NextRequest) {
     }
   }
   return Response.json({ ok: true, generated, avaliados: settings.length, horas: [...horasAvaliadas] });
+}
+
+/**
+ * Envolve a rotina para registrar o BATIMENTO.
+ *
+ * Agendador externo avisa quando a execucao falha; nenhum avisa quando ele
+ * proprio para. Quem detecta a ausencia e o servidor — ver `lib/cronBatimento.ts`.
+ *
+ * ⚠️ Registra nos DOIS caminhos, e com `ok` diferente: silencio (nunca rodou) e
+ * falha (rodou e quebrou) sao sinais distintos, e a tela os separa. Registrar so
+ * o sucesso faria uma rotina que falha sempre parecer uma rotina que parou.
+ *
+ * ⚠️ 401 NAO conta como execucao: chamada sem o segredo nao e o agendador
+ * trabalhando, e marcar batimento ali esconderia justamente o caso em que o
+ * `CRON_SECRET` foi trocado e o agendador parou de ser aceito.
+ */
+export async function GET(req: NextRequest) {
+  const t0 = Date.now();
+  try {
+    const res = await executar(req);
+    if (res.status !== 401) {
+      await registrarExecucao("reports", { ok: res.ok, duracaoMs: Date.now() - t0 });
+    }
+    return res;
+  } catch (e) {
+    await registrarExecucao("reports", {
+      ok: false,
+      duracaoMs: Date.now() - t0,
+      erro: e instanceof Error ? e.message : String(e),
+    });
+    throw e;
+  }
 }

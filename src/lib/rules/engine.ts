@@ -659,7 +659,31 @@ export async function runUserRules(userId: string): Promise<{ evaluated: number;
   let evaluated = 0;
   const now = Date.now();
   for (const rule of rules) {
-    if (rule.lastRunAt && now - rule.lastRunAt.getTime() < rule.frequencyMin * 60_000) continue;
+    /**
+     * 🔴 RESERVA antes de agir. Era ler-checar-agir, e a ação move dinheiro.
+     *
+     * O código lia `lastRunAt`, **executava** (pausar campanha, alterar
+     * orçamento) e só depois gravava. Dois chamadores simultâneos passavam os
+     * dois pela checagem — e numa regra de `+50%` a execução dupla dá `+125%`.
+     * Não precisa de dois agendadores: basta uma retentativa, ou o botão
+     * "Rodar agora" clicado durante um ciclo.
+     *
+     * O `WHERE` só passa se a janela de frequência realmente venceu. Quem
+     * atualiza a linha ganhou a vez; quem recebe `count: 0` desiste em
+     * silêncio. **Quem decide o vencedor é o banco** — mesmo padrão da reserva
+     * do auto-sync, do upsert monotônico de venda e do `garantirAreaPrincipal`.
+     *
+     * ⚠️ A reserva avança `lastRunAt` ANTES da ação, então uma execução que
+     * falhe faz a regra esperar a próxima janela em vez de tentar de novo já.
+     * É o lado seguro de errar: repetir uma ação que mexe em orçamento é pior
+     * que adiá-la um ciclo.
+     */
+    const limite = new Date(now - rule.frequencyMin * 60_000);
+    const reserva = await prisma.automationRule.updateMany({
+      where: { id: rule.id, OR: [{ lastRunAt: null }, { lastRunAt: { lt: limite } }] },
+      data: { lastRunAt: new Date() },
+    });
+    if (reserva.count === 0) continue;
     evaluated++;
     // ⚠️ O `as unknown as` é o que escondeu o filtro de produto inerte: sem ele
     // o compilador teria acusado `targetProducts` faltando em `RuleRow`. Toda
@@ -670,7 +694,9 @@ export async function runUserRules(userId: string): Promise<{ evaluated: number;
       prisma.automationRuleLog.create({
         data: { ruleId: rule.id, status: result.status, message: result.message, affected: result.affected, details: result.details as object },
       }),
-      prisma.automationRule.update({ where: { id: rule.id }, data: { lastRunAt: new Date() } }),
+      // ⚠️ `lastRunAt` NÃO é reescrito aqui — a reserva acima já o avançou.
+      // Regravá-lo agora esticaria a janela pelo tempo que a ação levou.
+      prisma.automationRule.update({ where: { id: rule.id }, data: { updatedAt: new Date() } }),
     ]);
     if (result.affected > 0) acted++;
   }

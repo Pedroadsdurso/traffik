@@ -1086,6 +1086,27 @@ model Notification {
   @@index([userId, timestamp])
 }
 
+/// Ultima execucao de cada rotina agendada.
+///
+/// ## Por que existe
+///
+/// Agendador externo (cron-job.org, GitHub Actions) avisa quando a execucao
+/// FALHA — nenhum avisa quando ele proprio para. Notificacao de falha depende
+/// de executar. A deteccao tem de ser invertida: o servidor percebe a AUSENCIA.
+///
+/// ⚠️ Cobre os dois agendadores de uma vez, inclusive o caso "os dois pararam",
+/// que e o unico que nenhum painel externo enxerga.
+model ExecucaoCron {
+  /// Nome da rota: `sync-facebook`, `run-rules`, `reports`, `manutencao`.
+  rota      String   @id
+  ultimaEm  DateTime
+  /// A ultima execucao terminou bem? Falha repetida e sinal diferente de silencio.
+  ok        Boolean  @default(true)
+  duracaoMs Int      @default(0)
+  /// Mensagem da ultima falha, quando houve.
+  erro      String?
+}
+
 model NotificationSettings {
   id String @id @default(cuid())
 
@@ -1103,6 +1124,16 @@ model NotificationSettings {
   report18      Boolean       @default(false)
   report23      Boolean       @default(true)
   reportPattern ReportPattern @default(STATUS_LUCRO)
+  /// Quando o ultimo relatorio foi RESERVADO para este usuario.
+  ///
+  /// 🔴 Nao e so registro: e a reserva que impede relatorio duplicado. A rota
+  /// tinha uma guarda por consulta (`jaEnviado`), que resolve chamada SEQUENCIAL
+  /// e nao resolve concorrente — dois chamadores acham "nao enviado" e os dois
+  /// criam. Mesma corrida de ler-checar-agir do `run-rules`.
+  ///
+  /// O `updateMany` condicional sobre esta coluna reserva ANTES de gerar: quem
+  /// recebe `count: 0` desiste. Quem decide o vencedor e o banco.
+  lastReportAt  DateTime?
 
   /// ⚠️ NÃO USE — o fuso de verdade é `User.timezone`.
   /// Esta coluna existe desde a migration inicial e nunca foi lida por código

@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { autoSyncSeNecessario } from "@/lib/facebook/autoSync";
 import { syncUser } from "@/lib/facebook/sync";
 import { cronAutorizado, naoAutorizado } from "@/lib/cronAuth";
+import { registrarExecucao } from "@/lib/cronBatimento";
 import { prisma } from "@/lib/prisma";
 
 export const maxDuration = 60;
@@ -38,7 +39,7 @@ const ORCAMENTO_MS = (maxDuration - 15) * 1000;
  * ferramenta parece simplesmente não funcionar. Com ordem por idade, quem
  * ficou de fora numa execução é o primeiro da próxima.
  */
-export async function GET(req: NextRequest) {
+async function executar(req: NextRequest) {
   if (!cronAutorizado(req)) return naoAutorizado();
   const comecou = Date.now();
 
@@ -169,4 +170,36 @@ export async function GET(req: NextRequest) {
     totalMetrics,
     results,
   });
+}
+
+/**
+ * Envolve a rotina para registrar o BATIMENTO.
+ *
+ * Agendador externo avisa quando a execucao falha; nenhum avisa quando ele
+ * proprio para. Quem detecta a ausencia e o servidor — ver `lib/cronBatimento.ts`.
+ *
+ * ⚠️ Registra nos DOIS caminhos, e com `ok` diferente: silencio (nunca rodou) e
+ * falha (rodou e quebrou) sao sinais distintos, e a tela os separa. Registrar so
+ * o sucesso faria uma rotina que falha sempre parecer uma rotina que parou.
+ *
+ * ⚠️ 401 NAO conta como execucao: chamada sem o segredo nao e o agendador
+ * trabalhando, e marcar batimento ali esconderia justamente o caso em que o
+ * `CRON_SECRET` foi trocado e o agendador parou de ser aceito.
+ */
+export async function GET(req: NextRequest) {
+  const t0 = Date.now();
+  try {
+    const res = await executar(req);
+    if (res.status !== 401) {
+      await registrarExecucao("sync-facebook", { ok: res.ok, duracaoMs: Date.now() - t0 });
+    }
+    return res;
+  } catch (e) {
+    await registrarExecucao("sync-facebook", {
+      ok: false,
+      duracaoMs: Date.now() - t0,
+      erro: e instanceof Error ? e.message : String(e),
+    });
+    throw e;
+  }
 }
