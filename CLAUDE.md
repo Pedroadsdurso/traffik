@@ -5519,7 +5519,52 @@ ingestão sem segredo**, criado para todo usuário sem que ele peça. Quem
 conhecer o token consegue inserir venda na conta. Decidir se ele deixa de
 nascer ou se passa a exigir chave.
 
-## 🛒 CHECKOUT PRÓPRIO: caminho pronto na gaveta do Pixel — ESPECIFICADO, não feito
+## 🛒 CHECKOUT PRÓPRIO: caminho pronto na gaveta do Pixel — ✅ FEITO (05/08/2026)
+
+Os 5 requisitos entregues. `lib/pixel/trechoUrl.ts` (puro, 17 asserções) e
+`lib/pixel/checkoutProprio.ts` (os passos e o código do desenvolvedor).
+
+| # | Entregue |
+|---|---|
+| 1 | Regra já em `contém URL`, campo em destaque, **exemplos clicáveis** (`/checkout`, `/finalizar`, `/pagamento`) |
+| 2 | URL inteira → extrai o caminho; trecho largo → recusa no Salvar |
+| 3 | Aviso âmbar: **o mesmo script vai nas DUAS páginas** |
+| 4 | Passos com código pronto para o desenvolvedor (`click_id` + `customer_ip`) |
+| 5 | **Estado por evento** em `SnippetCheckDTO.porEvento` |
+
+> ### 🔴 A trava do Salvar cobria só o VAZIO — e não era o único jeito de casar com tudo
+> `/` e `meusite.com` produzem exatamente o mesmo estrago que a string vazia,
+> porque `location.href` **sempre contém o host**. Quem digitasse o domínio
+> salvava e toda visita virava checkout iniciado, em silêncio. Hoje
+> `analisarTrecho` classifica em `ok · corrigido · largo · vazio`, e os dois
+> últimos bloqueiam.
+
+> ### ⛔ Corrige no `onBlur`, nunca a cada tecla
+> Normalizar enquanto a pessoa digita reescreveria o texto debaixo do cursor.
+> E colar a URL da barra de endereço é o gesto NATURAL de quem está olhando o
+> próprio checkout — recusar ali transformaria um acerto de intenção num erro
+> de formulário.
+
+> ### 🎯 `porEvento` é o que impede a próxima versão do bug do IC morto
+> A gaveta dizia "último evento recebido há 5min" — verdade, era o PageView —
+> enquanto o IC não disparava havia semanas. **Um agregado esconde justamente
+> o evento que parou.** Só alarma o evento LIGADO e nunca recebido; desligado
+> sem registro é o esperado.
+>
+> ⚠️ Conta só o que veio do NAVEGADOR (`gw:` fora): o IC criado pelo webhook
+> provaria que o gateway avisa, não que o script funciona — e é o script que
+> esta tela existe para conferir.
+
+> ### ⛔ O campo é `click_id`, NUNCA `sck`
+> O parser lê os dois, mas só o primeiro vira `matchClick`. Mandar em `sck`
+> grava a string e **não casa clique nenhum**, sem erro em lugar nenhum.
+
+⚠️ **Não verificado no ESTREITO** — ver a nota do item (d): a aba do grupo MCP
+vive na própria janela, que continua maximizada.
+
+---
+
+## 🛒 (histórico) a especificação, antes de ser feita
 
 **Pedido do usuário em 05/08/2026, com escopo fechado.** Fica registrado aqui
 inteiro porque é a especificação, não um lembrete.

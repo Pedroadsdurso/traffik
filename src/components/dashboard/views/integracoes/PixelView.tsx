@@ -21,6 +21,8 @@ import { pixelScript } from "@/lib/pixel/script";
 import { elapsed, plural } from "@/lib/format";
 import { CONFIG } from "@/lib/explicacoes";
 import { sx } from "@/lib/sx";
+import { EXEMPLOS_DE_TRECHO, analisarTrecho } from "@/lib/pixel/trechoUrl";
+import { PASSOS_CHECKOUT_PROPRIO } from "@/lib/pixel/checkoutProprio";
 import {
   EVENTOS_DO_PIXEL,
   EXPLICACAO_DONO,
@@ -186,6 +188,106 @@ function Secao({ titulo, selo, children }: { titulo: string; selo?: "script" | "
  * snippet velho no site = nenhum evento, e a tela dizia que estava tudo certo.
  * Ver `lib/pixel/detectores.ts`.
  */
+/**
+ * Os passos que só o desenvolvedor da página pode dar.
+ *
+ * 🔴 O script resolve o InitiateCheckout; ele NÃO resolve a atribuição. Quem
+ * cria a cobrança é o site, e é lá que o `click_id` e o IP do comprador
+ * entram. Sem eles a venda entra sem campanha e sem país — e continua
+ * aparecendo no faturamento, que é o que impede alguém de perceber.
+ */
+function PassosCheckoutProprio() {
+  return (
+    <div
+      style={sx(
+        "margin-top:var(--space-3);border:1px solid var(--color-border);border-radius:var(--radius-md);padding:var(--space-3)",
+      )}
+    >
+      <div className="card-kicker">Para o desenvolvedor do seu site</div>
+      <div className="card-title" style={sx("font-size:14px")}>Faltam dois envios ao criar a cobrança</div>
+      <p className="card-body text-muted" style={sx("margin:4px 0 var(--space-3);font-size:11.5px;line-height:1.5")}>
+        O script acima cuida do que acontece no navegador. Estes dois passos acontecem no seu
+        código, na hora de criar a cobrança no gateway — repasse esta parte para quem cuida do site.
+      </p>
+      {PASSOS_CHECKOUT_PROPRIO.map((passo) => (
+        <div key={passo.titulo} style={sx("margin-bottom:var(--space-3)")}>
+          <div style={sx("font-size:12.5px;font-weight:600")}>{passo.titulo}</div>
+          <div className="text-muted" style={sx("font-size:11.5px;line-height:1.5;margin-top:2px")}>
+            <strong>Sem isso:</strong> {passo.semIsso}
+          </div>
+          {passo.atencao && (
+            <div
+              style={sx(
+                "font-size:11.5px;line-height:1.5;margin-top:4px;color:var(--color-warning,#fbbf24)",
+              )}
+            >
+              {passo.atencao}
+            </div>
+          )}
+          {passo.codigo && <SnippetBox codigo={passo.codigo} />}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * O estado real de CADA evento.
+ *
+ * 🔴 É o que faltava quando o InitiateCheckout ficou morto: a gaveta dizia
+ * "último evento recebido há 5min" — verdade, era o PageView — enquanto o IC
+ * não disparava havia semanas. Um agregado esconde justamente o que parou.
+ *
+ * ⚠️ Só alarma o evento LIGADO e nunca recebido. Evento desligado sem registro
+ * é o esperado, e pintá-lo de âmbar treinaria a ignorar o aviso.
+ */
+function EstadoPorEvento({ check }: { check: SnippetCheckDTO | null }) {
+  if (!check || check.porEvento.length === 0) return null;
+  const ligados = check.porEvento.filter((e) => e.ligado);
+  if (ligados.length === 0) return null;
+
+  return (
+    <div style={sx("margin-top:var(--space-3)")}>
+      <div className="card-kicker">O que está chegando</div>
+      <div style={sx("display:flex;flex-direction:column;gap:4px;margin-top:6px")}>
+        {ligados.map((e) => {
+          const mudo = e.visto === null;
+          return (
+            <div
+              key={e.evento}
+              style={sx(
+                "display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px",
+              )}
+            >
+              <span>{e.evento}</span>
+              <span
+                style={sx(
+                  mudo
+                    ? "color:var(--color-warning,#fbbf24);font-size:11.5px"
+                    : "color:var(--color-text-muted,#9ca3af);font-size:11.5px",
+                )}
+              >
+                {mudo
+                  ? "nunca recebido"
+                  : `há ${elapsed(new Date(e.visto!).getTime())} · ${e.total}`}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      {ligados.some((e) => e.visto === null) && (
+        <p
+          className="card-body"
+          style={sx("margin:6px 0 0;font-size:11.5px;color:var(--color-warning,#fbbf24)")}
+        >
+          Evento ligado aqui e nunca recebido costuma ser script ausente na página onde ele deveria
+          disparar — ou o trecho do endereço não casando com a URL real.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function AvisoSnippet({ check }: { check: SnippetCheckDTO | null }) {
   if (!check) return null;
 
@@ -379,12 +481,20 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
       setError("Informe o ID do pixel da Meta.");
       return;
     }
-    if (form.ic.enabled && form.ic.type === "contem_url" && !form.ic.value.trim()) {
-      setError(
-        "Informe um trecho do endereço da página de pagamento. Em branco, toda visita ao seu " +
-          "site seria contada como checkout iniciado.",
-      );
-      return;
+    /**
+     * ⚠️ O vazio não é o único jeito de casar com tudo.
+     *
+     * `/` e o próprio domínio produzem exatamente o mesmo estrago que a string
+     * vazia — `location.href` sempre contém o host —, e a trava antiga só via
+     * `!trim()`. Quem digitasse `meusite.com` salvava, e toda visita virava
+     * checkout iniciado, em silêncio.
+     */
+    if (form.ic.enabled && form.ic.type === "contem_url") {
+      const a = analisarTrecho(form.ic.value);
+      if (a.grau === "vazio" || a.grau === "largo") {
+        setError(a.aviso ?? "Informe um trecho do endereço da página de pagamento.");
+        return;
+      }
     }
     setBusy(true);
     setError(null);
@@ -447,7 +557,9 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
    * criaria uma configuração que nunca funciona e não diz por quê.
    */
   const urlSemTrecho =
-    form.ic.enabled && form.ic.type === "contem_url" && !form.ic.value.trim();
+    form.ic.enabled &&
+    form.ic.type === "contem_url" &&
+    ["vazio", "largo"].includes(analisarTrecho(form.ic.value).grau);
 
   return (
     <div style={sx("display:flex;flex-direction:column;gap:var(--space-4)")}>
@@ -700,25 +812,50 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
                     className="input"
                     value={form.ic.value}
                     onChange={(e) => setForm({ ...form, ic: { ...form.ic, value: e.target.value } })}
+                    /* ⚠️ Corrige ao SAIR do campo, não a cada tecla: normalizar
+                       enquanto a pessoa digita reescreveria o texto debaixo do
+                       cursor. */
+                    onBlur={(e) => {
+                      const a = analisarTrecho(e.target.value);
+                      if (a.valor !== e.target.value) setForm({ ...form, ic: { ...form.ic, value: a.valor } });
+                    }}
                     placeholder="Ex.: /checkout"
                   />
+                  {/* Exemplos clicáveis: o formato é a dúvida real de quem
+                      nunca viu esse campo, e descrever é pior que mostrar. */}
+                  <div style={sx("display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px")}>
+                    {EXEMPLOS_DE_TRECHO.map((ex) => (
+                      <button
+                        key={ex}
+                        type="button"
+                        className="btn btn-ghost"
+                        style={sx("font-size:11.5px;padding:2px 8px;min-height:0")}
+                        onClick={() => setForm({ ...form, ic: { ...form.ic, value: ex } })}
+                      >
+                        {ex}
+                      </button>
+                    ))}
+                  </div>
                   {/*
                     ⚠️ O campo é OBRIGATÓRIO, e o vazio não é inofensivo: com ele
                     a comparação casa com qualquer endereço e TODA visita viraria
                     checkout iniciado. O Salvar fica travado — ver `save`.
                   */}
-                  <p
-                    className="card-body"
-                    style={sx(
-                      form.ic.value.trim()
-                        ? "margin:0;font-size:11.5px"
-                        : "margin:0;font-size:11.5px;color:var(--color-warning,#fbbf24)",
-                    )}
-                  >
-                    {form.ic.value.trim()
-                      ? "Vale para qualquer endereço que contenha este trecho."
-                      : "Preencha: sem um trecho para comparar, toda visita ao seu site seria contada como checkout iniciado."}
-                  </p>
+                  {(() => {
+                    const a = analisarTrecho(form.ic.value);
+                    return (
+                      <p
+                        className="card-body"
+                        style={sx(
+                          a.aviso
+                            ? "margin:0;font-size:11.5px;color:var(--color-warning,#fbbf24)"
+                            : "margin:0;font-size:11.5px",
+                        )}
+                      >
+                        {a.aviso ?? "Vale para qualquer endereço que contenha este trecho."}
+                      </p>
+                    );
+                  })()}
                 </div>
               )}
 
@@ -741,6 +878,9 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
               const px = pixels.find((p) => p.id === editId);
               if (!px) return null;
               const local = getPublicAppUrl().includes("localhost");
+              // A gaveta inteira do checkout próprio pende desta resposta.
+              const ehProprioSite =
+                form.ic.enabled && form.ic.type === "contem_url" && !regraManual(form.ic.type);
               return (
                 <>
                   <AvisoSnippet check={check} />
@@ -748,6 +888,27 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
                     Cole antes de <code>&lt;/head&gt;</code> do seu site. Dispara a visita em toda página,
                     mais o que você marcou acima.
                   </p>
+                  {/*
+                    🔴 Checkout próprio precisa do script em DUAS páginas, e a
+                    instrução genérica ("do seu site") deixava isso implícito.
+                    Sem o script na página de pagamento a regra `contém URL`
+                    nunca é avaliada — a URL do checkout só existe onde o script
+                    roda. É o mesmo erro de instalação invisível do checkout
+                    hospedado, invertido.
+                  */}
+                  {ehProprioSite && (
+                    <p
+                      className="card-body"
+                      style={sx(
+                        "margin:0;font-size:12px;color:var(--color-warning,#fbbf24);" +
+                          "border-left:2px solid var(--color-warning,#fbbf24);padding-left:8px",
+                      )}
+                    >
+                      <strong>O mesmo script vai nas duas páginas:</strong> a de vendas e a de
+                      pagamento. Sem ele na página de pagamento, o início de checkout nunca dispara —
+                      o funil mostra visita e venda, e nada no meio.
+                    </p>
+                  )}
                   {local && (
                     <p className="card-body" style={sx("margin:0;font-size:12px;color:var(--color-warning,#fbbf24)")}>
                       O script aponta para <code>{getPublicAppUrl()}</code>, um endereço local. Defina{" "}
@@ -755,6 +916,8 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
                     </p>
                   )}
                   <SnippetBox codigo={scriptText(px)} />
+                  {ehProprioSite && <PassosCheckoutProprio />}
+                  <EstadoPorEvento check={check} />
                 </>
               );
             })()

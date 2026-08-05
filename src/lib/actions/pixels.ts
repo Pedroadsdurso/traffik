@@ -387,6 +387,19 @@ export interface SnippetCheckDTO {
    * pintaria de âmbar a gaveta de todo usuário no dia do deploy.
    */
   nota: string | null;
+  /**
+   * Estado real **por evento**, não só "chegou alguma coisa".
+   *
+   * 🔴 É o que faltava quando o InitiateCheckout ficou morto: a gaveta dizia
+   * "último evento recebido há 5min" — verdade, era o PageView — enquanto o IC
+   * não disparava havia semanas. Um agregado esconde exatamente o evento que
+   * parou.
+   *
+   * ⚠️ `visto: null` com o evento LIGADO é o sinal que importa: configurado e
+   * nunca recebido. Com o evento desligado, `null` é o esperado e a tela não
+   * alarma.
+   */
+  porEvento: { evento: string; ligado: boolean; visto: string | null; total: number }[];
 }
 
 /**
@@ -442,9 +455,43 @@ export async function conferirSnippet(pixelConfigId: string): Promise<SnippetChe
     select: { detectores: true, timestamp: true },
   });
 
-  if (!ultimo) return { estado: "sem-dados", visto: null, divergencias: [], nota: null };
+  /**
+   * ⚠️ Conta só o que veio do NAVEGADOR (`gw:` fora), pela mesma razão do
+   * `ultimo`: o InitiateCheckout criado pelo webhook do gateway provaria que o
+   * gateway está avisando, não que o script está funcionando — e é o script
+   * que esta tela existe para conferir.
+   */
+  const porEventoBruto = await prisma.pixelEvent.groupBy({
+    by: ["event"],
+    where: {
+      pixelConfigId,
+      userId,
+      OR: [{ eventId: null }, { NOT: { eventId: { startsWith: "gw:" } } }],
+    },
+    _count: { _all: true },
+    _max: { timestamp: true },
+  });
+
+  const ligados: Record<string, boolean> = {
+    PageView: true, // sempre ativo — não passa por regra
+    Lead: config.eventRules.find((r) => r.eventType === "LEAD")?.enabled ?? false,
+    AddToCart: config.eventRules.find((r) => r.eventType === "ADD_TO_CART")?.enabled ?? false,
+    InitiateCheckout: ic?.enabled ?? false,
+    Purchase: config.eventRules.find((r) => r.eventType === "PURCHASE")?.enabled ?? false,
+  };
+  const porEvento = EVENTOS_DO_PIXEL.map((e) => {
+    const linha = porEventoBruto.find((x) => x.event === e);
+    return {
+      evento: e,
+      ligado: ligados[e] ?? false,
+      visto: linha?._max.timestamp?.toISOString() ?? null,
+      total: linha?._count._all ?? 0,
+    };
+  });
+
+  if (!ultimo) return { estado: "sem-dados", visto: null, divergencias: [], nota: null, porEvento };
   const visto = ultimo.timestamp.toISOString();
-  if (!ultimo.detectores) return { estado: "script-antigo", visto, divergencias: [], nota: null };
+  if (!ultimo.detectores) return { estado: "script-antigo", visto, divergencias: [], nota: null, porEvento };
 
   const divergencias = diferencasDeDetectores(ultimo.detectores, esperado);
   return {
@@ -452,6 +499,7 @@ export async function conferirSnippet(pixelConfigId: string): Promise<SnippetChe
     visto,
     divergencias,
     nota: avisoDeVersao(ultimo.detectores),
+    porEvento,
   };
 }
 
