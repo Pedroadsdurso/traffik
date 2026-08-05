@@ -67,6 +67,29 @@ function KpiBloco({ v, metric }: { v: TraffikView; metric: string }) {
       <div style={sx(`font-family:var(--font-heading);font-weight:500;font-size:${tamanhoNumero}px;line-height:1.1;font-variant-numeric:tabular-nums;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap${k.cor ? `;color:${k.cor}` : ""}`)}>
         {k.value}
       </div>
+      {/*
+        🔴 O card de ROI mostra DE ONDE veio o faturamento, junto do número.
+        
+        Medido em 04/08/2026: 49,6% do faturamento de um usuário e 100% do de
+        outro não tinham campanha. Sem estas linhas, o usuário lê o ROI baixo e
+        **culpa a campanha por um problema de rastreamento** — ou, pior, culpa o
+        rastreamento por vendas que legitimamente não vieram de anúncio.
+
+        ⚠️ Só no `md`: em bloco pequeno o número tem de sobreviver, e três
+        linhas o empurrariam para fora. Mesma ordem de sacrifício do sparkline.
+      */}
+      {metric === "roi" && densidade === "md" && (
+        <div style={sx("margin-top:6px;display:flex;flex-direction:column;gap:2px;font-size:11px;line-height:1.35")}>
+          {v.origemDaReceita.map((o) => (
+            <div key={o.rotulo} style={sx("display:flex;justify-content:space-between;gap:6px")} title={o.ajuda ?? undefined}>
+              <span className="text-muted" style={sx(`overflow:hidden;text-overflow:ellipsis;white-space:nowrap${o.alerta ? ";color:var(--color-warning,#fbbf24)" : ""}`)}>
+                {o.rotulo}
+              </span>
+              <span style={sx(`font-variant-numeric:tabular-nums;flex:none${o.alerta ? ";color:var(--color-warning,#fbbf24)" : ""}`)}>{o.brl}</span>
+            </div>
+          ))}
+        </div>
+      )}
       {(mostrarSparkline || mostrarDelta) && (
         <div style={sx("margin-top:auto;display:flex;flex-direction:column;gap:6px;min-height:0;overflow:hidden")}>
           {mostrarSparkline && <Sparkline valores={serie} />}

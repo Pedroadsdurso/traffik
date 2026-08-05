@@ -5267,6 +5267,33 @@ antes da verificação.
 qual frequência. É serviço externo, sem API configurada aqui. **Só o painel
 dele responde.**
 
+### ⛔ PADRÃO: mudar QUANDO o estado é gravado pode criar silêncio novo
+
+Descoberto em 05/08/2026, numa correção minha e no mesmo dia em que ela subiu.
+
+A corrida de ler-checar-agir do `run-rules` foi consertada movendo a gravação
+de `lastRunAt` para **antes** da ação. A reserva estava certa. O que faltou foi
+olhar o que acontecia **depois** dela:
+
+| | Antes da reserva | Depois |
+|---|---|---|
+| `evaluateRule` lança | `lastRunAt` intacto → tenta de novo no ciclo seguinte | `lastRunAt` **já avançado** → pula a janela inteira |
+| Registro | nenhum (tolerável — ia tentar de novo) | nenhum (**silêncio**, e a regra não roda) |
+
+O usuário veria *"última execução há 30 min"* e concluiria que rodou normal.
+
+> **Uma correção que muda o MOMENTO em que o estado é gravado transforma o
+> significado de todo caminho de erro que passa por ali.** O erro que era
+> tolerável — porque seria repetido — vira erro definitivo e mudo.
+>
+> ⚠️ Ao mover uma gravação para antes de uma operação, **liste o que pode falhar
+> entre as duas** e decida o que cada falha significa agora. Aqui a resposta foi
+> um `try/catch` que registra `status: "ERRO"` no histórico da regra.
+
+É primo da regra do `NULL` (o mesmo valor significando coisas diferentes em
+colunas diferentes): aqui é o mesmo CÓDIGO significando coisas diferentes
+antes e depois de uma mudança de ordem.
+
 ### 🔴 `userTimezone` cai em São Paulo EM SILÊNCIO — e isso vira sistemático
 
 `src/lib/userTimezone.ts:21` tem um `catch` que devolve `DEFAULT_TIMEZONE`

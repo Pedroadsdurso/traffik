@@ -711,7 +711,8 @@ export function useTraffikState(
    * Por isso o rótulo do card muda, em vez de a informação viver só no tooltip:
    * quem olha o número tem de ver a procedência junto.
    */
-  const fonteTaxa = d?.financeiro?.fontes?.gateway;
+  const fin = d?.financeiro;
+  const fonteTaxa = fin?.fontes?.gateway;
   const rotuloLiquido = (() => {
     if (!fonteTaxa) return "após taxas e impostos";
     const { vendasComValorReal: reais, vendasSemValorReal: estimadas } = fonteTaxa;
@@ -906,7 +907,6 @@ export function useTraffikState(
   const filterOptions = d?.filterOptions ?? { accounts: [], products: [], sources: [] };
 
   // ── Taxas e Despesas (Fase 13) ── resumo vem do dashboard real.
-  const feesExp = d?.expenses ?? { gateway: 0, tax: 0, recurring: 0, total: 0 };
   const PAYMENT_LABEL: Record<string, string> = { PIX: "Pix", CARTAO: "Cartão", BOLETO: "Boleto", OUTRO: "Todas", "": "Todas" };
   const gatewayExpenses = s.expenses
     .filter((e) => e.type === "TAXA_GATEWAY")
@@ -1449,16 +1449,50 @@ export function useTraffikState(
       const n = (x: number) => x.toLocaleString("pt-BR");
       switch (chave) {
         case "roas": return [["Faturamento", brl(revenue)], ["Gasto", brl(spend)]];
-        case "roi": return [["Lucro", brl(k?.profit ?? 0)], ["Custo total", brl(spend + (d?.expenses.total ?? 0))]];
+        // ⚠️ `custoTotal` do servidor, não `spend + expenses.total`: aquela
+        // soma EXCLUÍA as despesas recorrentes, então o tooltip do ROI mostrava
+        // um custo menor que o usado na conta. Mesmo bug do painel de Taxas.
+        case "roi": return [["Lucro líquido", brl(k?.profit ?? 0)], ["Investimento total", brl(fin?.custoTotal ?? 0)]];
         case "cpa": return [["Gasto", brl(spend)], ["Vendas", n(sales)]];
         case "ticket": return [["Faturamento", brl(revenue)], ["Vendas", n(sales)]];
         case "arpu": return [["Faturamento", brl(revenue)], ["Compradores únicos", n(k?.buyers ?? 0)]];
         case "margem": return [["Lucro", brl(k?.profit ?? 0)], ["Faturamento", brl(revenue)]];
-        case "lucro": return [["Faturamento", brl(revenue)], ["Gasto", brl(spend)], ["Taxas e despesas", brl(d?.expenses.total ?? 0)]];
+        case "lucro": return [["Faturamento", brl(revenue)], ["Gasto", brl(spend)], ["Taxas e despesas", brl((fin?.totalDescontos ?? 0) + (fin?.despesas ?? 0))]];
         case "ctr": return [["Cliques", n(k?.clicks ?? 0)]];
         default: return undefined;
       }
     },
+    /**
+     * De onde veio o faturamento, para o card de ROI.
+     *
+     * ⚠️ A terceira linha diz as DUAS possibilidades porque elas são
+     * indistinguíveis por construção: quem foi direto ao link do checkout e
+     * quem teve o rastreamento falhando produzem o mesmo estado — o visitante
+     * não passou pelo nosso script. Escolher uma seria inventar.
+     */
+    origemDaReceita: (() => {
+      const o = d?.origemDaReceita ?? { campanha: 0, direto: 0, semOrigem: 0 };
+      return [
+        { rotulo: "de campanha", valor: o.campanha, brl: brl(o.campanha), alerta: false, ajuda: null as string | null },
+        {
+          rotulo: "de tráfego direto",
+          valor: o.direto,
+          brl: brl(o.direto),
+          alerta: false,
+          ajuda: "O visitante chegou ao seu site sem vir de anúncio — orgânico, link na bio, indicação.",
+        },
+        {
+          rotulo: "sem origem identificada",
+          valor: o.semOrigem,
+          brl: brl(o.semOrigem),
+          // Só esta pede atenção, e mesmo assim pode ser legítima.
+          alerta: o.semOrigem > 0,
+          ajuda:
+            "Veio direto ao checkout ou o rastreamento não pegou — não dá para saber qual dos dois. " +
+            "Se você mesmo abriu o link do checkout para testar, é isto.",
+        },
+      ];
+    })(),
     /** Ticket médio cru — o funil usa para estimar o faturamento perdido. */
     ticketMedio: k?.ticket ?? 0,
     funnelStages: [
@@ -1954,14 +1988,35 @@ export function useTraffikState(
       });
       setS((st) => ({ ...st, expenses: [...st.expenses, created] }));
     },
+    /**
+     * O painel "Cálculo de lucro" da tela de Taxas.
+     *
+     * 🔴 Ele REIMPLEMENTAVA a conta e errava em dois pontos:
+     *
+     * 1. `revenue − spend − expenses.total` — e `expenses.total` é
+     *    `totalDescontos`, que **exclui as despesas recorrentes**. O painel
+     *    mostrava a linha "Despesas − R$ X" e **não a subtraía**. Só não
+     *    aparecia para quem tinha despesa zerada.
+     * 2. Não havia linha de **coprodução** nem de **custo de produto**, então
+     *    com esses cadastrados a soma deixava de fechar visualmente.
+     *
+     * Agora lê a `Composicao` do servidor — a MESMA que alimenta os cards de
+     * Faturamento Líquido e Lucro. Uma conta, um lugar.
+     */
     finance: {
-      revenue: brl(revenue),
-      spend: brl(spend),
-      gateway: brl(feesExp.gateway),
-      tax: brl(feesExp.tax),
-      despesas: brl(feesExp.recurring),
-      profit: brl(revenue - spend - feesExp.total),
-      margin: pct(revenue ? ((revenue - spend - feesExp.total) / revenue) * 100 : 0),
+      revenue: brl(fin?.bruto ?? revenue),
+      spend: brl(fin?.gastoAnuncios ?? spend),
+      gateway: brl(fin?.gateway ?? 0),
+      coproducao: brl(fin?.coproducao ?? 0),
+      tax: brl(fin?.impostos ?? 0),
+      custoProduto: brl(fin?.custoProduto ?? 0),
+      despesas: brl(fin?.despesas ?? 0),
+      liquido: brl(fin?.liquido ?? 0),
+      profit: brl(fin?.lucro ?? 0),
+      margin: pct(fin?.margem ?? 0),
+      /** Linhas com valor zero somem do painel — ver a nota na FeesView. */
+      temCoproducao: (fin?.coproducao ?? 0) > 0,
+      temCustoProduto: (fin?.custoProduto ?? 0) > 0,
     },
 
     rules,

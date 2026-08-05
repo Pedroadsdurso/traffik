@@ -81,7 +81,19 @@ const COLUNAS: { chave: string; label: string; dica?: string; fonte: Fonte }[] =
   { chave: "faturamento", label: "Faturamento", fonte: "nosso" },
   { chave: "lucro", label: "Lucro", fonte: "misto" },
   { chave: "roas", label: "ROAS", fonte: "misto" },
-  { chave: "roi", label: "ROI", fonte: "misto" },
+  /*
+    🔴 "ROI de mídia", nao "ROI" — sao contas DIFERENTES e nao podem ter o
+    mesmo nome.
+
+      Dashboard    ROI = lucro LIQUIDO / investimento total (com taxas,
+                   impostos e despesas)
+      Aqui         ROI de midia = (faturamento - gasto) / gasto
+
+    Taxas e impostos so existem no nivel da CONTA e nao ha como ratear com
+    honestidade por campanha. Chamar os dois de "ROI" fazia o usuario comparar
+    numeros que medem coisas diferentes e concluir que um deles esta errado.
+  */
+  { chave: "roiMidia", label: "ROI de mídia", fonte: "misto" },
   { chave: "ic", label: "IC", fonte: "nosso" },
   { chave: "cpi", label: "CPI", fonte: "misto" },
   { chave: "cliquesAtr", label: "Cliq. atr.", fonte: "nosso" },
@@ -250,8 +262,10 @@ export function AdsTable({
     switch (chave) {
       case "roas":
         return [["Faturamento", brl(totais.revenue)], ["Gasto", brl(totais.spend)]];
-      case "roi":
-        return [["Lucro", brl(md.lucro)], ["Custo (gasto)", brl(totais.spend)]];
+      case "roiMidia":
+        // ⚠️ "Lucro de mídia": faturamento − gasto, SEM taxas nem impostos.
+        // O rótulo diz isso para o número não ser lido como lucro real.
+        return [["Lucro de mídia", brl(md.lucro)], ["Gasto com anúncios", brl(totais.spend)]];
       case "cpa":
         return [["Gasto", brl(totais.spend)], ["Vendas aprovadas", v(totais.results)]];
       case "lucro":

@@ -434,12 +434,34 @@ export function FeesView({ v }: { v: TraffikView }) {
         <div className="card-kicker">Cálculo de lucro (período atual)</div>
         <div style={sx("display:flex;flex-direction:column;gap:var(--space-2);margin-top:var(--space-2);font-size:13px")}>
           <div style={sx("display:flex;justify-content:space-between")}><span className="text-muted">Faturamento</span><span style={sx("font-variant-numeric:tabular-nums")}>{v.finance.revenue}</span></div>
-          <div style={sx("display:flex;justify-content:space-between")}><span className="text-muted">Gasto em anúncios</span><span style={sx("font-variant-numeric:tabular-nums")}>− {v.finance.spend}</span></div>
           <div style={sx("display:flex;justify-content:space-between")}><span className="text-muted">Taxas de gateway</span><span style={sx("font-variant-numeric:tabular-nums")}>− {v.finance.gateway}</span></div>
+          {/*
+            🔴 Coprodução e Custo de produto FALTAVAM. Com qualquer um dos dois
+            cadastrado, o painel descontava (a conta é a mesma do servidor) e
+            não mostrava a linha — a soma deixava de fechar visualmente e o
+            usuário não tinha como conferir o próprio lucro.
+
+            ⚠️ Só aparecem quando há valor: quatro linhas zeradas empurrariam o
+            Lucro para fora da vista de quem não usa coprodução.
+          */}
+          {v.finance.temCoproducao && (
+            <div style={sx("display:flex;justify-content:space-between")}><span className="text-muted">Coprodução e afiliados</span><span style={sx("font-variant-numeric:tabular-nums")}>− {v.finance.coproducao}</span></div>
+          )}
           <div style={sx("display:flex;justify-content:space-between")}><span className="text-muted">Impostos</span><span style={sx("font-variant-numeric:tabular-nums")}>− {v.finance.tax}</span></div>
-          <div style={sx("display:flex;justify-content:space-between")}><span className="text-muted">Despesas</span><span style={sx("font-variant-numeric:tabular-nums")}>− {v.finance.despesas}</span></div>
+          {v.finance.temCustoProduto && (
+            <div style={sx("display:flex;justify-content:space-between")}><span className="text-muted">Custo de produto</span><span style={sx("font-variant-numeric:tabular-nums")}>− {v.finance.custoProduto}</span></div>
+          )}
+          {/* O líquido é o corte: até aqui só desconto sobre o faturamento. */}
+          <div style={sx("display:flex;justify-content:space-between;padding-top:4px;border-top:1px dashed var(--color-divider)")}><span>Faturamento líquido</span><span style={sx("font-variant-numeric:tabular-nums")}>{v.finance.liquido}</span></div>
+          <div style={sx("display:flex;justify-content:space-between")}><span className="text-muted">Gasto em anúncios</span><span style={sx("font-variant-numeric:tabular-nums")}>− {v.finance.spend}</span></div>
+          {/*
+            🔴 Esta linha aparecia e NAO era subtraida: o painel calculava
+            `revenue − spend − expenses.total`, e `expenses.total` exclui as
+            despesas recorrentes. Só não aparecia para quem tinha despesa zero.
+          */}
+          <div style={sx("display:flex;justify-content:space-between")}><span className="text-muted">Despesas recorrentes</span><span style={sx("font-variant-numeric:tabular-nums")}>− {v.finance.despesas}</span></div>
           <hr className="hr" style={sx("margin:var(--space-2) 0")} />
-          <div style={sx("display:flex;justify-content:space-between;font-size:15px")}><span>Lucro líquido</span><span style={sx("color:var(--color-accent-300);font-variant-numeric:tabular-nums")}>{v.finance.profit}</span></div>
+          <div style={sx("display:flex;justify-content:space-between;font-size:15px")}><span>Lucro</span><span style={sx("color:var(--color-accent-300);font-variant-numeric:tabular-nums")}>{v.finance.profit}</span></div>
           <div style={sx("display:flex;justify-content:space-between")}><span className="text-muted">Margem de lucro</span><span style={sx("font-variant-numeric:tabular-nums")}>{v.finance.margin}</span></div>
         </div>
       </div>

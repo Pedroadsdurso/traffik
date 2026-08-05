@@ -294,5 +294,20 @@ export function despesaVale(despesa: { workspaceId: string | null }, areaId: str
 
 /** `where` do Prisma equivalente ao `despesaVale`, para filtrar na consulta. */
 export function whereDespesasDaArea(areaId: string) {
-  return { workspaceId: areaId };
+  /**
+   * 🔴 `workspaceId` NULO = vale para TODAS as áreas — e por isso ENTRA aqui.
+   *
+   * Devolvia `{ workspaceId: areaId }` seco, que **descarta as nulas**. Taxa de
+   * gateway e imposto nascem globais (o formulário não os prende a área
+   * nenhuma), então na prática TODA despesa cadastrada era ignorada no cálculo
+   * de lucro — e o lucro aparecia maior que a realidade, com número plausível.
+   *
+   * Reproduzido em 05/08/2026: cinco descontos cadastrados, painel mostrando
+   * `Taxas de gateway − R$ 0,00` para todos.
+   *
+   * ⚠️ Este é o mesmo `OR` do catch-all de venda e evento — e aqui ele é ainda
+   * mais obrigatório, porque em `Expense` o NULO não significa "sem dono", e sim
+   * "vale para todo mundo". É a exceção que o CLAUDE.md registra.
+   */
+  return { OR: [{ workspaceId: null }, { workspaceId: areaId }] };
 }

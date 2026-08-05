@@ -102,13 +102,29 @@ export const METRICAS: Record<string, ConteudoInfo> = {
       "Depende das taxas cadastradas. Sem taxa de gateway nem imposto lançados, o lucro aparece maior do que é.",
     fonte: "derivada",
   },
+  /**
+   * ⚠️ DUAS entradas, de propósito — `roi` e `roiMidia` medem coisas
+   * diferentes. Uma entrada só faria a tabela do Gerenciador exibir a
+   * explicação do Dashboard, que fala de taxas e impostos que ela não desconta.
+   */
+  roiMidia: {
+    titulo: "ROI de mídia",
+    corpo: [
+      "Quanto o anúncio devolveu além do que custou, olhando SÓ a mídia.",
+      "0,50x significa que cada R$ 1 de anúncio voltou R$ 1,50.",
+    ],
+    formula: "(Faturamento da campanha − Gasto) ÷ Gasto",
+    alerta:
+      "Não desconta taxa de gateway, imposto nem despesa — esses custos só existem no nível da conta e não há como ratear com honestidade por campanha. O ROI do Dashboard, que é da conta inteira, desconta tudo e por isso costuma ser menor. Os dois estão certos; medem coisas diferentes.",
+    fonte: "derivada",
+  },
   roi: {
     titulo: "ROI — Retorno sobre o Investimento",
     corpo: [
       "Diferente do ROAS: olha o LUCRO, não o faturamento.",
       "0,50x significa 50% de lucro sobre o que foi investido. Negativo significa prejuízo.",
     ],
-    formula: "Lucro ÷ Custo total",
+    formula: "Lucro líquido ÷ Investimento total",
     alerta:
       "O piso é −1,00x, e não é um travamento: sem faturamento nenhum você perdeu 100% do investido, e não há como perder mais que isso. Quem varia com o tamanho do prejuízo é o Lucro, em reais.",
     fonte: "derivada",

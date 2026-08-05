@@ -80,6 +80,13 @@ export interface DashboardData {
     arpu: number;
     buyers: number;
   };
+  /**
+   * Faturamento aprovado por ORIGEM. Vai para o card de ROI.
+   *
+   * ⚠️ As três somam `kpis.revenue` por construção — são partição, não
+   * amostragem. Se um dia deixarem de somar, é bug de classificação.
+   */
+  origemDaReceita: { campanha: number; direto: number; semOrigem: number };
   deltas: Record<string, number | null>;
   chart: {
     labels: string[];
@@ -472,6 +479,7 @@ export async function computeDashboard(userId: string, filters: DashboardFilters
       buyers: summary.buyers,
       profit: summary.profit,
     },
+    origemDaReceita: summary.origem,
     deltas,
     chart,
     expenses: summary.expenses,
@@ -574,6 +582,35 @@ function summarize(w: Window) {
   }
   const buyers = emails.size + semEmail;
   const arpu = buyers ? revenue / buyers : 0;
+
+  /**
+   * De onde veio o faturamento — TRÊS origens, não duas.
+   *
+   * ## 🔴 "Não atribuído" juntava coisas diferentes
+   *
+   * Uma linha só de "sem campanha" soa como falha da ferramenta, e nem sempre
+   * é. Medido em 04/08/2026: 49,6% do faturamento de um usuário e 100% do de
+   * outro apareciam assim — e boa parte era venda de teste feita por link
+   * direto do checkout, que **não tem campanha mesmo**.
+   *
+   * | Origem | O que aconteceu |
+   * |---|---|
+   * | `campanha` | clique com `utm_campaign` — veio de anúncio |
+   * | `direto` | clique SEM `utm_campaign` — vimos a visita, não houve anúncio |
+   * | `semOrigem` | nenhum clique — nunca tocou o nosso script |
+   *
+   * ⚠️ **Só a terceira pede ação**, e mesmo ela é ambígua por construção: link
+   * direto do checkout e falha de rastreamento produzem o MESMO estado (o
+   * visitante não passou pelo script). A tela diz as duas possibilidades em vez
+   * de escolher uma — ver o texto do card.
+   */
+  const origem = { campanha: 0, direto: 0, semOrigem: 0 };
+  for (const s of approved) {
+    const v = num(s.value);
+    if (!s.click) origem.semOrigem += v;
+    else if (s.click.utmCampaign?.trim()) origem.campanha += v;
+    else origem.direto += v;
+  }
 
   // Vendas por produto
   const prodMap = new Map<string, { total: number; sales: number }>();
@@ -743,7 +780,7 @@ function summarize(w: Window) {
   const expenses = { gateway: fin.gateway, tax: fin.impostos, recurring: fin.despesas, total: fin.totalDescontos };
 
   return {
-    revenue, salesCount, pendentes, pendentesValor, reembolsadas, chargebackRate,
+    revenue, origem, salesCount, pendentes, pendentesValor, reembolsadas, chargebackRate,
     spend, clicksCount, ticket, cpa, roas, ctr, profit, roi, margin, arpu, buyers,
     expenses, products, sources, payments, funnel, byHour, byDay, byCountry, approval,
     // A composição inteira viaja até a UI: o tooltip do Faturamento Líquido e do
