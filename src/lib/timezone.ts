@@ -96,6 +96,42 @@ export function tzOffsetMs(d: Date, tz: string = DEFAULT_TIMEZONE): number {
 }
 
 /**
+ * Dois fusos discordam sobre ONDE O DIA COMEÇA?
+ *
+ * Existe para responder a pergunta do card de fuso: "o fuso configurado na conta
+ * bate com o do aparelho de quem está olhando?". E responde pelo que importa —
+ * o deslocamento —, não pelo nome.
+ *
+ * > ### ⛔ Comparar NOME produz alarme falso, e alarme falso se aprende a ignorar
+ * > `America/Sao_Paulo` e `America/Bahia` são strings diferentes e o **mesmo**
+ * > deslocamento: o dia começa no mesmo instante, então nenhum número da
+ * > ferramenta muda e não há o que avisar. Só a diferença de offset move a
+ * > fronteira do dia — que é a causa raiz de toda a seção "Fuso horário" do
+ * > CLAUDE.md.
+ *
+ * ⚠️ **Sonda mais de um instante, por causa do horário de verão.** Dois fusos
+ * podem coincidir hoje e divergir em três meses — `America/Sao_Paulo` e
+ * `Europe/Lisbon` chegam a compartilhar offset em parte do ano. Comparar só
+ * "agora" deixaria a divergência aparecer sozinha meses depois, que é exatamente
+ * o tipo de erro sistemático e silencioso que este módulo existe para acabar.
+ *
+ * Fuso ilegível devolve `false`: quem trata dado corrompido é `getUserTimezone`,
+ * e um alarme aqui em cima de um `Intl` que falhou não diria nada útil.
+ */
+export function fusosDiscordam(a: string, b: string, agora: Date = new Date()): boolean {
+  if (a === b) return false;
+  if (!isValidTimezone(a) || !isValidTimezone(b)) return false;
+  // ~Trimestral ao longo de um ano: pega as duas viradas de DST de qualquer
+  // hemisfério, sem varrer 365 dias por um aviso de tela.
+  const DIA = 86_400_000;
+  for (const passo of [0, 91, 182, 273]) {
+    const t = new Date(agora.getTime() + passo * DIA);
+    if (tzOffsetMs(t, a) !== tzOffsetMs(t, b)) return true;
+  }
+  return false;
+}
+
+/**
  * Relógio de parede no fuso → instante UTC.
  *
  * Duas passadas por causa do horário de verão: o offset é estimado no instante

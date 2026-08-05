@@ -75,7 +75,8 @@
     "test:efeitos": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-efeitos.mjs",
     "test:auditoria-metricas": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-auditoria-metricas.mjs",
     "test:trecho": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-trecho-url.mjs",
-    "test:utm-orfa": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-utm-orfa.mjs"
+    "test:utm-orfa": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-utm-orfa.mjs",
+    "test:fusos": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-fusos.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

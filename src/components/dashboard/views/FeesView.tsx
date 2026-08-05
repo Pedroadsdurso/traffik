@@ -10,7 +10,7 @@ import { TODAS_AS_FORMAS } from "@/lib/financeiro";
 import { Icone } from "../ui/Icone";
 import { Select } from "../ui/Select";
 import { InfoTip } from "../ui/InfoTip";
-import { TIMEZONE_OPTIONS, partsInTz } from "@/lib/timezone";
+import { TIMEZONE_OPTIONS, fusosDiscordam, partsInTz } from "@/lib/timezone";
 import type { TraffikView } from "../useTraffikState";
 
 /**
@@ -109,10 +109,62 @@ function CardImpostoAnuncios() {
   );
 }
 
+/**
+ * # 🔴 O fuso da conta cai no padrão EM SILÊNCIO — e este card é quem denuncia
+ *
+ * `User.timezone` é `@default("America/Sao_Paulo")` e **não é nulo nunca**. Então
+ * "escolhi Brasília" e "nunca abri esta tela" são **indistinguíveis no banco**,
+ * e quem se cadastra em Lisboa começa com o dia virando 4h cedo. O fuso não
+ * afeta um número: afeta a janela do período, `byHour`, `byDay`, os buckets do
+ * gráfico, os deltas, o `time_range` mandado à Meta, o limite diário do motor de
+ * regras e a hora do relatório. É sistemático, não intermitente.
+ *
+ * `getUserTimezone` já grita no log nos dois casos de DEFEITO (string corrompida,
+ * falha de leitura). Mas o caso que importa não é defeito — é o **padrão**, e
+ * log de servidor não é lido por quem usa a ferramenta.
+ *
+ * Quem sabe a resposta é o navegador. O aviso compara o fuso da conta com o do
+ * aparelho e oferece a troca em um clique.
+ *
+ * > ### ⚠️ Comparar por OFFSET, e o aviso é DISPENSÁVEL
+ * > Quem opera um negócio brasileiro morando fora tem razão de manter Brasília —
+ * > o aviso não pode virar cobrança. E `fusosDiscordam` compara deslocamento, não
+ * > nome, senão `America/Bahia` alarmaria sem nenhum número mudar.
+ *
+ * ⚠️ A leitura do navegador acontece em `useEffect`, nunca no render: o servidor
+ * não conhece o fuso do aparelho, e ler no primeiro render daria divergência de
+ * hidratação.
+ */
 function CardFusoHorario({ inicial }: { inicial: string }) {
   const [tz, setTz] = useState(inicial);
   const [salvo, setSalvo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [tzAparelho, setTzAparelho] = useState<string | null>(null);
+  const [dispensado, setDispensado] = useState(true);
+
+  useEffect(() => {
+    let doAparelho: string | undefined;
+    try {
+      doAparelho = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch {
+      // Sem `Intl` utilizável não há o que comparar — e um card de configuração
+      // não é lugar de reclamar do navegador.
+      return;
+    }
+    if (!doAparelho) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- leitura de sistema EXTERNO (Intl + localStorage), que o servidor não conhece: ler no render daria divergência de hidratação. É o caso que a doc do React permite.
+    setTzAparelho(doAparelho);
+    setDispensado(localStorage.getItem(`tk.fuso.dispensado.${doAparelho}`) === "1");
+  }, []);
+
+  // Preferência de TELA, por fuso de aparelho: quem dispensou em Lisboa e depois
+  // abre em São Paulo merece ver o aviso de novo. Não vai para o banco.
+  function dispensar() {
+    if (tzAparelho) localStorage.setItem(`tk.fuso.dispensado.${tzAparelho}`, "1");
+    setDispensado(true);
+  }
+
+  const divergente = tzAparelho != null && !dispensado && fusosDiscordam(tz, tzAparelho);
   // Só a função de transição é usada; o estado "pendente" não é exibido —
   // quem dá o retorno visual é a mensagem "Salvo — recarregando os dados…".
   const [, iniciar] = useTransition();
@@ -167,6 +219,32 @@ function CardFusoHorario({ inicial }: { inicial: string }) {
         <span className="text-muted">Agora neste fuso</span>
         <span style={sx("font-variant-numeric:tabular-nums")}>{dia} · {agora}</span>
       </div>
+      {divergente && (
+        <div
+          style={sx(
+            "margin-top:var(--space-3);padding:var(--space-3);border-radius:var(--radius-md);" +
+              "background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.28);font-size:12px;line-height:1.5",
+          )}
+        >
+          <strong style={sx("display:block;margin-bottom:4px")}>
+            Este aparelho está em outro fuso
+          </strong>
+          <span className="text-muted">
+            Seus relatórios usam <strong>{tz}</strong>, mas este computador está em{" "}
+            <strong>{tzAparelho}</strong>. Como o fuso decide onde o dia começa, as vendas
+            das últimas horas podem aparecer no dia seguinte — e o mesmo vale para vendas
+            por horário e para os filtros de período.
+          </span>
+          <div style={sx("display:flex;gap:var(--space-2);margin-top:var(--space-3);flex-wrap:wrap")}>
+            <button className="btn btn-sm" type="button" onClick={() => aplicar(tzAparelho!)}>
+              Usar {tzAparelho}
+            </button>
+            <button className="btn btn-ghost btn-sm" type="button" onClick={dispensar}>
+              Manter {tz}
+            </button>
+          </div>
+        </div>
+      )}
       {salvo && !erro && (
         <div style={sx("font-size:12px;color:var(--color-accent-300);margin-top:var(--space-2)")}>
           Salvo — recarregando os dados…
