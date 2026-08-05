@@ -5519,6 +5519,71 @@ ingestão sem segredo**, criado para todo usuário sem que ele peça. Quem
 conhecer o token consegue inserir venda na conta. Decidir se ele deixa de
 nascer ou se passa a exigir chave.
 
+## 🛒 CHECKOUT PRÓPRIO: caminho pronto na gaveta do Pixel — ESPECIFICADO, não feito
+
+**Pedido do usuário em 05/08/2026, com escopo fechado.** Fica registrado aqui
+inteiro porque é a especificação, não um lembrete.
+
+Hoje quem tem checkout no próprio domínio precisa **saber que a regra de
+detecção existe**, abrir o avançado, escolher "contém URL" e adivinhar o
+trecho. Errando, fica sem InitiateCheckout **sem nada avisar** — que é a
+mesma família do bug do IC vazio (`b38de14`).
+
+### O que a resposta "no meu próprio site" deve entregar
+
+| # | O quê |
+|---|---|
+| 1 | Regra já em **contém URL**, campo do trecho em destaque, com exemplo real (`/checkout`, `/finalizar`, `/pagamento`) |
+| 2 | **Validação do que ela digitou**: URL inteira → extrai o caminho sozinho; trecho que casaria com tudo (`/` ou o domínio) → avisa |
+| 3 | Snippet dizendo que vai nas **DUAS páginas** (vendas e checkout), e que sem ele no checkout o IC não dispara |
+| 4 | **Checklist do que só a pessoa pode fazer**: mandar `click_id` e `customer_ip` ao criar a cobrança, com código pronto |
+| 5 | **Estado real por evento**: "IC recebido pela última vez há X" ou "nenhum IC desde que você configurou" |
+
+> ### ⛔ Vazio NÃO salva, e a mensagem tem de dizer o porquê
+> `location.href.indexOf("")` é **sempre verdadeiro**: toda visita viraria
+> checkout. A trava já existe no gerador e no Salvar desde `b38de14` — o que
+> falta é a frase em português explicando a consequência, não mais uma trava.
+
+> ### 🔑 O código do checklist é lido pelo DESENVOLVEDOR da página, não pelo
+> ### usuário da Traffik
+> Então o texto não pode pressupor nada da ferramenta. Ele precisa: ler o
+> `click_id` do cookie `traffik_track` **ou** da querystring, mandar em
+> `tracking` **E** `metadata` (é grátis e dobra a chance de voltar no webhook),
+> e **avisar que, se a cobrança nasce no backend, o valor tem de viajar do
+> navegador até lá** — que é o passo que todo mundo esquece.
+>
+> ⚠️ O campo é **`click_id`**, NUNCA `sck`. O parser lê os dois, mas só o
+> primeiro vira `matchClick`; mandar em `sck` grava a string e **não casa
+> clique nenhum**, sem erro em lugar nenhum.
+
+> ### 🎯 O item 5 é o que impede a PRÓXIMA versão do mesmo bug
+> O IC vazio ficou invisível porque não havia como saber que não funcionava —
+> e o diagnóstico dizia "ok" sobre um tipo que o script não tinha. "Último
+> evento recebido" já existe na gaveta; o que falta é **por evento**.
+
+### Escopo, fechado pelo usuário
+
+- **Sem tela nova.** Tudo dentro da gaveta do Pixel, no caminho que a resposta
+  "no meu próprio site" abre.
+- **O caminho de checkout HOSPEDADO não muda** — funciona e é o caso da
+  maioria.
+
+---
+
+## 🎨 REDESIGN DO DESIGN SYSTEM — intenção futura, documento fora do repo
+
+Registrado em 05/08/2026 a pedido do usuário. **Não começar sem o documento.**
+
+Não é repaginação: é **refazer o design system do zero**, com outra
+organização e outra navegação. Referências: Apple, Raycast, Linear, Framer,
+Stripe e Arc.
+
+> ⚠️ **Não confunda com a "padronização visual", que está CONCLUÍDA** (selects
+> nativos, checkboxes e ícones 256×256 todos zerados). Isto é maior e substitui
+> a organização atual, não a limpa.
+
+O documento vive fora do repositório e o usuário traz quando for a hora.
+
 ## 🚦 COMECE AQUI — sessão de 05/08/2026
 
 ### 🔴🔴 DUAS MIGRATIONS PENDENTES EM PRODUÇÃO
@@ -5840,7 +5905,85 @@ avançado sozinha**; os 4 estados vazios de Taxas e o do sino renderizados, com
 3. Import/export do Bloco 8; faxina do nav morto no `useTraffikState` +
    `EditDashboardDrawer` inalcançável.
 
-## 🎯 ITEM (d) — escopo NOVO, aprovado em 01/08/2026
+## 🔬 ITEM (d) — MEDIDO em 05/08/2026: metade do escopo já não existe
+
+**A seção abaixo está desatualizada e foi mantida só como histórico.** Ela diz
+que o `Drawer` tem "largura FIXA em px — 520 padrão, 560 nas gavetas de Regra e
+Pixel. Abaixo de ~600px de viewport não cabe". **Isso é falso hoje.**
+
+Medido lendo o código:
+
+| Overlay | Estado real |
+|---|---|
+| `ui/Drawer` | ✅ `width:min(${largura}px, 100%)` — vira 100% no estreito |
+| `ui/Modal` | ✅ mesma fórmula |
+| Dropdown do `Select` (`.tk-pop`) | ⚠️ **não é `position:fixed` nem portado** — é `absolute` com `left:0` |
+| Popup do `DateRangePicker` | ⚠️ idem |
+
+> ### ⛔ "4 tipos de overlay `position:fixed`" também está errado
+> Só **dois** são `fixed` e portados para o `<body>` (Drawer e Modal), e os dois
+> já se resolvem sozinhos no estreito. Os outros dois são `absolute` dentro do
+> próprio container — o que muda o problema: não é largura, é **ancoragem**.
+
+**O que sobrou de verdade:** `.tk-pop` tem `min-width` vindo de quem chama (até
+290px) e `left: 0`, sem reposicionamento. Num viewport estreito ele podia ficar
+mais largo que a tela.
+
+✅ **Aplicado agora:** `max-width: calc(100vw - 24px)` no `.tk-pop`. O
+`min-width` perde para o `max-width` no CSS, então o teto vence — e em tela
+larga a regra é **inerte**, porque o popup nunca chega perto de 100vw.
+
+⚠️ **O que NÃO foi feito, de propósito:** a ancoragem continua `left: 0`. Um
+seletor colado na borda direita ainda pode transbordar para fora. Reposicionar
+(flip) muda o comportamento em TODAS as larguras, e eu não consegui medir no
+estreito — mudar o que não dá para verificar é como o rodapé do funil ficou
+invisível por semanas.
+
+### 🔴 A pré-condição do resize continua BLOQUEADA — e foi reproduzida
+
+Com a janela maximizada (medido: `innerWidth 2560 === screen.availWidth 2560`):
+
+```
+resize_window(560, 850) → "Successfully resized window ... to 560x850 pixels"
+innerWidth                → 2560
+```
+
+**Reportou sucesso e não redimensionou.** Os três contornos, e por que nenhum
+serviu nesta sessão:
+
+| Contorno | Situação |
+|---|---|
+| Restaurar a janela (Win+Down) | 🔴 precisa do usuário — a extensão manda tecla para a PÁGINA, não para o gerenciador de janelas |
+| `chrome-devtools-mcp` → `resize_page` (CDP) | 🔴 **as ferramentas estavam desconectadas** nesta sessão |
+| `window.open` com largura | 🔴 bloqueado (sem gesto do usuário) |
+
+**Para a próxima sessão: restaure a janela ANTES de começar.** E a regra que
+não muda: depois de qualquer resize, **leia `innerWidth` e compare** — a
+mensagem de sucesso não vale nada.
+
+### ✅ A varredura de CONDICIONAIS não depende de viewport, e rodou
+
+Semeando os estados que só aparecem sob certos dados (efeito com erro +
+mensagem crua longa, `sem_token`, espelho quebrado, "sem registro"):
+
+| | |
+|---|---|
+| Cards em Integrações › Testes | 15 |
+| Com transbordo | **0** |
+| Página com rolagem horizontal | **não** |
+| Caminhos condicionais que ATIVARAM | **6 de 6**, confirmados por texto na tela |
+
+> ⚠️ **A confirmação de que ativaram é o que dá valor ao "0 de 15".** Sem ela
+> seria o mesmo "0 de 23" da auditoria anterior: um layout que não quebra
+> porque nada foi renderizado. Foi essa checagem que mostrou que o bloco de
+> erro de CONTA **não** vive na vitrine de Anúncios (está dentro da gaveta do
+> perfil) e portanto continua sem varredura.
+
+**Ainda sem varredura:** os condicionais que vivem DENTRO de gaveta (erro de
+conta + backoff em Integrações › Anúncios) e o Gerenciador com filtros/estados
+combinados.
+
+## 🎯 (histórico) ITEM (d) — escopo de 01/08/2026
 
 **Deixou de ser "varrer 23 blocos em N larguras".** A descoberta de que **não
 existe uma única `@media` de largura na base** (só `prefers-reduced-motion` e

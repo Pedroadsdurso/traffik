@@ -539,6 +539,15 @@ a {
 .tk-pop {
   position: absolute; top: calc(100% + 6px); left: 0; z-index: 40;
   min-width: 100%; padding: 6px;
+  /* O `min-width` vem de quem chama (ate 290px no seletor de conta) e o popup
+     nao tem teto. Num viewport estreito ele fica MAIS LARGO que a tela e cria
+     rolagem horizontal na pagina inteira.
+
+     ⚠️ Isto é o TETO, nao o reposicionamento: a ancoragem continua `left: 0`,
+     entao um seletor colado na borda direita ainda pode transbordar para fora.
+     O `min-width` perde para o `max-width` no CSS, entao o teto vence — e em
+     tela larga a regra e inerte, porque o popup nunca chega perto de 100vw. */
+  max-width: calc(100vw - 24px);
   background: var(--color-surface);
   border: 1px solid var(--color-divider); border-radius: var(--radius-md);
   box-shadow: var(--shadow-lg);
