@@ -83,6 +83,23 @@ const t = (nome, cond, detalhe = "") => {
   else { falhas++; console.log(`  \x1b[31m✗ ${nome}${detalhe ? ` — ${detalhe}` : ""}\x1b[0m`); }
 };
 
+let pulados = 0;
+/**
+ * O cenario nao existe neste backup — PULA, nao passa.
+ *
+ * 🔴 Varias assercoes traziam `|| lista.length === 0` DENTRO da condicao: sem a
+ * forma que elas medem, davam verde tendo exercido NADA. Um verde que nao
+ * testou e indistinguivel de um verde que testou — e e isso que faz uma suite
+ * parecer mais forte do que e.
+ *
+ * Agora aparece como `pulado` e entra no resumo. Numero de pulos que sobe e
+ * sinal de que o backup deixou de cobrir um caso.
+ */
+const pular = (nome, motivo) => {
+  pulados++;
+  console.log(`  [33m⊘[0m ${nome} — [2mpulado: ${motivo}[0m`);
+};
+
 /** Estado do banco DEPOIS da migration: nenhuma configuração tem dono ainda. */
 function dadosDoUsuario(userId, { contaDaArea = {}, webhookDaArea = {}, pixelDaArea = {}, desempate = {} } = {}) {
   const ws = workspaces.filter((w) => w.userId === userId);
@@ -190,9 +207,25 @@ for (const u of users) {
     t("com área secundária: vendas somam o total", soma(d.vendas) === nVendas, `${soma(d.vendas)}/${nVendas}`);
     t("com área secundária: eventos somam o total", soma(d.eventos) === nEventos, `${soma(d.eventos)}/${nEventos}`);
     const naB = (d.cliques[areaB] ?? 0) + (d.vendas[areaB] ?? 0);
-    t("a área secundária de fato recebe linhas (o filtro não é no-op)", naB > 0 || contasDoUser.length === 0,
+    if (contasDoUser.length === 0) pular("a área secundária de fato recebe linhas", "usuário sem conta de anúncio no backup");
+    else t("a área secundária de fato recebe linhas (o filtro não é no-op)", naB > 0,
       `${d.cliques[areaB] ?? 0} cliques + ${d.vendas[areaB] ?? 0} vendas na secundária`);
-    t("nenhuma linha cai fora de toda área", Object.keys(d.cliques).every((k) => k) && !Object.keys(d.vendas).includes("undefined"));
+    /**
+     * 🔴 A versao anterior NAO detectava o que o nome promete.
+     *
+     * Ela conferia que nenhuma CHAVE do mapa era vazia ou "undefined". Mas uma
+     * linha que caia fora de toda area simplesmente **nao entra no mapa** — ela
+     * some, e as chaves ficam certinhas. Os dois desfechos produziam o mesmo
+     * valor observado: a assercao nao media nada.
+     *
+     * O que ela mede agora: toda chave do mapa e uma area que EXISTE. Linha
+     * PERDIDA ja e coberta pelas somas acima, que sao o teste certo para isso.
+     */
+    const idsValidos = new Set(dados.areas.map((a) => a.id));
+    const fantasma = [...Object.keys(d.cliques), ...Object.keys(d.vendas), ...Object.keys(d.eventos)]
+      .filter((k) => !idsValidos.has(k));
+    t("toda linha caiu numa área QUE EXISTE", fantasma.length === 0,
+      fantasma.length ? `chaves fantasma: ${fantasma.slice(0, 3).join(", ")}` : `${idsValidos.size} área(s) válida(s)`);
   }
 
   // ── Cenário 3: o BUG ANTIGO, reproduzido ──────────────────────────────────
@@ -226,7 +259,8 @@ for (const u of users) {
         webhookDaArea: { [wh[0].id]: wsDoUser.find((w) => !w.isDefault)?.id ?? "b" },
       }));
       const d = distribuir(mapa, u.id);
-      t("modelo ANTIGO perdia vendas (bug reproduzido)", sumidas > 0 || vendasDoUser.length === 0,
+      if (vendasDoUser.length === 0) pular("modelo ANTIGO perdia vendas", "usuário sem venda no backup");
+      else t("modelo ANTIGO perdia vendas (bug reproduzido)", sumidas > 0,
         `${sumidas} de ${vendasDoUser.length} vendas ficavam invisíveis nas duas áreas`);
       t("modelo NOVO não perde nenhuma", soma(d.vendas) === nVendas, `${soma(d.vendas)}/${nVendas}`);
     }
@@ -247,8 +281,11 @@ for (const u of users) {
       const mapa = construirMapa(dados);
       const atribuidas = comClique.map((s) => mapa.areaDaVenda(vendaParaAtribuir(s)));
       const porConta = atribuidas.filter((r) => r.motivo === "conta");
-      t("venda com clique atribuído vai para a área da CONTA, não do webhook",
-        porConta.length === 0 || porConta.every((r) => r.areaId === areaB),
+      // ⚠️ `every` sobre lista VAZIA e `true`: sem o pulo, zero venda decidida
+      // por conta dava verde — o nome promete uma comparacao que nao aconteceu.
+      if (porConta.length === 0) pular("venda com clique atribuído vai para a área da CONTA", "nenhuma venda decidida por conta neste backup");
+      else t("venda com clique atribuído vai para a área da CONTA, não do webhook",
+        porConta.every((r) => r.areaId === areaB),
         `${porConta.length} venda(s) decidida(s) por conta, todas na Área B`);
     }
   }
@@ -365,5 +402,5 @@ for (const u of users) {
   console.log("");
 }
 
-console.log(`\n\x1b[1m${ok} asserções passaram, ${falhas} falharam.\x1b[0m\n`);
+console.log(`\n\x1b[1m${ok} asserções passaram, ${falhas} falharam${pulados ? `, ${pulados} pulada(s)` : ''}.\x1b[0m\n`);
 process.exit(falhas === 0 ? 0 : 1);

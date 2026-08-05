@@ -73,22 +73,21 @@ export async function escopoDeConfig(
  * transformando erro silencioso em erro visível. Se um dia o aviso sair, o risco
  * volta inteiro.
  */
-export function whereDespesas(areaId: string) {
-  /**
-   * 🔴 `workspaceId` NULO = vale para TODAS as áreas — e por isso ENTRA aqui.
-   *
-   * Devolvia `{ workspaceId: areaId }` seco, que **descarta as nulas**. Taxa de
-   * gateway e imposto nascem globais (o formulário não os prende a área
-   * nenhuma), então na prática TODA despesa cadastrada era ignorada no cálculo
-   * de lucro — e o lucro aparecia maior que a realidade, com número plausível.
-   *
-   * Reproduzido em 05/08/2026: cinco descontos cadastrados, painel mostrando
-   * `Taxas de gateway − R$ 0,00` para todos.
-   *
-   * ⚠️ Este é o mesmo `OR` do catch-all de venda e evento — e aqui ele é ainda
-   * mais obrigatório, porque em `Expense` o NULO não significa "sem dono", e sim
-   * "vale para todo mundo". É a exceção que o CLAUDE.md registra.
-   */
-  return { OR: [{ workspaceId: null }, { workspaceId: areaId }] };
-}
+/**
+ * Despesas que se aplicam a uma área.
+ *
+ * 🔴 **É a MESMA função de `precedencia.ts`, e agora é literalmente a mesma.**
+ *
+ * Eram duas cópias, em arquivos diferentes, com o mesmo corpo — e as duas
+ * tinham o mesmo bug (descartavam `workspaceId` NULO, que aqui significa "vale
+ * para todas as áreas"). **Errar junto é pior que divergir**: com a listagem e o
+ * cálculo concordando, a divergência que denunciaria o erro não existia, e toda
+ * despesa cadastrada ficou fora do lucro sem ninguém perceber.
+ *
+ * ⚠️ `escopoConfig` e `precedencia` continuam separados de propósito — "de quem
+ * é esta VENDA?" e "de quem é este WEBHOOK?" são perguntas diferentes. Mas
+ * **para despesa a pergunta é a mesma**, e duas implementações dela não podem
+ * existir.
+ */
+export { whereDespesasDaArea as whereDespesas } from "./precedencia";
 

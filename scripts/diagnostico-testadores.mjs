@@ -460,8 +460,11 @@ async function main() {
       [u.id],
     );
     if (pagto.length) {
+      // ⚠️ HISTORICO COMPLETO, nao a janela. Sem dizer isso, o total daqui
+      // parece contradizer o da secao 1 (que e de N dias) — dois numeros do
+      // mesmo relatorio que nao batem levam a conclusao errada.
       console.log(`
-  ${C.b}3c. Forma de pagamento das vendas aprovadas${C.x}`);
+  ${C.b}3c. Forma de pagamento das vendas aprovadas${C.x}  ${C.d}(histórico completo, não a janela de ${dias} dias)${C.x}`);
       for (const m of pagto) {
         const marca = m.metodo === "OUTRO" ? `${C.a}← nao reconhecida pelo mapPayment${C.x}` : "";
         console.log(`     ${String(m.metodo).padEnd(8)} ${String(m.n).padStart(4)} venda(s) · ${brl(m.valor)}  ${marca}`);
