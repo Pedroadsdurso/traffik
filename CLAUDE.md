@@ -5187,6 +5187,59 @@ sozinho. Erro de permissão não se resolve tentando de novo em 20 s.
 (contador sem data) que erra para o lado de TENTAR: travar uma conta para
 sempre por causa de dado incompleto seria pior que uma tentativa a mais.
 
+### ✅ VALIDADO EM PRODUÇÃO com dado de OUTRO usuário (04/08/2026)
+
+O testador reconectou depois que a restrição da conta de desenvolvedor dele
+caiu, e quatro coisas foram exercidas de uma vez, com dado real que não é nosso:
+
+| | O quê |
+|---|---|
+| ✅ | `accountStatus` gravado e traduzido — as contas voltaram a "Ativa" |
+| ✅ | Tradução do erro `(#200)` |
+| ✅ | Aviso de perfil (`lastDiscoveryError`) apareceu **e sumiu sozinho** ao reconectar |
+| ✅ | Reset dos contadores no callback do OAuth |
+| ⚠️ | Upsert em lote — ver a ressalva abaixo |
+
+> ### ⚠️ A leitura de que o LOTE destravou os 102 anúncios NÃO se sustenta
+> A conclusão natural foi: "102 anúncios × 40 dias teria estourado o tempo com
+> o N+1". Ela é plausível e **os números não a sustentam**.
+>
+> O `40` daquela mensagem é `summary.metrics` — **linhas gravadas**, não dias
+> (o rótulo "dias" no botão está errado e é dívida). Foram 40 linhas, não
+> 4.080: a maioria dos 102 anúncios não teve gasto no período. E 40 upserts em
+> série são ~4 s, que o caminho MANUAL (`syncSingleAccount`, requisição direta,
+> fora do `after()`) aguentaria sem lote.
+>
+> **O que destravou foi o token voltar.** O lote continua sendo a correção
+> certa — ele protege o ciclo automático recorrente, que é onde o orçamento é
+> apertado —, mas atribuir a ele este caso seria confundir correlação com causa.
+>
+> ⚠️ Fica um sinal a conferir: **Conta 2 sincronizou 28 anúncios e `0` linhas de
+> métrica.** Pode ser ausência de gasto (legítimo) ou `metricasOrfas`. O
+> `diag:testadores` responde na seção "Por conta".
+
+### 🔍 `npm run falha:coletiva` — "é problema dele ou é nosso?"
+
+Uma restrição no NOSSO app derruba todos ao mesmo tempo, e a tela diz a mesma
+coisa que diria para um problema individual — cada um abre chamado achando que
+é problema dele.
+
+Agrupa as contas com erro recente pela **causa traduzida** e conta **usuários
+distintos**. Dois ou mais já é o sinal.
+
+> ### ⚠️ Agrupa pela CAUSA, nunca pelo texto cru
+> A Meta prefixa o nome da conta e anexa a URL da doc, então duas mensagens da
+> mesma causa nunca são strings iguais. Agrupar por texto cru não acharia grupo
+> nenhum — foi exercitado com dois usuários e textos diferentes.
+
+> ⛔ **O veredito não é binário.** "1 de 1 usuário falhando" não é evidência de
+> nada; é o caso normal de quem tem um usuário só. Com menos de 2 usuários
+> conectados o script **diz que não consegue distinguir**, em vez de dar um
+> veredito que não se sustenta.
+
+O aviso automático na tela fica para quando houver volume — a decisão foi
+começar pelo script, rodado sob suspeita.
+
 ### 🔍 `npm run diag:testadores` — só leitura, pode rodar em produção
 
 ```
