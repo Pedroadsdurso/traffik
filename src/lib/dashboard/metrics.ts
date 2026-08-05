@@ -13,6 +13,9 @@ import {
   zonedToUtc,
 } from "@/lib/timezone";
 import { chaveDoPedido, contarPedidos, umPorPedido } from "@/lib/pedidos";
+import { nomeDaFonte } from "@/lib/fontes";
+import { ehTemplateNaoSubstituido } from "@/lib/utm/parse";
+import { getImpostoAnunciosPct } from "@/lib/impostoAnuncios";
 import { calcularFinanceiro, type Composicao } from "@/lib/financeiro";
 import { janelaAnterior, janelaDoPeriodo, type PeriodoNome } from "@/lib/periodo";
 import { SENTINELA_CHECKOUT_GATEWAY } from "@/lib/webhook/checkoutEvent";
@@ -132,6 +135,14 @@ export interface DashboardData {
   financeiro: Composicao;
   products: { name: string; total: number; sales: number }[];
   sources: { name: string; total: number }[];
+  /**
+   * Vendas aprovadas por POSICIONAMENTO da Meta (`utm_term`).
+   *
+   * ⚠️ Só entram as vendas cujo clique trouxe o `{{placement}}` substituído. A
+   * soma NÃO fecha com `kpis.revenue` — venda sem clique, sem UTM ou com
+   * template cru fica de fora, e a tela diz isso.
+   */
+  byPlacement: { name: string; total: number; sales: number }[];
   payments: { name: string; total: number; count: number }[];
   funnel: { cliques: number; visitas: number; checkouts: number; iniciadas: number; vendas: number };
   /**
@@ -295,7 +306,11 @@ async function windowAggregate(
         // O resolvedor de área precisa destes três para aplicar a precedência.
         webhookId: true,
         apiCredentialId: true,
-        click: { select: { utmSource: true, utmCampaign: true, country: true, workspaceId: true } },
+        // ⚠️ O `utmTerm` vem das DUAS pontas de propósito: a cadeia
+        // `Sale -> Click` é a fonte, e a cópia na venda é o seguro para quando
+        // o clique some (`clickId` é `SetNull`). Ver `lib/vendas/utmsDaVenda`.
+        utmTerm: true,
+        click: { select: { utmSource: true, utmCampaign: true, country: true, workspaceId: true, utmTerm: true } },
       },
       orderBy: { timestamp: "desc" },
     }),
@@ -463,8 +478,16 @@ export async function computeDashboard(userId: string, filters: DashboardFilters
     loadFilterOptions(userId),
   ]);
 
-  const summary = summarize(current);
-  const prev = summarize(previous);
+  /**
+   * ⚠️ A MESMA alíquota vai para as duas janelas.
+   *
+   * Os deltas comparam período atual com anterior; aplicar o imposto só no
+   * atual faria a variação do lucro incluir a mudança de regra de cálculo, e o
+   * usuário leria isso como queda de desempenho no dia em que ligou o toggle.
+   */
+  const impostoAnunciosPct = await getImpostoAnunciosPct(userId);
+  const summary = summarize(current, impostoAnunciosPct);
+  const prev = summarize(previous, impostoAnunciosPct);
 
   const deltas: Record<string, number | null> = {
     revenue: pctDelta(summary.revenue, prev.revenue),
@@ -510,6 +533,7 @@ export async function computeDashboard(userId: string, filters: DashboardFilters
     financeiro: summary.financeiro,
     products: summary.products,
     sources: summary.sources,
+    byPlacement: summary.byPlacement,
     payments: summary.payments,
     funnel: summary.funnel,
     bots: current.bots,
@@ -525,7 +549,7 @@ export async function computeDashboard(userId: string, filters: DashboardFilters
 
 type Window = Awaited<ReturnType<typeof windowAggregate>>;
 
-function summarize(w: Window) {
+function summarize(w: Window, impostoAnunciosPct = 0) {
   const approved = w.sales.filter((s) => s.status === "APROVADA");
   const revenue = approved.reduce((a, s) => a + num(s.value), 0);
   // ⚠️ CONVERSÕES, não itens. Um checkout com order bump gera 2 linhas e 1
@@ -613,6 +637,7 @@ function summarize(w: Window) {
       // que já mordeu a contagem de conversões.
       chavePedido: chaveDoPedido(s),
     })),
+    impostoAnunciosPct,
   });
   const profit = fin.lucro;
   // ROI como **multiplicador** (Bloco 4), na mesma escala do ROAS: 1,87x.
@@ -692,13 +717,61 @@ function summarize(w: Window) {
   // Vendas por fonte
   const srcMap = new Map<string, number>();
   for (const s of approved) {
-    const src = s.click?.utmSource ?? "Direto / Orgânico";
+    /**
+     * ⚠️ Agrupa pelo nome DE EXIBIÇÃO, não pelo valor cru.
+     *
+     * `FB`, `facebook` e `Meta` são a mesma fonte, e apareciam como três fatias
+     * separadas somando a mesma coisa. Quem decide é `lib/fontes.ts` — o valor
+     * gravado no clique continua intocado, porque `utm_source=FB` já está
+     * colado no painel dos gateways de quem gerou os códigos.
+     */
+    const src = nomeDaFonte(s.click?.utmSource);
     srcMap.set(src, (srcMap.get(src) ?? 0) + num(s.value));
   }
   const sources = [...srcMap.entries()]
     .map(([name, total]) => ({ name, total }))
     .sort((a, b) => b.total - a.total)
     .slice(0, 6);
+
+  /**
+   * Vendas por POSICIONAMENTO (`utm_term` = `{{placement}}` da Meta).
+   *
+   * Responde "onde o anúncio converteu?" — feed do Instagram, stories, reels,
+   * audience network. É a dimensão que o Gerenciador não mostra e que decide
+   * onde vale a pena concentrar entrega.
+   *
+   * ⛔ Template não substituído NÃO vira posicionamento.
+   *
+   * Um clique com `{{placement}}` cru (ou `%7B%7Bplacement%7D%7D`) não veio de
+   * entrega de anúncio — é preview, crawler ou link colado à mão. Deixá-lo
+   * entrar criaria um "posicionamento" fantasma no topo do ranking, com nome de
+   * macro, e a soma pareceria completa. `ehTemplateNaoSubstituido` é o MESMO
+   * guarda que o parser de tracking usa; duplicar a checagem aqui faria as duas
+   * divergirem no primeiro formato novo.
+   *
+   * ⚠️ Conta PEDIDOS e soma LINHAS: o posicionamento descreve a compra, não o
+   * item, então um checkout com order bump é uma conversão — mas o dinheiro dos
+   * dois itens é real.
+   */
+  const placeMap = new Map<string, { total: number; sales: number }>();
+  const pedidosPorPlacement = new Set<string>();
+  for (const s of approved) {
+    const bruto = s.click?.utmTerm ?? s.utmTerm;
+    const place = ehTemplateNaoSubstituido(bruto) ? null : bruto?.trim() || null;
+    if (!place) continue;
+    const cur = placeMap.get(place) ?? { total: 0, sales: 0 };
+    cur.total += num(s.value);
+    const chave = `${place}::${chaveDoPedido(s)}`;
+    if (!pedidosPorPlacement.has(chave)) {
+      pedidosPorPlacement.add(chave);
+      cur.sales += 1;
+    }
+    placeMap.set(place, cur);
+  }
+  const byPlacement = [...placeMap.entries()]
+    .map(([name, v]) => ({ name, total: v.total, sales: v.sales }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 12);
 
   // Vendas por pagamento
   const payMap = new Map<PaymentMethod, { total: number; count: number }>();
@@ -846,7 +919,7 @@ function summarize(w: Window) {
   return {
     revenue, origem, salesCount, pendentes, pendentesValor, reembolsadas, chargebackRate,
     spend, clicksCount, ticket, cpa, roas, ctr, profit, roi, margin, arpu, buyers,
-    expenses, products, sources, payments, funnel, byHour, byDay, byCountry, approval,
+    expenses, products, sources, byPlacement, payments, funnel, byHour, byDay, byCountry, approval,
     // A composição inteira viaja até a UI: o tooltip do Faturamento Líquido e do
     // Lucro precisa mostrar CADA desconto, senão o número é impossível de conferir.
     financeiro: fin,
@@ -1000,7 +1073,10 @@ function buildActivity(w: Window) {
     items.push({
       id: "s-" + s.id,
       type: tipo,
-      source: s.click?.utmSource ?? "Direto",
+      // ⚠️ MESMA tradução do donut e do filtro. Sem ela a coluna ORIGEM do feed
+      // mostrava "FB" enquanto o gráfico ao lado já dizia "Meta Ads" — a mesma
+      // fonte com dois nomes na mesma tela.
+      source: s.click?.utmSource ? nomeDaFonte(s.click.utmSource) : "Direto",
       campaign: s.click?.utmCampaign ?? s.product,
       value: num(s.value),
       ts: s.timestamp.getTime(),
@@ -1010,7 +1086,7 @@ function buildActivity(w: Window) {
     items.push({
       id: "c-" + c.id,
       type: "clique",
-      source: c.utmSource ?? "Direto",
+      source: c.utmSource ? nomeDaFonte(c.utmSource) : "Direto",
       campaign: c.utmCampaign ?? "—",
       value: null,
       ts: c.timestamp.getTime(),

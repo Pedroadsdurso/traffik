@@ -321,6 +321,72 @@ export function BlockContent({ id, v }: { id: string; v: TraffikView }) {
         </Bloco>
       );
 
+    /**
+     * Vendas por POSICIONAMENTO (`utm_term` = `{{placement}}` da Meta).
+     *
+     * ⚠️ Esta tabela NÃO soma o faturamento total, e a última linha diz isso.
+     * Venda sem clique, sem UTM ou com o template não substituído não tem
+     * posicionamento — omitir o resto faria o usuário comparar com o KPI, ver
+     * que não fecha, e concluir que um dos dois está errado.
+     */
+    case "chart:posicionamento":
+      return (
+        <Bloco>
+          <div className="card-kicker">Vendas por posicionamento</div>
+          {v.placements.length === 0 ? (
+            <div className="text-muted" style={sx("font-size:12px;line-height:1.5;padding:var(--space-3) 0")}>
+              Nenhuma venda com posicionamento no período. Ele vem do <code>utm_term</code> dos
+              códigos da aba UTMs — se você ainda não os instalou, ou se o tráfego não veio de
+              anúncio, esta tabela fica vazia.
+            </div>
+          ) : (
+            <div style={sx("overflow-x:auto;margin-top:var(--space-2)")}>
+              <table style={sx("width:100%;border-collapse:collapse;font-size:12px")}>
+                <thead>
+                  <tr className="text-muted" style={sx("text-align:left")}>
+                    <th style={sx("padding:4px 8px 4px 0;font-weight:500")}>Onde apareceu</th>
+                    <th style={sx("padding:4px 8px;font-weight:500;text-align:right")}>Vendas</th>
+                    <th style={sx("padding:4px 8px;font-weight:500;text-align:right")}>Faturamento</th>
+                    <th style={sx("padding:4px 0 4px 8px;font-weight:500;text-align:right")}>Ticket</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {v.placements.map((p) => (
+                    <tr key={p.name}>
+                      <td style={sx("padding:5px 8px 5px 0;position:relative")}>
+                        {/* Barra de proporção atrás do nome: compara a olho sem
+                            uma coluna a mais numa tabela que já é estreita. */}
+                        <div
+                          aria-hidden
+                          style={sx(
+                            `position:absolute;left:0;top:3px;bottom:3px;width:${p.barWidth};` +
+                              "background:var(--color-accent-soft,rgba(139,92,246,.16));border-radius:3px",
+                          )}
+                        />
+                        <span style={sx("position:relative")}>{p.name}</span>
+                      </td>
+                      <td style={sx("padding:5px 8px;text-align:right;font-variant-numeric:tabular-nums")}>{p.sales}</td>
+                      <td style={sx("padding:5px 8px;text-align:right;font-variant-numeric:tabular-nums")}>{p.totalLabel}</td>
+                      <td style={sx("padding:5px 0 5px 8px;text-align:right;font-variant-numeric:tabular-nums")}>{p.ticketLabel}</td>
+                    </tr>
+                  ))}
+                  {v.placementSemDados > 0 && (
+                    <tr className="text-muted">
+                      <td style={sx("padding:5px 8px 5px 0")} title="Venda sem clique rastreado, sem UTM, ou com o {{placement}} não substituído.">
+                        Sem posicionamento
+                      </td>
+                      <td style={sx("padding:5px 8px;text-align:right")}>—</td>
+                      <td style={sx("padding:5px 8px;text-align:right;font-variant-numeric:tabular-nums")}>{brl0(v.placementSemDados)}</td>
+                      <td style={sx("padding:5px 0 5px 8px;text-align:right")}>—</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Bloco>
+      );
+
     case "chart:pagamentos":
       return (
         <Bloco>

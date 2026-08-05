@@ -1,5 +1,6 @@
 "use client";
 
+import { nomeDaFonte } from "@/lib/fontes";
 import { sx } from "@/lib/sx";
 import { DashboardGrid } from "../DashboardGrid";
 import { BannerPendencias } from "../ui/BannerPendencias";
@@ -48,7 +49,11 @@ export function DashboardView({ v }: { v: TraffikView }) {
             value={v.dashSource}
             onChange={v.setDashSource}
             minWidth={170}
-            options={[{ value: "todas", label: "Todas as fontes" }, ...v.filterSources.map((s) => ({ value: s, label: s }))]}
+            /* ⚠️ O `value` continua sendo o utm_source CRU — é ele que o
+               servidor usa no `where`. Só o rótulo é traduzido; trocar o value
+               por "Meta Ads" faria o filtro procurar uma fonte que não existe
+               em clique nenhum. */
+            options={[{ value: "todas", label: "Todas as fontes" }, ...v.filterSources.map((s) => ({ value: s, label: nomeDaFonte(s) }))]}
           />
         </div>
 

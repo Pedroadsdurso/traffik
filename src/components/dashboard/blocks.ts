@@ -84,6 +84,9 @@ const CHART_BLOCKS: BlockDef[] = [
   { id: "chart:receita", label: "Faturamento vs. gasto", kind: "chart", w: 12, h: 7, minW: 4, minH: 5 },
   { id: "chart:produtos", label: "Vendas por produto", kind: "chart", w: 6, h: 6, minW: 3, minH: 4 },
   { id: "chart:fontes", label: "Vendas por fonte", kind: "chart", w: 6, h: 6, minW: 3, minH: 4 },
+  // Tabela, não donut: a lista de posicionamentos tem cauda longa e precisa de
+  // largura para as linhas caberem. Nasce FORA do layout padrão — ver a nota.
+  { id: "chart:posicionamento", label: "Vendas por posicionamento", kind: "chart", w: 6, h: 6, minW: 4, minH: 4 },
   { id: "chart:pagamentos", label: "Vendas por pagamento", kind: "chart", w: 6, h: 6, minW: 3, minH: 4 },
   { id: "chart:funil", label: "Funil de conversão", kind: "chart", w: 12, h: 7, minW: 4, minH: 5 },
   { id: "chart:feed", label: "Atividade recente", kind: "chart", w: 12, h: 8, minW: 4, minH: 5 },

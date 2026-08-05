@@ -155,6 +155,23 @@ model User {
   /// e bloqueiam o envio à CAPI na ingestão. Por isso são removíveis na tela
   /// (Integrações › Testes) — bloquear é irreversível, a lista não pode ser.
   testHostPatterns Json?
+
+  /// O imposto incide sobre o GASTO com anuncios, nao sobre o faturamento.
+  ///
+  /// 🔴 A Meta reporta o gasto LIQUIDO: o tributo que incide sobre o anuncio
+  /// (no Brasil, ~12% somando as parcelas) nunca chega em `DailyAdMetric.spend`.
+  /// Sem isto o lucro sai sistematicamente MAIOR que a realidade, por uma
+  /// fracao fixa do investimento — e o numero continua plausivel.
+  ///
+  /// ⚠️ Nao e uma linha em `Expense` porque a BASE e outra: as despesas de la
+  /// incidem sobre o faturamento ou por pedido. Modelar como IMPOSTO comum
+  /// aplicaria a aliquota na base errada, e o erro seria invisivel justamente
+  /// em quem esta perto do ponto de equilibrio (faturamento ~ gasto).
+  ///
+  /// ⚠️ Nasce DESLIGADO. Ligar sozinho mudaria o lucro de todo mundo no dia do
+  /// deploy sem ninguem pedir; quem sabe a aliquota certa e o usuario.
+  impostoAnunciosAtivo Boolean @default(false)
+  impostoAnunciosPct   Decimal @default(12) @db.Decimal(6, 3)
   /// Quando o usuário concluiu (ou pulou) o assistente de primeiro acesso.
   /// Nulo = nunca viu o onboarding. É o que impede o assistente de reaparecer
   /// a cada login — a marcação fica no banco, não no navegador.

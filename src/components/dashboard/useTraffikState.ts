@@ -871,6 +871,31 @@ export function useTraffikState(
     pctLabel: Math.round((x.total / srcTotal) * 100) + "%",
     barWidth: Math.round((x.total / srcMax) * 100) + "%",
   }));
+  /**
+   * Posicionamento (`utm_term`). É TABELA, não donut: a lista tem cauda longa
+   * (feed, stories, reels, explore, audience network…) e um donut com 12 fatias
+   * vira legenda ilegível. Aqui o que se compara é linha a linha.
+   */
+  const placeMax = Math.max(1, ...(d?.byPlacement ?? []).map((x) => x.total));
+  const placements = (d?.byPlacement ?? []).map((x) => ({
+    name: x.name,
+    total: x.total,
+    sales: x.sales,
+    totalLabel: brl0(x.total),
+    // Ticket do posicionamento: faturamento ÷ CONVERSÕES daquele lugar.
+    ticketLabel: x.sales ? brl0(x.total / x.sales) : "—",
+    barWidth: Math.round((x.total / placeMax) * 100) + "%",
+  }));
+  /**
+   * Faturamento aprovado que NÃO tem posicionamento.
+   *
+   * ⚠️ A tabela precisa dizer isto. Ela nunca soma o faturamento total — venda
+   * sem clique, sem UTM ou com `{{placement}}` cru fica de fora —, e sem a
+   * linha do resto o usuário compara os números com o KPI, vê que não fecham e
+   * conclui que um dos dois está errado.
+   */
+  const placementSemDados = Math.max(0, revenue - (d?.byPlacement ?? []).reduce((a, x) => a + x.total, 0));
+
   const payTotal = (d?.payments ?? []).reduce((a, x) => a + x.total, 0) || 1;
   const payMax = Math.max(1, ...(d?.payments ?? []).map((x) => x.total));
   const payments = (d?.payments ?? []).map((x) => ({
@@ -957,6 +982,15 @@ export function useTraffikState(
         id: e.id,
         name: e.name,
         amountStr: String(e.amount),
+        /**
+         * Unidade REAL da linha, lida do `calc` gravado.
+         *
+         * ⛔ A tela imprimia "%" fixo ao lado do valor. Agora que estes blocos
+         * aceitam valor por venda, um "R$ 10 por venda" apareceria como "10%" —
+         * a tela afirmando uma coisa e a conta fazendo outra, no número que
+         * decide o lucro. O sufixo tem de vir do dado, nunca do template.
+         */
+        unidade: e.calc === "FIXO" ? "R$/venda" : "%",
         onChange: (ev: React.ChangeEvent<HTMLInputElement>) => {
           const amount = parseFloat(ev.target.value) || 0;
           setS((st) => ({ ...st, expenses: st.expenses.map((x) => (x.id === e.id ? { ...x, amount } : x)) }));
@@ -1447,7 +1481,7 @@ export function useTraffikState(
     /** Aplica o intervalo do calendário e já muda o período para "custom". */
     setDashRange: (from: string, to: string) => set({ dashPeriod: "custom", dashFrom: from, dashTo: to }),
 
-    kpiCards, chart, chartPeriodLabel, products, sources, payments, funnel, feed, metricList,
+    kpiCards, chart, chartPeriodLabel, products, sources, placements, placementSemDados, payments, funnel, feed, metricList,
     // Registro por chave: o grid do Bloco 2 renderiza cada KPI como bloco
     // independente, então precisa acessar a métrica pelo id e não pela ordem.
     metricCards: reg,
@@ -1980,24 +2014,34 @@ export function useTraffikState(
      * ⚠️ São PERCENTUAIS sobre o faturamento, como o imposto. Sem eles
      * cadastrados o Faturamento Líquido aparece maior do que é, e o card avisa.
      */
-    addCoproducao: async (nome: string, pct: string) => {
-      const amount = parseFloat(pct) || 0;
+    addCoproducao: async (nome: string, pct: string, calc: "PERCENTUAL" | "FIXO" = "PERCENTUAL") => {
+      const amount = parseFloat(pct.replace(",", ".")) || 0;
       if (!amount) return;
       const created = await createExpense({
         name: nome.trim() || "Coprodução",
         type: "COPRODUCAO",
-        calc: "PERCENTUAL",
+        calc,
         amount,
       });
       setS((st) => ({ ...st, expenses: [...st.expenses, created] }));
     },
-    addCustoProduto: async (nome: string, pct: string) => {
-      const amount = parseFloat(pct) || 0;
+    /**
+     * ⚠️ `calc` deixou de ser fixo em `PERCENTUAL`.
+     *
+     * Custo de produto raramente é percentual: quem vende físico paga um valor
+     * por unidade (impressão, embalagem, frete). Forçar percentual obrigava a
+     * converter na mão e a refazer a conta a cada mudança de preço — e o
+     * resultado ficava errado no instante em que o ticket mudasse.
+     *
+     * O mesmo vale para coprodução: comissão fixa por venda existe.
+     */
+    addCustoProduto: async (nome: string, pct: string, calc: "PERCENTUAL" | "FIXO" = "PERCENTUAL") => {
+      const amount = parseFloat(pct.replace(",", ".")) || 0;
       if (!amount) return;
       const created = await createExpense({
         name: nome.trim() || "Custo de produto",
         type: "CUSTO_PRODUTO",
-        calc: "PERCENTUAL",
+        calc,
         amount,
       });
       setS((st) => ({ ...st, expenses: [...st.expenses, created] }));
@@ -2042,6 +2086,17 @@ export function useTraffikState(
       coproducao: brl(fin?.coproducao ?? 0),
       tax: brl(fin?.impostos ?? 0),
       custoProduto: brl(fin?.custoProduto ?? 0),
+      /**
+       * ⚠️ O painel PRECISA desta linha, senão ele para de fechar.
+       *
+       * Com o imposto de anúncios ligado o Lucro cai, e sem a linha o usuário
+       * soma o que está na tela, não bate, e conclui que o Lucro está errado.
+       * É exatamente o defeito que já existiu aqui com coprodução e custo de
+       * produto — o painel mostrando um desconto que não subtraía, ou
+       * subtraindo um que não mostrava.
+       */
+      impostoAnuncios: brl(fin?.impostoAnuncios ?? 0),
+      temImpostoAnuncios: (fin?.impostoAnuncios ?? 0) > 0,
       despesas: brl(fin?.despesas ?? 0),
       liquido: brl(fin?.liquido ?? 0),
       profit: brl(fin?.lucro ?? 0),

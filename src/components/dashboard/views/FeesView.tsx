@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 
-import { setMyTimezone } from "@/lib/actions/profile";
+import { getImpostoAnuncios, setImpostoAnuncios, setMyTimezone } from "@/lib/actions/profile";
 import { CONFIG } from "@/lib/explicacoes";
 import { faltamTaxas } from "@/lib/areas/taxas";
 import { sx } from "@/lib/sx";
@@ -21,6 +21,94 @@ import type { TraffikView } from "../useTraffikState";
  * Mostra a hora atual no fuso escolhido — é a única forma de o usuário conferir
  * que acertou sem esperar o dashboard virar o dia.
  */
+/**
+ * Imposto sobre o GASTO com anúncios.
+ *
+ * 🔴 A Meta reporta o gasto LÍQUIDO: o tributo que incide sobre o anúncio nunca
+ * chega no número que a ferramenta recebe. Sem esta linha o lucro sai
+ * sistematicamente maior que a realidade, por uma fração fixa do investimento —
+ * e o número continua plausível, que é o que torna o erro caro.
+ *
+ * ⚠️ Fica aqui e NÃO no bloco de impostos: lá a base é o faturamento. Misturar
+ * as duas faria a alíquota certa incidir sobre o número errado.
+ */
+function CardImpostoAnuncios() {
+  const [ativo, setAtivo] = useState(false);
+  const [pct, setPct] = useState("12");
+  const [erro, setErro] = useState<string | null>(null);
+  const [, iniciar] = useTransition();
+
+  const carregar = useCallback(() => {
+    void getImpostoAnuncios().then((r) => {
+      setAtivo(r.ativo);
+      setPct(String(r.pct).replace(".", ","));
+    });
+  }, []);
+  useEffect(carregar, [carregar]);
+
+  function salvar(novoAtivo: boolean, novoPct: string) {
+    const n = Number(novoPct.replace(",", "."));
+    setErro(null);
+    iniciar(async () => {
+      const r = await setImpostoAnuncios(novoAtivo, Number.isFinite(n) ? n : 0);
+      if (!r.ok) {
+        setErro(r.error ?? "Não foi possível salvar.");
+        return;
+      }
+      // O lucro é calculado no servidor: recarregar é o caminho honesto de
+      // repintar os cards com a alíquota nova, igual ao card de fuso.
+      setTimeout(() => window.location.reload(), 400);
+    });
+  }
+
+  return (
+    <div className="card elev-sm">
+      <div className="card-kicker">Imposto sobre anúncios</div>
+      <div className="card-title">O que a Meta cobra além do gasto</div>
+      <p className="text-muted" style={sx("font-size:12px;margin-top:var(--space-2);line-height:1.5")}>
+        O Gerenciador do Facebook mostra o valor do anúncio sem o imposto que incide
+        sobre ele. Ligue aqui para que o seu lucro já venha com esse custo descontado.
+      </p>
+
+      <label style={sx("display:flex;align-items:center;gap:8px;margin-top:var(--space-3);cursor:pointer")}>
+        <input
+          type="checkbox"
+          checked={ativo}
+          onChange={(e) => { setAtivo(e.target.checked); salvar(e.target.checked, pct); }}
+        />
+        <span style={sx("font-size:13px")}>Descontar imposto do gasto com anúncios</span>
+      </label>
+
+      {ativo && (
+        <div style={sx("display:flex;gap:8px;align-items:center;margin-top:var(--space-3)")}>
+          <input
+            className="input"
+            style={sx("max-width:120px")}
+            value={pct}
+            inputMode="decimal"
+            onChange={(e) => setPct(e.target.value)}
+            onBlur={() => salvar(true, pct)}
+            aria-label="Alíquota em porcentagem"
+          />
+          <span className="text-muted" style={sx("font-size:12px")}>% sobre o gasto</span>
+        </div>
+      )}
+
+      <p className="text-muted" style={sx("font-size:11.5px;margin-top:var(--space-3);line-height:1.5")}>
+        {/* ⚠️ Não afirmamos que 12% é a alíquota DELE: ela varia com o município
+            e com o regime. Dizer "é 12%" produziria um lucro errado com cara de
+            conferido. */}
+        No Brasil costuma ficar perto de 12%, somando as parcelas. Confirme com quem
+        cuida da sua contabilidade — o valor certo depende da sua cidade e do seu regime.
+      </p>
+
+      {erro && (
+        <p style={sx("font-size:12px;margin-top:var(--space-2);color:var(--color-danger,#f87171)")}>{erro}</p>
+      )}
+    </div>
+  );
+}
+
 function CardFusoHorario({ inicial }: { inicial: string }) {
   const [tz, setTz] = useState(inicial);
   const [salvo, setSalvo] = useState(false);
@@ -146,6 +234,7 @@ export function FeesView({ v }: { v: TraffikView }) {
   const [taxNome, setTaxNome] = useState("");
   const [taxPct, setTaxPct] = useState("");
   const [coprodNome, setCoprodNome] = useState("");
+  const [coprodCalc, setCoprodCalc] = useState<"PERCENTUAL" | "FIXO">("PERCENTUAL");
   const [coprodPct, setCoprodPct] = useState("");
   const [gatewayNome, setGatewayNome] = useState("");
   /**
@@ -157,6 +246,7 @@ export function FeesView({ v }: { v: TraffikView }) {
    */
   const [gatewayCalc, setGatewayCalc] = useState<"PERCENTUAL" | "FIXO">("PERCENTUAL");
   const [custoNome, setCustoNome] = useState("");
+  const [custoCalc, setCustoCalc] = useState<"PERCENTUAL" | "FIXO">("PERCENTUAL");
   const [custoPct, setCustoPct] = useState("");
   const [despesaNome, setDespesaNome] = useState("");
   const [despesaValor, setDespesaValor] = useState("");
@@ -356,7 +446,8 @@ export function FeesView({ v }: { v: TraffikView }) {
                 <span style={sx("font-size:14px")}>{c.name}</span>
                 <div style={sx("display:flex;align-items:center;gap:6px")}>
                   <input className="input" style={sx("width:80px;text-align:right")} value={c.amountStr} onChange={c.onChange} onBlur={c.commit} inputMode="decimal" />
-                  <span className="text-muted">%</span>
+                  {/* Sufixo vindo do `calc` gravado — ver a nota em useTraffikState. */}
+                  <span className="text-muted" style={sx("font-size:12px")}>{c.unidade}</span>
                   <RemoveBtn onClick={c.remove} />
                 </div>
               </div>
@@ -364,7 +455,7 @@ export function FeesView({ v }: { v: TraffikView }) {
             <FormAdicionar
               acao={
                 <button className="btn btn-secondary" type="button" disabled={!coprodPct.trim()}
-                  onClick={() => void v.addCoproducao(coprodNome, coprodPct).then(() => { setCoprodNome(""); setCoprodPct(""); })}>
+                  onClick={() => void v.addCoproducao(coprodNome, coprodPct, coprodCalc).then(() => { setCoprodNome(""); setCoprodPct(""); })}>
                   Adicionar comissão
                 </button>
               }
@@ -373,7 +464,11 @@ export function FeesView({ v }: { v: TraffikView }) {
                 <input className="input" style={sx("width:100%")} placeholder="Nome (ex.: Afiliado João)" value={coprodNome} onChange={(e) => setCoprodNome(e.target.value)} />
               </CampoForm>
               <CampoForm>
-                <input className="input" style={sx("width:100%")} placeholder="% da comissão" value={coprodPct} onChange={(e) => setCoprodPct(e.target.value)} inputMode="decimal" />
+                <input className="input" style={sx("width:100%")} placeholder={coprodCalc === "PERCENTUAL" ? "% da comissão" : "R$ por venda"} value={coprodPct} onChange={(e) => setCoprodPct(e.target.value)} inputMode="decimal" />
+              </CampoForm>
+              <CampoForm>
+                <Select label="" minWidth={150} value={coprodCalc} onChange={(x) => setCoprodCalc(x as "PERCENTUAL" | "FIXO")}
+                  options={[{ value: "PERCENTUAL", label: "% por venda" }, { value: "FIXO", label: "R$ por venda" }]} />
               </CampoForm>
             </FormAdicionar>
           </div>
@@ -395,7 +490,8 @@ export function FeesView({ v }: { v: TraffikView }) {
                 <span style={sx("font-size:14px")}>{c.name}</span>
                 <div style={sx("display:flex;align-items:center;gap:6px")}>
                   <input className="input" style={sx("width:80px;text-align:right")} value={c.amountStr} onChange={c.onChange} onBlur={c.commit} inputMode="decimal" />
-                  <span className="text-muted">%</span>
+                  {/* Sufixo vindo do `calc` gravado — ver a nota em useTraffikState. */}
+                  <span className="text-muted" style={sx("font-size:12px")}>{c.unidade}</span>
                   <RemoveBtn onClick={c.remove} />
                 </div>
               </div>
@@ -403,7 +499,7 @@ export function FeesView({ v }: { v: TraffikView }) {
             <FormAdicionar
               acao={
                 <button className="btn btn-secondary" type="button" disabled={!custoPct.trim()}
-                  onClick={() => void v.addCustoProduto(custoNome, custoPct).then(() => { setCustoNome(""); setCustoPct(""); })}>
+                  onClick={() => void v.addCustoProduto(custoNome, custoPct, custoCalc).then(() => { setCustoNome(""); setCustoPct(""); })}>
                   Adicionar custo
                 </button>
               }
@@ -412,7 +508,13 @@ export function FeesView({ v }: { v: TraffikView }) {
                 <input className="input" style={sx("width:100%")} placeholder="Nome (ex.: Impressão + envio)" value={custoNome} onChange={(e) => setCustoNome(e.target.value)} />
               </CampoForm>
               <CampoForm>
-                <input className="input" style={sx("width:100%")} placeholder="% do faturamento" value={custoPct} onChange={(e) => setCustoPct(e.target.value)} inputMode="decimal" />
+                <input className="input" style={sx("width:100%")} placeholder={custoCalc === "PERCENTUAL" ? "% do faturamento" : "R$ por venda"} value={custoPct} onChange={(e) => setCustoPct(e.target.value)} inputMode="decimal" />
+              </CampoForm>
+              <CampoForm>
+                {/* Produto físico paga por unidade, não por percentual — ver a
+                    nota em `addCustoProduto`. */}
+                <Select label="" minWidth={150} value={custoCalc} onChange={(x) => setCustoCalc(x as "PERCENTUAL" | "FIXO")}
+                  options={[{ value: "PERCENTUAL", label: "% do faturamento" }, { value: "FIXO", label: "R$ por venda" }]} />
               </CampoForm>
             </FormAdicionar>
           </div>
@@ -463,6 +565,7 @@ export function FeesView({ v }: { v: TraffikView }) {
 
       <div style={sx("display:flex;flex-direction:column;gap:var(--space-4);position:sticky;top:var(--space-4)")}>
       <CardFusoHorario inicial={v.timezone} />
+      <CardImpostoAnuncios />
 
       <div className="card elev-sm">
         <div className="card-kicker">Cálculo de lucro (período atual)</div>
@@ -488,6 +591,11 @@ export function FeesView({ v }: { v: TraffikView }) {
           {/* O líquido é o corte: até aqui só desconto sobre o faturamento. */}
           <div style={sx("display:flex;justify-content:space-between;padding-top:4px;border-top:1px dashed var(--color-divider)")}><span>Faturamento líquido</span><span style={sx("font-variant-numeric:tabular-nums")}>{v.finance.liquido}</span></div>
           <div style={sx("display:flex;justify-content:space-between")}><span className="text-muted">Gasto em anúncios</span><span style={sx("font-variant-numeric:tabular-nums")}>− {v.finance.spend}</span></div>
+          {/* Linha só aparece quando há valor — igual a coprodução e custo de
+              produto. Uma linha "− R$ 0,00" permanente é ruído. */}
+          {v.finance.temImpostoAnuncios && (
+            <div style={sx("display:flex;justify-content:space-between")}><span className="text-muted">Imposto sobre anúncios</span><span style={sx("font-variant-numeric:tabular-nums")}>− {v.finance.impostoAnuncios}</span></div>
+          )}
           {/*
             🔴 Esta linha aparecia e NAO era subtraida: o painel calculava
             `revenue − spend − expenses.total`, e `expenses.total` exclui as

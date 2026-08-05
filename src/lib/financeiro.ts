@@ -113,6 +113,13 @@ export interface Composicao {
   liquido: number;
   /** Gasto com anúncios (Meta) no período. */
   gastoAnuncios: number;
+  /**
+   * Imposto sobre o gasto com anúncios. `0` quando desligado.
+   *
+   * ⚠️ Fica FORA de `totalDescontos` de propósito: aquilo é o que incide sobre
+   * o faturamento. Este é custo de mídia, e entra no lucro e no custo total.
+   */
+  impostoAnuncios: number;
   /** Despesas recorrentes rateadas no período. */
   despesas: number;
   /** liquido − gastoAnuncios − despesas */
@@ -201,6 +208,13 @@ export function calcularFinanceiro(opts: {
    * que os testes puros e qualquer chamador antigo esperam.
    */
   vendas?: VendaParaFinanceiro[];
+  /**
+   * Alíquota do imposto sobre o GASTO com anúncios, em % (ex.: 12).
+   *
+   * ⚠️ `0` ou omitido = desligado. É diferente das despesas: a base aqui é o
+   * gasto, não o faturamento.
+   */
+  impostoAnunciosPct?: number;
 }): Composicao {
   const { bruto, brutoPorPagamento, gastoAnuncios } = opts;
 
@@ -332,10 +346,28 @@ export function calcularFinanceiro(opts: {
   gateway += fGateway.real;
   coproducao += fCoprod.real;
 
+  /**
+   * Imposto sobre o GASTO com anúncios.
+   *
+   * 🔴 A Meta reporta o gasto LÍQUIDO: o tributo que incide sobre o anúncio
+   * (no Brasil ~12%) nunca chega em `DailyAdMetric.spend`. Sem esta linha o
+   * lucro sai sistematicamente maior que a realidade, por uma fração fixa do
+   * investimento — e o número continua plausível, que é o que o torna caro.
+   *
+   * ⚠️ **Não entra em `totalDescontos`.** Aquele campo é o que incide sobre o
+   * FATURAMENTO (é o `expenses.total` que o resto do código já espera, e a base
+   * da linha "descontos" da tela). Somar aqui um custo de mídia misturaria as
+   * duas naturezas e faria a decomposição do líquido deixar de fechar.
+   *
+   * Ele entra no LUCRO e no CUSTO TOTAL, que é onde ele de fato pesa.
+   */
+  const pctAnuncios = Math.max(0, opts.impostoAnunciosPct ?? 0);
+  const impostoAnuncios = gastoAnuncios * (pctAnuncios / 100);
+
   const totalDescontos = gateway + coproducao + impostos + custoProduto;
   const liquido = bruto - totalDescontos;
-  const lucro = liquido - gastoAnuncios - recorrentes;
-  const custoTotal = totalDescontos + gastoAnuncios + recorrentes;
+  const lucro = liquido - gastoAnuncios - impostoAnuncios - recorrentes;
+  const custoTotal = totalDescontos + gastoAnuncios + impostoAnuncios + recorrentes;
 
   return {
     bruto,
@@ -345,6 +377,7 @@ export function calcularFinanceiro(opts: {
     custoProduto,
     liquido,
     gastoAnuncios,
+    impostoAnuncios,
     despesas: recorrentes,
     lucro,
     totalDescontos,
