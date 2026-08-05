@@ -34,6 +34,8 @@ As **v1 (13 fases)** estão completas e reais. O **roteiro v2 (13 blocos)** tamb
 > | `docs/temas/deploy-e-operacao.md` | Vercel, cron, agendadores, domínio, performance | deployar ou investigar produção |
 > | `docs/historico/*.md` | registro de sessão por período — o "por que ficou assim" | precisar da origem de uma decisão |
 > | `docs/arquivo-morto.md` | o que saiu do fluxo **e o motivo** | desconfiar de doc que contradiz o código |
+> | `docs/auditoria.md` | 🔜 auditoria pré-redesign: 310 cores hardcoded, 5 problemas estruturais, o que PRESERVAR | trabalhar no redesign |
+> | `docs/design/00-CRITERIOS-CORRIGIDOS.md` | 🔜 **decisões e critérios do redesign** — o que foi corrigido em cima do prompt master | **antes de qualquer fase do redesign** |
 >
 > ⚠️ **`docs/arquivo-morto.md` não é lixo.** Vários "obsoletos" desta base
 > voltaram a importar. O que está lá é o que **descreve comportamento que
@@ -925,6 +927,7 @@ npm run test:ip          # 27 asserções, IP atrás de proxy (Vercel, VPS, Clou
 npm run test:telefone    # 25 asserções, E.164 antes do hash da CAPI
 npm run db:onde          # em qual banco o .env aponta
 npm run migrate:alvo     # para qual banco o `migrate deploy` vai AGORA (so leitura)
+npm run marca:gerar      # deriva simbolo/wordmark/favicon dos PNGs de origem (saida COMMITADA)
 npm run script:onde      # onde falta reinstalar o script de UTM
 npm run backup -- --url '<connection string>'   # SEMPRE com --url
 ```

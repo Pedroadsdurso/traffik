@@ -79,7 +79,8 @@
     "test:fusos": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-fusos.mjs",
     "test:checkout-detector": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-checkout-detector.mjs",
     "test:checkout-jornada": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-checkout-jornada.mjs",
-    "migrate:alvo": "node scripts/migrate-alvo.mjs"
+    "migrate:alvo": "node scripts/migrate-alvo.mjs",
+    "marca:gerar": "node scripts/gen-marca.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
