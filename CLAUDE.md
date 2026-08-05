@@ -754,16 +754,26 @@ qualquer resize, leia `innerWidth` e compare. `innerWidth === screen.availWidth`
 
 Tudo até `12c25ac` está no `origin/main`.
 
-### 🔴🔴 DUAS MIGRATIONS PENDENTES EM PRODUÇÃO
+### ✅ Migrations: nenhuma pendente
 
-**`npx prisma migrate deploy` ANTES do push.** As duas são aditivas (colunas
-nullable ou com default), então o build antigo continua funcionando — mas o
-código novo faz `SELECT` delas em toda carga de dashboard.
+Conferido pelo usuário em 05/08/2026: **`No pending migrations to apply`, 45
+aplicadas.** As duas que este arquivo listava como pendentes
+(`20260805100000_venda_efeitos` e `20260805110000_imposto_anuncios`) **já
+estavam em produção**.
 
-| Migration | O quê |
-|---|---|
-| `20260805100000_venda_efeitos` | 6 colunas em `Sale` + 3 índices |
-| `20260805110000_imposto_anuncios` | 2 colunas em `User` |
+> ### ⚠️ Eu registrei como pendente algo que não tinha verificado — 2ª vez
+> A primeira foi a `20260731090000_pixel_config_setup`, também marcada
+> "PENDENTE" aqui enquanto já estava aplicada. É o mesmo modo de falha do
+> "nenhuma escrita real foi exercida": **"não verificado por mim" virou "não
+> feito" na escrita.**
+>
+> **Quem opera a produção é o usuário — pergunte antes de registrar estado dela.**
+> Eu não tenho as credenciais de produção localmente, de propósito, então
+> qualquer afirmação minha sobre o banco de produção é inferência.
+
+**A ordem continua valendo para a PRÓXIMA migration:** `migrate deploy` na
+produção primeiro, push depois. O código novo faz `SELECT` das colunas novas em
+toda carga de dashboard; deployar antes derruba o painel inteiro.
 
 ### O que foi entregue
 
