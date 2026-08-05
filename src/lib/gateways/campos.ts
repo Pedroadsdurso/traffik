@@ -124,3 +124,43 @@ export function fbclidDoFbc(fbc: string | null): string | null {
   const m = /^fb\.[^.]*\.[^.]*\.(.+)$/.exec(fbc.trim());
   return m?.[1] ?? null;
 }
+
+/**
+ * O comprador chegou ao checkout?
+ *
+ * ## 🔴 Lista fechada de eventos perde a corrida, sempre
+ *
+ * Cada parser tinha um `Set` de eventos que significam "chegou ao pagamento", e
+ * um evento fora dele devolvia `false` **sem fallback**. O status já tinha
+ * aprendido essa lição (`statusPeloTexto`, depois do `PIX_EXPIRED` da Kirvano);
+ * o `gerouCheckout` ficou de fora da correção.
+ *
+ * O sintoma é assimétrico e por isso passa despercebido: a venda aparece com o
+ * status certo — porque o status TEM fallback — e o **InitiateCheckout não é
+ * criado**. O funil perde uma etapa inteira, sem erro em lugar nenhum.
+ * Observado em produção com a OnyxPag em 05/08/2026.
+ *
+ * ## A regra
+ *
+ * | Evento | Decide |
+ * |---|---|
+ * | **conhecido** | a lista do parser, e só ela |
+ * | **desconhecido** | o STATUS: pendente ou abandonada = chegou ao checkout |
+ *
+ * ⚠️ O fallback vale SÓ para evento desconhecido. Um evento conhecido que o
+ * parser deliberadamente deixou fora da lista continua fora — senão esta função
+ * silenciosamente reverteria decisões que alguém tomou de propósito.
+ *
+ * ⚠️ `ABANDONADA` entra junto de `PENDENTE`: um carrinho abandonado **chegou**
+ * ao checkout e desistiu. Foi essa distinção que quase apagou o topo do funil
+ * quando os dois status foram separados.
+ */
+export function chegouAoCheckout(
+  evento: string,
+  eventoConhecido: boolean,
+  listaDeCheckout: ReadonlySet<string>,
+  status: SaleStatus,
+): boolean {
+  if (eventoConhecido) return listaDeCheckout.has(evento);
+  return status === "PENDENTE" || status === "ABANDONADA";
+}

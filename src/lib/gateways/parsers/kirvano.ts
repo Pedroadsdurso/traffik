@@ -2,6 +2,7 @@ import type { SaleStatus } from "@/generated/prisma/enums";
 
 import {
   isObj,
+  chegouAoCheckout,
   mapPayment,
   pick,
   statusPeloTexto,
@@ -163,7 +164,7 @@ function parseUmaVenda(payload: Json): VendaNormalizada {
       "Produto",
     produtoId: toStr(produto ? pick(produto, ["id", "offer_id"]) : undefined, 191),
     status,
-    gerouCheckout: EVENTO_GEROU_CHECKOUT.has(evento),
+    gerouCheckout: chegouAoCheckout(evento, conhecido != null, EVENTO_GEROU_CHECKOUT, status),
     formaDePagamento: mapPayment(pick(payload, ["payment_method", "method"])),
 
     email: toStr(pick(payload, ["customer.email", "email"]), 191),

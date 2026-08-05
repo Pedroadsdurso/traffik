@@ -67,7 +67,8 @@
     "test:backoff": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-backoff.mjs",
     "falha:coletiva": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/falha-coletiva.mjs",
     "ads:orfas": "node scripts/sonda-orfas.mjs",
-    "test:cron-reserva": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-cron-reserva.mjs"
+    "test:cron-reserva": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-cron-reserva.mjs",
+    "test:checkout-fallback": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-checkout-fallback.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

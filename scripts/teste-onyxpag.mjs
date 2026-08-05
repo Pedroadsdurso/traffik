@@ -156,6 +156,7 @@ console.log("\n\x1b[1mCapacidades declaradas × observadas\x1b[0m");
   eq("nenhuma capacidade divergente", div, []);
 }
 
+
 console.log(
   falhas === 0
     ? `\n\x1b[1m\x1b[32m${ok} asserções passaram, 0 falharam.\x1b[0m\n`

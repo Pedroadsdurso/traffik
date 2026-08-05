@@ -99,12 +99,35 @@ function ProfilePanel({ p }: { p: Profile }) {
         </div>
       )}
 
+      {/*
+        🔴 O texto anterior dizia que "conta criada agora aparece aqui sozinha
+        na próxima sincronização" — e isso é FALSO para conta de uma BM nova.
+
+        `descobrirContas` de fato roda a cada ciclo completo e chama
+        `/me/adaccounts`. Mas o Facebook tem autorização GRANULAR: na tela de
+        permissões o usuário escolhe quais negócios e contas libera, e o token
+        guarda essa seleção. Uma BM criada depois **não entra nela** — a conta
+        não é devolvida pela API, e é indistinguível de uma conta que não
+        existe. Não há como descobrir sozinho.
+
+        ⚠️ A promessa antiga fazia o usuário esperar por algo que nunca ia
+        acontecer. Dizer o que ele precisa FAZER custa um parágrafo.
+      */}
+      <div
+        className="text-muted"
+        style={sx("font-size:11.5px;line-height:1.55;padding:0 var(--space-1)")}
+      >
+        Criou uma conta ou um Gerenciador de Negócios novo no Facebook e ele não aparece aqui?
+        Clique em <strong>Desconectar</strong> e conecte de novo — na tela de permissões do
+        Facebook, marque <strong>todas</strong> as contas. A autorização anterior vale só para as
+        que estavam marcadas na época. Nada do que já foi sincronizado se perde.
+      </div>
+
       <div style={sx("display:flex;flex-direction:column;gap:6px")}>
         {p.accounts.length === 0 ? (
           <div className="text-muted" style={sx("font-size:13px;line-height:1.5;padding:var(--space-2)")}>
             Nenhuma conta de anúncio neste perfil. Confira se este é o Facebook que administra as
-            suas contas — conta criada agora no Gerenciador de Negócios aparece aqui sozinha, na
-            próxima sincronização.
+            suas contas.
           </div>
         ) : (
           p.accounts.map((ac) => (

@@ -33,7 +33,17 @@ export interface PixelScriptConfig {
 }
 
 /** Domínios de checkout usados quando a regra por clique não lista os do usuário. */
-const CHECKOUT_PADRAO = ["pay.kirvano.com", "hotmart", "cartpanda", "kiwify", "monetizze", "pay.", "checkout"];
+const CHECKOUT_PADRAO = [
+  "pay.kirvano.com",
+  "hotmart",
+  "cartpanda",
+  "kiwify",
+  "monetizze",
+  "cakto",
+  // Genéricos, no fim: cobrem gateway que ainda não está na lista.
+  "pay.",
+  "checkout",
+];
 
 function jsStr(v: string): string {
   return v.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
