@@ -90,7 +90,7 @@ export function TestadorPayloadCard() {
           O que se cola aqui é o aviso que o gateway manda a cada venda. */}
       <div className="card-title">Testar um aviso de venda</div>
       <p className="card-body" style={sx("margin:4px 0 0;max-width:70ch")}>
-        Cole o exemplo de webhook da documentação do gateway e veja o que a Traffik entenderia dele.
+        Cole o exemplo de webhook da documentação do gateway e veja o que a Trackhub entenderia dele.
         Nada é salvo — nenhuma venda é criada.
       </p>
 

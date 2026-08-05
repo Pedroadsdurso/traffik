@@ -3,7 +3,7 @@ import type { PaymentMethod, SaleStatus } from "@/generated/prisma/enums";
 /**
  * # O CONTRATO — formato interno de venda, independente do gateway
  *
- * Toda venda que entra na Traffik passa por aqui, venha da Kirvano, da Cakto, de
+ * Toda venda que entra na Trackhub passa por aqui, venha da Kirvano, da Cakto, de
  * um gateway que ainda não existe ou da chave de API. **Nada abaixo desta camada
  * sabe o nome de um gateway.**
  *
@@ -36,7 +36,7 @@ import type { PaymentMethod, SaleStatus } from "@/generated/prisma/enums";
  * | Classe | Exemplos | Pode ser sobrescrito? |
  * |---|---|---|
  * | **Declarado** — veio do payload | valor, produto, e-mail, status | ✅ sim: a fonte é a mesma |
- * | **Derivado com procedência** — a Traffik inferiu | `country`/`countrySource`, `clickId`/`matchMethod` | ⛔ só se estiver vazio, ou se a fonte nova for **igual ou mais forte** |
+ * | **Derivado com procedência** — a Trackhub inferiu | `country`/`countrySource`, `clickId`/`matchMethod` | ⛔ só se estiver vazio, ou se a fonte nova for **igual ou mais forte** |
  *
  * O caso concreto que originou a regra: `ingestSale` recalcula o país a cada
  * ingestão, e a 2ª fonte dele é o IP **de dentro do payload**. Quando a Fase A da

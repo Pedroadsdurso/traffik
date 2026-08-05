@@ -9,7 +9,7 @@ import { parseKirvano } from "./parsers/kirvano";
 /**
  * # O REGISTRO DE GATEWAYS — fonte única
  *
- * Tudo o que a Traffik sabe sobre um gateway está aqui: como autenticar, como
+ * Tudo o que a Trackhub sabe sobre um gateway está aqui: como autenticar, como
  * ler o payload, o que ele consegue entregar, que URL o usuário cola no painel
  * dele e o que a tela mostra.
  *
@@ -140,7 +140,7 @@ export const REGISTRO: Record<string, GatewayDef> = {
       reentregaEventos: true,
       // 🔴 O checkout (`pay.cakto.com.br`) e a página de obrigado são DELA, e o
       // painel tem configuração de pixel do Facebook por produto. Se o usuário
-      // colou o ID do pixel lá E deixou o Purchase com a Traffik, a Meta conta
+      // colou o ID do pixel lá E deixou o Purchase com a Trackhub, a Meta conta
       // cada venda duas vezes. A gaveta do Pixel nomeia a Cakto por causa desta
       // linha — ver `pixelProprio` no contrato.
       pixelProprio: true,

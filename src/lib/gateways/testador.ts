@@ -102,7 +102,7 @@ const CAMPOS: { campo: keyof VendaNormalizada; rotulo: string; padrao?: RegExp }
   { campo: "documento", rotulo: "Documento", padrao: /doc|cpf|cnpj|tax_?id/i },
   { campo: "pais", rotulo: "País do comprador", padrao: /country|pais|nation/i },
   { campo: "ipDoComprador", rotulo: "IP do comprador", padrao: /(^|_)ip($|_|addr)/i },
-  { campo: "clickId", rotulo: "click_id da Traffik", padrao: /click/i },
+  { campo: "clickId", rotulo: "click_id da Trackhub", padrao: /click/i },
   { campo: "fbc", rotulo: "Cookie _fbc (Meta)", padrao: /fbc|fbclid/i },
   { campo: "fbp", rotulo: "Cookie _fbp (Meta)", padrao: /fbp/i },
   { campo: "taxaGateway", rotulo: "Taxa do gateway", padrao: /fee|tax(a|es)|comiss/i },

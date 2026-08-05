@@ -22,7 +22,7 @@
  *
  * ## ⚠️ "gateway" e "ninguem" fazem a MESMA coisa do nosso lado
  *
- * Nos dois casos a Traffik para de enviar aquele evento à Meta. A diferença é de
+ * Nos dois casos a Trackhub para de enviar aquele evento à Meta. A diferença é de
  * **intenção declarada**, e ela existe porque muda o que a ferramenta diz ao
  * usuário: "gateway" significa "alguém mais envia" e merece o aviso sobre CAPI
  * própria; "ninguem" significa "este evento não vai para a Meta, e está certo".
@@ -58,7 +58,7 @@ export type MapaDeDonos = Partial<Record<EventoDoPixel, DonoDoEvento>>;
 const DONOS_VALIDOS: readonly string[] = ["traffik", "navegador", "gateway", "ninguem"];
 
 /**
- * ## 🔴 `PageView` é o único evento cujo padrão NÃO é a Traffik
+ * ## 🔴 `PageView` é o único evento cujo padrão NÃO é a Trackhub
  *
  * O código-base da Meta que o usuário cola na página termina em
  * `fbq('track', 'PageView')`. Esse disparo:
@@ -77,7 +77,7 @@ const DONOS_VALIDOS: readonly string[] = ["traffik", "navegador", "gateway", "ni
  *
  * > ⚠️ **Isto MUDA o comportamento de quem já tem pixel cadastrado**, e é o
  * > objetivo: hoje essas contas contam visita em dobro. Quem não tiver pixel
- * > nativo na página escolhe "Traffik" na gaveta e volta ao envio server-side.
+ * > nativo na página escolhe "Trackhub" na gaveta e volta ao envio server-side.
  *
  * ⚠️ Os demais eventos continuam em `traffik`. Neles não existe segundo emissor
  * automático — `Lead`, `AddToCart`, `InitiateCheckout` e `Purchase` só saem do
@@ -124,7 +124,7 @@ export function padraoDoEvento(evento: string): DonoDoEvento {
 }
 
 /**
- * A Traffik envia este evento para a Meta?
+ * A Trackhub envia este evento para a Meta?
  *
  * É o único predicado que os três caminhos de envio consultam — o do script no
  * navegador, o de `/api/pixel/event` e o do `dispatchPixel` do Purchase. Um
@@ -144,7 +144,7 @@ export function traffikEnvia(bruto: unknown, evento: string): boolean {
  * problema onde ele não está.
  */
 export const ROTULO_DONO: Record<DonoDoEvento, string> = {
-  traffik: "Traffik",
+  traffik: "Trackhub",
   navegador: "O pixel da sua página",
   gateway: "O checkout do gateway",
   ninguem: "Ninguém",
@@ -163,7 +163,7 @@ export const EXPLICACAO_DONO: Record<DonoDoEvento, string> = {
  *
  * Era um aviso por evento, e só o `PageView` tinha um. Ele dizia:
  *
- * > "Escolha Traffik só se você NÃO tiver o pixel do Facebook na página."
+ * > "Escolha Trackhub só se você NÃO tiver o pixel do Facebook na página."
  *
  * Duas coisas aconteceram com ele, e as duas mandam apagar em vez de reescrever:
  *

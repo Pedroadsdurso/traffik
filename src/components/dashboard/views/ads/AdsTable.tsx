@@ -304,7 +304,7 @@ export function AdsTable({
       </span>
       <span style={sx("display:inline-flex;align-items:center;gap:5px")}>
         <span style={sx(`width:5px;height:5px;border-radius:50%;background:${COR_FONTE.nosso}`)} />
-        <span className="text-muted">Medido pela Traffik</span>
+        <span className="text-muted">Medido pela Trackhub</span>
       </span>
       <span style={sx("display:inline-flex;align-items:center;gap:5px")}>
         <span style={sx(`width:5px;height:5px;border-radius:50%;background:${COR_FONTE.misto}`)} />

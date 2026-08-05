@@ -1,6 +1,6 @@
 import { AreasView } from "@/components/dashboard/views/AreasView";
 
-export const metadata = { title: "Áreas de Trabalho · Traffik" };
+export const metadata = { title: "Áreas de Trabalho · Trackhub" };
 
 /**
  * Destino do "Gerenciar áreas" do seletor da sidebar — que até aqui dava 404.

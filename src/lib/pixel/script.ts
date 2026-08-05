@@ -1,5 +1,5 @@
 /**
- * Gerador do script de pixel próprio da Traffik (Bloco 12). É um JS
+ * Gerador do script de pixel próprio da Trackhub (Bloco 12). É um JS
  * autocontido que o usuário cola no <head>: escuta os eventos configurados na
  * página e reporta ao nosso backend (`/api/pixel/event`), que repassa à
  * Conversions API dos pixels da Meta cadastrados. Purchase é server-side (via
@@ -11,7 +11,7 @@ import { EVENTOS_DO_PIXEL, donoDoEvento, traffikEnvia } from "./donos";
 
 export interface PixelScriptConfig {
   configId: string;
-  /** `PixelConfig.eventOwners` cru. Ausente = tudo da Traffik. */
+  /** `PixelConfig.eventOwners` cru. Ausente = tudo da Trackhub. */
   eventOwners?: unknown;
   /**
    * Há pixel nativo da Meta na página? Ausente = sim (comportamento anterior).
@@ -79,7 +79,7 @@ function jsStr(v: string): string {
 }
 
 /**
- * Eventos que a Traffik NÃO envia — o espelho no `fbq` os ignora.
+ * Eventos que a Trackhub NÃO envia — o espelho no `fbq` os ignora.
  *
  * ⚠️ Só o ESPELHO. O `track()` continua mandando o POST para nós, porque o
  * funil e o Dashboard contam do nosso banco: escolher "meu gateway" para o
@@ -141,7 +141,7 @@ function dominiosCheckout(ic: PixelScriptConfig["initiateCheckout"]): string[] {
 export function pixelScript(cfg: PixelScriptConfig): string {
   const ic = cfg.initiateCheckout;
   const tipoIC = tipoDeIC(ic);
-  return `/*! Traffik Pixel — cole antes de </head> */
+  return `/*! Trackhub Pixel — cole antes de </head> */
 (function () {
   "use strict";
   var CONFIG = "${jsStr(cfg.configId)}";
@@ -150,7 +150,7 @@ export function pixelScript(cfg: PixelScriptConfig): string {
   var ADD_TO_CART = ${cfg.addToCart};
   var IC = ${tipoIC ? `{ type: "${jsStr(tipoIC)}", value: "${jsStr(ic.value || "")}" }` : "null"};
   var CHECKOUT = ${JSON.stringify(dominiosCheckout(ic))};
-  // Eventos cujo dono NÃO é a Traffik. Só afeta o espelho no pixel nativo:
+  // Eventos cujo dono NÃO é a Trackhub. Só afeta o espelho no pixel nativo:
   // o POST para nós continua, porque o funil e o Dashboard contam do nosso
   // banco e não podem perder uma etapa por causa de uma escolha de pixel.
   var ALHEIOS = ${JSON.stringify(eventosAlheios(cfg.eventOwners))};
@@ -240,7 +240,7 @@ export function pixelScript(cfg: PixelScriptConfig): string {
     } catch (e) {}
   }
   function aviso(msg) {
-    try { if (window.console && window.console.warn) window.console.warn("[Traffik Pixel] " + msg); } catch (e) {}
+    try { if (window.console && window.console.warn) window.console.warn("[Trackhub Pixel] " + msg); } catch (e) {}
   }
   // Conta ao servidor o que aconteceu com o espelho DEPOIS que o evento já foi
   // gravado. \`somenteEspelho\` faz a rota atualizar a linha e parar — sem gravar
@@ -300,7 +300,7 @@ export function pixelScript(cfg: PixelScriptConfig): string {
       "o pixel do Facebook (fbq) nao apareceu em " + (ESPERA_MS / 1000) + "s. " +
       "Estes eventos foram so para o servidor, sem par no navegador, e a Meta pode conta-los em dobro: " +
       pend.map(function (p) { return p.e; }).join(", ") + ". " +
-      "Confira se o codigo do Facebook esta nesta pagina — e, se estiver, cole o script da Traffik DEPOIS dele."
+      "Confira se o codigo do Facebook esta nesta pagina — e, se estiver, cole o script da Trackhub DEPOIS dele."
     );
     for (var i = 0; i < pend.length; i++) relatar(pend[i].e, pend[i].id, "sem-fbq");
   }

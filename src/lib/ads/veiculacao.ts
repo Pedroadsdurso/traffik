@@ -206,7 +206,7 @@ export function veiculacao(status: string, effectiveStatus: string | null | unde
       // Valor cru na tela, de propósito: é o que permite acrescentá-lo ao MAPA
       // sem precisar reproduzir o caso. Traduzir por chute seria pior.
       rotulo: cru,
-      detalhe: "A Meta devolveu um estado que a Traffik ainda não traduz. O valor aparece como veio.",
+      detalhe: "A Meta devolveu um estado que a Trackhub ainda não traduz. O valor aparece como veio.",
       tom: "indefinido",
       cor: COR.indefinido,
       divergente: status === "ACTIVE",

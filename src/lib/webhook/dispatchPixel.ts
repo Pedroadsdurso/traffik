@@ -122,7 +122,7 @@ export async function dispatchPurchaseEvents(saleId: string): Promise<void> {
             ? [{ pixelId: px.pixelId, accessToken: px.accessToken }]
             : [];
 
-      // Pixel da Traffik cadastrado, regra ligada, e NENHUM pixel da Meta
+      // Pixel da Trackhub cadastrado, regra ligada, e NENHUM pixel da Meta
       // dentro dele: nada para onde enviar. A tela mostra "0 pixels da Meta",
       // mas nada ligava isso à venda que não foi.
       if (targets.length === 0) registrar(CAPI_SEM_TOKEN);

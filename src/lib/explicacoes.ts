@@ -363,7 +363,7 @@ export const CONFIG: Record<string, ConteudoInfo> = {
       "É obrigatório nas regras que aumentam orçamento.",
     ],
     alerta:
-      "Sem teto, uma regra de +20% aumentaria o orçamento a cada execução: 100 → 120 → 144 → 173… Por isso a Traffik recusa o aumento quando o teto está em branco.",
+      "Sem teto, uma regra de +20% aumentaria o orçamento a cada execução: 100 → 120 → 144 → 173… Por isso a Trackhub recusa o aumento quando o teto está em branco.",
   },
   regraJanela: {
     titulo: "Intervalo de execução",
@@ -379,7 +379,7 @@ export const CONFIG: Record<string, ConteudoInfo> = {
       "Em quais contas esta regra pode agir. Em branco = todas as contas desta área de trabalho.",
     ],
     alerta:
-      "A regra nunca age em conta de outra área, mesmo em branco — a Traffik sempre limita ao que pertence à área onde ela foi criada.",
+      "A regra nunca age em conta de outra área, mesmo em branco — a Trackhub sempre limita ao que pertence à área onde ela foi criada.",
   },
   despesaArea: {
     titulo: "Só nesta área de trabalho",

@@ -6,7 +6,7 @@ import { AuthForm } from "../AuthForm";
 import { AuthShell } from "../AuthShell";
 import { signupAction } from "../actions";
 
-export const metadata = { title: "Criar conta · Traffik" };
+export const metadata = { title: "Criar conta · Trackhub" };
 
 export default async function SignupPage() {
   // Checa o `id`, não só a sessão: um JWT órfão (de outro banco) chega com

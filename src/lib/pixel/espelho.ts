@@ -55,7 +55,7 @@ export const ESTADOS_DO_ESPELHO: readonly EstadoDoEspelho[] = [
     rotulo: "o pixel da página nunca apareceu",
     tom: "ruim",
     ajuda:
-      "Esperamos 10s e o código do Facebook não carregou nessa página. Esses eventos foram só pelo servidor, sem par no navegador — a Meta pode contá-los em dobro. Confira se o código do Facebook está na página e cole o script da Traffik depois dele.",
+      "Esperamos 10s e o código do Facebook não carregou nessa página. Esses eventos foram só pelo servidor, sem par no navegador — a Meta pode contá-los em dobro. Confira se o código do Facebook está na página e cole o script da Trackhub depois dele.",
   },
   {
     estado: "erro",

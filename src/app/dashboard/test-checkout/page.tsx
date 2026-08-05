@@ -5,7 +5,7 @@ import { listWebhooks } from "@/lib/actions/webhooks";
 import { getAppUrl } from "@/lib/appUrl";
 import { TestCheckout } from "./TestCheckout";
 
-export const metadata = { title: "Checkout de teste · Traffik" };
+export const metadata = { title: "Checkout de teste · Trackhub" };
 
 export default async function TestCheckoutPage() {
   const session = await auth();

@@ -10,7 +10,7 @@ export interface SelectOption {
 }
 
 /**
- * Select próprio do Traffik (Bloco 3) — o nativo do navegador não aceita o
+ * Select próprio do Trackhub (Bloco 3) — o nativo do navegador não aceita o
  * dropdown escuro nem busca interna.
  *
  * Mantém o essencial de acessibilidade que o nativo dava de graça: papéis

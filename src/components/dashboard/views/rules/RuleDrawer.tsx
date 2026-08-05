@@ -502,7 +502,7 @@ export function RuleDrawer({
             />
             {tetoFaltando && (
               <div style={sx("font-size:11.5px;color:#ef4444")}>
-                Informe o teto — sem ele a Traffik recusa o aumento e a regra nunca age.
+                Informe o teto — sem ele a Trackhub recusa o aumento e a regra nunca age.
               </div>
             )}
           </Campo>

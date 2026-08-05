@@ -5615,6 +5615,66 @@ mesma família do bug do IC vazio (`b38de14`).
 
 ---
 
+## 🌐 TRAFFIK → TRACKHUB: o nome trocou, o DOMÍNIO não (05/08/2026)
+
+**Trocado:** 64 ocorrências de texto em 37 arquivos, pelo padrão `\bTraffik\b`
+(sensível a maiúscula, com fronteira de palavra).
+
+> ### ⛔ O padrão foi PROVADO antes de rodar, não presumido
+> `\bTraffik\b` **não casa** dentro de `TraffikProvider` — depois do `k` vem
+> `P`, os dois caracteres de palavra, então a fronteira não existe. E sendo
+> sensível a maiúscula, `traffikPixel` e `traffik_track` ficam fora por
+> construção.
+>
+> Verificado com as seis linhas antes de tocar em arquivo nenhum. Um `sed`
+> ingênuo teria renomeado o cookie e quebrado **todo snippet instalado**.
+
+**Intocado, de propósito:** `traffik_track`, `window.traffikPixel`,
+`window.traffik`, `traffik_click_id`, `useTraffik`/`TraffikProvider`/
+`TraffikView`/`TraffikContext`, `traffikEnvia`, os `.webp` das logos e as
+colunas do banco.
+
+> ⚠️ **A troca não invalida snippet instalado.** A assinatura (`detectores.ts`)
+> é calculada sobre os detectores e os donos dos eventos — não sobre o
+> comentário do cabeçalho. Foi verificado antes: mudar o texto **não** faz a
+> gaveta acusar "script desatualizado".
+>
+> ⚠️ Durante a transição convivem dois nomes: o script já instalado diz
+> `/*! Traffik Pixel */` e o novo diz `Trackhub`. Isso é esperado e some quando
+> cada cliente recola.
+
+### 🔴 O DOMÍNIO é outra migração, e é a cara
+
+`NEXT_PUBLIC_APP_URL` viaja **assada dentro de cada snippet instalado** — o
+`apiBase` é literal no código que está no site do cliente. Trocar o domínio
+não é renomear: é **quebrar todo script instalado** até cada um recolar.
+
+**O que a migração exigiria, na ordem:**
+
+| # | Passo | Por quê |
+|---|---|---|
+| 1 | Domínio próprio (`app.trackhub.com.br`) apontando para a Vercel | hoje é `342dd-virid.vercel.app`, derivado do nome do projeto |
+| 2 | **Os DOIS endereços respondendo** — o novo e o `.vercel.app` | o antigo continua recebendo clique e evento de todo script já instalado |
+| 3 | `FACEBOOK_REDIRECT_URI` atualizado no app do Facebook | o OAuth recusa URI não registrada |
+| 4 | `AUTH_URL` + `NEXT_PUBLIC_APP_URL` na Vercel, com **Redeploy** | env var só vale em build novo |
+| 5 | Só então gerar snippet novo | quem não recolar segue no domínio velho, e funciona |
+| 6 | Aposentar o antigo **quando `Click`/`PixelEvent` pararem de chegar por ele** | e não por data — é o tráfego que diz |
+
+> ### ⛔ Não existe "prazo" para o passo 6, existe MEDIÇÃO
+> Desligar o domínio antigo com script ainda apontando para lá mata o
+> rastreamento **em silêncio**: o site do cliente continua no ar, o script
+> continua rodando, e o POST simplesmente não chega. Nada na tela dele muda —
+> só param de entrar cliques.
+>
+> A pergunta que libera o passo 6 é *"quantos eventos ainda chegaram pelo
+> host antigo nos últimos 30 dias?"*, e ela **não tem resposta hoje**: não
+> gravamos o host que atendeu. Se esta migração for acontecer, isso precisa
+> ser instrumentado ANTES.
+
+⚠️ O webhook tem o mesmo problema, e pior: a URL está colada no painel do
+gateway do usuário, fora do nosso alcance. Ela **nunca** pode parar de
+responder sem aviso — venda perdida não volta.
+
 ## 🎨 REDESIGN DO DESIGN SYSTEM — intenção futura, documento fora do repo
 
 Registrado em 05/08/2026 a pedido do usuário. **Não começar sem o documento.**

@@ -12,7 +12,7 @@ const SCRIPT_TEMA = `(function(){try{var s=localStorage.getItem('traffik_theme')
 document.documentElement.setAttribute('data-theme',s==='light'||s==='dark'?s:'dark');}catch(e){}})();`;
 
 export const metadata: Metadata = {
-  title: "Traffik",
+  title: "Trackhub",
   description: "Tracking de tráfego, vendas e Facebook Ads",
 };
 

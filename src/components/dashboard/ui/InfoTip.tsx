@@ -10,7 +10,7 @@ export type FonteDado = "meta" | "nosso" | "derivada";
 
 const FONTE_META: Record<FonteDado, { cor: string; label: string }> = {
   meta: { cor: "#60a5fa", label: "Vem do Facebook" },
-  nosso: { cor: "#a78bfa", label: "Medido pela Traffik" },
+  nosso: { cor: "#a78bfa", label: "Medido pela Trackhub" },
   derivada: { cor: "#94a3b8", label: "Calculado" },
 };
 

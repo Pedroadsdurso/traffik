@@ -173,7 +173,7 @@ export async function listTrackedProducts(): Promise<string[]> {
 
 /**
  * Gateways conectados que têm **configuração de pixel própria** — os que podem
- * estar disparando `Purchase` sem que a Traffik saiba.
+ * estar disparando `Purchase` sem que a Trackhub saiba.
  *
  * > ### 🔴 Por que a tela precisa NOMEAR o gateway
  * > O `Purchase` é o único evento sem dedup possível (ver `pixelProprio` no
@@ -326,7 +326,7 @@ export async function updatePixel(id: string, input: PixelFormInput): Promise<Pi
         name: input.name?.trim() || "Meta Pixel",
         // ⚠️ `undefined` MANTÉM o valor gravado; `{}` o zera. O formulário só
         // manda o mapa quando o usuário mexeu nele — sem esta distinção, salvar
-        // qualquer outra coisa do pixel devolveria todos os eventos à Traffik em
+        // qualquer outra coisa do pixel devolveria todos os eventos à Trackhub em
         // silêncio, que é o mesmo defeito do token apagado ao renomear.
         eventOwners: input.eventOwners ?? undefined,
         // Objeto literal, não a interface: o Json do Prisma exige index signature.

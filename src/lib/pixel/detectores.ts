@@ -58,7 +58,7 @@ export interface Detectores {
    *
    * | Passo | O que acontece |
    * |---|---|
-   * | Dono do `PageView` vai de "pixel da página" para "Traffik" | |
+   * | Dono do `PageView` vai de "pixel da página" para "Trackhub" | |
    * | Servidor (decide **ao vivo**) | passa a mandar PageView à CAPI |
    * | Script instalado (`ALHEIOS` **congelado**) | continua sem espelhar |
    * | Pixel nativo da página | segue disparando o dele, sem `eid` |

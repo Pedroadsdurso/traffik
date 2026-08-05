@@ -32,7 +32,7 @@ function WebhooksBlock({ v }: { v: TraffikView }) {
         <div className="card-kicker">Webhooks</div>
         <div className="card-title">Recebimento de vendas</div>
         <p className="card-body" style={sx("margin:4px 0 0;max-width:70ch")}>
-          Conecte o gateway de pagamento para que as vendas cheguem à Traffik em tempo real.
+          Conecte o gateway de pagamento para que as vendas cheguem à Trackhub em tempo real.
         </p>
       </div>
 
@@ -251,7 +251,7 @@ Content-Type: application/json
         <p className="card-body" style={sx("margin:var(--space-2) 0")}>
           Você não precisa entender o que aparece aqui. Gere uma chave acima, copie os dois
           blocos abaixo e mande para quem fez o seu checkout — é o suficiente para a pessoa
-          ligar o seu sistema à Traffik.
+          ligar o seu sistema à Trackhub.
         </p>
 
         <div className="card-kicker" style={sx("margin-bottom:4px")}>Endereço para enviar as vendas</div>
@@ -451,7 +451,7 @@ function CredentialModal({ v }: { v: TraffikView }) {
       aberta
       onClose={v.closeCredModal}
       titulo="Adicionar Credencial"
-      descricao="A chave autentica envios de venda de qualquer sistema para a Traffik."
+      descricao="A chave autentica envios de venda de qualquer sistema para a Trackhub."
       rodape={
         v.createdCredKey ? (
           <button className="btn btn-primary" type="button" onClick={v.closeCredModal}>Concluir</button>

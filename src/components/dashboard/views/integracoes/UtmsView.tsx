@@ -155,7 +155,7 @@ function CodigosBlock({ codes }: { codes: UtmCodesDTO | null }) {
             {dest === "hotmart"
               ? "O xcod concatena tudo com um separador único da sua conta, usado no parsing reverso."
               : dest === "cartpanda"
-                ? "O cid identifica sua conta na Traffik para atribuição."
+                ? "O cid identifica sua conta na Trackhub para atribuição."
                 : "Formato genérico de UTMs para qualquer plataforma."}
           </p>
         </Modal>

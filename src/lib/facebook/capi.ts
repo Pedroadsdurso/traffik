@@ -12,7 +12,7 @@ function hash(value: string | null | undefined): string | undefined {
   return createHash("sha256").update(normalized).digest("hex");
 }
 
-/** Nomes de evento aceitos pela Conversions API que a Traffik dispara. */
+/** Nomes de evento aceitos pela Conversions API que a Trackhub dispara. */
 export type CapiEventName = "Purchase" | "Lead" | "AddToCart" | "InitiateCheckout" | "PageView";
 
 export interface ServerEventInput {

@@ -207,7 +207,7 @@ export function ExcluirAreaDialog({
       resumo.push(
         contas === "mover"
           ? "As contas de anúncio passam para a área Principal."
-          : "As contas de anúncio saem da Traffik, junto com o histórico de investimento delas.",
+          : "As contas de anúncio saem da Trackhub, junto com o histórico de investimento delas.",
       );
     if (previa.webhooks.length > 0)
       resumo.push(webhooks === "mover" ? "Os gateways continuam recebendo vendas, agora na Principal." : "Os gateways são removidos e param de receber vendas.");
@@ -271,7 +271,7 @@ export function ExcluirAreaDialog({
                 titulo: "Remover da ferramenta",
                 perigo: true,
                 aviso:
-                  "A conta sai da Traffik junto com a área, e o histórico de investimento dela vai embora — todo o gasto já registrado, de todos os períodos. ROAS, ROI e CPA do passado deixam de existir para essas campanhas. Nada muda no Facebook: a conta continua lá, intacta.",
+                  "A conta sai da Trackhub junto com a área, e o histórico de investimento dela vai embora — todo o gasto já registrado, de todos os períodos. ROAS, ROI e CPA do passado deixam de existir para essas campanhas. Nada muda no Facebook: a conta continua lá, intacta.",
               },
             ]}
           />
@@ -288,7 +288,7 @@ export function ExcluirAreaDialog({
                 titulo: "Excluir",
                 perigo: true,
                 aviso:
-                  "O endereço configurado no painel do seu gateway vai parar de funcionar, e as vendas dele deixam de chegar na Traffik. As vendas que já entraram continuam no histórico, mas deixam de aparecer ligadas a esse gateway.",
+                  "O endereço configurado no painel do seu gateway vai parar de funcionar, e as vendas dele deixam de chegar na Trackhub. As vendas que já entraram continuam no histórico, mas deixam de aparecer ligadas a esse gateway.",
               },
             ]}
           />

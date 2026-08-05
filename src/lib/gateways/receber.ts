@@ -226,7 +226,7 @@ export function receberDeWebhook(
 }
 
 /**
- * Recebe pela chave de API da Traffik (sistema próprio do usuário).
+ * Recebe pela chave de API da Trackhub (sistema próprio do usuário).
  *
  * Usa o parser genérico: aqui não há gateway do outro lado, e é justamente por
  * isso que a tolerância a apelidos de campo faz sentido.

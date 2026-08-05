@@ -140,7 +140,7 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
       }));
     } else {
       // ⚠️ Conta NÃO leva `effectiveStatus` — e a ausência é significativa, não
-      // esquecimento. Aqui o toggle é "rastreando na Traffik", não entrega da
+      // esquecimento. Aqui o toggle é "rastreando na Trackhub", não entrega da
       // Meta: quem veicula é campanha, conjunto e anúncio. A célula de
       // Veiculação mostra "—" seco, sem falar em sincronização pendente.
       base = raw.accounts.map((ac) => ({
@@ -474,7 +474,7 @@ export function AdsManagerView({ v }: { v: TraffikView }) {
          *
          * Os dois ramos são ações DIFERENTES, e é por isso que não dá para
          * unificar: nas outras abas o toggle pausa/ativa **no Facebook**; aqui
-         * ele liga/desliga o **rastreamento da conta na Traffik**.
+         * ele liga/desliga o **rastreamento da conta na Trackhub**.
          */
         onToggleStatus={(id) => {
           if (nivel) v.toggleAdsEntity(nivel, id);

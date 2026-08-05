@@ -27,7 +27,7 @@ export function AuthShell({
         <div style={sx("display:flex;justify-content:center")}>
           <Image
             src="/logos/traffik-claro.webp"
-            alt="Traffik"
+            alt="Trackhub"
             width={904}
             height={230}
             priority

@@ -439,7 +439,7 @@ export function useTraffikState(
     lastWorkspaceId?: string | null;
   } = {},
 ) {
-  const brandName = opts.brandName || "Traffik";
+  const brandName = opts.brandName || "Trackhub";
   const liveUpdates = opts.liveUpdates !== false;
   const trackingId = opts.trackingId || "SEU_ID";
   const appUrl = (opts.appUrl || "https://app.traffik.io").replace(/\/+$/, "");
@@ -1682,7 +1682,7 @@ export function useTraffikState(
      * nenhum**. O controle existia, refletia o estado certo, e era inerte.
      *
      * ⚠️ É outra ação que a das outras abas, não a mesma com outro argumento:
-     * lá o toggle pausa/ativa NA META; aqui ele decide se a Traffik sincroniza
+     * lá o toggle pausa/ativa NA META; aqui ele decide se a Trackhub sincroniza
      * esta conta. Por isso a server action é outra (`toggleAccountTracking`).
      *
      * ⚠️ Atualiza as DUAS fontes: `adProfiles` (o que Integrações › Anúncios

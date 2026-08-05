@@ -6,7 +6,7 @@ import { AuthForm } from "../AuthForm";
 import { AuthShell } from "../AuthShell";
 import { loginAction } from "../actions";
 
-export const metadata = { title: "Entrar · Traffik" };
+export const metadata = { title: "Entrar · Trackhub" };
 
 export default async function LoginPage() {
   // Checa o `id`, não só a sessão: um JWT órfão (de outro banco) chega com

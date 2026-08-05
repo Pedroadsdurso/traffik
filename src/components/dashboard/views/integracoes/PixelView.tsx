@@ -740,7 +740,7 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
                 tipo="radio"
                 checked={!form.temPixelNativo}
                 onChange={() => responderPreset({ temPixelNativo: false })}
-                label="Não, só a Traffik vai enviar"
+                label="Não, só a Trackhub vai enviar"
                 dica="Enviamos tudo pelo nosso servidor, inclusive a visita. Chega mesmo com bloqueador de anúncios."
               />
             </div>
@@ -961,7 +961,7 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
                   tipo="radio"
                   checked={!form.outroEnviaPurchase}
                   onChange={() => responderPreset({ outroEnviaPurchase: false })}
-                  label="Não — quem avisa é a Traffik"
+                  label="Não — quem avisa é a Trackhub"
                   dica="Enviamos a venda pelo nosso servidor, só quando ela é aprovada de verdade. É o recomendado: chega mesmo com bloqueador de anúncios e não dispara em PIX que ninguém pagou."
                 />
                 <Checkbox
@@ -969,7 +969,7 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
                   checked={form.outroEnviaPurchase}
                   onChange={() => responderPreset({ outroEnviaPurchase: true })}
                   label="Sim — a página de obrigado ou o checkout do meu gateway já envia"
-                  dica="A Traffik para de enviar a venda para a Meta. Continua registrando tudo aqui: faturamento, funil e Gerenciador não mudam."
+                  dica="A Trackhub para de enviar a venda para a Meta. Continua registrando tudo aqui: faturamento, funil e Gerenciador não mudam."
                 />
               </div>
 

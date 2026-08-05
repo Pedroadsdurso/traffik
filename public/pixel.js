@@ -1,5 +1,5 @@
 /*!
- * Traffik pixel — rastreamento de cliques e UTMs de primeira parte.
+ * Trackhub pixel — rastreamento de cliques e UTMs de primeira parte.
  *
  * Instale antes de </head>:
  *   <script src="https://SEU_HOST/pixel.js" data-account="SEU_ID" async></script>

@@ -23,7 +23,7 @@
  *
  * | Estado | Consequência |
  * |---|---|
- * | Dono = Traffik, script não espelha | evento da CAPI sem par no navegador → **a Meta conta duas vezes** |
+ * | Dono = Trackhub, script não espelha | evento da CAPI sem par no navegador → **a Meta conta duas vezes** |
  * | Sem pixel nativo, script tentando espelhar | 10s de espera por um `fbq` que nunca vem, `console.warn` e `sem-fbq` gravado — **alarme vermelho numa configuração correta** |
  *
  * Uma resposta, um mapa, os dois lados coerentes por construção.
@@ -135,7 +135,7 @@ export const PRESET_PADRAO: PresetPixel = {
  * > dele.** Sem pixel nativo não existe segundo emissor, e a CAPI é o único
  * > caminho — aí o PageView volta a ser nosso.
  * >
- * > ⚠️ `Lead`, `AddToCart` e `InitiateCheckout` são **sempre da Traffik**, em
+ * > ⚠️ `Lead`, `AddToCart` e `InitiateCheckout` são **sempre da Trackhub**, em
  * > qualquer resposta. Eles só saem do navegador se alguém chamar
  * > `fbq('track', …)` explicitamente, e quando isso acontece o nosso script
  * > espelha com o mesmo `event_id` — a Meta junta os dois. Rebaixá-los perderia
@@ -166,7 +166,7 @@ export function donosDoPreset(preset: PresetPixel): MapaDeDonos {
  * é `PageView: "navegador"`, todo pixel existente infere `temPixelNativo: true`,
  * que é o comportamento em vigor.
  *
- * Só cai em `false` quem trocou o PageView para Traffik na mão — e aí `false` é
+ * Só cai em `false` quem trocou o PageView para Trackhub na mão — e aí `false` é
  * a leitura certa, porque é o que essa escolha significa.
  *
  * ⚠️ O mesmo vale para `outroEnviaPurchase`: o padrão do projeto é

@@ -1,7 +1,7 @@
 /**
  * # PRECEDÊNCIA DE FONTE — a REGRA 2 do contrato, implementada
  *
- * Campo **derivado** é o que a Traffik inferiu, não o que o gateway declarou:
+ * Campo **derivado** é o que a Trackhub inferiu, não o que o gateway declarou:
  * `country`/`countrySource` e `clickId`/`matchMethod`. Cada um carrega a
  * procedência da inferência, e essa procedência tem força.
  *

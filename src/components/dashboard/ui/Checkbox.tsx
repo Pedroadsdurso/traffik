@@ -3,7 +3,7 @@
 import { sx } from "@/lib/sx";
 
 /**
- * Checkbox e radio próprios do Traffik.
+ * Checkbox e radio próprios do Trackhub.
  *
  * O nativo não aceita a cor da marca no estado marcado nem transição, e ao lado
  * dos componentes já customizados (Select, DateRangePicker) ele denuncia a

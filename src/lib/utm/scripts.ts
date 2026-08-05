@@ -1,5 +1,5 @@
 /**
- * Geradores dos scripts próprios da Traffik para instalar na página de vendas
+ * Geradores dos scripts próprios da Trackhub para instalar na página de vendas
  * (Bloco 11 › Scripts). São strings de JavaScript autocontido — o usuário baixa
  * e cola no <head> do site. Nada de terceiros: código nosso.
  */
@@ -15,7 +15,7 @@ function jsString(v: string): string {
  * os links de checkout da página e expõe `window.traffik.getData()`.
  */
 export function utmScript(accountId: string, apiBase: string, workspaceId?: string | null): string {
-  return `/*! Traffik — captura de UTMs (cole antes de </head>) */
+  return `/*! Trackhub — captura de UTMs (cole antes de </head>) */
 (function () {
   "use strict";
   var ACCOUNT = "${jsString(accountId)}";
@@ -86,7 +86,7 @@ export function utmScript(accountId: string, apiBase: string, workspaceId?: stri
  * redireciona para a URL definida, preservando os UTMs da URL atual.
  */
 export function backRedirectScript(destUrl: string): string {
-  return `/*! Traffik — back redirect (cole antes de </head>) */
+  return `/*! Trackhub — back redirect (cole antes de </head>) */
 (function () {
   "use strict";
   var DEST = "${jsString(destUrl.trim())}";
