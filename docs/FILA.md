@@ -726,3 +726,70 @@ mensagem crua longa, `sem_token`, espelho quebrado, "sem registro"):
 **Ainda sem varredura:** os condicionais que vivem DENTRO de gaveta (erro de
 conta + backoff em Integrações › Anúncios) e o Gerenciador com filtros/estados
 combinados.
+
+---
+
+## 📏 ITEM (d) — o que foi EXERCIDO em 05/08/2026, e o que continua bloqueado
+
+### ✅ O clamp do `Drawer` está provado
+
+Medido com o painel de Integrações › Anúncios aberto, em quatro larguras:
+
+| Largura do bloco de contenção | `Drawer` | Descendentes que vazam | Rolagem H |
+|---|---|---|---|
+| sem constrição | 560px | 0 de 63 | não |
+| 430px | **430px** | 0 de 63 | não |
+| 390px | **390px** | 0 de 63 | não |
+| 360px | **360px** | 0 de 63 | não |
+| 320px | **320px** | 0 de 63 | não |
+
+`width: min(560px, 100%)` clampa exatamente e volta a 560 ao soltar. **Isto fecha
+a suspeita nº 1 da lista antiga** (que dizia largura FIXA em px — ver
+`docs/arquivo-morto.md` §2).
+
+### 🔬 A técnica usada — e o LIMITE dela, que importa mais
+
+Um ancestral com `transform` passa a ser o **bloco de contenção** de um
+`position: fixed` descendente (é o mesmo mecanismo do bug do `.page-enter` que
+achatava gavetas). Então `body { width: 430px; transform: translateZ(0) }` faz o
+overlay resolver `100%` contra 430px, de verdade, com o componente e o CSS reais.
+
+Provado antes de confiar: um `div` fixo com `width:100%` mediu **2552px → 430px**.
+
+> ### ⛔ Ela NÃO substitui um viewport estreito de verdade — dois limites medidos
+>
+> 1. **`vw` continua o do viewport real.** Com o body em 360px, o
+>    `max-width: calc(100vw - 24px)` do `.tk-pop` computou **2536px**. Toda regra
+>    baseada em `vw` fica sem exercício.
+> 2. **A página TRANSBORDA em vez de refluir.** Com o body em 360px, o gatilho de
+>    um `Select` ficou com a borda direita em **581px** — fora do body. Isso é
+>    artefato da técnica (grid com mínimo próprio), não bug da tela.
+>
+> ⚠️ **Foi por pouco que eu não reportei o artefato como defeito.** A medição
+> dizia `transbordaADireita: true` para o `.tk-pop`, e a explicação era o meu
+> método. Quem repetir isto: confira se o *gatilho* já está fora do box antes de
+> acusar o popup.
+
+### ⛔ Continua bloqueado, e o motivo mudou
+
+| Alvo | Estado |
+|---|---|
+| `ui/Drawer` | ✅ exercido (acima) |
+| `ui/Modal` | ⚠️ **não exercido** — "+ Nova campanha" não abriu no banco de dev (sem conta/campanha). Achar um modal que abra sem dado semeado, ou semear |
+| `.tk-pop` (dropdown do `Select`) | ⚠️ **não exercido** — precisa de `vw` real |
+| `DateRangePicker` | ⚠️ **não exercido** |
+
+**O `resize_window` mentiu de novo** (disse `430x900`, `innerWidth` ficou 2560).
+
+> ### 🔴 A causa provável, e é diferente da vez anterior
+> O grupo de abas do MCP é **auto-removido quando a última aba fecha**. Então a
+> janela que o usuário restaurou deixou de hospedar grupo nenhum, e o
+> `tabs_context_mcp{createIfEmpty:true}` criou um grupo **novo na janela
+> maximizada**.
+>
+> **A ordem que deve funcionar:** eu crio a aba primeiro, o usuário desmaximiza a
+> janela que a contém **depois**, e só então a varredura roda. Restaurar antes não
+> serve — o grupo ainda não existe.
+
+⚠️ E a regra que não muda: **depois de qualquer resize, leia `innerWidth` e
+compare.** A mensagem de sucesso não vale nada.
