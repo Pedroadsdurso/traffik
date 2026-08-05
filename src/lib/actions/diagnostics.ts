@@ -12,6 +12,7 @@ import { getLastWorkspaceId } from "@/lib/actions/workspaces";
 import { escopoDeConfig } from "@/lib/areas/escopoConfig";
 import { plural } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
+import { estadoDasRotinas } from "@/lib/cronBatimento";
 import { lerPadroes } from "@/lib/pixel/ambiente";
 import { ordemDoEspelho } from "@/lib/pixel/espelho";
 import { parseTrackingCodes } from "@/lib/utm/parse";
@@ -504,4 +505,32 @@ export async function removerPadraoDeTeste(padrao: string): Promise<PadraoAprova
     data: { testHostPatterns: JSON.parse(JSON.stringify(restantes)) },
   });
   return restantes.map((p) => ({ padrao: p.padrao, criadoEm: p.criadoEm ?? null }));
+}
+
+
+/**
+ * Estado das rotinas agendadas, para a aba Testes.
+ *
+ * 🔴 **Isto e a rede de seguranca de CINCO rotinas** — sincronizacao com o
+ * Facebook, motor de regras, relatorios, manutencao e o historico de primeira
+ * conexao. Um agendador que para nao tem sintoma imediato: o painel responde,
+ * os dados estao la, e o que morre e o que acontece com ninguem olhando.
+ *
+ * ⚠️ Nao e recortado por area: o agendamento e da CONTA inteira, nao de uma
+ * operacao. Recortar aqui esconderia a rotina parada de quem estivesse na area
+ * errada — mesma razao pela qual notificacao sem venda aparece em toda area.
+ */
+export async function getRotinasAgendadas(): Promise<{
+  rota: string;
+  rotulo: string;
+  ultimaEm: string | null;
+  atrasada: boolean;
+  falhou: boolean;
+  erro: string | null;
+}[]> {
+  await requireUserId();
+  const linhas = await estadoDasRotinas();
+  // Datas viram string: o retorno de server action e serializado, e um `Date`
+  // atravessa como string de qualquer forma — melhor ser explicito.
+  return linhas.map((l) => ({ ...l, ultimaEm: l.ultimaEm?.toISOString() ?? null }));
 }

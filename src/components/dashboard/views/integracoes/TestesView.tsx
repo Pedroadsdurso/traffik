@@ -1,11 +1,12 @@
 "use client";
 
-import { plural } from "@/lib/format";
+import { elapsed, plural } from "@/lib/format";
 import { useCallback, useEffect, useState } from "react";
 
 import {
   analyzeTrackingUrl,
   getInstallChecklist,
+  getRotinasAgendadas,
   listTestablePixels,
   listWebhookLogs,
   listarPadroesDeTeste,
@@ -22,6 +23,7 @@ import { estadoDoEspelho, type TomDoEspelho } from "@/lib/pixel/espelho";
 import { sx } from "@/lib/sx";
 import { TestadorPayloadCard } from "./TestadorPayloadCard";
 import { Select } from "../../ui/Select";
+import { Icone } from "../../ui/Icone";
 
 const STATUS_TAG: Record<string, { label: string; cls: string }> = {
   RECEBIDO: { label: "Recebido", cls: "tag tag-neutral" },
@@ -486,6 +488,91 @@ function TrackingTestCard() {
  *
  * Com a prop na lista de dependências, a troca de área refaz a consulta.
  */
+/**
+ * Estado das rotinas agendadas.
+ *
+ * 🔴 Existe porque agendador externo avisa quando a execucao FALHA e **nenhum
+ * avisa quando ele proprio PARA**. Um cron parado nao tem sintoma imediato: o
+ * painel responde, os dados estao la, e o que morre e o que acontece com
+ * ninguem olhando — motor de regras, relatorios, purga de IP, retencao de log.
+ * Some devagar, e quando aparece ja faz semanas.
+ *
+ * ⚠️ Fica na coluna "Como esta agora", junto do checklist: e leitura de estado,
+ * nao um teste que se dispara.
+ */
+function RotinasCard() {
+  const [rotinas, setRotinas] = useState<Awaited<ReturnType<typeof getRotinasAgendadas>>>([]);
+
+  useEffect(() => {
+    getRotinasAgendadas().then(setRotinas).catch(() => {});
+  }, []);
+
+  if (rotinas.length === 0) return null;
+
+  const problema = rotinas.filter((r) => r.atrasada || r.falhou);
+
+  return (
+    <div className="card">
+      <div className="card-kicker">Rotinas automáticas</div>
+      <div className="card-title">O que roda sem ninguém olhando</div>
+
+      {problema.length === 0 ? (
+        <p className="text-muted" style={sx("font-size:12.5px;line-height:1.55;margin-top:var(--space-2)")}>
+          As quatro rotinas estão rodando no horário. Elas são o que mantém a sincronização,
+          as regras, os relatórios e a limpeza funcionando quando você não está com o painel aberto.
+        </p>
+      ) : (
+        <div
+          style={sx(
+            "display:flex;gap:8px;align-items:flex-start;margin-top:var(--space-2);padding:8px 10px;" +
+              "border-radius:var(--radius-sm);font-size:12px;line-height:1.55;border-left:3px solid #f87171;" +
+              "background:color-mix(in srgb, #f87171 7%, var(--color-surface))",
+          )}
+        >
+          <Icone nome="erro" tamanho={15} cor="perigo" />
+          <div>
+            <strong>{plural(problema.length, "rotina parou ou falhou", "rotinas pararam ou falharam")}.</strong>
+            <div className="text-muted" style={sx("margin-top:2px")}>
+              Confira o agendador (cron-job.org) e se o endereço do painel mudou. Enquanto isso durar,
+              o que depende delas não acontece — e não há erro na tela para avisar.
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={sx("display:flex;flex-direction:column;gap:6px;margin-top:var(--space-3)")}>
+        {rotinas.map((r) => {
+          /*
+            ⚠️ TRES estados, nao dois. "Nunca rodou" nao e atraso — logo depois
+            de o batimento existir, toda linha esta ausente, e alarmar ali
+            encheria a tela de vermelho por uma coluna recem-criada.
+          */
+          const tom = r.falhou || r.atrasada ? "#f87171" : r.ultimaEm ? "var(--color-accent-300)" : "var(--color-neutral-400)";
+          const texto = r.falhou
+            ? "falhou na última execução"
+            : r.atrasada
+              ? "sem rodar há tempo demais"
+              : r.ultimaEm
+                ? `rodou ${elapsed(new Date(r.ultimaEm).getTime())}`
+                : "aguardando a primeira execução";
+          return (
+            <div key={r.rota} style={sx("display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);font-size:12.5px")}>
+              <span style={sx("display:flex;align-items:center;gap:7px")}>
+                <span style={sx(`width:7px;height:7px;border-radius:50%;background:${tom};flex:none`)} />
+                {r.rotulo}
+              </span>
+              <span className="text-muted" style={sx("font-size:11.5px;text-align:right")}>
+                {texto}
+                {r.erro && <span style={sx("display:block;opacity:.75")}>{r.erro.slice(0, 60)}</span>}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ChecklistCard({ workspaceId }: { workspaceId: string | null }) {
   const [items, setItems] = useState<ChecklistItemDTO[]>([]);
   const [busy, setBusy] = useState(false);
@@ -662,6 +749,7 @@ export function TestesView({ workspaceId }: { workspaceId: string | null }) {
       <div style={sx(COLUNA)}>
         <TituloColuna>Como está agora</TituloColuna>
         <ChecklistCard workspaceId={workspaceId} />
+        <RotinasCard />
         <PadroesDeTesteCard />
         <EspelhoCard />
         <WebhookLogsCard />

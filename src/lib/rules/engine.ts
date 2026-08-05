@@ -689,7 +689,31 @@ export async function runUserRules(userId: string): Promise<{ evaluated: number;
     // o compilador teria acusado `targetProducts` faltando em `RuleRow`. Toda
     // coluna nova do schema precisa ser acrescentada à interface À MÃO — este
     // cast não avisa.
-    const result = await evaluateRule(rule as unknown as RuleRow);
+    /**
+     * 🔴 Exceção NÃO tratada aqui vira silêncio, e a reserva torna isso pior.
+     *
+     * `evaluateRule` trata o carregamento de entidades e o erro POR ENTIDADE,
+     * mas o que escapar disso (uma consulta de métrica que falha, um erro de
+     * rede) propaga. Antes da reserva, um throw deixava `lastRunAt` intacto e a
+     * regra tentava de novo no ciclo seguinte. Com a reserva, `lastRunAt` **já
+     * foi avançado** — então a regra pularia a janela inteira sem uma linha no
+     * histórico dizendo por quê.
+     *
+     * O usuário veria "última execução há 30 min" e concluiria que rodou
+     * normal. É o mesmo raciocínio de silêncio × falha do batimento das
+     * rotinas: as duas coisas precisam ser distinguíveis.
+     */
+    let result: RuleRunResult;
+    try {
+      result = await evaluateRule(rule as unknown as RuleRow);
+    } catch (e) {
+      result = {
+        status: "ERRO",
+        affected: 0,
+        message: e instanceof Error ? e.message : String(e),
+        details: null,
+      };
+    }
     await prisma.$transaction([
       prisma.automationRuleLog.create({
         data: { ruleId: rule.id, status: result.status, message: result.message, affected: result.affected, details: result.details as object },
