@@ -201,15 +201,15 @@ console.log("\n\x1b[1mTaxa reportada pelo gateway\x1b[0m");
       vendas,
     });
 
-  const real = base([{ valor: 100, formaPagamento: PIX, taxaGateway: 7.5, coproducao: null }]);
+  const real = base([{ valor: 100, formaPagamento: PIX, taxaGateway: 7.5, coproducao: null , chavePedido: "p1" }]);
   eq("gateway informou → a taxa cadastrada é ignorada naquela venda", real.gateway, 7.5);
   eq("  e a procedência fica registrada", real.fontes.gateway.real, 7.5);
 
   // ⚠️ Se a base da taxa cadastrada não encolhesse, daria 7,50 + 10,00 = 17,50 —
   // descontando DUAS VEZES da venda que já informou a própria taxa.
   const misto = base([
-    { valor: 100, formaPagamento: PIX, taxaGateway: 7.5, coproducao: null },
-    { valor: 100, formaPagamento: PIX, taxaGateway: null, coproducao: null },
+    { valor: 100, formaPagamento: PIX, taxaGateway: 7.5, coproducao: null , chavePedido: "p2" },
+    { valor: 100, formaPagamento: PIX, taxaGateway: null, coproducao: null , chavePedido: "p3" },
   ]);
   eq("MISTO: 7,50 real + 5,00 cadastrada, sem dupla contagem", misto.gateway, 12.5);
   eq("  vendas com valor real", misto.fontes.gateway.vendasComValorReal, 1);
@@ -217,20 +217,20 @@ console.log("\n\x1b[1mTaxa reportada pelo gateway\x1b[0m");
 
   // A REGRA 1 do contrato de gateways, no lugar onde ela custa dinheiro.
   eq("gateway informou ZERO → desconta nada",
-    base([{ valor: 100, formaPagamento: PIX, taxaGateway: 0, coproducao: null }]).gateway, 0);
+    base([{ valor: 100, formaPagamento: PIX, taxaGateway: 0, coproducao: null , chavePedido: "p4" }]).gateway, 0);
   eq("gateway NÃO informou → cai nos 5% cadastrados",
-    base([{ valor: 100, formaPagamento: PIX, taxaGateway: null, coproducao: null }]).gateway, 5);
+    base([{ valor: 100, formaPagamento: PIX, taxaGateway: null, coproducao: null , chavePedido: "p5" }]).gateway, 5);
 
   // Cobrar cadastro de um número que já é medido treinaria o usuário a ignorar
   // o aviso — que é o oposto do que ele existe para fazer.
-  const tudoReal = base([{ valor: 100, formaPagamento: PIX, taxaGateway: 7.5, coproducao: 10 }], []);
+  const tudoReal = base([{ valor: 100, formaPagamento: PIX, taxaGateway: 7.5, coproducao: 10 , chavePedido: "p6" }], []);
   eq("todas informaram → para de cobrar cadastro de taxa", tudoReal.faltando.includes("taxa do gateway"), false);
   eq("  e de coprodução", tudoReal.faltando.includes("coprodução"), false);
   eq("  mas imposto continua faltando (ninguém informou)", tudoReal.faltando.includes("imposto"), true);
 
   const metade = base([
-    { valor: 100, formaPagamento: PIX, taxaGateway: 7.5, coproducao: null },
-    { valor: 100, formaPagamento: PIX, taxaGateway: null, coproducao: null },
+    { valor: 100, formaPagamento: PIX, taxaGateway: 7.5, coproducao: null , chavePedido: "p7" },
+    { valor: 100, formaPagamento: PIX, taxaGateway: null, coproducao: null , chavePedido: "p8" },
   ], []);
   eq("mistura AINDA cobra cadastro — metade depende dele", metade.faltando.includes("taxa do gateway"), true);
 
@@ -280,6 +280,94 @@ console.log("\n\x1b[1mTaxa reportada pelo gateway\x1b[0m");
     ],
   });
   eq("global + especifica somam", (ambas.gateway), 60);
+}
+
+
+/**
+ * ─────────── Os TRÊS MODOS de cobrança (05/08/2026) ───────────
+ *
+ * 🔴 `FIXO` incidia UMA VEZ no período inteiro (`return e.amount`, sem
+ * multiplicar). Uma taxa de "R$ 2,50 por venda" com 40 vendas descontava
+ * R$ 2,50 — o Faturamento Líquido saía R$ 97,50 MAIOR que a realidade, com o
+ * número continuando plausível.
+ */
+console.log("");
+console.log("Tres modos: % por venda / R$ por venda / R$ por mes");
+{
+  const PIX = "PIX";
+  const venda = (v, pedido, taxa = null) => ({
+    valor: v, formaPagamento: PIX, taxaGateway: taxa, coproducao: null, chavePedido: pedido,
+  });
+  const rodar = (vendas, despesas) =>
+    calcularFinanceiro({
+      bruto: vendas.reduce((a, v) => a + v.valor, 0),
+      brutoPorPagamento: new Map([[PIX, vendas.reduce((a, v) => a + v.valor, 0)]]),
+      gastoAnuncios: 0,
+      despesas,
+      vendas,
+    });
+
+  const tresVendas = [venda(100, "p1"), venda(100, "p2"), venda(100, "p3")];
+
+  // Modo 1 — % por venda (o que já existia).
+  eq("% por venda: 5% de 300",
+    rodar(tresVendas, [{ type: "TAXA_GATEWAY", calc: "PERCENTUAL", amount: 5, paymentMethod: null }]).gateway, 15);
+
+  // Modo 2 — R$ por venda. É o que estava quebrado.
+  eq("R$ por venda: 2,50 x 3 PEDIDOS",
+    rodar(tresVendas, [{ type: "TAXA_GATEWAY", calc: "FIXO", amount: 2.5, paymentMethod: null }]).gateway, 7.5);
+
+  // ⛔ A asserção que dá sentido à anterior: order bump NÃO cobra duas vezes.
+  // Um checkout com bump é 2 linhas e 1 conversão.
+  const comBump = [venda(90, "pedido-A"), venda(27, "pedido-A"), venda(100, "pedido-B")];
+  eq("order bump: 2 linhas, 1 pedido -> 2 cobrancas, nao 3",
+    rodar(comBump, [{ type: "TAXA_GATEWAY", calc: "FIXO", amount: 2.5, paymentMethod: null }]).gateway, 5);
+  eq("  e o faturamento continua somando as LINHAS",
+    rodar(comBump, []).bruto, 217);
+
+  // Modo 3 — R$ por mês. Não incide sobre venda nenhuma.
+  const mensal = rodar(tresVendas, [
+    { type: "DESPESA_RECORRENTE", calc: "FIXO", amount: 97, paymentMethod: null },
+  ]);
+  eq("R$ por mes: cobrado uma vez, nao por venda", mensal.despesas, 97);
+  eq("  e nao entra nos descontos sobre faturamento", mensal.totalDescontos, 0);
+  eq("  mas entra no lucro", mensal.lucro, 300 - 97);
+
+  // A taxa fixa por FORMA DE PAGAMENTO conta só os pedidos daquela forma.
+  const misturado = [
+    { ...venda(100, "p1"), formaPagamento: "PIX" },
+    { ...venda(100, "p2"), formaPagamento: "CARTAO" },
+    { ...venda(100, "p3"), formaPagamento: "CARTAO" },
+  ];
+  eq("R$ fixo do cartao nao cobra as vendas por Pix",
+    calcularFinanceiro({
+      bruto: 300,
+      brutoPorPagamento: new Map([["PIX", 100], ["CARTAO", 200]]),
+      gastoAnuncios: 0,
+      despesas: [{ type: "TAXA_GATEWAY", calc: "FIXO", amount: 1, paymentMethod: "CARTAO" }],
+      vendas: misturado,
+    }).gateway, 2);
+
+  // E a base encolhe também no modo fixo: quem já informou a taxa não paga a cadastrada.
+  const parcial = [venda(100, "p1", 7.5), venda(100, "p2"), venda(100, "p3")];
+  eq("R$ por venda so cobra os pedidos SEM taxa informada",
+    rodar(parcial, [{ type: "TAXA_GATEWAY", calc: "FIXO", amount: 2, paymentMethod: null }]).gateway,
+    7.5 + 4);
+
+  // Imposto e custo de produto também aceitam valor por venda.
+  eq("imposto R$ por venda: 1,00 x 3",
+    rodar(tresVendas, [{ type: "IMPOSTO", calc: "FIXO", amount: 1, paymentMethod: null }]).impostos, 3);
+  eq("custo de produto R$ por venda: 10 x 3",
+    rodar(tresVendas, [{ type: "CUSTO_PRODUTO", calc: "FIXO", amount: 10, paymentMethod: null }]).custoProduto, 30);
+
+  // ⚠️ Chamador LEGADO (sem lista de vendas) mantém o comportamento anterior:
+  // fixo incide uma vez. Ele não tem como saber quantas compras houve, e
+  // chutar zero apagaria a despesa em silêncio.
+  eq("sem lista de vendas, o fixo incide UMA vez (comportamento antigo)",
+    calcularFinanceiro({
+      bruto: 300, brutoPorPagamento: new Map([[PIX, 300]]), gastoAnuncios: 0,
+      despesas: [{ type: "TAXA_GATEWAY", calc: "FIXO", amount: 2.5, paymentMethod: null }],
+    }).gateway, 2.5);
 }
 
 console.log(

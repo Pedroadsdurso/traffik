@@ -71,9 +71,58 @@ export interface PresetPixel {
    * é permissão indevida, é perder venda.
    */
   outroEnviaPurchase: boolean;
+  /**
+   * **Onde o comprador paga.** Decide a regra de detecção do InitiateCheckout.
+   *
+   * ## 🔴 Por que isto virou pergunta, e não ficou só no avançado
+   *
+   * A escolha entre `clique_checkout` e `contem_url` **não é uma preferência
+   * técnica — é um fato sobre o negócio do usuário**, e ele sabe a resposta sem
+   * saber o que é um detector:
+   *
+   * | Onde ele paga | Regra | Por quê |
+   * |---|---|---|
+   * | No checkout do gateway (`pay.cakto.com.br`, `pay.kirvano.com`) | `clique_checkout` | **não dá para instalar script lá** — a página é do gateway. O que dá para ver é o CLIQUE no link, no site dele |
+   * | No próprio site | `contem_url` | o script roda na página de pagamento, então a URL dela é o sinal |
+   *
+   * Escolher errado não dá erro: dá **zero InitiateCheckout**, para sempre. Era
+   * a configuração de quem apontava `contem_url` para o checkout hospedado — a
+   * URL comparada é a da página onde o script roda, e o script nunca roda lá.
+   *
+   * ⚠️ `contem_url` **exige o trecho da URL**. Vazio, `location.href.indexOf("")`
+   * é sempre verdadeiro e toda visita viraria checkout — o erro oposto, e tão
+   * mudo quanto. O script guarda contra isso e a gaveta exige o campo.
+   *
+   * > ### ⛔ NÃO grave este campo no `setup` — ele é DERIVADO da regra de IC
+   * > Ao contrário dos outros dois, a resposta aqui já tem onde morar: a regra
+   * > gravada em `PixelEventRule`. Guardá-la também no `setup` criaria duas
+   * > fontes para a mesma pergunta, e elas divergiriam no primeiro ajuste pelo
+   * > avançado — a tela mostraria "paga no meu site" com o script detectando
+   * > clique. É o defeito que fez a tela de Áreas dizer "Sem webhook" para uma
+   * > área com webhook.
+   * >
+   * > `temPixelNativo` e `outroEnviaPurchase` são diferentes: eles não têm outra
+   * > coluna própria (o mapa de donos só os reflete por coincidência do padrão),
+   * > então **esses dois** precisam do `setup`.
+   */
+  ondeSePaga: OndeSePaga;
 }
 
-export const PRESET_PADRAO: PresetPixel = { temPixelNativo: true, outroEnviaPurchase: false };
+/** Onde fica a página em que o comprador efetivamente paga. */
+export type OndeSePaga = "gateway" | "proprio_site";
+
+/** A regra de detecção que cada resposta produz. */
+export const REGRA_DE_CHECKOUT: Record<OndeSePaga, "clique_checkout" | "contem_url"> = {
+  gateway: "clique_checkout",
+  proprio_site: "contem_url",
+};
+
+export const PRESET_PADRAO: PresetPixel = {
+  temPixelNativo: true,
+  outroEnviaPurchase: false,
+  // O caso comum deste produto: infoprodutor com checkout hospedado pelo gateway.
+  ondeSePaga: "gateway",
+};
 
 /**
  * O mapa de donos que cada resposta produz.
@@ -130,7 +179,7 @@ export function donosDoPreset(preset: PresetPixel): MapaDeDonos {
  * os dois faria a resposta antiga ser descartada inteira e o PageView voltar
  * ao padrão sem ninguém pedir.
  */
-export function lerPreset(setup: unknown, eventOwners: unknown): PresetPixel {
+export function lerPreset(setup: unknown, eventOwners: unknown, icTipo?: string | null): PresetPixel {
   const obj =
     setup && typeof setup === "object" && !Array.isArray(setup)
       ? (setup as Record<string, unknown>)
@@ -142,6 +191,12 @@ export function lerPreset(setup: unknown, eventOwners: unknown): PresetPixel {
       typeof nativo === "boolean" ? nativo : donoDoEvento(eventOwners, "PageView") === "navegador",
     outroEnviaPurchase:
       typeof outro === "boolean" ? outro : donoDoEvento(eventOwners, "Purchase") !== "traffik",
+    // ⚠️ SEMPRE derivado da regra gravada — nunca lido do `setup`. Ver a nota
+    // em `PresetPixel.ondeSePaga`. O "senão" é `gateway` de propósito: é o que
+    // `clique_checkout` (o padrão de sempre) significa, e é onde os modos
+    // manuais do avançado (`contem_texto`/`contem_css`) caem — a pergunta não
+    // os descreve, então a tela mostra isso em vez de fingir uma resposta.
+    ondeSePaga: icTipo === "contem_url" ? "proprio_site" : "gateway",
   };
 }
 

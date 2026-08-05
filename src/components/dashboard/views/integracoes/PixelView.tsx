@@ -6,6 +6,7 @@ import {
   conferirSnippet,
   createPixel,
   deletePixel,
+  gatewaysComPixelProprio,
   listPixels,
   listTrackedProducts,
   togglePixel,
@@ -28,7 +29,13 @@ import {
   type DonoDoEvento,
   type MapaDeDonos,
 } from "@/lib/pixel/donos";
-import { donosDoPreset, seguePreset, type PresetPixel } from "@/lib/pixel/preset";
+import {
+  REGRA_DE_CHECKOUT,
+  donosDoPreset,
+  seguePreset,
+  type OndeSePaga,
+  type PresetPixel,
+} from "@/lib/pixel/preset";
 import { Select } from "../../ui/Select";
 import { Checkbox } from "../../ui/Checkbox";
 import { Icone } from "../../ui/Icone";
@@ -64,7 +71,9 @@ const EMPTY_FORM: Form = {
   ic: { enabled: true, type: "clique_checkout", value: "" },
   purchase: { enabled: true, sendMode: "APENAS_APROVADAS", valueMode: "VALOR_DA_VENDA", fixedValue: "", targetProduct: "" },
   outroEnviaPurchase: false,
-  donos: donosDoPreset({ temPixelNativo: true, outroEnviaPurchase: false }),
+  // `ondeSePaga` não entra no mapa de donos — ele decide a regra de detecção,
+  // não quem envia. Vai aqui só para satisfazer o preset completo.
+  donos: donosDoPreset({ temPixelNativo: true, outroEnviaPurchase: false, ondeSePaga: "gateway" }),
 };
 
 function formToInput(f: Form): PixelFormInput {
@@ -84,8 +93,37 @@ function formToInput(f: Form): PixelFormInput {
       targetProduct: f.purchase.targetProduct || null,
     },
     eventOwners: f.donos,
-    preset: { temPixelNativo: f.temPixelNativo, outroEnviaPurchase: f.outroEnviaPurchase },
+    preset: {
+      temPixelNativo: f.temPixelNativo,
+      outroEnviaPurchase: f.outroEnviaPurchase,
+      // ⚠️ DERIVADO da regra, não um campo próprio do formulário. A regra é o
+      // que fica gravado; um segundo estado para a mesma resposta divergiria
+      // dela no primeiro ajuste pelo avançado.
+      ondeSePaga: ondePaga(f.ic.type),
+    },
   };
+}
+
+/** "Cakto" · "Cakto e Kirvano" · "Cakto, Kirvano e Hotmart". */
+function listaEm(nomes: string[]): string {
+  if (nomes.length <= 1) return nomes[0] ?? "";
+  return `${nomes.slice(0, -1).join(", ")} e ${nomes[nomes.length - 1]}`;
+}
+
+/** A resposta de "onde o comprador paga", lida da regra de detecção. */
+function ondePaga(tipo: DetectionType): OndeSePaga {
+  return tipo === "contem_url" ? "proprio_site" : "gateway";
+}
+
+/**
+ * A regra é um dos dois modos manuais do avançado?
+ *
+ * A pergunta descreve `clique_checkout` e `contem_url`. `contem_texto` e
+ * `contem_css` não são nenhum dos dois — e marcar um dos botões assim mesmo
+ * seria a tela afirmando uma resposta que o usuário não deu. Ela diz isso.
+ */
+function regraManual(tipo: DetectionType): boolean {
+  return tipo !== "clique_checkout" && tipo !== "contem_url";
 }
 
 function dtoToForm(px: PixelConfigDTO): Form {
@@ -240,10 +278,17 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [check, setCheck] = useState<SnippetCheckDTO | null>(null);
+  /**
+   * Gateways conectados que têm painel de pixel próprio — os que podem estar
+   * disparando `Purchase` por conta. Vem do REGISTRO, nunca de um `if` por
+   * plataforma. Ver `gatewaysComPixelProprio`.
+   */
+  const [comPixelProprio, setComPixelProprio] = useState<string[]>([]);
 
   useEffect(() => {
     listPixels(workspaceId).then(setPixels).catch(() => {});
     listTrackedProducts().then(setProducts).catch(() => {});
+    gatewaysComPixelProprio(workspaceId).then(setComPixelProprio).catch(() => {});
   }, [workspaceId]);
 
   /**
@@ -284,15 +329,31 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
    * exatamente o estado que esta reforma existe para eliminar. O caminho de
    * volta é o `↩ voltar ao padrão` do avançado.
    */
-  function responderPreset(patch: Partial<PresetPixel>) {
+  function responderPreset(patch: Partial<Omit<PresetPixel, "ondeSePaga">>) {
     setForm((f) => {
       const preset: PresetPixel = {
         temPixelNativo: f.temPixelNativo,
         outroEnviaPurchase: f.outroEnviaPurchase,
+        ondeSePaga: ondePaga(f.ic.type),
         ...patch,
       };
       return { ...f, ...preset, donos: donosDoPreset(preset) };
     });
+  }
+
+  /**
+   * "Onde o comprador paga" — a resposta É a regra de detecção.
+   *
+   * ⚠️ O valor é LIMPO ao trocar: uma lista de domínios de checkout e um trecho
+   * de URL da própria página não são a mesma coisa, e carregar o valor antigo
+   * produziria uma regra que casa com nada (ou, pior, com tudo).
+   */
+  function responderOndePaga(onde: OndeSePaga) {
+    setForm((f) =>
+      ondePaga(f.ic.type) === onde && !regraManual(f.ic.type)
+        ? f
+        : { ...f, ic: { ...f.ic, type: REGRA_DE_CHECKOUT[onde], value: "" } },
+    );
   }
 
   function addMeta() {
@@ -316,6 +377,13 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
   async function save() {
     if (!temPixel) {
       setError("Informe o ID do pixel da Meta.");
+      return;
+    }
+    if (form.ic.enabled && form.ic.type === "contem_url" && !form.ic.value.trim()) {
+      setError(
+        "Informe um trecho do endereço da página de pagamento. Em branco, toda visita ao seu " +
+          "site seria contada como checkout iniciado.",
+      );
       return;
     }
     setBusy(true);
@@ -363,9 +431,23 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
 
   const primeiro = form.metaPixels[0];
   const noPadrao = seguePreset(
-    { temPixelNativo: form.temPixelNativo, outroEnviaPurchase: form.outroEnviaPurchase },
+    {
+      temPixelNativo: form.temPixelNativo,
+      outroEnviaPurchase: form.outroEnviaPurchase,
+      ondeSePaga: ondePaga(form.ic.type),
+    },
     form.donos,
   );
+
+  /**
+   * A regra de URL sem trecho para comparar casa com TUDO.
+   *
+   * Travar o Salvar é o mesmo padrão do teto de orçamento obrigatório nas
+   * Regras: o script já guarda contra isso e não dispararia, mas deixar salvar
+   * criaria uma configuração que nunca funciona e não diz por quê.
+   */
+  const urlSemTrecho =
+    form.ic.enabled && form.ic.type === "contem_url" && !form.ic.value.trim();
 
   return (
     <div style={sx("display:flex;flex-direction:column;gap:var(--space-4)")}>
@@ -463,7 +545,7 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
         rodape={
           <>
             <button className="btn btn-secondary" type="button" onClick={() => setModalOpen(false)}>Cancelar</button>
-            <button className="btn btn-primary" type="button" onClick={save} disabled={busy || !temPixel}>
+            <button className="btn btn-primary" type="button" onClick={save} disabled={busy || !temPixel || urlSemTrecho}>
               {busy ? "Salvando…" : "Salvar"}
             </button>
           </>
@@ -580,6 +662,74 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
               />
             </div>
           </div>
+
+          {/*
+            ── Onde o comprador paga ──
+
+            🔴 Esta pergunta existe porque escolher errado NÃO dá erro: dá zero
+            InitiateCheckout, para sempre. Ela fica aqui, colada no checkbox que
+            ela faz funcionar, e não no avançado, porque é um fato sobre o
+            negócio do usuário — ele responde sem saber o que é um detector.
+          */}
+          {form.ic.enabled && (
+            <div style={sx("margin-top:var(--space-2);padding-left:var(--space-3);border-left:2px solid var(--color-divider)")}>
+              <div style={sx("font-size:13px;font-weight:600;margin-bottom:6px")}>
+                Onde o comprador paga?
+              </div>
+              <div style={sx("display:flex;flex-direction:column;gap:4px")}>
+                <Checkbox
+                  tipo="radio"
+                  checked={!regraManual(form.ic.type) && ondePaga(form.ic.type) === "gateway"}
+                  onChange={() => responderOndePaga("gateway")}
+                  label="Em outro site (Kirvano, Hotmart, Cakto…)"
+                  dica="A página de pagamento é do gateway, então não dá para instalar nada nela. Registramos o clique no link que leva até lá."
+                />
+                <Checkbox
+                  tipo="radio"
+                  checked={!regraManual(form.ic.type) && ondePaga(form.ic.type) === "proprio_site"}
+                  onChange={() => responderOndePaga("proprio_site")}
+                  label="No meu próprio site"
+                  dica="A página de pagamento é sua e tem este script. Registramos quando ela é aberta."
+                />
+              </div>
+
+              {ondePaga(form.ic.type) === "proprio_site" && !regraManual(form.ic.type) && (
+                <div className="field" style={sx("margin-top:var(--space-2)")}>
+                  <label>Um trecho do endereço da página de pagamento</label>
+                  <input
+                    className="input"
+                    value={form.ic.value}
+                    onChange={(e) => setForm({ ...form, ic: { ...form.ic, value: e.target.value } })}
+                    placeholder="Ex.: /checkout"
+                  />
+                  {/*
+                    ⚠️ O campo é OBRIGATÓRIO, e o vazio não é inofensivo: com ele
+                    a comparação casa com qualquer endereço e TODA visita viraria
+                    checkout iniciado. O Salvar fica travado — ver `save`.
+                  */}
+                  <p
+                    className="card-body"
+                    style={sx(
+                      form.ic.value.trim()
+                        ? "margin:0;font-size:11.5px"
+                        : "margin:0;font-size:11.5px;color:var(--color-warning,#fbbf24)",
+                    )}
+                  >
+                    {form.ic.value.trim()
+                      ? "Vale para qualquer endereço que contenha este trecho."
+                      : "Preencha: sem um trecho para comparar, toda visita ao seu site seria contada como checkout iniciado."}
+                  </p>
+                </div>
+              )}
+
+              {regraManual(form.ic.type) && (
+                <p className="card-body text-muted" style={sx("margin:6px 0 0;font-size:11.5px")}>
+                  Você escolheu uma regra manual em “Configuração avançada”, então esta pergunta não
+                  se aplica. Marque uma das duas opções acima para voltar ao modo simples.
+                </p>
+              )}
+            </div>
+          )}
         </Secao>
 
         {/* ── 3. O script vem LOGO ABAIXO do que o determina ──
@@ -681,6 +831,27 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
                       Confira no <strong>Gerenciador de Eventos</strong> da Meta que a venda continua
                       chegando. Se o outro lado parar de enviar, ela some — e nada aqui vai avisar,
                       porque do nosso lado está tudo certo.
+                    </>
+                  ) : comPixelProprio.length > 0 ? (
+                    /*
+                      🔴 NOMEIA o gateway conectado. "Confira se alguém mais
+                      envia" pede uma investigação que o usuário não sabe por
+                      onde começar; dizer em qual painel olhar é acionável.
+                      A frase PERGUNTA em vez de afirmar: sabemos que o painel
+                      tem o campo, não sabemos se ele preencheu.
+                    */
+                    <>
+                      <strong>
+                        Você usa {listaEm(comPixelProprio)} — e o painel {comPixelProprio.length > 1 ? "deles tem" : "dela tem"}{" "}
+                        campo de pixel do Facebook.
+                      </strong>{" "}
+                      Se o seu ID de pixel está colado lá, {comPixelProprio.length > 1 ? "eles disparam" : "ela dispara"}{" "}
+                      a venda na página de obrigado e a Meta vai contar{" "}
+                      <strong>duas conversões para cada venda</strong>, otimizando a campanha com o
+                      número inflado. Este é o único evento em que não dá para combinar os dois
+                      lados: ou nós enviamos, ou {comPixelProprio.length > 1 ? "eles" : "ela"}. Se
+                      preferir manter o envio por lá, apague o pixel no painel{" "}
+                      {comPixelProprio.length > 1 ? "deles" : "dela"} ou marque “Sim” acima.
                     </>
                   ) : (
                     <>

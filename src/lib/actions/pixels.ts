@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { encryptSecret } from "@/lib/crypto/secrets";
 import { getLastWorkspaceId } from "@/lib/actions/workspaces";
 import { escopoDeConfig } from "@/lib/areas/escopoConfig";
+import { REGISTRO } from "@/lib/gateways/registro";
 import { prisma } from "@/lib/prisma";
 import type { PixelEventType, PurchaseSendMode, PurchaseValueMode } from "@/generated/prisma/enums";
 
@@ -16,6 +17,7 @@ import { lerDonos, type MapaDeDonos } from "@/lib/pixel/donos";
 import { assinaturaDetectores, avisoDeVersao, diferencasDeDetectores } from "@/lib/pixel/detectores";
 import { EVENTOS_DO_PIXEL, donoDoEvento } from "@/lib/pixel/donos";
 import { PRESET_PADRAO, donosDoPreset, lerPreset, type PresetPixel } from "@/lib/pixel/preset";
+import { TIPO_IC_PADRAO } from "@/lib/pixel/script";
 
 export type DetectionType = "clique_checkout" | "contem_texto" | "contem_css" | "contem_url";
 
@@ -107,12 +109,15 @@ function toDTO(px: {
   }[];
 }): PixelConfigDTO {
   const byType = new Map(px.eventRules.map((r) => [r.eventType, r]));
+  const detIC = (byType.get("INITIATE_CHECKOUT")?.detection as DetectionJson) ?? null;
   return {
     id: px.id,
     name: px.name,
     enabled: px.enabled,
     eventOwners: lerDonos(px.eventOwners),
-    preset: lerPreset(px.setup, px.eventOwners),
+    // A regra de IC entra porque `ondeSePaga` é inferível dela para os pixels
+    // anteriores ao campo — ver `lerPreset`.
+    preset: lerPreset(px.setup, px.eventOwners, detIC?.tipo ?? null),
     metaPixels: px.metaPixels.map((m) => ({
       id: m.id,
       pixelId: m.pixelId,
@@ -166,12 +171,60 @@ export async function listTrackedProducts(): Promise<string[]> {
   return rows.map((r) => r.product).filter(Boolean);
 }
 
+/**
+ * Gateways conectados que têm **configuração de pixel própria** — os que podem
+ * estar disparando `Purchase` sem que a Traffik saiba.
+ *
+ * > ### 🔴 Por que a tela precisa NOMEAR o gateway
+ * > O `Purchase` é o único evento sem dedup possível (ver `pixelProprio` no
+ * > contrato): ou nós enviamos, ou o gateway. O aviso genérico — "confira se
+ * > alguém mais envia" — pede uma investigação que o usuário não sabe por onde
+ * > começar. "A Cakto tem campo de pixel no painel dela" diz onde olhar.
+ *
+ * ⚠️ Lê a capacidade do REGISTRO, nunca um `if (platform === "CAKTO")`. Gateway
+ * novo com painel de pixel entra declarando a linha, sem tocar nesta função nem
+ * na tela.
+ *
+ * ⚠️ Só webhooks ATIVOS: um gateway desligado não está recebendo venda, então
+ * não pode estar disparando Purchase.
+ */
+export async function gatewaysComPixelProprio(workspaceId?: string | null): Promise<string[]> {
+  const userId = await requireUserId();
+  const escopo = await escopoDeConfig(userId, workspaceId ?? (await getLastWorkspaceId()));
+  const webhooks = await prisma.webhook.findMany({
+    where: { userId, active: true, ...escopo.where },
+    select: { platform: true },
+    distinct: ["platform"],
+  });
+  return webhooks
+    .map((w) => REGISTRO[w.platform])
+    .filter((g): g is NonNullable<typeof g> => Boolean(g?.capacidades.pixelProprio))
+    .map((g) => g.nome);
+}
+
 /** Monta os event rules a partir do formulário. */
 function rulesFromForm(input: PixelFormInput) {
-  const detection =
-    input.initiateCheckout.enabled && input.initiateCheckout.detectionType && input.initiateCheckout.detectionValue?.trim()
-      ? { tipo: input.initiateCheckout.detectionType, valor: input.initiateCheckout.detectionValue.trim() }
-      : undefined;
+  /**
+   * 🔴 O TIPO É GRAVADO MESMO SEM VALOR — e é a metade dos dados do bug.
+   *
+   * A condição antiga exigia `detectionValue?.trim()`, e o valor vazio é a
+   * configuração RECOMENDADA (`clique_checkout` sem domínios = "vazio já cobre
+   * Kirvano, Cakto, Hotmart…"). Então o caso comum gravava `detection:
+   * undefined`, o DTO devolvia `detectionType: null`, e o script saía com
+   * `var IC = { type: "" }` — que não casa com nenhum ramo. **Todo pixel criado
+   * com os padrões nunca disparou InitiateCheckout pelo clique.**
+   *
+   * O script já materializa o padrão (ver `tipoDeIC` em `pixel/script.ts`), o
+   * que conserta os pixels já salvos sem migração. Gravar o tipo aqui é o outro
+   * lado: faz o dado no banco dizer o que o script faz, em vez de depender de
+   * dois lugares aplicarem o mesmo `??`.
+   */
+  const detection = input.initiateCheckout.enabled
+    ? {
+        tipo: input.initiateCheckout.detectionType ?? "clique_checkout",
+        valor: input.initiateCheckout.detectionValue?.trim() ?? "",
+      }
+    : undefined;
   return [
     { eventType: "LEAD" as const, enabled: input.lead },
     { eventType: "ADD_TO_CART" as const, enabled: input.addToCart },
@@ -218,10 +271,25 @@ export async function createPixel(input: PixelFormInput): Promise<PixelConfigDTO
       workspaceId: escopo.areaId || null,
       // Pixel novo nasce com o preset respondido pela tela; sem resposta, o
       // padrão (`tem pixel nativo`) é o caso comum e o mapa de donos vem dele.
-      // Objeto literal, não a interface: o Json do Prisma exige index signature,
-      // e escrever os campos aqui também impede que uma propriedade nova do
-      // preset vá parar no banco sem ninguém decidir.
-      setup: input.preset ? { temPixelNativo: input.preset.temPixelNativo } : undefined,
+      // Objeto literal, não a interface: o Json do Prisma exige index signature.
+      //
+      // 🔴 Escrever campo a campo custou os dois campos que vieram depois:
+      // `outroEnviaPurchase` e `ondeSePaga` eram descartados aqui, e só não
+      // apareceram como bug porque `lerPreset` sabe INFERIR os dois. Uma
+      // resposta explícita que sobrevive por inferência é uma resposta que
+      // ninguém guardou — e a inferência só empata enquanto o mapa de donos e a
+      // regra de IC não puderem dizer outra coisa.
+      //
+      // ⚠️ Preset com campo novo: acrescente aqui, ou ele nasce morto igual.
+      // ⚠️ `ondeSePaga` fica de FORA: ele é derivado da regra de IC, que já é
+      // gravada. Duas fontes para a mesma pergunta divergem no primeiro ajuste
+      // pelo avançado — ver a nota em `PresetPixel.ondeSePaga`.
+      setup: input.preset
+        ? {
+            temPixelNativo: input.preset.temPixelNativo,
+            outroEnviaPurchase: input.preset.outroEnviaPurchase,
+          }
+        : undefined,
       eventOwners: input.eventOwners ?? donosDoPreset(input.preset ?? PRESET_PADRAO),
       metaPixels: { create: metaPixels },
       eventRules: { create: rulesFromForm(input) },
@@ -261,10 +329,25 @@ export async function updatePixel(id: string, input: PixelFormInput): Promise<Pi
         // qualquer outra coisa do pixel devolveria todos os eventos à Traffik em
         // silêncio, que é o mesmo defeito do token apagado ao renomear.
         eventOwners: input.eventOwners ?? undefined,
-        // Objeto literal, não a interface: o Json do Prisma exige index signature,
-      // e escrever os campos aqui também impede que uma propriedade nova do
-      // preset vá parar no banco sem ninguém decidir.
-      setup: input.preset ? { temPixelNativo: input.preset.temPixelNativo } : undefined,
+        // Objeto literal, não a interface: o Json do Prisma exige index signature.
+      //
+      // 🔴 Escrever campo a campo custou os dois campos que vieram depois:
+      // `outroEnviaPurchase` e `ondeSePaga` eram descartados aqui, e só não
+      // apareceram como bug porque `lerPreset` sabe INFERIR os dois. Uma
+      // resposta explícita que sobrevive por inferência é uma resposta que
+      // ninguém guardou — e a inferência só empata enquanto o mapa de donos e a
+      // regra de IC não puderem dizer outra coisa.
+      //
+      // ⚠️ Preset com campo novo: acrescente aqui, ou ele nasce morto igual.
+      // ⚠️ `ondeSePaga` fica de FORA: ele é derivado da regra de IC, que já é
+      // gravada. Duas fontes para a mesma pergunta divergem no primeiro ajuste
+      // pelo avançado — ver a nota em `PresetPixel.ondeSePaga`.
+      setup: input.preset
+        ? {
+            temPixelNativo: input.preset.temPixelNativo,
+            outroEnviaPurchase: input.preset.outroEnviaPurchase,
+          }
+        : undefined,
         metaPixels: { create: metaPixels },
         eventRules: { create: rulesFromForm(input) },
       },
@@ -334,12 +417,16 @@ export async function conferirSnippet(pixelConfigId: string): Promise<SnippetChe
   const esperado = assinaturaDetectores({
     lead: config.eventRules.find((r) => r.eventType === "LEAD")?.enabled ?? false,
     addToCart: config.eventRules.find((r) => r.eventType === "ADD_TO_CART")?.enabled ?? false,
-    ic: ic?.enabled ? (det?.tipo ?? "clique_checkout") : null,
+    // Mesma constante que o gerador usa (`tipoDeIC`). Com o padrão escrito à
+    // mão nos dois lados, o verificador podia concordar consigo mesmo sobre um
+    // tipo que o script não tinha — foi o que deixou um detector morto passar
+    // por "ok".
+    ic: ic?.enabled ? (det?.tipo ?? TIPO_IC_PADRAO) : null,
     icValor: det?.valor ?? null,
     // As duas linhas abaixo são o achado que a v1 não cobria: as duas viajam
     // ASSADAS no snippet, e mudá-las sem reinstalar produzia script defasado
     // que o aviso não pegava.
-    nativo: lerPreset(config.setup, config.eventOwners).temPixelNativo,
+    nativo: lerPreset(config.setup, config.eventOwners, det?.tipo ?? null).temPixelNativo,
     donos: Object.fromEntries(
       EVENTOS_DO_PIXEL.map((e) => [e, donoDoEvento(config.eventOwners, e)]),
     ),

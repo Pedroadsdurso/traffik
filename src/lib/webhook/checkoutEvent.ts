@@ -85,7 +85,15 @@ export async function registrarCheckoutDoGateway(
           userId: sale.userId,
           event: "InitiateCheckout",
           fbclid,
-          timestamp: { gte: new Date(sale.timestamp.getTime() - JANELA_DEDUP_MS) },
+          // ⚠️ A janela tem as DUAS pontas. Só com `gte` ela era "de 6h antes da
+          // venda até o fim dos tempos", o que basta em tempo real (o clique
+          // sempre veio antes) e é errado ao reprocessar uma venda antiga: um
+          // checkout de meses depois, do mesmo visitante, contaria como
+          // duplicata e apagaria o evento que o backfill existe para criar.
+          timestamp: {
+            gte: new Date(sale.timestamp.getTime() - JANELA_DEDUP_MS),
+            lte: new Date(sale.timestamp.getTime() + JANELA_DEDUP_MS),
+          },
         },
         select: { id: true },
       });
@@ -99,6 +107,30 @@ export async function registrarCheckoutDoGateway(
         eventId,
         url: SENTINELA_CHECKOUT_GATEWAY,
         fbclid,
+        /**
+         * 🔴 O INSTANTE É O DA VENDA, não o do processamento.
+         *
+         * A coluna tem `@default(now())`, e omiti-la carimbava o evento com a
+         * hora em que o webhook chegou. Em tempo real os dois quase coincidem —
+         * mas não são a mesma coisa, e as diferenças são exatamente os casos
+         * que importam:
+         *
+         * | Situação | `now()` | `sale.timestamp` |
+         * |---|---|---|
+         * | Reentrega do gateway horas depois | hora da reentrega | hora do pedido |
+         * | Backfill de vendas antigas | **hoje** | o dia real |
+         * | Fila do gateway atrasada | hora da vazão | hora do pedido |
+         *
+         * No backfill isso deixa de ser detalhe: sem o instante explícito, todo
+         * checkout recuperado cairia no funil de HOJE, inflando o dia da
+         * execução e deixando o passado tão vazio quanto estava. O número
+         * continuaria plausível — só distribuído errado.
+         *
+         * ⚠️ E a venda que o evento acompanha está no bucket do `timestamp`
+         * dela. Carimbar o IC noutro instante colocaria as duas pontas do mesmo
+         * checkout em períodos diferentes.
+         */
+        timestamp: sale.timestamp,
       },
     });
     return "criado";

@@ -85,6 +85,21 @@ export interface VendaParaFinanceiro {
   /** NULO = gateway não informou. ZERO = informou que não cobrou. */
   taxaGateway: number | null;
   coproducao: number | null;
+  /**
+   * Chave do PEDIDO — o agrupador do checkout.
+   *
+   * > ### 🔴 SEM ISTO A TAXA POR VENDA VIRA TAXA POR ITEM, EM SILÊNCIO
+   * > Uma taxa de "R$ 2,50 por venda" é cobrada uma vez por **compra**, não uma
+   * > vez por linha. Um checkout com order bump grava 2 linhas e 1 pedido: sem a
+   * > chave, o desconto sairia R$ 5,00 e o Faturamento Líquido apareceria menor
+   * > que a realidade — plausível e errado, que é a assinatura desta classe de
+   * > bug neste projeto.
+   * >
+   * > ⚠️ **É a mesma armadilha do `pedidoId` fora do `select`**: quem monta esta
+   * > lista precisa TRAZER a coluna. Sem ela `chaveDoPedido` cai no `id` da
+   * > linha e tudo volta a ser por item, sem `tsc`/`lint`/`build` acusarem nada.
+   */
+  chavePedido: string;
 }
 
 export interface Composicao {
@@ -141,14 +156,36 @@ const POR_TIPO: Record<string, RotuloDesconto> = {
 };
 
 /**
- * Aplica uma despesa: percentual sobre a base, ou valor fixo.
+ * Aplica uma despesa: percentual sobre a base, ou valor fixo **por pedido**.
  *
- * ⚠️ A base do **gateway** é o faturamento DAQUELA forma de pagamento, não o
- * total: uma taxa de 4,9% do cartão não incide sobre o que entrou por Pix.
+ * ## Os três modos que a tela oferece
+ *
+ * | Modo | `type` / `calc` | Como incide |
+ * |---|---|---|
+ * | % por venda | qualquer / `PERCENTUAL` | sobre o faturamento da base |
+ * | R$ por venda | qualquer / `FIXO` | × número de **pedidos** da base |
+ * | R$ por mês | `DESPESA_RECORRENTE` | uma vez no período, não passa por aqui |
+ *
+ * > ### 🔴 `FIXO` incidia UMA VEZ, no período inteiro
+ * > `return e.amount` sem multiplicar. Uma taxa de "R$ 2,50 por venda" com 40
+ * > vendas no mês descontava R$ 2,50 — e o Faturamento Líquido aparecia
+ * > **R$ 97,50 maior que a realidade**, com o número continuando plausível.
+ *
+ * ⚠️ A base do **gateway** é o faturamento (ou a contagem) DAQUELA forma de
+ * pagamento, não o total: uma taxa de 4,9% do cartão não incide sobre o que
+ * entrou por Pix, e uma de R$ 1,00 por Pix não é cobrada nas vendas por cartão.
  */
-function aplicar(e: DespesaEntrada, base: number): number {
-  return e.calc === "PERCENTUAL" ? (base * e.amount) / 100 : e.amount;
+function aplicar(e: DespesaEntrada, base: number, pedidos: number): number {
+  return e.calc === "PERCENTUAL" ? (base * e.amount) / 100 : e.amount * pedidos;
 }
+
+/** Faturamento e nº de PEDIDOS de um recorte — as duas bases que `aplicar` usa. */
+interface Base {
+  valor: number;
+  pedidos: number;
+}
+
+const BASE_ZERO: Base = { valor: 0, pedidos: 0 };
 
 export function calcularFinanceiro(opts: {
   /** Faturamento das vendas APROVADAS. */
@@ -176,32 +213,81 @@ export function calcularFinanceiro(opts: {
   const zerada = (): FonteDoDesconto => ({ real: 0, estimado: 0, vendasComValorReal: 0, vendasSemValorReal: 0 });
   const fGateway = zerada();
   const fCoprod = zerada();
-  // Faturamento que AINDA precisa da taxa cadastrada, por forma de pagamento.
-  const baseSemTaxaReal = new Map<PaymentMethod, number>();
-  let baseSemCoprodReal = 0;
 
+  /**
+   * ⛔ AGRUPA POR PEDIDO ANTES DE QUALQUER CONTA.
+   *
+   * Taxa de gateway e coprodução são da **compra**, não do item. Um checkout com
+   * order bump chega como 2 linhas e é 1 conversão — e as duas coisas que
+   * dependem disso erram em direções opostas se a linha for a unidade:
+   *
+   * | | contando linhas | contando pedidos |
+   * |---|---|---|
+   * | taxa FIXA de R$ 2,50 | R$ 5,00 (dobrada) | R$ 2,50 |
+   * | "taxa real em N de M vendas" | M inflado | M = conversões, igual ao resto do produto |
+   *
+   * ⚠️ Um pedido conta como "informou a taxa" se **qualquer** linha dele
+   * informou — as parcelas são somadas. Exigir que todas informem faria o
+   * pedido cair na taxa cadastrada **por cima** da parte já medida, que é
+   * cobrar duas vezes da mesma compra.
+   */
+  interface Pedido {
+    valor: number;
+    forma: PaymentMethod;
+    taxa: number | null;
+    coprod: number | null;
+  }
+  const pedidos = new Map<string, Pedido>();
   for (const v of vendas) {
-    if (v.taxaGateway != null) {
-      fGateway.real += v.taxaGateway;
+    const p = pedidos.get(v.chavePedido) ?? { valor: 0, forma: v.formaPagamento, taxa: null, coprod: null };
+    p.valor += v.valor;
+    if (v.taxaGateway != null) p.taxa = (p.taxa ?? 0) + v.taxaGateway;
+    if (v.coproducao != null) p.coprod = (p.coprod ?? 0) + v.coproducao;
+    pedidos.set(v.chavePedido, p);
+  }
+
+  // Faturamento e nº de pedidos que AINDA precisam da taxa cadastrada.
+  const baseSemTaxaReal = new Map<PaymentMethod, Base>();
+  let baseSemCoprodReal: Base = { valor: 0, pedidos: 0 };
+
+  for (const p of pedidos.values()) {
+    if (p.taxa != null) {
+      fGateway.real += p.taxa;
       fGateway.vendasComValorReal += 1;
     } else {
       fGateway.vendasSemValorReal += 1;
-      baseSemTaxaReal.set(v.formaPagamento, (baseSemTaxaReal.get(v.formaPagamento) ?? 0) + v.valor);
+      const cur = baseSemTaxaReal.get(p.forma) ?? { valor: 0, pedidos: 0 };
+      baseSemTaxaReal.set(p.forma, { valor: cur.valor + p.valor, pedidos: cur.pedidos + 1 });
     }
-    if (v.coproducao != null) {
-      fCoprod.real += v.coproducao;
+    if (p.coprod != null) {
+      fCoprod.real += p.coprod;
       fCoprod.vendasComValorReal += 1;
     } else {
       fCoprod.vendasSemValorReal += 1;
-      baseSemCoprodReal += v.valor;
+      baseSemCoprodReal = { valor: baseSemCoprodReal.valor + p.valor, pedidos: baseSemCoprodReal.pedidos + 1 };
     }
   }
 
-  // Sem lista de vendas, a base da taxa cadastrada é o faturamento inteiro —
-  // exatamente como antes.
-  const baseGateway = opts.vendas ? baseSemTaxaReal : brutoPorPagamento;
-  const baseGatewayTotal = opts.vendas ? [...baseSemTaxaReal.values()].reduce((x, y) => x + y, 0) : bruto;
-  const baseCoprod = opts.vendas ? baseSemCoprodReal : bruto;
+  /**
+   * Sem lista de vendas, a base é o faturamento inteiro — exatamente como antes.
+   *
+   * ⚠️ E `pedidos: 1`, que preserva o comportamento antigo do `FIXO` (incidir
+   * uma vez). Um chamador que não passa as vendas **não tem como saber quantas
+   * compras houve**, e chutar 0 apagaria a despesa em silêncio. Todo chamador
+   * real passa a lista; isto cobre os testes puros e o legado.
+   */
+  const semLista: Base = { valor: bruto, pedidos: 1 };
+  const baseGateway = (m: PaymentMethod): Base =>
+    opts.vendas ? (baseSemTaxaReal.get(m) ?? BASE_ZERO) : { valor: brutoPorPagamento.get(m) ?? 0, pedidos: 1 };
+  const baseGatewayTotal: Base = opts.vendas
+    ? [...baseSemTaxaReal.values()].reduce(
+        (a, b) => ({ valor: a.valor + b.valor, pedidos: a.pedidos + b.pedidos }),
+        BASE_ZERO,
+      )
+    : semLista;
+  const baseCoprod: Base = opts.vendas ? baseSemCoprodReal : semLista;
+  /** Base das despesas que incidem sobre o faturamento inteiro (imposto, custo). */
+  const baseTotal: Base = { valor: bruto, pedidos: opts.vendas ? pedidos.size : 1 };
 
   let gateway = 0;
   let impostos = 0;
@@ -216,26 +302,28 @@ export function calcularFinanceiro(opts: {
 
     switch (e.type) {
       case "TAXA_GATEWAY": {
-        const base = e.paymentMethod ? baseGateway.get(e.paymentMethod) ?? 0 : baseGatewayTotal;
-        const valor = aplicar(e, base);
+        const base = e.paymentMethod ? baseGateway(e.paymentMethod) : baseGatewayTotal;
+        const valor = aplicar(e, base.valor, base.pedidos);
         fGateway.estimado += valor;
         gateway += valor;
         break;
       }
       case "IMPOSTO":
-        impostos += aplicar(e, bruto);
+        impostos += aplicar(e, baseTotal.valor, baseTotal.pedidos);
         break;
       case "COPRODUCAO": {
-        const valor = aplicar(e, baseCoprod);
+        const valor = aplicar(e, baseCoprod.valor, baseCoprod.pedidos);
         fCoprod.estimado += valor;
         coproducao += valor;
         break;
       }
       case "CUSTO_PRODUTO":
-        custoProduto += aplicar(e, bruto);
+        custoProduto += aplicar(e, baseTotal.valor, baseTotal.pedidos);
         break;
       default:
-        // DESPESA_RECORRENTE — custo fixo do período, não incide sobre venda.
+        // DESPESA_RECORRENTE — custo fixo do PERÍODO, não incide sobre venda.
+        // Não passa por `aplicar`: multiplicar por pedidos aqui transformaria a
+        // mensalidade da ferramenta numa taxa por venda.
         recorrentes += e.amount;
     }
   }

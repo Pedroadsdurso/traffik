@@ -40,6 +40,10 @@ const NADA: Capacidades = {
   telefone: "nenhum",
   agrupaItens: false,
   reentregaEventos: false,
+  // "Sistema próprio": o checkout é do usuário, então não há painel de terceiro
+  // com campo de pixel. Se a página dele dispara Purchase, quem responde é a 2ª
+  // pergunta do preset — este campo é sobre o painel do GATEWAY.
+  pixelProprio: false,
 };
 
 export const REGISTRO: Record<string, GatewayDef> = {
@@ -79,6 +83,8 @@ export const REGISTRO: Record<string, GatewayDef> = {
       agrupaItens: false,
       // ✅ Observada em produção: dois `PIX_GENERATED` do mesmo pedido no mesmo dia.
       reentregaEventos: true,
+      // Checkout e página de obrigado são dela, e o painel tem campo de pixel.
+      pixelProprio: true,
     },
     campos: [
       { chave: "nome", rotulo: "Nome (opcional)", obrigatorio: false },
@@ -132,6 +138,12 @@ export const REGISTRO: Record<string, GatewayDef> = {
       agrupaItens: true, // order bump no mesmo disparo, modo agrupado
       // ✅ Ela tem endpoints de "Reenviar Evento" e "Histórico de Eventos".
       reentregaEventos: true,
+      // 🔴 O checkout (`pay.cakto.com.br`) e a página de obrigado são DELA, e o
+      // painel tem configuração de pixel do Facebook por produto. Se o usuário
+      // colou o ID do pixel lá E deixou o Purchase com a Traffik, a Meta conta
+      // cada venda duas vezes. A gaveta do Pixel nomeia a Cakto por causa desta
+      // linha — ver `pixelProprio` no contrato.
+      pixelProprio: true,
     },
     campos: [
       { chave: "nome", rotulo: "Nome (opcional)", obrigatorio: false },
@@ -225,6 +237,11 @@ export const REGISTRO: Record<string, GatewayDef> = {
       // A doc recomenda "implementing retry logic for temporary failures" —
       // tratamos como reentrega. A idempotência já é garantida pelo upsert.
       reentregaEventos: true,
+      // A cobrança é criada pela API a partir do site do próprio usuário, e a
+      // doc não descreve página de obrigado nem campo de pixel. Quem dispara o
+      // Purchase no navegador, se alguém disparar, é o site dele — e disso a
+      // 2ª pergunta do preset já trata.
+      pixelProprio: false,
     },
     campos: [
       { chave: "nome", rotulo: "Nome (opcional)", obrigatorio: false },

@@ -832,6 +832,9 @@ export function useTraffikState(
 
   const W = 600, H = 180, PAD = 12;
   const cr = d?.chart.revenue?.length ? d.chart.revenue : [0, 0];
+  // Série de gasto vazia (granularidade horária) mantém o mini-gráfico com o
+  // eixo do faturamento, e a linha de gasto colada no chão em vez de um pico
+  // fantasma às 00h.
   const cs = d?.chart.spend?.length ? d.chart.spend : [0, 0];
   const combinedMax = Math.max(1, ...cr, ...cs) * 1.15;
   const revenueLine = buildPoints(cr.length > 1 ? cr : [...cr, ...cr], combinedMax, W, H, PAD);
@@ -915,7 +918,10 @@ export function useTraffikState(
       name: e.name,
       methodLabel: e.paymentMethod ? PAYMENT_LABEL[e.paymentMethod] : "todas as formas",
       amountStr: String(e.amount),
-      unit: e.calc === "PERCENTUAL" ? "%" : "R$",
+      // ⚠️ "R$" sozinho era ambíguo — não dizia se a taxa incide por venda ou
+      // uma vez no período. E ela incidia UMA VEZ, que era o bug. O rótulo
+      // agora afirma a unidade que o cálculo usa.
+      unit: e.calc === "PERCENTUAL" ? "% por venda" : "R$ por venda",
       onChange: (ev: React.ChangeEvent<HTMLInputElement>) => {
         const amount = parseFloat(ev.target.value) || 0;
         setS((st) => ({ ...st, expenses: st.expenses.map((x) => (x.id === e.id ? { ...x, amount } : x)) }));
@@ -1436,7 +1442,13 @@ export function useTraffikState(
     metricCards: reg,
     // Séries do Bloco 4 (por horário / por dia), já filtradas no servidor.
     // Bloco 5: séries brutas para os gráficos novos (o front formata).
-    chartSerie: { labels: d?.chart.labels ?? [], revenue: d?.chart.revenue ?? [], spend: d?.chart.spend ?? [] },
+    chartSerie: {
+      labels: d?.chart.labels ?? [],
+      revenue: d?.chart.revenue ?? [],
+      spend: d?.chart.spend ?? [],
+      // Sem gasto por hora a linha não é desenhada, e o gráfico diz por quê.
+      gastoNaSerie: d?.chart.gastoNaSerie ?? true,
+    },
     // Cada etapa declara de ONDE vem a contagem, porque as cinco não saem da
     // mesma fonte — e é exatamente isso que explica uma etapa passar de 100%
     // da anterior. Só "vendas aprovadas ⊆ vendas iniciadas" é garantido por
@@ -1921,14 +1933,23 @@ export function useTraffikState(
      * ⚠️ Campo de formulário não deve morar neste hook. O que vem para cá é
      * dado do servidor e estado compartilhado entre telas, não digitação.
      */
-    addGateway: async (metodo: string, pct: string) => {
+    addGateway: async (metodo: string, pct: string, calc: "PERCENTUAL" | "FIXO" = "PERCENTUAL", nome = "") => {
       const amount = parseFloat(pct) || 0;
       if (!amount) return;
       // ⚠️ O sentinela vira `null` AQUI, na fronteira com o servidor. Ele nunca
       // chega ao banco — lá `null` já significa "todas as formas".
       const method = metodo === TODAS_AS_FORMAS ? null : (metodo as ExpenseDTO["paymentMethod"]);
       const label = method ? PAYMENT_LABEL[method] : "todas as formas";
-      const created = await createExpense({ name: `Taxa ${label}`, type: "TAXA_GATEWAY", calc: "PERCENTUAL", amount, paymentMethod: method });
+      // Nome LIVRE: quem tem dois gateways precisa distinguir "Cakto Pix" de
+      // "Kirvano Pix" — com o nome derivado da forma de pagamento, as duas
+      // linhas ficavam idênticas na tela e só o valor as diferenciava.
+      const created = await createExpense({
+        name: nome.trim() || `Taxa ${label}`,
+        type: "TAXA_GATEWAY",
+        calc,
+        amount,
+        paymentMethod: method,
+      });
       setS((st) => ({ ...st, expenses: [...st.expenses, created] }));
     },
     // Novo imposto

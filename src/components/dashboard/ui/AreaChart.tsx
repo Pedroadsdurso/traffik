@@ -9,7 +9,17 @@ import { useTamanho } from "./useTamanho";
 export interface SerieArea {
   labels: string[];
   revenue: number[];
+  /** Vazio quando a granularidade não tem gasto — ver `gastoNaSerie`. */
   spend: number[];
+  /**
+   * A série de gasto existe nesta granularidade?
+   *
+   * ⛔ `false` por hora: a Meta reporta gasto por DIA. Antes o total do dia era
+   * lançado no bucket das 00h e o gráfico desenhava um pico de madrugada que
+   * nunca houve. Sumir com a linha sem dizer nada seria a mesma mentira do
+   * outro lado — por isso a legenda e o tooltip explicam a ausência.
+   */
+  gastoNaSerie?: boolean;
 }
 
 /** Usado só até a primeira medida do container. */
@@ -58,7 +68,10 @@ export function AreaChart({ serie }: { serie: SerieArea }) {
   const W = largura > 0 ? largura : W_PADRAO;
   const H = altura > 0 ? altura : H_PADRAO;
 
-  const max = topoAgradavel(Math.max(1, ...serie.revenue, ...serie.spend));
+  // Compatível com quem não passa a flag: série de gasto vazia já significa
+  // "não existe nesta granularidade".
+  const temGasto = (serie.gastoNaSerie ?? true) && serie.spend.length > 0;
+  const max = topoAgradavel(Math.max(1, ...serie.revenue, ...(temGasto ? serie.spend : [])));
   const plotW = Math.max(10, W - PAD.left - PAD.right);
   const plotH = Math.max(10, H - PAD.top - PAD.bottom);
 
@@ -113,10 +126,14 @@ export function AreaChart({ serie }: { serie: SerieArea }) {
         ))}
 
         {/* Séries: gasto atrás, faturamento na frente */}
-        <polygon points={area(serie.spend)} fill="var(--color-neutral-700)" opacity={0.35} />
+        {temGasto && (
+          <>
+            <polygon points={area(serie.spend)} fill="var(--color-neutral-700)" opacity={0.35} />
+            <polyline points={linha(serie.spend)} fill="none" stroke="var(--color-neutral-500)"
+              strokeWidth={2} strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
+          </>
+        )}
         <polygon points={area(serie.revenue)} fill="var(--color-accent-800)" opacity={0.45} />
-        <polyline points={linha(serie.spend)} fill="none" stroke="var(--color-neutral-500)"
-          strokeWidth={2} strokeDasharray="4 4" vectorEffect="non-scaling-stroke" />
         <polyline points={linha(serie.revenue)} fill="none" stroke="var(--color-accent)"
           strokeWidth={2.5} vectorEffect="non-scaling-stroke" />
 
@@ -146,7 +163,7 @@ export function AreaChart({ serie }: { serie: SerieArea }) {
             <line x1={x(idx)} x2={x(idx)} y1={PAD.top} y2={PAD.top + plotH}
               stroke="var(--color-accent)" strokeWidth={1} opacity={0.5} vectorEffect="non-scaling-stroke" />
             <circle cx={x(idx)} cy={y(serie.revenue[idx] ?? 0)} r={4} fill="var(--color-accent)" />
-            <circle cx={x(idx)} cy={y(serie.spend[idx] ?? 0)} r={3.5} fill="var(--color-neutral-400)" />
+            {temGasto && <circle cx={x(idx)} cy={y(serie.spend[idx] ?? 0)} r={3.5} fill="var(--color-neutral-400)" />}
           </g>
         )}
       </svg>
@@ -166,8 +183,29 @@ export function AreaChart({ serie }: { serie: SerieArea }) {
           </div>
           <div style={sx("display:flex;align-items:center;gap:6px")}>
             <span style={sx("width:7px;height:7px;border-radius:50%;background:var(--color-neutral-500)")} />
-            Gasto: <strong>{brl0(serie.spend[idx] ?? 0)}</strong>
+            {temGasto ? (
+              <>Gasto: <strong>{brl0(serie.spend[idx] ?? 0)}</strong></>
+            ) : (
+              <span style={sx("opacity:.7")}>Gasto: só por dia</span>
+            )}
           </div>
+        </div>
+      )}
+
+      {/*
+        ⚠️ A ausência da linha é DITA, não deixada em branco. Uma série que some
+        sem explicação é indistinguível de dado faltando — e mandaria o usuário
+        procurar um problema de tracking que não existe.
+      */}
+      {n > 0 && !temGasto && (
+        <div
+          className="text-muted"
+          style={sx(
+            "position:absolute;left:0;bottom:0;font-size:11px;line-height:1.4;pointer-events:none;" +
+              "background:var(--color-surface);padding:2px 6px;border-radius:var(--radius-sm)",
+          )}
+        >
+          O Facebook informa o gasto por dia, não por hora — escolha um período maior para ver a linha.
         </div>
       )}
     </div>

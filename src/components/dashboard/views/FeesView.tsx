@@ -147,6 +147,15 @@ export function FeesView({ v }: { v: TraffikView }) {
   const [taxPct, setTaxPct] = useState("");
   const [coprodNome, setCoprodNome] = useState("");
   const [coprodPct, setCoprodPct] = useState("");
+  const [gatewayNome, setGatewayNome] = useState("");
+  /**
+   * Modo de cobrança da taxa de gateway.
+   *
+   * ⚠️ Só dois aqui — "R$ por mês" é assinatura, não taxa de venda, e mora no
+   * card de custos fixos. Oferecer os três no mesmo lugar convidaria a cadastrar
+   * a mensalidade da ferramenta como taxa por venda.
+   */
+  const [gatewayCalc, setGatewayCalc] = useState<"PERCENTUAL" | "FIXO">("PERCENTUAL");
   const [custoNome, setCustoNome] = useState("");
   const [custoPct, setCustoPct] = useState("");
   const [despesaNome, setDespesaNome] = useState("");
@@ -213,6 +222,9 @@ export function FeesView({ v }: { v: TraffikView }) {
                 <br />
                 Gateway que informa a taxa em cada venda já entra sozinho; a taxa daqui cobre as
                 vendas em que ele não informa.
+                <br />
+                Cobre em <strong>% por venda</strong> ou em <strong>R$ por venda</strong> — a
+                segunda é contada uma vez por compra, mesmo quando ela tem order bump.
               </div>
             )}
             {v.gatewayExpenses.map((g) => (
@@ -228,11 +240,31 @@ export function FeesView({ v }: { v: TraffikView }) {
             <FormAdicionar
               acao={
                 <button className="btn btn-secondary" type="button" disabled={!gatewayPct.trim()}
-                  onClick={() => void v.addGateway(gatewayMetodo, gatewayPct).then(() => setGatewayPct(""))}>
+                  onClick={() =>
+                    void v
+                      .addGateway(gatewayMetodo, gatewayPct, gatewayCalc, gatewayNome)
+                      .then(() => { setGatewayPct(""); setGatewayNome(""); })
+                  }>
                   Adicionar taxa
                 </button>
               }
             >
+              <CampoForm>
+                <input className="input" style={sx("width:100%")} placeholder="Nome (ex.: Cakto Pix)"
+                  value={gatewayNome} onChange={(e) => setGatewayNome(e.target.value)} />
+              </CampoForm>
+              <CampoForm>
+                <Select
+                  label=""
+                  minWidth={0}
+                  value={gatewayCalc}
+                  onChange={(m) => setGatewayCalc(m as "PERCENTUAL" | "FIXO")}
+                  options={[
+                    { value: "PERCENTUAL", label: "% por venda" },
+                    { value: "FIXO", label: "R$ por venda" },
+                  ]}
+                />
+              </CampoForm>
               <CampoForm>
                 <Select
                   label=""
@@ -259,7 +291,9 @@ export function FeesView({ v }: { v: TraffikView }) {
                 />
               </CampoForm>
               <CampoForm>
-                <input className="input" style={sx("width:100%")} placeholder="% da taxa" value={gatewayPct} onChange={(e) => setGatewayPct(e.target.value)} inputMode="decimal" />
+                <input className="input" style={sx("width:100%")}
+                  placeholder={gatewayCalc === "PERCENTUAL" ? "% da taxa" : "R$ por venda"}
+                  value={gatewayPct} onChange={(e) => setGatewayPct(e.target.value)} inputMode="decimal" />
               </CampoForm>
             </FormAdicionar>
           </div>

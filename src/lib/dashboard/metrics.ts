@@ -91,7 +91,20 @@ export interface DashboardData {
   chart: {
     labels: string[];
     revenue: number[];
+    /**
+     * Gasto por bucket. **VAZIO na granularidade horária** — ver `gastoNaSerie`.
+     */
     spend: number[];
+    /**
+     * A série de gasto existe nesta granularidade?
+     *
+     * ⛔ `false` por hora: `DailyAdMetric` é diária e a Meta não reporta gasto
+     * por hora. Antes o total do dia era lançado no bucket das 00h, o que
+     * desenhava um pico de madrugada que nunca houve — e um ROAS de 0 naquela
+     * hora contra ∞ nas outras 23. A tela é obrigada a dizer que a linha não
+     * existe; sumir sem explicação seria a mesma falha muda do outro lado.
+     */
+    gastoNaSerie: boolean;
     periodLabel: string;
     granularity: "hour" | "day";
     /** Série por bucket de cada KPI, para os mini-gráficos dos cards. */
@@ -549,6 +562,11 @@ function summarize(w: Window) {
       formaPagamento: s.paymentMethod,
       taxaGateway: s.taxaGateway == null ? null : num(s.taxaGateway),
       coproducao: s.coproducao == null ? null : num(s.coproducao),
+      // ⚠️ `chaveDoPedido` cai no `id` da linha quando `pedidoId` não vem no
+      // `select` — e aí a taxa FIXA volta a ser cobrada por item, em silêncio.
+      // A consulta de `w.sales` PRECISA trazer `pedidoId`. É a mesma armadilha
+      // que já mordeu a contagem de conversões.
+      chavePedido: chaveDoPedido(s),
     })),
   });
   const profit = fin.lucro;
@@ -807,7 +825,7 @@ function buildChart(
   // instante (é um `DateTime`), mas o gasto casa por CHAVE, porque
   // `DailyAdMetric.date` é `@db.Date` — um dia de calendário gravado como
   // meia-noite UTC, que não coincide com a meia-noite de nenhum outro fuso.
-  const buckets: { label: string; start: number; end: number; dayKey: string; primeiroDoDia: boolean }[] = [];
+  const buckets: { label: string; start: number; end: number; dayKey: string }[] = [];
   if (granularity === "hour") {
     const [y, m, d] = startKey.split("-").map(Number);
     for (let h = 0; h < 24; h++) {
@@ -822,7 +840,6 @@ function buildChart(
         start: bs.getTime(),
         end: be.getTime(),
         dayKey: startKey,
-        primeiroDoDia: h === 0,
       });
     }
   } else {
@@ -838,7 +855,6 @@ function buildChart(
         start: bs.getTime(),
         end: be.getTime(),
         dayKey: key,
-        primeiroDoDia: true,
       });
     }
   }
@@ -847,14 +863,37 @@ function buildChart(
   const revenue = buckets.map((b) =>
     approved.filter((s) => s.timestamp.getTime() >= b.start && s.timestamp.getTime() < b.end).reduce((a, s) => a + num(s.value), 0),
   );
-  // Gasto é uma métrica DIÁRIA: não existe gasto por hora. Numa série horária
-  // o total do dia é lançado no primeiro bucket, para o gráfico continuar
-  // somando o mesmo que o KPI de gasto em vez de zerar a linha inteira.
-  const spend = buckets.map((b) =>
-    b.primeiroDoDia
-      ? w.metrics.filter((m) => dateColumnKey(m.date) === b.dayKey).reduce((a, m) => a + num(m.spend), 0)
-      : 0,
-  );
+  /**
+   * # ⛔ NÃO EXISTE GASTO POR HORA — e desenhá-lo era pior que não desenhar
+   *
+   * `DailyAdMetric` é, como o nome diz, **diária**: a Meta não reporta gasto por
+   * hora e não há como pedir. Até aqui a série horária lançava o total do dia
+   * inteiro no bucket das **00h**, com o argumento de que assim a soma do
+   * gráfico continuava batendo com o KPI.
+   *
+   * O argumento estava errado, e o custo é maior que o ganho:
+   *
+   * | O que o gráfico mostrava | O que o usuário lia |
+   * |---|---|
+   * | pico de gasto às 00h, zero nas outras 23h | "gastei tudo de madrugada" |
+   * | ROAS do bucket das 00h ≈ 0 | "a madrugada não converte" |
+   * | ROAS das outras 23h = ∞ (gasto 0) | "o dia inteiro é lucrativo" |
+   *
+   * Nenhuma dessas leituras é verdade, e as três são acionáveis — é o tipo de
+   * número que muda decisão de mídia. **Somar certo não compensa distribuir
+   * errado**: o KPI de gasto continua correto porque vem de `summarize`, não
+   * daqui, então o que se perdia era só a coincidência de a série somar o mesmo.
+   *
+   * Hoje, em granularidade horária, a série de gasto simplesmente **não
+   * existe** — e `gastoNaSerie: false` faz a tela dizer isso, em vez de deixar
+   * uma linha sumir sem explicação (que seria a mesma falha muda, do outro lado).
+   */
+  const gastoNaSerie = granularity === "day";
+  const spend = gastoNaSerie
+    ? buckets.map((b) =>
+        w.metrics.filter((m) => dateColumnKey(m.date) === b.dayKey).reduce((a, m) => a + num(m.spend), 0),
+      )
+    : [];
 
   // Séries por bucket para os sparklines dos cards de KPI (Bloco 5 — polimento).
   // Derivadas dos mesmos buckets do gráfico, para a mini-linha contar a mesma
@@ -869,14 +908,19 @@ function buildChart(
     return emails.size + nesse.filter((s) => !s.buyerEmail?.trim()).length;
   });
   const div = (a: number, b: number) => (b ? a / b : 0);
+  // ⚠️ Sem gasto na série, as três métricas que DIVIDEM por ele saem vazias em
+  // vez de zeradas. Um array de zeros do mesmo tamanho passaria pelo
+  // `serie.length > 1` do card e desenharia uma linha reta no chão — um ROAS
+  // que parece medido e é só a ausência do denominador.
+  const serieVazia: number[] = [];
   const sparklines: Record<string, number[]> = {
     faturamento: revenue,
-    gasto: spend,
+    gasto: gastoNaSerie ? spend : serieVazia,
     vendas: vendasPorBucket,
-    roas: revenue.map((r, i) => div(r, spend[i] ?? 0)),
+    roas: gastoNaSerie ? revenue.map((r, i) => div(r, spend[i] ?? 0)) : serieVazia,
     ticket: revenue.map((r, i) => div(r, vendasPorBucket[i] ?? 0)),
     arpu: revenue.map((r, i) => div(r, compradoresPorBucket[i] ?? 0)),
-    cpa: spend.map((sp, i) => div(sp, vendasPorBucket[i] ?? 0)),
+    cpa: gastoNaSerie ? spend.map((sp, i) => div(sp, vendasPorBucket[i] ?? 0)) : serieVazia,
   };
 
   // ⚠️ `Record<PeriodoNome, string>` e não um objeto solto: o mapa solto deixava
@@ -893,7 +937,7 @@ function buildChart(
   };
   const periodLabel = ROTULO_GRAFICO[period];
 
-  return { labels: buckets.map((b) => b.label), revenue, spend, periodLabel, granularity, sparklines };
+  return { labels: buckets.map((b) => b.label), revenue, spend, gastoNaSerie, periodLabel, granularity, sparklines };
 }
 
 function buildActivity(w: Window) {

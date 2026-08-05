@@ -258,6 +258,29 @@ export interface Capacidades {
   agrupaItens: boolean;
   /** Reentrega o mesmo evento? Se sim, a idempotência é requisito, não luxo. */
   reentregaEventos: boolean;
+
+  /**
+   * O painel deste gateway tem **configuração de pixel do Facebook própria**?
+   *
+   * ## 🔴 Para que serve: o `Purchase` é o único evento sem dedup possível
+   *
+   * Nos demais eventos o nosso script espelha no `fbq` com o mesmo `event_id` e
+   * a Meta junta os dois. O `Purchase` nunca sai do nosso script — ele é
+   * server-side, com `event_id = Sale.id`, que nenhum pixel de navegador
+   * consegue reproduzir. **Ou nós enviamos, ou o gateway.** Os dois enviando =
+   * cada venda contada duas vezes, e a campanha otimizada com o número inflado.
+   *
+   * Quem tem checkout e página de obrigado hospedados costuma oferecer um campo
+   * "ID do pixel" no painel; colado ali, ele dispara `Purchase` sozinho. O
+   * usuário não tem como saber que isso conflita — daí a tela precisar dizer, e
+   * precisar **nomear o gateway** em vez de dar um aviso genérico.
+   *
+   * ⚠️ **Declarado pelo desenho do gateway (checkout hospedado por ele), não
+   * medido no Gerenciador de Eventos.** É por isso que o texto da tela pergunta
+   * ("se você colou o ID do seu pixel lá…") em vez de afirmar que está
+   * disparando. Confirmar exige olhar o painel do usuário.
+   */
+  pixelProprio: boolean;
 }
 
 // ─────────────────────────── autenticação ───────────────────────────

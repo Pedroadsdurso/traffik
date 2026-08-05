@@ -45,6 +45,35 @@ const CHECKOUT_PADRAO = [
   "checkout",
 ];
 
+/**
+ * Tipo de detecção quando a regra gravada não diz qual é.
+ *
+ * > ### 🔴 O PADRÃO PRECISA SER MATERIALIZADO NO SCRIPT, não só na assinatura
+ * >
+ * > `rulesFromForm` só grava `detection` quando há **valor**, e o valor vazio é
+ * > justamente a configuração recomendada ("vazio já cobre Kirvano, Cakto,
+ * > Hotmart…"). Então o caso comum chegava aqui como `type: undefined`, e o
+ * > script saía com `var IC = { type: "", value: "" }` — que **não casa com
+ * > nenhum ramo** do `if` lá embaixo. Resultado: todo pixel criado com os
+ * > padrões nunca disparou InitiateCheckout pelo clique.
+ * >
+ * > ⚠️ E o diagnóstico dizia **"ok"**. `conferirSnippet` e `assinatura()`
+ * > aplicavam os dois o mesmo `?? "clique_checkout"` ao calcular o hash, então
+ * > as duas pontas concordavam sobre um tipo que o script **não tinha**. Um
+ * > default aplicado no verificador e não no verificado torna o verificador
+ * > cego exatamente ao que ele existe para pegar.
+ * >
+ * > Por isso `tipoDeIC()` é o único lugar que resolve o padrão, e tudo —
+ * > o `IC`, a lista de domínios e a assinatura — deriva dela. Não há como as
+ * > três discordarem.
+ */
+export const TIPO_IC_PADRAO = "clique_checkout";
+
+/** O tipo que ESTE script vai usar de fato. `null` quando o evento está desligado. */
+function tipoDeIC(ic: PixelScriptConfig["initiateCheckout"]): string | null {
+  return ic.enabled ? (ic.type || TIPO_IC_PADRAO) : null;
+}
+
 function jsStr(v: string): string {
   return v.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
@@ -81,7 +110,10 @@ function assinatura(cfg: PixelScriptConfig): string {
   return assinaturaDetectores({
     lead: cfg.lead,
     addToCart: cfg.addToCart,
-    ic: cfg.initiateCheckout.enabled ? (cfg.initiateCheckout.type ?? "clique_checkout") : null,
+    // ⚠️ A MESMA função que decide o `IC` do script. Ver `tipoDeIC`: quando o
+    // padrão era aplicado só aqui, a assinatura descrevia um script que não
+    // existia e o diagnóstico dizia "ok" para um detector morto.
+    ic: tipoDeIC(cfg.initiateCheckout),
     icValor: cfg.initiateCheckout.value ?? null,
     nativo: cfg.temPixelNativo !== false,
     // ⚠️ Resolvido AQUI, com o padrão já aplicado. Guardar o mapa cru faria
@@ -95,7 +127,10 @@ function assinatura(cfg: PixelScriptConfig): string {
 
 /** Lista de domínios da regra por clique; vazio cai nos padrões. */
 function dominiosCheckout(ic: PixelScriptConfig["initiateCheckout"]): string[] {
-  if (ic.type !== "clique_checkout") return [];
+  // Pelo tipo RESOLVIDO: com o tipo cru, a regra recomendada (clique + valor
+  // vazio) chegava aqui como `undefined` e devolvia lista vazia — o script saía
+  // com `CHECKOUT = []` e nenhum link casava.
+  if (tipoDeIC(ic) !== "clique_checkout") return [];
   const doUsuario = (ic.value ?? "")
     .split(",")
     .map((d) => d.trim().toLowerCase())
@@ -105,6 +140,7 @@ function dominiosCheckout(ic: PixelScriptConfig["initiateCheckout"]): string[] {
 
 export function pixelScript(cfg: PixelScriptConfig): string {
   const ic = cfg.initiateCheckout;
+  const tipoIC = tipoDeIC(ic);
   return `/*! Traffik Pixel — cole antes de </head> */
 (function () {
   "use strict";
@@ -112,7 +148,7 @@ export function pixelScript(cfg: PixelScriptConfig): string {
   var API = "${jsStr(cfg.apiBase.replace(/\/+$/, ""))}";
   var LEAD = ${cfg.lead};
   var ADD_TO_CART = ${cfg.addToCart};
-  var IC = ${ic.enabled ? `{ type: "${jsStr(ic.type || "")}", value: "${jsStr(ic.value || "")}" }` : "null"};
+  var IC = ${tipoIC ? `{ type: "${jsStr(tipoIC)}", value: "${jsStr(ic.value || "")}" }` : "null"};
   var CHECKOUT = ${JSON.stringify(dominiosCheckout(ic))};
   // Eventos cujo dono NÃO é a Traffik. Só afeta o espelho no pixel nativo:
   // o POST para nós continua, porque o funil e o Dashboard contam do nosso
@@ -340,8 +376,12 @@ export function pixelScript(cfg: PixelScriptConfig): string {
         }
       }, true);
     } else if (IC.type === "contem_url") {
-      if (location.href.indexOf(IC.value) > -1) track("InitiateCheckout");
-    } else {
+      // \`IC.value &&\` NAO e defensividade a toa: "".indexOf("") e 0, entao um
+      // valor vazio faria TODA visita virar InitiateCheckout e inflar o topo do
+      // funil — o oposto exato da falha silenciosa do tipo vazio, e igualmente
+      // mudo. Sem trecho de URL, a regra nao dispara.
+      if (IC.value && location.href.indexOf(IC.value) > -1) track("InitiateCheckout");
+    } else if (IC.value) {
       document.addEventListener("click", function (e) {
         var el = e.target; while (el && el !== document.body) {
           if (IC.type === "contem_texto" && (el.textContent || "").toLowerCase().indexOf(IC.value.toLowerCase()) > -1) { track("InitiateCheckout"); return; }
