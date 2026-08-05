@@ -781,15 +781,31 @@ Provado antes de confiar: um `div` fixo com `width:100%` mediu **2552px → 430p
 
 **O `resize_window` mentiu de novo** (disse `430x900`, `innerWidth` ficou 2560).
 
-> ### 🔴 A causa provável, e é diferente da vez anterior
-> O grupo de abas do MCP é **auto-removido quando a última aba fecha**. Então a
-> janela que o usuário restaurou deixou de hospedar grupo nenhum, e o
-> `tabs_context_mcp{createIfEmpty:true}` criou um grupo **novo na janela
-> maximizada**.
+> ### 🔴 A CAUSA, e ela explica as duas tentativas frustradas
+> O grupo de abas do MCP é **auto-removido quando a última aba fecha** (a própria
+> ferramenta avisa: *"Group is now empty (auto-removed)"*). Então a janela que o
+> usuário restaurou deixou de hospedar grupo nenhum, e o
+> `tabs_context_mcp{createIfEmpty:true}` da sessão seguinte criou um grupo **novo,
+> na janela maximizada**.
 >
-> **A ordem que deve funcionar:** eu crio a aba primeiro, o usuário desmaximiza a
-> janela que a contém **depois**, e só então a varredura roda. Restaurar antes não
-> serve — o grupo ainda não existe.
+> **A ordem correta — registrada a pedido do usuário em 05/08/2026:**
+> 1. eu crio a aba (`tabs_create_mcp` / `createIfEmpty`);
+> 2. **só então** o usuário desmaximiza a janela que contém aquela aba;
+> 3. aí o `resize_window` passa a valer — e ainda assim se confere o `innerWidth`.
+>
+> ⚠️ **Restaurar antes não funciona, porque o grupo ainda não existe.** Duas
+> sessões foram gastas nisso, e nas duas o usuário fez a parte dele corretamente —
+> o pedido estava errado, não a execução. Não peça "restaure a janela" antes de a
+> aba existir.
+
+### ⏸️ E este item espera o REDESIGN, de propósito
+
+Decisão do usuário em 05/08/2026. O que falta varrer é exatamente `Modal`,
+`.tk-pop` e `DateRangePicker` — e **o redesign reescreve os três**. Varrer agora
+seria medir componentes que vão deixar de existir.
+
+O que sobrevive à espera: o clamp do `Drawer` já provado, e o **método** acima
+(com os dois limites medidos), pronto para ser reusado nos componentes novos.
 
 ⚠️ E a regra que não muda: **depois de qualquer resize, leia `innerWidth` e
 compare.** A mensagem de sucesso não vale nada.

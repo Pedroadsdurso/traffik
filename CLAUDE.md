@@ -746,6 +746,23 @@ ser incômodo e vira **dado errado permanente** no site do cliente.
 Com a janela maximizada ele reporta êxito e **não redimensiona**. Depois de
 qualquer resize, leia `innerWidth` e compare. `innerWidth === screen.availWidth`
 é o indício de maximizada.
+
+> ### ⛔ E a ORDEM importa: crie a ABA primeiro, desmaximize DEPOIS
+> Descoberto em 05/08/2026, depois de duas tentativas frustradas em que o usuário
+> restaurou a janela e o resize continuou falhando.
+>
+> **O grupo de abas do MCP é auto-removido quando a última aba fecha.** Então
+> pedir para desmaximizar antes não resolve: a janela restaurada fica sem grupo
+> nenhum, e o `tabs_context_mcp{createIfEmpty:true}` da sessão seguinte cria um
+> grupo **novo, na janela maximizada**.
+>
+> A sequência que funciona:
+> 1. eu chamo `tabs_create_mcp` / `tabs_context_mcp{createIfEmpty:true}`;
+> 2. **só então** o usuário desmaximiza a janela que contém aquela aba;
+> 3. aí o `resize_window` passa a valer — e ainda assim se confere o `innerWidth`.
+>
+> ⚠️ Não peça "restaure a janela" antes de a aba existir. Duas sessões foram
+> gastas nisso, e nas duas o usuário fez a parte dele corretamente.
 → `docs/FILA.md`
 
 ---
@@ -805,12 +822,22 @@ O raciocínio completo de cada item está em **`docs/FILA.md`**.
 
 | # | Item | Estado |
 |---|---|---|
-| 1 | **Item (d) — varredura de viewport estreito** | ⏳ metade feita; o resto **depende de o usuário desmaximizar a janela do grupo MCP** |
-| 2 | Evento de TESTE da Cakto contando como venda | ⛔ bloqueado até a Cakto ser reativada (precisa do payload real) |
-| 3 | Import/export de regras (Bloco 8) | ficou fora de propósito: não havia regra para exportar |
-| 4 | Redesign do design system | intenção futura; o documento vive fora do repo e o usuário traz |
+| 1 | **Redesign do design system** | 🔜 **o próximo.** O usuário traz o roteiro; o documento vive fora do repo |
+| 2 | **Item (d) — varredura de viewport estreito** | ⏸️ **DEPOIS do redesign, de propósito** — ver abaixo |
+| 3 | Evento de TESTE da Cakto contando como venda | ⛔ bloqueado até a Cakto ser reativada (precisa do payload real) |
+| 4 | Import/export de regras (Bloco 8) | ficou fora de propósito: não havia regra para exportar |
 
-> ### ⚠️ O bloqueio do item 1 é de AMBIENTE, não de código
+> ### ⏸️ Por que o item (d) espera o redesign — decisão de 05/08/2026
+> O que falta varrer é exatamente `Modal`, `.tk-pop` (dropdown do `Select`) e
+> `DateRangePicker`. **O redesign reescreve esses três**, então varrer agora seria
+> medir componentes que vão deixar de existir.
+>
+> ✅ O que já foi provado **não** se perde como informação: o clamp
+> `min(560px, 100%)` do `Drawer` funciona (exercido em 430/390/360/320px, 0 de 63
+> descendentes vazando). E o **método** — e os dois limites dele — está registrado
+> em `docs/FILA.md`, pronto para ser reusado nos componentes novos.
+
+> ### ⚠️ O bloqueio do item (d) é de AMBIENTE, não de código
 > `resize_window` mentiu duas vezes (última em 05/08: disse `560x900`,
 > `innerWidth` ficou **2560**). O CDP não substitui — `chrome-devtools-mcp` roda
 > num browser **separado e não autenticado**, e o cookie de sessão do NextAuth é
