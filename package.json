@@ -65,7 +65,8 @@
     "test:conta-meta": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-conta-meta.mjs",
     "db:gerar": "node scripts/prisma-gerar.mjs",
     "test:backoff": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-backoff.mjs",
-    "falha:coletiva": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/falha-coletiva.mjs"
+    "falha:coletiva": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/falha-coletiva.mjs",
+    "ads:orfas": "node scripts/sonda-orfas.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
