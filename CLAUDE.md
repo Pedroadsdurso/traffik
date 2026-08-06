@@ -940,9 +940,36 @@ O raciocínio completo de cada item está em **`docs/FILA.md`**.
 > - **`Integrações › Visão geral`** não está entre os filhos da sidebar porque a
 >   tela não existe — `integracoes/page.tsx` é um `redirect`. É **pendência**, e
 >   entra como primeiro filho quando a tela for construída.
-> - **`Integrações › Testes` saiu da navegação** (decisão do `03`), mas a tela
->   continua entregue. ⚠️ O que a mantém alcançável é o **link da Central de
->   ajuda**. Remover aquele link deixa uma tela real órfã.
+> ### ⏳ `/dashboard/integracoes/testes` está ÓRFÃ DE PROPÓSITO, com prazo
+>
+> **Decisão do dono, 06/08/2026.** A tela existe e está entregue (Bloco 13, 911
+> linhas na `TestesView`). Ela **saiu da navegação** por decisão do `03` ("Aba
+> Testes. Já decidido").
+>
+> Onde ela está e onde NÃO está — a lista importa, porque "órfã" aqui é preciso:
+>
+> | Caminho | |
+> |---|---|
+> | Rail (navegação) | ❌ fora, decisão do `03` |
+> | Central de ajuda | ❌ **link removido em 06/08** |
+> | Paleta ⌘K | ✅ **achável digitando "testes"** — é a busca global, não um esconderijo |
+> | URL direta | ✅ a rota existe e funciona |
+>
+> O link da ajuda saiu por regra, não por estética: uma tela inteira acessível só
+> por dentro de um popover de **atalhos** é pior que uma tela fora do menu — a
+> primeira parece disponível e não é encontrável; a segunda é honesta sobre o
+> próprio estado. A paleta é outra coisa: ela existe justamente para alcançar o
+> que a navegação não lista, e é onde alguém procuraria por nome.
+>
+> ⛔ **Não "conserte" isto religando um link.** O estado é intencional.
+>
+> **Prazo: ela MORRE no passo de Integrações**, junto da reescrita daquela área.
+> Não foi deletada agora de propósito — deletar 911 linhas no meio da entrega de
+> outra tela mistura dois trabalhos e dois motivos de revisão.
+>
+> ⚠️ Quem for reescrever Integrações: a `TestesView` é a dívida a liquidar, e o
+> que ela faz (diagnóstico de rastreamento, card do espelho do `PixelEvent`) tem
+> de ter destino decidido **antes** de o arquivo sumir.
 >
 > ### 🔎 A PALETA ⌘K usa `useOverlay`, NÃO o `Popover` — e a diferença é de contrato
 >

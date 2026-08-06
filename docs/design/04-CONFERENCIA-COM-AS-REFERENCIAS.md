@@ -55,7 +55,7 @@ em `components/tk/`.
 | Título da tela + linha de apoio à esquerda | ✅ **feito** — 🔧 o `01` §9 manda REMOVER o título; o `04` vence e ele fica. O rail colapsado não tem rótulo nenhum, e o subtítulo é a única frase que diz o que a tela faz |
 | Seletor de período no header | 🔧 **fica na faixa de filtros** — ver nota |
 | Botão `Filtros` | ✅ **feito** — 🔧 **só existe na tela que tem faixa de filtros**, e isso é verificado em execução: a tela REGISTRA a faixa (`useRegistrarFaixaDeFiltros`) e o header só desenha o botão se alguém registrou. Provado pelo lado negativo: no Gerenciador o botão não existe |
-| `Central de ajuda` com ícone `?` | ✅ **parcial, com motivo** — contém só os **atalhos reais** (hoje ⌘K é o único) e o link para **Testes de integração**. 🔧 **Não** é um índice de "o que cada tela faz": documentação que ninguém lê e que envelhece sozinha, e esta base já pagou por constante de texto órfã descrevendo comportamento antigo. Guia de verdade entra aqui quando existir |
+| `Central de ajuda` com ícone `?` | ✅ **feito — só atalhos de teclado.** Hoje ⌘K é o único, e o painel tem um item por isso, não por preguiça. 🔧 **Não** é índice de "o que cada tela faz" (doc que ninguém lê e envelhece sozinha), e 🔧 **não** leva link para tela fora do menu — ver a pendência abaixo. Guia de verdade entra aqui quando existir |
 | Sino de notificações com badge numérico | ✅ **feito** |
 | Alternador de tema | ✅ **feito** |
 | Avatar com dropdown `⌄` | ✅ **feito** — mesmo componente do rodapé do rail, duas aparências. 🔧 só itens com destino real (Áreas, Taxas, Sair): não existe tela de perfil, e item que promete tela inexistente é affordance mentindo |
@@ -75,7 +75,7 @@ em `components/tk/`.
 | | Item |
 |---|---|
 | 🔜 | **`Integrações › Visão geral` fora dos filhos da sidebar.** A tela não existe (`integracoes/page.tsx` é `redirect` para `anuncios`), e item de menu que promete uma tela e entrega outra é affordance mentindo. Entra como **PRIMEIRO filho** quando a Visão geral for construída, no passo de Integrações. Os filhos hoje são **Anúncios · Webhooks · UTMs · Pixel/Eventos** |
-| ⚠️ | **`Integrações › Testes` saiu da navegação** por decisão do `03` ("Aba Testes. Já decidido"). A tela continua existindo e entregue (Bloco 13). Quem a mantém alcançável é o link da **Central de ajuda** — removê-lo de lá deixa a tela órfã |
+| ⏳ | **`Integrações › Testes` está fora da navegação de propósito, com prazo.** Saiu do rail pelo `03`; o link de socorro que existia na Central de ajuda **foi removido** em 06/08 por decisão do dono — tela inteira acessível só por dentro de um popover de **atalhos** é PIOR que tela fora do menu: parece disponível e não é encontrável. ⛔ Não religue aquele link. Ela **continua achável pela paleta ⌘K** ("testes"), que é busca global e não esconderijo. **Morre no passo de Integrações** — não agora, para não deletar 911 linhas no meio da entrega de outra tela |
 
 ---
 
