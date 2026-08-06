@@ -925,9 +925,29 @@ O raciocínio completo de cada item está em **`docs/FILA.md`**.
 >   salvos.
 > - **`metrics.ts` (aditivo apenas):** break-even → Top Campanhas → token
 >   expirando → heatmap hora × dia.
-> - **Clique no globo não abre o popover.** Duas tentativas gastas (colunas finas
->   demais para acertar; marcadores `htmlElementsData` não montaram). O popover
->   está escrito e não foi possível exercê-lo.
+> ### 🌍 O GLOBO NÃO TEM INTERAÇÃO — medido, e o código foi REMOVIDO
+>
+> **Clique e hover não funcionam: o raycaster do three.js não acerta as colunas**
+> (`pointRadius` 0.13 é fino demais). Provado na tela — depois de passar o mouse
+> sobre uma coluna, `getComputedStyle(canvas).cursor` continua `auto` e nenhum
+> tooltip aparece.
+>
+> Duas tentativas gastas: `htmlElementsData` **não monta nó nenhum** no DOM;
+> antes disso, quatro cliques em posições diferentes do Brasil não abriram nada.
+>
+> ⛔ **Próximo caminho seria `onPointClick` com `pointRadius` maior (~0.25) —
+> RECUSADO pelo usuário em 06/08/2026**, por engrossar a coluna e piorar um
+> visual que acabou de ficar bom.
+>
+> ✅ **`pointLabel`, `onPointClick` e o popover de país foram DELETADOS**, não
+> deixados no arquivo. Dois motivos, e os dois são regra desta base: código que
+> só rodaria se o raycaster acertasse é "implementado e inerte", e cursor de
+> ponteiro sobre algo que não responde é **affordance mentindo** — parece
+> ferramenta quebrada. Quem responde "qual país e quanto" é o **ranking ao
+> lado**, que é DOM de verdade.
+>
+> ⚠️ Não conclua daí que o globo está sem informação: ele mostra distribuição, a
+> lista mostra o número. São papéis diferentes no mesmo bloco.
 
 > ### 🔁 A ORDEM DO ROTEIRO MUDOU — 05/08/2026
 > Pedido do usuário, e a razão é boa: várias sessões e milhares de dólares sem

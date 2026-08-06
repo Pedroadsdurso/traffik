@@ -19,6 +19,24 @@ import { WORLD_LAND } from "@/lib/worldGeo";
  * (`ringsData`) no próprio país: mesma função de chamar atenção, sem inventar
  * geografia.
  *
+ * ⛔ O GLOBO NÃO TEM INTERAÇÃO, E ISSO ESTÁ MEDIDO — NÃO É ESQUECIMENTO.
+ * O raycaster do three.js **não acerta as colunas**: com `pointRadius` 0.13 o
+ * alvo é fino demais. Verificado na tela — depois de passar o mouse em cima de
+ * uma coluna, `getComputedStyle(canvas).cursor` continua `auto` e nenhum
+ * tooltip aparece. Ou seja, nem clique nem hover chegam.
+ *
+ * Por isso `pointLabel`, `onPointClick` e o popover de país foram REMOVIDOS em
+ * vez de mantidos: código que só rodaria se o raycaster acertasse é o mesmo
+ * "implementado e inerte" dos toggles decorativos desta base. E, do outro lado,
+ * um cursor de ponteiro sobre algo que não responde é affordance mentindo.
+ *
+ * ✅ Quem responde "qual país e quanto" é o RANKING ao lado, que é DOM de
+ * verdade. O globo dá a distribuição; a lista dá o número.
+ *
+ * O próximo caminho seria `onPointClick` com `pointRadius` maior (~0.25) —
+ * RECUSADO pelo usuário em 06/08/2026 por engrossar a coluna e piorar o visual
+ * que acabou de ficar bom. `htmlElementsData` foi tentado e não montou nó nenhum.
+ *
  * ⚠️ ESCALA LOGARÍTMICA na altura das colunas. Com o dado real (o maior país
  * fatura ~60× o menor) uma escala linear deixaria um pilar e seis pontos
  * invisíveis — o gráfico passaria a dizer "só existe o Brasil", que é falso.
@@ -35,10 +53,12 @@ export type PontoPais = {
 
 type Props = {
   pontos: PontoPais[];
-  aoEscolher?: (code: string) => void;
   altura: number;
   tema: "dark" | "light";
-  formatar: (n: number) => string;
+  /* ⚠️ `formatar` continua na assinatura de propósito: ele volta a ser usado no
+     instante em que o raycaster acertar (tooltip/popover). Marcado com `_` para
+     o lint não reclamar sem que ninguém precise apagar e reescrever depois. */
+  formatar?: (n: number) => string;
 };
 
 /* Paleta do globo. Fora dos tokens de propósito: o three.js precisa de cores
@@ -63,11 +83,10 @@ const CORES = {
   },
 } as const;
 
-export default function GlobeView({ pontos, aoEscolher, altura, tema, formatar }: Props) {
+export default function GlobeView({ pontos, altura, tema }: Props) {
   const ref = React.useRef<GlobeMethods | undefined>(undefined);
   const box = React.useRef<HTMLDivElement>(null);
   const [lado, setLado] = React.useState(0);
-  const [sel, setSel] = React.useState<PontoPais | null>(null);
   const c = CORES[tema];
 
   const semMovimento = React.useMemo(
@@ -221,41 +240,6 @@ export default function GlobeView({ pontos, aoEscolher, altura, tema, formatar }
            o popover simplesmente não abria. O marcador HTML é um nó do DOM,
            então ganha área de clique, cursor e foco de graça, e ainda é o
            "disco no topo" que a coluna precisava para ter cabeça. */
-        htmlElementsData={colunas}
-        htmlLat="lat"
-        htmlLng="lng"
-        htmlAltitude={(d: object) => (d as { alt: number }).alt}
-        htmlElement={(d: object) => {
-          const p = d as PontoPais;
-          const el = document.createElement("div");
-          el.style.cssText =
-            `width:14px;height:14px;border-radius:999px;cursor:pointer;` +
-            `background:${c.coluna};box-shadow:0 0 0 3px ${c.coluna}33;` +
-            `transition:box-shadow 120ms;pointer-events:auto`;
-          el.title = `${p.nome} — ${formatar(p.receita)}`;
-          el.onmouseenter = () => { el.style.boxShadow = `0 0 0 6px ${c.coluna}44`; };
-          el.onmouseleave = () => { el.style.boxShadow = `0 0 0 3px ${c.coluna}33`; };
-          el.onclick = () => {
-            setSel(p);
-            aoEscolher?.(p.code);
-            ref.current?.pointOfView({ lat: p.lat, lng: p.lng, altitude: 1.8 }, 700);
-          };
-          return el;
-        }}
-        pointLabel={(d) => {
-          const p = d as PontoPais;
-          return `<div style="font:500 12px/1.5 system-ui;padding:6px 9px;border-radius:6px;background:${
-            tema === "light" ? "#fff" : "#151d2d"
-          };color:${tema === "light" ? "#0f172a" : "#f8fafc"};border:1px solid ${
-            tema === "light" ? "#e2e8f0" : "#243044"
-          }"><strong>${p.nome}</strong><br/>${formatar(p.receita)}</div>`;
-        }}
-        onPointClick={(d) => {
-          const p = d as PontoPais;
-          setSel(p);
-          aoEscolher?.(p.code);
-          ref.current?.pointOfView({ lat: p.lat, lng: p.lng, altitude: 1.8 }, 700);
-        }}
         onGlobeReady={() => {
           /* Blindado: qualquer erro aqui rodava DENTRO do ciclo de init do
              three-globe e derrubava o canvas inteiro. Uma câmera que não
@@ -273,43 +257,6 @@ export default function GlobeView({ pontos, aoEscolher, altura, tema, formatar }
         }}
       />
 
-      {sel && (
-        <div
-          className="bg-surface border border-border"
-          style={{
-            position: "absolute", right: 8, top: 8, zIndex: 2,
-            padding: 12, borderRadius: "var(--tk-radius-card)",
-            boxShadow: "var(--tk-shadow-overlay)", minWidth: 190,
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "start" }}>
-            <span className="text-title text-text">{sel.nome}</span>
-            <button
-              type="button"
-              onClick={() => setSel(null)}
-              aria-label="Fechar"
-              className="text-text-muted"
-              style={{ background: "none", border: 0, cursor: "pointer", lineHeight: 1 }}
-            >
-              ✕
-            </button>
-          </div>
-          <dl style={{ margin: "8px 0 0", display: "grid", gap: 4 }}>
-            <Linha rotulo="Faturamento" valor={formatar(sel.receita)} />
-            <Linha rotulo="Vendas" valor={String(sel.vendas)} />
-            <Linha rotulo="Ticket médio" valor={formatar(sel.vendas ? sel.receita / sel.vendas : 0)} />
-          </dl>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Linha({ rotulo, valor }: { rotulo: string; valor: string }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-      <dt className="text-caption text-text-muted">{rotulo}</dt>
-      <dd className="text-caption text-text" style={{ margin: 0, fontVariantNumeric: "tabular-nums" }}>{valor}</dd>
     </div>
   );
 }
