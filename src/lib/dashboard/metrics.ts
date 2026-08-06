@@ -391,7 +391,11 @@ async function windowAggregate(
       // imposto são globais; prendê-los a uma área faria toda área secundária
       // calcular lucro SEM imposto, com número plausível.
       where: { userId, active: true, ...whereDespesasDaArea(areaAtiva) },
-      select: { type: true, calc: true, amount: true, paymentMethod: true },
+      /* ⚠️ `recurrence` ENTROU AQUI, e a ausência dela era metade do bug: sem o
+         campo no `select` ele chega `undefined`, o rateio cai no padrão
+         `MENSAL` e uma despesa ANUAL volta a ser cobrada como mensalidade — em
+         silêncio, com `tsc` verde. É a armadilha do `pedidoId`, de novo. */
+      select: { type: true, calc: true, amount: true, paymentMethod: true, recurrence: true },
     }),
     // Feed de atividade: TODOS os eventos do pixel, cada um com seu badge.
     // Antes esta consulta filtrava `event: "InitiateCheckout"`, então Lead e
@@ -695,6 +699,9 @@ function summarize(w: Window, impostoAnunciosPct = 0) {
       chavePedido: chaveDoPedido(s),
     })),
     impostoAnunciosPct,
+    /* A janela que o filtro da tela definiu. É o que faz a mensalidade valer
+       3/31 num "Últimos 3 dias" em vez de inteira. */
+    janela: { startKey: w.janela.startKey, endKey: w.janela.endKey },
   });
   const profit = fin.lucro;
   // ROI como **multiplicador** (Bloco 4), na mesma escala do ROAS: 1,87x.
@@ -989,11 +996,22 @@ function summarize(w: Window, impostoAnunciosPct = 0) {
   // e com "Últimos 30 dias" o por-dia É o mês. Fica coerente com qualquer
   // filtro em vez de ignorar o de cima.
   //
-  // O lucro por hora rateia as despesas (gateway/imposto/recorrentes) na
-  // proporção do faturamento daquela hora — não há como atribuí-las por hora,
-  // então o rateio proporcional é a aproximação honesta. Gasto de anúncio vem
-  // de métricas diárias e também é rateado.
-  const custoSobreReceita = revenue ? (spend + fin.totalDescontos) / revenue : 0;
+  /* 🔴 O COMENTÁRIO AQUI AFIRMAVA QUE AS RECORRENTES ENTRAVAM, E ELAS NÃO
+     ENTRAVAM. `fin.totalDescontos` é `gateway + coprodução + impostos +
+     custoProduto` — as recorrentes ficam FORA dele (ver `financeiro.ts:399`).
+     Então o lucro por horário simplesmente as ignorava, enquanto o card de
+     Lucro as cobrava inteiras: o MESMO custo, dois tratamentos, e o comentário
+     descrevendo um terceiro que não existia.
+
+     Agora entra `fin.despesas`, que já vem RATEADO pelos dias da janela
+     (`lib/despesas/rateio.ts`). O rateio por dias acontece uma vez, no nível do
+     período; aqui só se distribui o que sobrou entre as horas.
+
+     ⚠️ A distribuição POR HORA continua proporcional ao faturamento, e isso é
+     deliberado: não há informação de hora numa despesa de calendário. A soma
+     das 24 horas fecha com o lucro do período, que é a propriedade que importa
+     — dividir igual pelas 24 faria toda hora sem venda mostrar prejuízo. */
+  const custoSobreReceita = revenue ? (spend + fin.totalDescontos + fin.despesas) / revenue : 0;
 
   // `hourInTz` em vez de `getHours()`: era exatamente aqui que uma venda das
   // 17h em Brasília aparecia às 20h — o processo na Vercel roda em UTC e

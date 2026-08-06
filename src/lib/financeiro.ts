@@ -1,4 +1,6 @@
 import type { PaymentMethod } from "@/generated/prisma/enums";
+import type { ExpenseRecurrence } from "@/generated/prisma/enums";
+import { ratearDespesa } from "@/lib/despesas/rateio";
 
 /**
  * # Faturamento líquido e lucro — UMA conta, um lugar
@@ -62,6 +64,15 @@ export interface DespesaEntrada {
   calc: string;
   amount: number;
   paymentMethod: PaymentMethod | null;
+  /**
+   * ⛔ ERA IGNORADA POR TODO CÁLCULO. Cinco valores no schema, os cinco tratados
+   * igual — uma despesa ANUAL de R$ 6.000 entrava inteira num Dashboard
+   * filtrado em "Hoje". Ver `lib/despesas/rateio.ts`.
+   *
+   * Opcional só para não quebrar chamador antigo; ausente é lido como `MENSAL`,
+   * que é o padrão do schema e o caso esmagadoramente comum.
+   */
+  recurrence?: ExpenseRecurrence;
 }
 
 /**
@@ -120,7 +131,10 @@ export interface Composicao {
    * o faturamento. Este é custo de mídia, e entra no lucro e no custo total.
    */
   impostoAnuncios: number;
-  /** Despesas recorrentes rateadas no período. */
+  /**
+   * Despesas recorrentes **rateadas pelos dias da janela**, respeitando a
+   * frequência cadastrada. ⚠️ `UNICA` fica FORA — ver `rateio.ts`.
+   */
   despesas: number;
   /** liquido − gastoAnuncios − despesas */
   lucro: number;
@@ -216,6 +230,16 @@ export function calcularFinanceiro(opts: {
    * gasto, não o faturamento.
    */
   impostoAnunciosPct?: number;
+  /**
+   * A janela do período, em chaves `YYYY-MM-DD`. **OBRIGATÓRIA.**
+   *
+   * ⛔ Ela é obrigatória de propósito, e a alternativa foi recusada: um
+   * `janela?` opcional faria todo chamador que esquecesse voltar ao
+   * comportamento antigo — a despesa inteira em qualquer período — **em
+   * silêncio**, que é exatamente o bug que este parâmetro existe para matar.
+   * Obrigatória, o compilador força cada chamador a decidir.
+   */
+  janela: { startKey: string; endKey: string };
 }): Composicao {
   const { bruto, brutoPorPagamento, gastoAnuncios } = opts;
 
@@ -336,10 +360,17 @@ export function calcularFinanceiro(opts: {
         custoProduto += aplicar(e, baseTotal.valor, baseTotal.pedidos);
         break;
       default:
-        // DESPESA_RECORRENTE — custo fixo do PERÍODO, não incide sobre venda.
-        // Não passa por `aplicar`: multiplicar por pedidos aqui transformaria a
-        // mensalidade da ferramenta numa taxa por venda.
-        recorrentes += e.amount;
+        /* DESPESA_RECORRENTE — custo de CALENDÁRIO. Não incide sobre venda (não
+           passa por `aplicar`: multiplicar por pedidos transformaria a
+           mensalidade numa taxa por venda) e não é proporcional ao faturamento
+           (ela existe no dia em que não se vendeu nada — e é justamente aí que
+           ratear por receita a faria sumir, escondendo o custo quando ele mais
+           dói).
+
+           🔴 RATEADA PELOS DIAS, e a frequência cadastrada é respeitada. Antes
+           `+= e.amount` somava o valor cheio em qualquer janela, e `recurrence`
+           não era lida por cálculo nenhum. Ver `lib/despesas/rateio.ts`. */
+        recorrentes += ratearDespesa(e.amount, e.recurrence ?? "MENSAL", opts.janela);
     }
   }
 

@@ -27,13 +27,32 @@ function eq(nome, obtido, esperado) {
 
 const pct = (type, amount, paymentMethod = null) => ({ type, calc: "PERCENTUAL", amount, paymentMethod });
 const fixo = (type, amount) => ({ type, calc: "FIXO", amount, paymentMethod: null });
+/** Recorrente com frequência explícita — a que o rateio respeita. */
+const rec = (amount, recurrence = "MENSAL") => ({ type: "DESPESA_RECORRENTE", calc: "FIXO", amount, paymentMethod: null, recurrence });
+
+/**
+ * ⛔ A JANELA É OBRIGATÓRIA, e aqui ela é um MÊS INTEIRO de propósito.
+ *
+ * Agosto de 2026 tem 31 dias, e a soma de 1/31 trinta e uma vezes é exatamente
+ * 1 — então uma despesa MENSAL vale o valor CHEIO nesta janela. Isso mantém
+ * verdadeiras todas as asserções que já existiam, e é o que faz este arquivo
+ * distinguir as duas coisas que o rateio pode quebrar:
+ *
+ *   - asserção que muda AQUI  →  a fórmula está errada (mês inteiro tem de dar
+ *                                o valor cheio);
+ *   - asserção que muda numa JANELA CURTA  →  é o rateio funcionando.
+ *
+ * Sem essa escolha, toda asserção mudaria de número ao mesmo tempo e não
+ * haveria como separar correção de erro.
+ */
+const MES = { startKey: "2026-08-01", endKey: "2026-08-31" };
 
 // ── 1. A cadeia completa ────────────────────────────────────────────────────
 console.log("\n\x1b[1mCadeia completa de desconto\x1b[0m");
 {
   // R$ 1.000 aprovados, todos por Pix. Gateway 5% (Pix), coprodução 20%,
   // imposto 6%, custo de produto 10%. Anúncios 200, despesa fixa 50.
-  const f = calcularFinanceiro({
+  const f = calcularFinanceiro({ janela: MES,
     bruto: 1000,
     brutoPorPagamento: new Map([["PIX", 1000]]),
     gastoAnuncios: 200,
@@ -63,7 +82,7 @@ console.log("\n\x1b[1mCadeia completa de desconto\x1b[0m");
 console.log("\n\x1b[1mTaxa de gateway por forma de pagamento\x1b[0m");
 {
   // 1000 no total: 400 Pix + 600 cartão. Pix 1%, cartão 5%.
-  const f = calcularFinanceiro({
+  const f = calcularFinanceiro({ janela: MES,
     bruto: 1000,
     brutoPorPagamento: new Map([
       ["PIX", 400],
@@ -76,7 +95,7 @@ console.log("\n\x1b[1mTaxa de gateway por forma de pagamento\x1b[0m");
   eq("cada taxa incide só sobre a sua forma (4 + 30)", f.gateway, 34);
 }
 {
-  const f = calcularFinanceiro({
+  const f = calcularFinanceiro({ janela: MES,
     bruto: 1000,
     brutoPorPagamento: new Map([["PIX", 1000]]),
     gastoAnuncios: 0,
@@ -88,7 +107,7 @@ console.log("\n\x1b[1mTaxa de gateway por forma de pagamento\x1b[0m");
 // ── 3. Desconto não cadastrado: zero, MAS denunciado ───────────────────────
 console.log("\n\x1b[1mDesconto não cadastrado\x1b[0m");
 {
-  const f = calcularFinanceiro({
+  const f = calcularFinanceiro({ janela: MES,
     bruto: 1000,
     brutoPorPagamento: new Map([["PIX", 1000]]),
     gastoAnuncios: 0,
@@ -99,7 +118,7 @@ console.log("\n\x1b[1mDesconto não cadastrado\x1b[0m");
   eq("`faltando` denuncia os três ausentes", f.faltando, ["taxa do gateway", "coprodução", "custo de produto"]);
 }
 {
-  const f = calcularFinanceiro({ bruto: 500, brutoPorPagamento: new Map(), gastoAnuncios: 0, despesas: [] });
+  const f = calcularFinanceiro({ janela: MES, bruto: 500, brutoPorPagamento: new Map(), gastoAnuncios: 0, despesas: [] });
   eq("sem NADA cadastrado, líquido = bruto", f.liquido, 500);
   eq("e os quatro descontos são denunciados", f.faltando.length, 4);
 }
@@ -107,7 +126,7 @@ console.log("\n\x1b[1mDesconto não cadastrado\x1b[0m");
 // ── 4. Prejuízo e ROI indefinido ───────────────────────────────────────────
 console.log("\n\x1b[1mPrejuízo e ROI indefinido\x1b[0m");
 {
-  const f = calcularFinanceiro({
+  const f = calcularFinanceiro({ janela: MES,
     bruto: 100,
     brutoPorPagamento: new Map([["PIX", 100]]),
     gastoAnuncios: 300,
@@ -118,18 +137,18 @@ console.log("\n\x1b[1mPrejuízo e ROI indefinido\x1b[0m");
   eq("ROI = −200/300", f.roi, -0.67);
 }
 {
-  const f = calcularFinanceiro({ bruto: 0, brutoPorPagamento: new Map(), gastoAnuncios: 500, despesas: [] });
+  const f = calcularFinanceiro({ janela: MES, bruto: 0, brutoPorPagamento: new Map(), gastoAnuncios: 500, despesas: [] });
   eq("sem faturamento, ROI é o piso −1,00x (matemático, não clamp)", f.roi, -1);
 }
 {
   // ⚠️ Faturou sem gastar nada: ROI é INDEFINIDO, não zero. "0,00x" se leria
   // como empate para quem só teve lucro.
-  const f = calcularFinanceiro({ bruto: 800, brutoPorPagamento: new Map([["PIX", 800]]), gastoAnuncios: 0, despesas: [] });
+  const f = calcularFinanceiro({ janela: MES, bruto: 800, brutoPorPagamento: new Map([["PIX", 800]]), gastoAnuncios: 0, despesas: [] });
   eq("custo zero -> ROI null (a tela mostra '—')", f.roi, null);
   eq("mas o lucro existe", f.lucro, 800);
 }
 {
-  const f = calcularFinanceiro({ bruto: 0, brutoPorPagamento: new Map(), gastoAnuncios: 0, despesas: [] });
+  const f = calcularFinanceiro({ janela: MES, bruto: 0, brutoPorPagamento: new Map(), gastoAnuncios: 0, despesas: [] });
   /* ⚠️ Esta assercao ESPERAVA 0, e o 0 era o defeito. Ela provava que nao havia
      divisao por zero — e nao havia mesmo —, mas travava no lugar a resposta
      errada para a pergunta seguinte: "0%" de margem afirma que se vendeu e nada
@@ -141,7 +160,7 @@ console.log("\n\x1b[1mPrejuízo e ROI indefinido\x1b[0m");
   // 🔴 O caso que o usuário reportou: painel zerado mostrando −1,00x em vermelho.
   // Uma despesa fixa sozinha produzia lucro −20 / custo 20 = −1,00x, e a tela
   // gritava prejuizo num periodo em que nada aconteceu.
-  const f = calcularFinanceiro({
+  const f = calcularFinanceiro({ janela: MES,
     bruto: 0,
     brutoPorPagamento: new Map(),
     gastoAnuncios: 0,
@@ -155,7 +174,7 @@ eq("zero e NEUTRO, nao verde", corFinanceira(0, "roi"), "var(--color-text)");
 // ── 5. Valor FIXO em vez de percentual ─────────────────────────────────────
 console.log("\n\x1b[1mDesconto de valor fixo\x1b[0m");
 {
-  const f = calcularFinanceiro({
+  const f = calcularFinanceiro({ janela: MES,
     bruto: 1000,
     brutoPorPagamento: new Map([["PIX", 1000]]),
     gastoAnuncios: 0,
@@ -198,7 +217,7 @@ console.log("\n\x1b[1mTaxa reportada pelo gateway\x1b[0m");
   const PIX = "PIX";
   const taxa5 = pct("TAXA_GATEWAY", 5);
   const base = (vendas, despesas = [taxa5]) =>
-    calcularFinanceiro({
+    calcularFinanceiro({ janela: MES,
       bruto: vendas.reduce((a, v) => a + v.valor, 0),
       brutoPorPagamento: new Map([[PIX, vendas.reduce((a, v) => a + v.valor, 0)]]),
       gastoAnuncios: 0,
@@ -240,7 +259,7 @@ console.log("\n\x1b[1mTaxa reportada pelo gateway\x1b[0m");
   eq("mistura AINDA cobra cadastro — metade depende dele", metade.faltando.includes("taxa do gateway"), true);
 
   // Chamador antigo (sem a lista de vendas) não pode mudar de comportamento.
-  const semLista = calcularFinanceiro({
+  const semLista = calcularFinanceiro({ janela: MES,
     bruto: 100, brutoPorPagamento: new Map([[PIX, 100]]), gastoAnuncios: 0, despesas: [taxa5],
   });
   eq("sem lista de vendas, comportamento é o de ANTES", semLista.gateway, 5);
@@ -253,21 +272,21 @@ console.log("\n\x1b[1mTaxa reportada pelo gateway\x1b[0m");
   const base = { bruto: 300, brutoPorPagamento: porPagamento, gastoAnuncios: 0 };
 
   // Taxa GLOBAL (paymentMethod null) -> 10% de 300 = 30
-  const global = calcularFinanceiro({
+  const global = calcularFinanceiro({ janela: MES,
     ...base,
     despesas: [{ type: "TAXA_GATEWAY", calc: "PERCENTUAL", amount: 10, paymentMethod: null }],
   });
   eq("taxa global incide sobre o faturamento inteiro", (global.gateway), 30);
 
   // A MESMA taxa marcada como OUTRO -> so 10% dos 100 de OUTRO = 10
-  const soOutro = calcularFinanceiro({
+  const soOutro = calcularFinanceiro({ janela: MES,
     ...base,
     despesas: [{ type: "TAXA_GATEWAY", calc: "PERCENTUAL", amount: 10, paymentMethod: "OUTRO" }],
   });
   eq("a MESMA taxa como OUTRO pega so um terco (era o bug)", (soOutro.gateway), 10);
 
   // Pix 10% + cartao 30% nao se misturam
-  const misto = calcularFinanceiro({
+  const misto = calcularFinanceiro({ janela: MES,
     ...base,
     despesas: [
       { type: "TAXA_GATEWAY", calc: "PERCENTUAL", amount: 10, paymentMethod: "PIX" },
@@ -277,7 +296,7 @@ console.log("\n\x1b[1mTaxa reportada pelo gateway\x1b[0m");
   eq("Pix 10% + cartao 30% = 10 + 30, cada um sobre a propria base", (misto.gateway), 40);
 
   // Global + especifica somam (o usuario pode ter as duas)
-  const ambas = calcularFinanceiro({
+  const ambas = calcularFinanceiro({ janela: MES,
     ...base,
     despesas: [
       { type: "TAXA_GATEWAY", calc: "PERCENTUAL", amount: 10, paymentMethod: null },
@@ -304,7 +323,7 @@ console.log("Tres modos: % por venda / R$ por venda / R$ por mes");
     valor: v, formaPagamento: PIX, taxaGateway: taxa, coproducao: null, chavePedido: pedido,
   });
   const rodar = (vendas, despesas) =>
-    calcularFinanceiro({
+    calcularFinanceiro({ janela: MES,
       bruto: vendas.reduce((a, v) => a + v.valor, 0),
       brutoPorPagamento: new Map([[PIX, vendas.reduce((a, v) => a + v.valor, 0)]]),
       gastoAnuncios: 0,
@@ -345,7 +364,7 @@ console.log("Tres modos: % por venda / R$ por venda / R$ por mes");
     { ...venda(100, "p3"), formaPagamento: "CARTAO" },
   ];
   eq("R$ fixo do cartao nao cobra as vendas por Pix",
-    calcularFinanceiro({
+    calcularFinanceiro({ janela: MES,
       bruto: 300,
       brutoPorPagamento: new Map([["PIX", 100], ["CARTAO", 200]]),
       gastoAnuncios: 0,
@@ -369,10 +388,73 @@ console.log("Tres modos: % por venda / R$ por venda / R$ por mes");
   // fixo incide uma vez. Ele não tem como saber quantas compras houve, e
   // chutar zero apagaria a despesa em silêncio.
   eq("sem lista de vendas, o fixo incide UMA vez (comportamento antigo)",
-    calcularFinanceiro({
+    calcularFinanceiro({ janela: MES,
       bruto: 300, brutoPorPagamento: new Map([[PIX, 300]]), gastoAnuncios: 0,
       despesas: [{ type: "TAXA_GATEWAY", calc: "FIXO", amount: 2.5, paymentMethod: null }],
     }).gateway, 2.5);
+}
+
+
+// ── RATEIO DA DESPESA RECORRENTE ────────────────────────────────────────────
+//
+// 🔴 ESTE BLOCO EXISTE PORQUE AS 70 ASSERÇÕES ANTERIORES NÃO PODIAM FALHAR PELO
+// RATEIO. Todas usam janela de mês inteiro, onde MENSAL vale 1,0 — então elas
+// provam que a correção NÃO QUEBROU NADA, e não provam que ela FUNCIONA. São
+// coisas diferentes, e só a segunda defende o conserto do próximo commit.
+console.log("\n\x1b[1mRateio da despesa recorrente\x1b[0m");
+{
+  const so = (despesas, janela) =>
+    calcularFinanceiro({ janela, bruto: 1000, brutoPorPagamento: new Map(), gastoAnuncios: 0, despesas }).despesas;
+
+  // O CONTROLE: mês inteiro cobra o valor cheio. Sem ele, "rateou" seria
+  // indistinguível de "sumiu com a despesa".
+  eq("MENSAL em mês inteiro = valor cheio", so([rec(500)], MES), 500);
+
+  // 3 dias de agosto (31 dias): 3/31 de 500 = 48,39
+  eq("MENSAL em 3 dias = 3/31 do valor", so([rec(500)], { startKey: "2026-08-01", endKey: "2026-08-03" }), 500 * 3 / 31);
+
+  /* JANELA QUE CRUZA MÊS — o caso que obrigou a somar dia a dia. 30/07, 31/07
+     e 01/08: dois dias de julho (31 dias) e um de agosto (31 dias). Com um
+     divisor médio de 30 fixo o número sairia diferente, e erraria mais quanto
+     mais curta a janela. */
+  eq(
+    "MENSAL cruzando o mês soma dia a dia, com o divisor de CADA mês",
+    so([rec(500)], { startKey: "2026-07-30", endKey: "2026-08-01" }),
+    500 * (2 / 31 + 1 / 31),
+  );
+
+  /* FEVEREIRO prova que o divisor é do mês, não uma constante: 3 dias de
+     fevereiro valem MAIS que 3 dias de agosto, porque o mês é mais curto. */
+  const fev = so([rec(500)], { startKey: "2026-02-01", endKey: "2026-02-03" });
+  const ago = so([rec(500)], { startKey: "2026-08-01", endKey: "2026-08-03" });
+  eq("3 dias de fevereiro custam MAIS que 3 de agosto", fev > ago, true);
+  eq("  …e é exatamente 3/28 (2026 não é bissexto)", fev, 500 * 3 / 28);
+
+  /* 🔴 ANUAL — o caso mais dramático, e o que mais doía: R$ 6.000 entravam
+     INTEIROS num Dashboard filtrado em "Hoje". */
+  eq("ANUAL num dia = 1/365, não o valor cheio", so([rec(6000, "ANUAL")], { startKey: "2026-08-06", endKey: "2026-08-06" }), 6000 / 365);
+  eq("ANUAL em ano bissexto usa 366", so([rec(6000, "ANUAL")], { startKey: "2028-08-06", endKey: "2028-08-06" }), 6000 / 366);
+
+  // DIARIA MULTIPLICA pelos dias — antes aparecia uma vez só.
+  eq("DIARIA em 5 dias = 5x o valor", so([rec(50, "DIARIA")], { startKey: "2026-08-01", endKey: "2026-08-05" }), 250);
+
+  eq("SEMANAL em 14 dias = 2x o valor", so([rec(100, "SEMANAL")], { startKey: "2026-08-01", endKey: "2026-08-14" }), 200);
+
+  /* ⛔ UNICA fica FORA do cálculo: o schema não guarda quando ela ocorreu, e
+     contá-la em toda janela (o que se fazia) é pior que omiti-la. */
+  eq("UNICA não entra no cálculo", so([rec(999, "UNICA")], MES), 0);
+  eq("  …e não contamina as outras", so([rec(999, "UNICA"), rec(500)], MES), 500);
+
+  /* A frequência AUSENTE cai em MENSAL — o padrão do schema. É o caminho de
+     todo chamador antigo, e precisa continuar previsível. */
+  eq("sem `recurrence`, vale MENSAL", so([fixo("DESPESA_RECORRENTE", 500)], MES), 500);
+
+  /* 🔴 A ASSERÇÃO QUE PROVA O BUG ANTIGO. Antes, TODAS estas devolviam o valor
+     cheio — era o mesmo número para janela de 1 dia e de um mês, para mensal e
+     para anual. Se alguém reintroduzir `+= e.amount`, esta linha cai. */
+  const umDia = { startKey: "2026-08-06", endKey: "2026-08-06" };
+  eq("um dia NÃO cobra a mensalidade inteira", so([rec(500)], umDia) < 500, true);
+  eq("  …nem a anual", so([rec(6000, "ANUAL")], umDia) < 6000, true);
 }
 
 console.log(

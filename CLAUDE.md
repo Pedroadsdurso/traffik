@@ -1348,6 +1348,71 @@ Depois do mapa, nesta ordem, que é do dono:
 
 ---
 
+# 💸 DESPESA RECORRENTE — o rateio, e a mudança de número em produção
+
+> ### 📅 06/08/2026 — O LUCRO SUBIU, E É CORREÇÃO
+>
+> **A partir de 06/08/2026, o Lucro em janelas menores que um mês passa a ser
+> maior. Não é bug novo, é correção — a despesa recorrente antes entrava inteira
+> em qualquer janela, e a anual entrava inteira também.**
+>
+> Medido no dev, com uma despesa de cada frequência (50 diária · 100 semanal ·
+> 500 mensal · 6.000 anual · 300 única) e faturamento de R$ 10.000:
+>
+> | Janela | Despesa ANTES | Despesa AGORA | Lucro antes → agora |
+> |---|---|---|---|
+> | Hoje (1 dia) | R$ 6.950 | **R$ 96,85** | 3.050 → **9.903** |
+> | Últimos 7 dias | R$ 6.950 | R$ 677,97 | 3.050 → 9.322 |
+> | Últimos 30 dias | R$ 6.950 | R$ 2.905,59 | 3.050 → 7.094 |
+> | Agosto inteiro | R$ 6.950 | R$ 3.002,45 | 3.050 → 6.998 |
+>
+> ⚠️ Nem no mês inteiro o número volta ao antigo, e é correto: só a MENSAL vale
+> cheia num mês: a DIÁRIA passa a multiplicar pelos 31 dias (era cobrada uma vez
+> só) e a ANUAL vira 31/365.
+>
+> ### 📣 A frase para os testadores
+>
+> *Corrigimos um erro no cálculo do Lucro. Despesas recorrentes estavam sendo
+> descontadas por inteiro em qualquer período: uma mensalidade de R$ 500 era
+> debitada tanto em "Hoje" quanto em "Últimos 30 dias", e uma despesa anual de
+> R$ 6.000 também. O Dashboard do dia mostrava prejuízo que não existia. Agora
+> elas são rateadas pelos dias do período, e a frequência que você cadastrou
+> (diária, semanal, mensal, anual) passa a ser respeitada — antes ela era
+> ignorada. Se o seu Lucro subiu, é isso: o número de antes estava errado.*
+
+### A regra, e ela é UMA função
+
+**`src/lib/despesas/rateio.ts` é a fonte única.** ⛔ Não rateie em outro lugar.
+
+```
+DIARIA   →  amount × dias
+SEMANAL  →  amount × dias / 7
+MENSAL   →  soma, por dia, de amount / dias-do-mês-DAQUELE-dia
+ANUAL    →  soma, por dia, de amount / dias-do-ano-DAQUELE-dia
+UNICA    →  0 (fora do cálculo)
+```
+
+⛔ **Nada de divisor fixo de 30.** A soma dia a dia é o que faz 30/07–01/08
+pegar o divisor de julho e o de agosto, e fevereiro valer ÷28 ou ÷29. Um divisor
+médio erraria nos dois meses ao mesmo tempo, e erraria mais quanto mais curta a
+janela — que é onde o defeito dói.
+
+⛔ **`janela` é OBRIGATÓRIA em `calcularFinanceiro`.** Opcional faria todo
+chamador que esquecesse voltar ao comportamento antigo em silêncio.
+
+### 🔜 PENDENTE: a migration `ocorreEm` (aprovada, não feita)
+
+"Despesa única" sem data é um recurso quebrado, não uma limitação de dashboard.
+Aprovada em 06/08/2026, **separada de propósito** — é a primeira mudança de
+schema do redesign e não entra no meio de um commit de cálculo.
+
+| | Desenho |
+|---|---|
+| coluna | `ocorreEm DateTime?`, nulo nas linhas existentes |
+| nova `UNICA` | obrigatório |
+| linha antiga sem data | continua FORA do cálculo, com o aviso na tela |
+| backfill | ⛔ **NENHUM.** `createdAt` é quando a LINHA foi criada, não quando a despesa ocorreu — usá-lo inventaria semântica e quebraria quem cadastra hoje algo antigo |
+
 # ➗ DENOMINADOR ZERO — a regra, e o dia em que ficamos limpos
 
 > Mapa completo em **`docs/design/05-MAPA-DAS-RAZOES.md`**. O que muda
