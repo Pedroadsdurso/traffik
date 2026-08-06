@@ -582,7 +582,7 @@ export async function computeDashboard(userId: string, filters: DashboardFilters
     arpu: pctDelta(summary.arpu, prev.arpu),
   };
 
-  const chart = buildChart(current, startKey, endKey, end, granularity, filters.period, tz);
+  const chart = buildChart(current, startKey, endKey, end, granularity, filters.period, tz, summary.taxaEfetiva, summary.custosFixos);
   const activity = buildActivity(current);
 
   return {
@@ -1117,6 +1117,9 @@ function summarize(w: Window, impostoAnunciosPct = 0) {
   return {
     revenue, origem, salesCount, pendentes, pendentesValor, reembolsadas, chargebackRate,
     spend, clicksCount, ticket, cpa, roas, ctr, profit, roi, margin, arpu, buyers, topCampaigns, heatmap,
+    /* Para a serie de LUCRO por bucket — ver `buildChart`. */
+    taxaEfetiva: div(fin.totalDescontos, revenue) ?? 0,
+    custosFixos: spend + fin.impostoAnuncios + fin.despesas,
     expenses, products, sources, byPlacement, payments, funnel, byHour, byDay, byCountry, approval,
     // A composição inteira viaja até a UI: o tooltip do Faturamento Líquido e do
     // Lucro precisa mostrar CADA desconto, senão o número é impossível de conferir.
@@ -1137,6 +1140,11 @@ function buildChart(
   granularity: "hour" | "day",
   period: DashPeriod,
   tz: string,
+  /** `totalDescontos / bruto` do periodo — a fatia que os custos PROPORCIONAIS
+      comem de cada real. Vem de `summarize` para nao ser recalculada aqui. */
+  taxaEfetiva: number,
+  /** Gasto de anuncio + imposto de anuncio + despesa rateada, do periodo. */
+  custosFixos: number,
 ) {
   // Cada bucket carrega a chave do dia a que pertence: o faturamento casa por
   // instante (é um `DateTime`), mas o gasto casa por CHAVE, porque
@@ -1236,6 +1244,11 @@ function buildChart(
   // vazias em vez de zeradas — a série nem chega ao componente. Isto continua
   // valendo, e é diferente do buraco NO MEIO: aquele agora é `null` bucket a
   // bucket, e a linha se interrompe em vez de descer ao chão.
+  /* Os custos fixos do periodo divididos pelos buckets. ⚠️ Divisao IGUAL, nao
+     proporcional a receita: gasto de anuncio ja entra por bucket (`spend[i]`), e
+     o que sobra — imposto de anuncio e despesa recorrente — e custo de
+     CALENDARIO. Ratear por receita o faria sumir no dia sem venda. */
+  const custosFixosPorBucket = buckets.length ? (custosFixos - spend.reduce((a, b) => a + b, 0)) / buckets.length : 0;
   const serieVazia: (number | null)[] = [];
   const sparklines: Record<string, (number | null)[]> = {
     faturamento: revenue,
@@ -1245,6 +1258,22 @@ function buildChart(
     ticket: revenue.map((r, i) => div(r, vendasPorBucket[i] ?? 0)),
     arpu: revenue.map((r, i) => div(r, compradoresPorBucket[i] ?? 0)),
     cpa: gastoNaSerie ? spend.map((sp, i) => div(sp, vendasPorBucket[i] ?? 0)) : serieVazia,
+    /* ── LUCRO por bucket ────────────────────────────────────────────────
+       🔴 LUCRO REAL, NAO PROPORCIONAL. A tentacao era `r - r * custoSobreReceita`
+       — a mesma aproximacao do `byHour` —, e ela tem um defeito que estraga
+       justamente este grafico: num dia com GASTO e ZERO RECEITA o lucro sairia
+       ZERO. Esse e o dia que mais dói, e ele apareceria como neutro.
+
+       Aqui cada bucket desconta o proprio gasto e a sua fatia dos custos fixos,
+       entao o dia negativo aparece negativo.
+
+       ⚠️ SO com gasto por bucket. Na granularidade horaria `DailyAdMetric` nao
+       tem hora, e um lucro por hora sairia com o gasto do dia inteiro no bucket
+       das 00h — serie vazia e melhor que serie inventada. Mesma guarda de
+       `roas` e `cpa`. */
+    lucroLiquido: gastoNaSerie
+      ? revenue.map((r, i) => r * (1 - taxaEfetiva) - (spend[i] ?? 0) - custosFixosPorBucket)
+      : serieVazia,
   };
 
   // ⚠️ `Record<PeriodoNome, string>` e não um objeto solto: o mapa solto deixava

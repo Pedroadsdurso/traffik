@@ -504,6 +504,63 @@ console.log("\n\x1b[1mBreak-even\x1b[0m");
   }).breakEven, 0);
 }
 
+
+// ── SÉRIE DE LUCRO: a soma tem de dar o lucro do período ────────────────────
+//
+// 🔴 É O MESMO ROUND-TRIP DO BREAK-EVEN, e pega os dois erros prováveis da
+// distribuição por bucket:
+//
+//   - custos fixos mal distribuídos (sobrando ou faltando um bucket);
+//   - taxa efetiva aplicada DUAS vezes (uma no líquido, outra no bucket).
+//
+// Nenhum dos dois aparece olhando o desenho: a linha continua com a forma certa
+// e só o nível está errado. E nenhum apareceria numa asserção de VALOR, que
+// passaria igual com a soma errada desde que o número não mudasse.
+console.log("\n\x1b[1mSérie de lucro\x1b[0m");
+{
+  /* ⚠️ ISTO É UMA CÓPIA da fórmula de `buildChart`, e o limite disso precisa
+     estar escrito: se a de lá mudar e esta não, **a asserção continua
+     passando** — ela testa a cópia. Ela NÃO protege contra divergência entre
+     os dois arquivos.
+     O que ela protege é a PROPRIEDADE: que a fórmula, qualquer que seja,
+     some o lucro do período. `buildChart` não é exportada, então testá-la
+     direto exigiria exportá-la só para o teste — e uma função pública que
+     ninguém chama é a dívida que este projeto já paga em outros lugares. */
+  const serieDeLucro = (revenuePorBucket, spendPorBucket, taxaEfetiva, custosFixosNaoGasto) => {
+    const porBucket = custosFixosNaoGasto / revenuePorBucket.length;
+    return revenuePorBucket.map((r, i) => r * (1 - taxaEfetiva) - (spendPorBucket[i] ?? 0) - porBucket);
+  };
+
+  const MES2 = { startKey: "2026-08-01", endKey: "2026-08-31" };
+  const receita = [1000, 0, 2500, 500];   // um bucket com ZERO receita e gasto
+  const gasto = [100, 80, 150, 70];
+  const bruto = receita.reduce((a, x) => a + x, 0);
+  const gastoTotal = gasto.reduce((a, x) => a + x, 0);
+
+  const f = calcularFinanceiro({
+    janela: MES2, bruto,
+    brutoPorPagamento: new Map([["PIX", bruto]]),
+    gastoAnuncios: gastoTotal,
+    despesas: [pct("TAXA_GATEWAY", 5, "PIX"), pct("IMPOSTO", 6), rec(500)],
+  });
+
+  const taxaEfetiva = f.totalDescontos / bruto;
+  const naoGasto = f.impostoAnuncios + f.despesas;
+  const serie = serieDeLucro(receita, gasto, taxaEfetiva, naoGasto);
+  const soma = serie.reduce((a, x) => a + x, 0);
+
+  eq("a SOMA da série de lucro dá o lucro do período", Math.abs(soma - f.lucro) < 0.01, true);
+
+  /* O bucket sem receita tem de sair NEGATIVO — é o defeito que a fórmula
+     proporcional teria escondido, mostrando zero justamente no dia que dói. */
+  eq("bucket com gasto e ZERO receita fica negativo", serie[1] < 0, true);
+  eq("  …e a aproximação proporcional daria zero (o erro evitado)", 0 - 0 * taxaEfetiva, 0);
+
+  /* Controle: o bucket com mais receita tem de ser o maior. Sem ele, "a soma
+     bate" passaria com a série toda achatada no mesmo valor. */
+  eq("o bucket de maior receita é o de maior lucro", serie.indexOf(Math.max(...serie)), 2);
+}
+
 console.log(
   falhas === 0
     ? `\n\x1b[1m\x1b[32m${ok} asserções passaram, 0 falharam.\x1b[0m\n`
