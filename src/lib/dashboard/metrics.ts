@@ -70,7 +70,8 @@ export interface DashboardData {
      */
     pendentesValor: number;
     reembolsadas: number;
-    chargebackRate: number;
+    /** `null` = nenhum evento de venda no periodo. Indefinido, nao 0%. */
+    chargebackRate: number | null;
     /**
      * ⚠️ As cinco abaixo são `number | null`, e `null` significa **indefinido**,
      * nunca zero. Sem venda não existe ticket nem CPA; sem gasto não existe
@@ -87,7 +88,8 @@ export interface DashboardData {
     roas: number | null;
     /** `null` quando não houve custo nenhum — ROI é indefinido, não zero. */
     roi: number | null;
-    margin: number;
+    /** `null` = sem faturamento no periodo. Indefinido, nao 0%. */
+    margin: number | null;
     ctr: number | null;
     clicks: number;
     profit: number;
@@ -609,7 +611,11 @@ function summarize(w: Window, impostoAnunciosPct = 0) {
   // Idem para o topo do funil: "vendas iniciadas" é quanta gente chegou a
   // comprar, não quantos itens foram para o carrinho.
   const totalSalesEvents = contarPedidos(w.sales);
-  const chargebackRate = totalSalesEvents ? (chargebacks / totalSalesEvents) * 100 : 0;
+  /* `null` = NENHUM evento de venda no periodo. Uma taxa de chargeback de
+     "0,00%" afirma que houve movimento e nada foi contestado — que e uma
+     tranquilidade fabricada quando nao houve venda nenhuma. */
+  const taxaCb = div(chargebacks, totalSalesEvents);
+  const chargebackRate = taxaCb === null ? null : taxaCb * 100;
 
   const spend = w.metrics.reduce((a, m) => a + num(m.spend), 0);
   const impressions = w.metrics.reduce((a, m) => a + m.impressions, 0);

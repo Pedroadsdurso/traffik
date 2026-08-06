@@ -59,6 +59,10 @@ export function calcularFunil(entradas: EtapaEntrada[], ticketMedio = 0): Resumo
     // Percentual da MAIOR etapa (método Utmify). Com o maior no denominador,
     // nenhuma etapa passa de 100% — era o que acontecia no método antigo, em
     // que "Visita na página" (220) sobre "Cliques" (98) dava 224,49%.
+    /* ⚠️ Aqui o 0 e CORRETO e fica: `pct` e a LARGURA da barra, nao uma metrica.
+       Sem etapa nenhuma com valor, a barra tem largura zero — que e o desenho
+       certo, nao uma afirmacao sobre conversao. A razao de verdade e a
+       `taxaVsAnterior` logo abaixo, e essa ja devolvia `null`. */
     const pct = maior > 0 ? (e.value / maior) * 100 : 0;
 
     // A taxa vs. anterior continua calculada: deixou de ser o número em

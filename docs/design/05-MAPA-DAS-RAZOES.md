@@ -1,5 +1,33 @@
 # 05 — MAPA DAS RAZÕES COM DENOMINADOR ZERO
 
+> ## ✅ FECHADO EM 06/08/2026 — **0 de 24** com contrato errado
+>
+> O levantamento abaixo fica como está, porque descreve o estado ANTES. O que
+> mudou está no CLAUDE.md, seção "DENOMINADOR ZERO".
+>
+> ### 🔎 A base estava mais pronta do que este mapa sugeria
+>
+> Contraintuitivo, e muda a expectativa de custo: **o trabalho real era no
+> PRODUTOR, quase nada nos consumidores.**
+>
+> Ao tornar `margem` e `chargeback` anuláveis — duas mudanças de tipo em
+> interfaces lidas por dezenas de arquivos — o `tsc` quebrou em **dois lugares,
+> os dois no mesmo arquivo** (`reports/generate.ts:41,48`).
+>
+> A razão: `format.ts` já aceitava `null` em TODOS os formatadores (`brl`, `pct`,
+> `multFmt`) e `financeiro.ts` já tinha campo nulo por causa da correção anterior
+> do ROI. A camada de apresentação estava pronta havia tempo — faltava alguém
+> puxar o gatilho na origem.
+>
+> ⚠️ **Mas o `tsc` só conta metade.** Ele acha quem lê; não acha quem colapsa. A
+> varredura por `?? 0` / `|| 0` / `|| 1` encontrou **6 pontos** que compilavam,
+> mantinham o tipo e desfaziam a correção em silêncio — inclusive o do
+> `chargebackRate`, cuja correção teria nascido inerte.
+>
+> **A conta final:** 2 quebras de compilação, 6 colapsos silenciosos. Se isto
+> valer para a próxima mudança de contrato, espere o mesmo formato — barato no
+> compilador, caro na varredura.
+
 > ✅ **LEVANTAMENTO COMPLETO.** Iniciado em 06/08/2026 (só o item 4) e fechado em
 > 06/08/2026, itens 1, 2, 3 e 5.
 >

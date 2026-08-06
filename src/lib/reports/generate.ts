@@ -16,6 +16,19 @@ function mult(v: number | null): string {
 }
 
 /** Monta o conteúdo do relatório conforme o padrão escolhido pelo usuário. */
+
+/**
+ * O trecho da margem, ou NADA.
+ *
+ * ⛔ Em PROSA, indefinido some — nao vira "—". A regra "vira traco" e de tabela
+ * e de card, onde a celula existe e precisa dizer que esta vazia. Aqui o texto
+ * chega por notificacao, corrido: "12 vendas · ROAS 3,20x" e uma frase
+ * completa; "12 vendas · ROAS 3,20x · margem —" parece defeito de formatacao.
+ */
+function margem(v: number | null): string {
+  return v === null ? "" : ` · margem ${v.toFixed(0)}%`;
+}
+
 function buildContent(
   pattern: ReportPattern,
   k: {
@@ -24,7 +37,7 @@ function buildContent(
     profit: number;
     sales: number;
     roas: number | null;
-    margin: number;
+    margin: number | null;
     cpa: number | null;
     ticket: number | null;
   },
@@ -38,14 +51,14 @@ function buildContent(
   if (pattern === "NOTIFICACOES_CRIATIVAS") {
     return {
       title: "🎨 Performance de hoje",
-      content: `${k.sales} vendas · ROAS ${mult(k.roas)} · margem ${k.margin.toFixed(0)}%`,
+      content: `${k.sales} vendas · ROAS ${mult(k.roas)}${margem(k.margin)}`,
     };
   }
   // STATUS_LUCRO
   const emoji = k.profit >= 0 ? "🟢" : "🔴";
   return {
     title: `${emoji} Status de lucro`,
-    content: `Lucro ${brl(k.profit)} · Faturamento ${brl(k.revenue)} · margem ${k.margin.toFixed(0)}%`,
+    content: `Lucro ${brl(k.profit)} · Faturamento ${brl(k.revenue)}${margem(k.margin)}`,
   };
 }
 

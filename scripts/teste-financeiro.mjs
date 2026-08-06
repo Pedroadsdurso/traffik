@@ -130,7 +130,12 @@ console.log("\n\x1b[1mPrejuízo e ROI indefinido\x1b[0m");
 }
 {
   const f = calcularFinanceiro({ bruto: 0, brutoPorPagamento: new Map(), gastoAnuncios: 0, despesas: [] });
-  eq("tudo zero não divide por zero na margem", f.margem, 0);
+  /* ⚠️ Esta assercao ESPERAVA 0, e o 0 era o defeito. Ela provava que nao havia
+     divisao por zero — e nao havia mesmo —, mas travava no lugar a resposta
+     errada para a pergunta seguinte: "0%" de margem afirma que se vendeu e nada
+     sobrou. Sem faturamento nao ha margem a medir. Teste que codifica o
+     comportamento antigo defende o bug de quem for consertar. */
+  eq("sem faturamento -> margem null (a tela mostra '—'), nunca 0%", f.margem, null);
 }
 {
   // 🔴 O caso que o usuário reportou: painel zerado mostrando −1,00x em vermelho.

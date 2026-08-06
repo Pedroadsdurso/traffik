@@ -1365,23 +1365,60 @@ e o primeiro caso gasta dinheiro. Medido no dev: **2 campanhas disparavam**.
 > Isto é registro de estado, não de conforto: a partir do momento em que existir
 > regra em produção, a mesma pergunta deixa de ter resposta barata.
 
-### Quantos pontos ainda usam o contrato errado: **8 de 24**
+### Quantos pontos usam o contrato errado: **0 de 24** ✅
 
-Dos 24 pontos de cálculo, 15 estavam errados; 7 foram corrigidos (motor de
-regras ×3, séries de sparkline ×4). **Faltam 8:**
+Fechado em 06/08/2026. Motor de regras ×3, séries ×4, criativos ×2, margem,
+chargeback, funil, `rate`, `pctLabel` ×2, donuts.
 
-| # | Onde | Devolve |
-|---|---|---|
-| 1–2 | `ads/creatives.ts:150-151` (CTR, ROAS) | `0` |
-| 3 | `financeiro.ts:385` (margem) | `0` — **e o tipo é `number`, não `number \| null`** |
-| 4 | `dashboard/metrics.ts:603` (chargeback) | `0` — idem |
-| 5 | `funnel.ts:62` | `0` — e a linha 67, na MESMA função, devolve `null` |
-| 6 | `useTraffikState.ts:812` (`rate` do funil) | `"0%"` |
-| 7 | `useTraffikState.ts:770` e `:805` (`pctLabel`) | `0%` via `\|\| 1` — guarda contra `NaN`, não contra indefinido |
-| 8 | `Donut.tsx:79,151,186` · `DonutChart.tsx:46` · `CountryMap.tsx:388` | misto |
+Três dos 24 **continuam devolvendo `0`, e está certo** — são GEOMETRIA, não
+métrica: `funnel.ts:62` (largura da barra), `DonutChart.tsx:46` (fração de
+circunferência) e a fração do sparkline. Sem total, o desenho tem tamanho zero,
+que é o desenho correto. O percentual que a pessoa LÊ passa por outro caminho e
+devolve `"—"`. Estão anotados no código para não serem "corrigidos" por engano.
 
-⚠️ **3 e 4 mudam de TIPO**, e `reports/generate.ts:41,48` faz `k.margin.toFixed(0)`
-sem checagem — quebra alto no `tsc`, que é o desejado.
+Dois arquivos saíram inteiros: `ui/Donut.tsx` e `ui/CountryMap.tsx` eram órfãos
+do Dashboard antigo — tinham o defeito de verdade (`NaN%` sem guarda nenhuma) e
+**consumidor nenhum**.
+
+> ### 🔴 O `|| 1` ERA O PIOR DA LISTA, E POR UM MOTIVO DIFERENTE DOS OUTROS
+> Os outros 🔴 devolviam **zero**, que alguém atento reconhece como "sem dado".
+> O `|| 1` de `srcTotal` e `payTotal` **FABRICAVA um denominador**: com todas as
+> fontes zeradas, `x.total / 1` saía `0%` — percentual plausível, calculado
+> sobre uma unidade que não existe em lugar nenhum.
+>
+> Onde o número inventado aparecia: **na coluna de participação das tabelas de
+> Fontes de tráfego e de Formas de pagamento**, no Dashboard. Não é
+> arredondamento nem fallback — é um número com aparência de medição.
+
+---
+
+## ⛔ COMENTÁRIO QUE LISTA CASOS MORRE NO PRIMEIRO CASO NOVO
+
+O `useTraffikState` tinha um aviso dizendo *"⛔ Estas CINCO não levam `?? 0`"*, e
+ele **falhou exatamente pela porta que tentava fechar**: o `chargebackRate` não
+estava entre as cinco, ganhou `?? 0` na linha seguinte, e a correção dele nasceu
+inerte — compilando, com o tipo certo, sem chegar à tela.
+
+Hoje o comentário descreve a REGRA:
+
+> *"Todo valor que pode ser `null` porque o denominador não existe chega até a
+> apresentação como `null`. Um `?? 0` ou `|| 0` nesta camada compila, mantém o
+> tipo correto e desfaz a correção em silêncio."*
+
+**Ao escrever advertência em comentário, descreva a regra, não a lista.** A lista
+é ilustração; quem protege é a frase.
+
+> ### 🔴 TERCEIRA VEZ NESTA SESSÃO: "PASSA NO BUILD COM A COISA DESLIGADA"
+> | O quê | Como estava |
+> |---|---|
+> | Anel de venda nova no globo | dependia de dado que não existe — foi REMOVIDO, não deixado inerte |
+> | Botão "Filtros" no header | resolvido com CONTRATO: a tela registra a faixa, o header só desenha se alguém registrou |
+> | **`?? 0` sobre valor recém-nulo** | tipo certo, build verde, correção não chega à tela |
+>
+> O denominador comum é sempre o mesmo: **`tsc`, `lint` e `build` não perguntam
+> se a coisa está ligada.** A varredura por `?? 0` / `|| 0` / `|| 1` sobre valor
+> que virou anulável é obrigatória em toda mudança de contrato — a mudança de
+> tipo aparece no compilador, o colapso silencioso não.
 
 ---
 

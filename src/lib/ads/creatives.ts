@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { janelaDoPeriodo, type PeriodoNome } from "@/lib/periodo";
 import { dayEnd, dayKeyInTz, dayStart, keyToDateColumn } from "@/lib/timezone";
 import { chaveDoPedido } from "@/lib/pedidos";
+// A regra de denominador zero e UMA so nesta base. Ver o comentario do `div`.
+import { div } from "@/lib/ads/metrics";
 import { splitPipe } from "@/lib/utm/parse";
 import { CAMPOS_UTM, utmsDaVenda } from "@/lib/vendas/utmsDaVenda";
 
@@ -17,8 +19,10 @@ export interface CreativeRow {
   campaign: string;
   thumbnailUrl: string | null;
   format: string;
-  ctr: number;
-  roas: number;
+  /** `null` = sem impressao. Indefinido, nao zero. */
+  ctr: number | null;
+  /** `null` = sem gasto. Indefinido, nao zero. */
+  roas: number | null;
   spend: number;
   sales: number;
   revenue: number;
@@ -147,8 +151,11 @@ export async function computeCreatives(
       sales: (byId?.sales ?? 0) + (byName?.sales ?? 0),
       revenue: (byId?.revenue ?? 0) + (byName?.revenue ?? 0),
     };
-    const ctr = met.impressions ? (met.clicks / met.impressions) * 100 : 0;
-    const roas = met.spend ? attr.revenue / met.spend : 0;
+    /* Denominador zero é INDEFINIDO, não zero — mesmo contrato do resto da
+       base. Sem impressão não existe CTR; sem gasto não existe ROAS. */
+    const ctrBruto = div(met.clicks, met.impressions);
+    const ctr = ctrBruto === null ? null : ctrBruto * 100;
+    const roas = div(attr.revenue, met.spend);
     return {
       id: a.id,
       name: a.creative?.title || a.creative?.name || a.name,
@@ -165,18 +172,33 @@ export async function computeCreatives(
   });
 
   // "Melhor do dia" = maior ROAS entre os que tiveram gasto.
+  // ⚠️ `roas === null` é justamente "não teve gasto", então o `spend > 0` que já
+  // estava aqui e a checagem de nulo cobrem o mesmo caso — mantidos os dois: o
+  // primeiro é a intenção declarada, o segundo é o que o tipo exige.
   let bestId: string | null = null;
   let bestRoas = 0;
   for (const r of rows) {
-    if (r.spend > 0 && r.roas > bestRoas) {
+    if (r.spend > 0 && r.roas !== null && r.roas > bestRoas) {
       bestRoas = r.roas;
       bestId = r.id;
     }
   }
   if (bestId) rows.find((r) => r.id === bestId)!.best = true;
 
+  /* ⛔ INDEFINIDO VAI PARA O FIM, sempre — nas duas direções que a lista
+     oferece. Um `null` tratado como 0 pela subtração colocaria o criativo SEM
+     GASTO no meio do ranking de ROAS, entre os que renderam pouco. Ele não
+     rendeu pouco: ele não foi medido, e comparar com quem foi é a mesma
+     confusão que este mapa inteiro existe para desfazer. */
   const sortKey = opts.sort;
-  rows.sort((a, b) => b[sortKey] - a[sortKey]);
+  rows.sort((a, b) => {
+    const x = a[sortKey];
+    const y = b[sortKey];
+    if (x === null && y === null) return 0;
+    if (x === null) return 1;
+    if (y === null) return -1;
+    return y - x;
+  });
 
   return rows;
 }

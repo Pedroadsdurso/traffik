@@ -43,6 +43,10 @@ export function DonutChart({
      componente duas vezes, e um acumulador de escopo externo somaria dobrado —
      as fatias sairiam giradas na segunda passada. */
   const arcos = React.useMemo(() => {
+    /* ⚠️ Aqui o 0 e CORRETO e fica. `fracoes` e GEOMETRIA — quanto de
+       circunferencia cada fatia ocupa —, nao uma metrica exibida. Sem total,
+       nenhuma fatia tem arco, que e o desenho certo. O percentual que a pessoa
+       LE vem da legenda, e esse passa por `pct1`, que devolve "—". */
     const fracoes = fatias.map((f) => (total ? f.valor / total : 0));
     return fatias.map((f, i) => ({
       ...f,

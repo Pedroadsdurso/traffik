@@ -132,7 +132,8 @@ export interface Composicao {
   /** Custo total: descontos + anúncios + despesas. Base do ROI. */
   custoTotal: number;
   /** `lucro / bruto` em %. `0` quando não houve faturamento. */
-  margem: number;
+  /** `null` = sem faturamento no periodo. Indefinido, nao 0%. */
+  margem: number | null;
   /**
    * ROI como MULTIPLICADOR (`lucro / custoTotal`).
    *
@@ -382,7 +383,14 @@ export function calcularFinanceiro(opts: {
     lucro,
     totalDescontos,
     custoTotal,
-    margem: bruto ? (lucro / bruto) * 100 : 0,
+    /**
+     * `null` = SEM FATURAMENTO no periodo, entao nao ha margem a medir.
+     *
+     * Devolvia 0, e "0%" de margem se le como "vendi e nao sobrou nada" — uma
+     * afirmacao sobre eficiencia que ninguem mediu. Sem denominador nao existe
+     * percentual; existe ausencia de percentual.
+     */
+    margem: bruto ? (lucro / bruto) * 100 : null,
     /**
      * ⚠️ `null` também quando NÃO HOUVE MOVIMENTO — não só quando o custo é zero.
      *

@@ -14,6 +14,8 @@ import {
 import type { PixelConfigDTO } from "@/lib/actions/pixels";
 import type { RuleDTO } from "@/lib/actions/rules";
 import { TODAS_AS_FORMAS, corFinanceira } from "@/lib/financeiro";
+// A regra de denominador zero é UMA só nesta base. Ver o comentário do `div`.
+import { div } from "@/lib/ads/metrics";
 import { estadoDaConta, podeRastrear } from "@/lib/facebook/contaStatus";
 import { explicarErroDeConta } from "@/lib/facebook/erroMeta";
 import { rotuloDaEspera } from "@/lib/facebook/backoff";
@@ -56,7 +58,7 @@ import {
 import type { CreativeRow } from "@/lib/ads/creatives";
 import type { AdsOverview } from "@/lib/ads/overview";
 import type { DashboardData } from "@/lib/dashboard/metrics";
-import { brl, brl0, buildPoints, elapsed, multFmt, pct, plural, roasFmt } from "@/lib/format";
+import { brl, brl0, buildPoints, elapsed, multFmt, pct, plural, roasFmt, TRACO } from "@/lib/format";
 import { setLastWorkspaceId, type WorkspaceDTO } from "@/lib/actions/workspaces";
 import { DEFAULT_TIMEZONE } from "@/lib/timezone";
 import type { MetricKey } from "./types";
@@ -610,13 +612,23 @@ export function useTraffikState(
   const spend = k?.spend ?? 0;
   const sales = k?.sales ?? 0;
   /**
-   * ⛔ Estas cinco NÃO levam `?? 0`.
+   * ⛔ REGRA DESTA CAMADA — vale para QUALQUER valor, não para uma lista deles.
    *
-   * `null` aqui significa **indefinido** — sem venda não existe ticket nem CPA,
-   * sem gasto não existe ROAS, sem impressão não existe CTR, sem comprador não
-   * existe ARPU. Colapsar para 0 devolve o bug que o servidor acabou de
-   * consertar: "CPA R$ 0,00" se lê como aquisição de graça, e "0,00x" como
-   * empate. Um `?? 0` aqui é invisível e desfaz a correção inteira.
+   * **Todo valor que pode ser `null` porque o denominador não existe chega até a
+   * apresentação como `null`.** Um `?? 0` ou `|| 0` aqui compila, mantém o tipo
+   * correto e **desfaz a correção em silêncio** — o formatador recebe um zero
+   * legítimo e imprime "R$ 0,00" ou "0,00%" como se fosse medição.
+   *
+   * ⚠️ Esta advertência já existiu ENUMERANDO cinco métricas, e foi por isso que
+   * ela falhou: o `chargebackRate` não estava na lista, ganhou `?? 0` na linha
+   * abaixo, e a correção dele nasceu inerte — compilando, com o tipo certo, sem
+   * chegar à tela. **Comentário que lista casos morre no primeiro caso novo;
+   * comentário que descreve a regra sobrevive.**
+   *
+   * O que "indefinido" quer dizer em cada uma: sem venda não existe ticket nem
+   * CPA, sem gasto não existe ROAS, sem impressão não existe CTR, sem comprador
+   * não existe ARPU, sem faturamento não existe margem, sem evento de venda não
+   * existe taxa de chargeback. A lista é ilustração — a regra é a frase acima.
    */
   const ticket = k?.ticket ?? null;
   const cpa = k?.cpa ?? null;
@@ -626,7 +638,7 @@ export function useTraffikState(
   // `null` = sem custo no período, ROI indefinido. Não colapsar para 0: "0,00x"
   // se lê como empate, e empate é diferente de "não dá para calcular".
   const roi = k?.roi ?? null;
-  const margin = k?.margin ?? 0;
+  const margin = k?.margin ?? null;
   const ctr = k?.ctr ?? null;
   const pendentes = k?.pendentes ?? 0;
   const pendentesValor = k?.pendentesValor ?? 0;
@@ -656,7 +668,7 @@ export function useTraffikState(
   })();
   const lucro = k?.profit ?? 0;
   const reembolsadas = k?.reembolsadas ?? 0;
-  const chargebackRate = k?.chargebackRate ?? 0;
+  const chargebackRate = k?.chargebackRate ?? null;
 
   const A = "var(--color-accent-300)";
   const N = "var(--color-neutral-400)";
@@ -761,13 +773,25 @@ export function useTraffikState(
     totalLabel: brl0(p.total),
     barWidth: Math.round((p.total / prodMax) * 100) + "%",
   }));
-  const srcTotal = (d?.sources ?? []).reduce((a, x) => a + x.total, 0) || 1;
+  /** Participação em %, ou "—" quando não há total sobre o que calcular. */
+  const pct1 = (parte: number, total: number) => {
+    const r = div(parte, total);
+    return r === null ? TRACO : Math.round(r * 100) + "%";
+  };
+
+  /* 🔴 AQUI HAVIA `|| 1`, E ELE ERA O PIOR DA LISTA. Os outros defeitos deste
+     mapa devolviam ZERO, que alguém atento reconhece como "sem dado". O `|| 1`
+     FABRICAVA um denominador: com todas as fontes zeradas, `x.total / 1` saía
+     `0%` — um percentual plausível, calculado sobre uma unidade que não existe
+     em lugar nenhum. Não é arredondamento nem fallback: é um número inventado
+     com aparência de medição. */
+  const srcTotal = (d?.sources ?? []).reduce((a, x) => a + x.total, 0);
   const srcMax = Math.max(1, ...(d?.sources ?? []).map((x) => x.total));
   const sources = (d?.sources ?? []).map((x) => ({
     name: x.name,
     total: x.total,
     totalLabel: brl0(x.total),
-    pctLabel: Math.round((x.total / srcTotal) * 100) + "%",
+    pctLabel: pct1(x.total, srcTotal),
     barWidth: Math.round((x.total / srcMax) * 100) + "%",
   }));
   /**
@@ -782,7 +806,7 @@ export function useTraffikState(
     sales: x.sales,
     totalLabel: brl0(x.total),
     // Ticket do posicionamento: faturamento ÷ CONVERSÕES daquele lugar.
-    ticketLabel: x.sales ? brl0(x.total / x.sales) : "—",
+    ticketLabel: (() => { const t = div(x.total, x.sales); return t === null ? TRACO : brl0(t); })(),
     barWidth: Math.round((x.total / placeMax) * 100) + "%",
   }));
   /**
@@ -795,21 +819,26 @@ export function useTraffikState(
    */
   const placementSemDados = Math.max(0, revenue - (d?.byPlacement ?? []).reduce((a, x) => a + x.total, 0));
 
-  const payTotal = (d?.payments ?? []).reduce((a, x) => a + x.total, 0) || 1;
+  const payTotal = (d?.payments ?? []).reduce((a, x) => a + x.total, 0); // ver a nota do `srcTotal`
   const payMax = Math.max(1, ...(d?.payments ?? []).map((x) => x.total));
   const payments = (d?.payments ?? []).map((x) => ({
     name: x.name,
     total: x.total,
     count: x.count,
     totalLabel: brl0(x.total),
-    pctLabel: Math.round((x.total / payTotal) * 100) + "%",
+    pctLabel: pct1(x.total, payTotal),
     barWidth: Math.round((x.total / payMax) * 100) + "%",
   }));
 
   const fn = d?.funnel ?? { cliques: 0, checkouts: 0, vendas: 0 };
   const maxF = Math.max(1, fn.cliques, fn.checkouts, fn.vendas);
   const funH = (n: number) => Math.max(24, Math.round((n / maxF) * 120)) + "px";
-  const rate = (a: number, b: number) => (b ? ((a / b) * 100).toFixed(1).replace(".", ",") : "0") + "%";
+  /* Sem etapa anterior nao existe taxa de conversao — devolvia "0%", que afirma
+     que TODO mundo caiu fora, quando na verdade nao houve de onde cair. */
+  const rate = (a: number, b: number) => {
+    const r = div(a, b);
+    return r === null ? TRACO : (r * 100).toFixed(1).replace(".", ",") + "%";
+  };
   const funnel = [
     { label: "Cliques", count: fn.cliques.toLocaleString("pt-BR"), height: funH(fn.cliques), color: "var(--color-accent-800)", hasRate: false, rate: "" },
     { label: "Checkouts iniciados", count: fn.checkouts.toLocaleString("pt-BR"), height: funH(fn.checkouts), color: "var(--color-accent-600)", hasRate: true, rate: rate(fn.checkouts, fn.cliques) },
@@ -1373,7 +1402,7 @@ export function useTraffikState(
       ];
     })(),
     /** Ticket médio cru — o funil usa para estimar o faturamento perdido. */
-    ticketMedio: k?.ticket ?? 0,
+    ticketMedio: k?.ticket,
     funnelStages: [
       { chaveInfo: "cliques", label: "Cliques no anúncio", curto: "Cliques", value: d?.funnel.cliques ?? 0, fonte: "Meta Ads (métrica diária)" },
       { chaveInfo: "visitas", label: "Visita na página", curto: "Vis. Página", value: d?.funnel.visitas ?? 0, fonte: "Nosso script — 1 por sessão" },
@@ -1933,7 +1962,7 @@ export function useTraffikState(
       despesas: brl(fin?.despesas ?? 0),
       liquido: brl(fin?.liquido ?? 0),
       profit: brl(fin?.lucro ?? 0),
-      margin: pct(fin?.margem ?? 0),
+      margin: pct(fin?.margem ?? null),
       /** Linhas com valor zero somem do painel — ver a nota na FeesView. */
       temCoproducao: (fin?.coproducao ?? 0) > 0,
       temCustoProduto: (fin?.custoProduto ?? 0) > 0,
