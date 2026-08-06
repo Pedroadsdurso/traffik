@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { loadDashboardLayouts } from "@/lib/actions/dashboardLayout";
-import { layoutPadrao, migrarLayout, type LayoutZonas } from "./migrar";
+import { useCallback, useEffect, useState } from "react";
+import { loadDashboardLayouts, resetDashboardLayout, saveLayoutZonas } from "@/lib/actions/dashboardLayout";
+import { MAX_FAIXA, layoutPadrao, migrarLayout, type LayoutZonas } from "./migrar";
+import { CATALOGO_META, type Largura } from "../catalogo";
 
 /**
  * Lê o layout salvo e o entrega já MIGRADO para as três zonas.
@@ -30,13 +31,26 @@ import { layoutPadrao, migrarLayout, type LayoutZonas } from "./migrar";
  * `useTraffikState` passam a precisar de `<Desde>`. Está anotado lá, no ponto
  * exato que quebraria.
  */
-export function useLayoutDashboard(workspaceId?: string | null): {
-  layout: LayoutZonas;
-  /** `true` até a primeira leitura terminar. A tela desenha o padrão enquanto isso. */
-  carregando: boolean;
-} {
+export function useLayoutDashboard(workspaceId?: string | null) {
   const [layout, setLayout] = useState<LayoutZonas>(layoutPadrao);
   const [carregando, setCarregando] = useState(true);
+
+  /**
+   * 🔴 O SNAPSHOT É O QUE FAZ O CANCELAR DESCARTAR DE VERDADE.
+   *
+   * Ele é tirado ao ENTRAR em edição, e o Cancelar restaura a partir dele — não
+   * recarrega do servidor. Recarregar pareceria funcionar e teria um buraco: se
+   * o usuário salvou uma vez, cancelou depois de mudar mais, o "recarregar"
+   * traria o SALVO, não o estado de quando ele entrou. Cancelar tem de desfazer
+   * a sessão de edição inteira.
+   *
+   * ⛔ E nada é gravado até o Salvar. Enquanto `editando` é `true`, tudo vive
+   * aqui — o layout do banco não é tocado. Estado de edição que vaza para o
+   * salvo é pior que não ter Cancelar: a pessoa confia no botão.
+   */
+  const [snapshot, setSnapshot] = useState<LayoutZonas | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const editando = snapshot !== null;
 
   /* ⚠️ O `vivo` não é ritual: trocar de área de trabalho dispara uma segunda
      leitura antes de a primeira voltar, e sem ele a resposta ANTIGA chegaria
@@ -65,5 +79,148 @@ export function useLayoutDashboard(workspaceId?: string | null): {
     };
   }, [workspaceId]);
 
-  return { layout, carregando };
+  /* ── Entrar e sair ─────────────────────────────────────────────────────── */
+  const abrirEdicao = useCallback(() => {
+    /* Cópia PROFUNDA: `paineis` é array de objetos, e um spread raso deixaria o
+       snapshot compartilhando as mesmas referências — mudar a largura de um
+       painel alteraria os dois, e o Cancelar restauraria o estado já sujo. */
+    setSnapshot(JSON.parse(JSON.stringify(layout)) as LayoutZonas);
+  }, [layout]);
+
+  const cancelar = useCallback(() => {
+    if (snapshot) setLayout(snapshot);
+    setSnapshot(null);
+  }, [snapshot]);
+
+  const salvar = useCallback(async () => {
+    setSalvando(true);
+    try {
+      await saveLayoutZonas(layout, workspaceId);
+      setSnapshot(null);
+    } finally {
+      setSalvando(false);
+    }
+  }, [layout, workspaceId]);
+
+  const redefinir = useCallback(async () => {
+    setSalvando(true);
+    try {
+      await resetDashboardLayout("desktop", workspaceId);
+      setLayout(layoutPadrao());
+      setSnapshot(null);
+    } finally {
+      setSalvando(false);
+    }
+  }, [workspaceId]);
+
+  /* ── As operações das três zonas ───────────────────────────────────────────
+     ⛔ Cada uma aplica a REGRA DA ZONA, e é por isso que elas moram aqui e não
+     na tela: a tela desenha três listas parecidas, e se as regras estivessem lá
+     a terceira acabaria sem a validação da primeira. */
+
+  /** Troca a posição de duas métricas DENTRO da mesma zona. Nunca entre zonas. */
+  const moverMetrica = useCallback((zona: "hero" | "faixa", de: number, para: number) => {
+    setLayout((l) => {
+      const lista = [...l[zona]];
+      if (de < 0 || para < 0 || de >= lista.length || para >= lista.length) return l;
+      const [x] = lista.splice(de, 1);
+      lista.splice(para, 0, x!);
+      return { ...l, [zona]: lista };
+    });
+  }, []);
+
+  const moverPainel = useCallback((de: number, para: number) => {
+    setLayout((l) => {
+      const lista = [...l.paineis];
+      if (de < 0 || para < 0 || de >= lista.length || para >= lista.length) return l;
+      const [x] = lista.splice(de, 1);
+      lista.splice(para, 0, x!);
+      return { ...l, paineis: lista };
+    });
+  }, []);
+
+  /**
+   * Põe uma métrica no HERO. `substituir` é o índice de quem sai.
+   *
+   * ⛔ O HERO TEM EXATAMENTE 4, SEMPRE. Não há "adicionar" quando está cheio —
+   * há TROCAR. É por isso que a tela pergunta qual substituir em vez de recusar
+   * calado: recusar não diz o que fazer, e deixar em 3 quebra a fileira.
+   */
+  const trocarHero = useCallback((metrica: string, substituir: number) => {
+    setLayout((l) => {
+      if (substituir < 0 || substituir >= l.hero.length) return l;
+      const hero = [...l.hero];
+      const antigo = hero[substituir]!;
+      hero[substituir] = metrica;
+      /* Quem saiu do hero vai para a FAIXA, se couber. Sumir com a métrica que
+         o usuário tinha escolhido seria perder a escolha dele sem avisar. */
+      const faixa = l.faixa.filter((m) => m !== metrica);
+      if (!faixa.includes(antigo) && faixa.length < MAX_FAIXA) faixa.push(antigo);
+      return { ...l, hero, faixa };
+    });
+  }, []);
+
+  /** `true` quando a faixa está no teto — a tela usa para bloquear COM AVISO. */
+  const faixaCheia = layout.faixa.length >= MAX_FAIXA;
+
+  const addFaixa = useCallback((metrica: string) => {
+    setLayout((l) => {
+      if (l.faixa.length >= MAX_FAIXA) return l; // guarda; a tela avisa antes
+      if (l.faixa.includes(metrica) || l.hero.includes(metrica)) return l;
+      return { ...l, faixa: [...l.faixa, metrica] };
+    });
+  }, []);
+
+  const removerFaixa = useCallback((metrica: string) => {
+    setLayout((l) => ({ ...l, faixa: l.faixa.filter((m) => m !== metrica) }));
+  }, []);
+
+  const addPainel = useCallback((id: string) => {
+    setLayout((l) => {
+      const meta = CATALOGO_META.find((b) => b.id === id);
+      if (!meta || l.paineis.some((p) => p.id === id)) return l;
+      return { ...l, paineis: [...l.paineis, { id, largura: meta.larguraPadrao }] };
+    });
+  }, []);
+
+  const removerPainel = useCallback((id: string) => {
+    setLayout((l) => ({ ...l, paineis: l.paineis.filter((p) => p.id !== id) }));
+  }, []);
+
+  /**
+   * Troca a largura de um painel.
+   *
+   * ⛔ SÓ ACEITA LARGURA QUE O BLOCO DECLAROU. É o que separa "escolher entre
+   * opções" de redimensionamento livre — e a guarda fica aqui, não na tela,
+   * porque a tela só oferece as permitidas e uma segunda validação divergiria.
+   */
+  const trocarLargura = useCallback((id: string, largura: Largura) => {
+    setLayout((l) => {
+      const meta = CATALOGO_META.find((b) => b.id === id);
+      if (!meta || !(meta.larguras as readonly Largura[]).includes(largura)) return l;
+      return { ...l, paineis: l.paineis.map((p) => (p.id === id ? { ...p, largura } : p)) };
+    });
+  }, []);
+
+  return {
+    layout,
+    carregando,
+    editando,
+    salvando,
+    faixaCheia,
+    abrirEdicao,
+    cancelar,
+    salvar,
+    redefinir,
+    moverMetrica,
+    moverPainel,
+    trocarHero,
+    addFaixa,
+    removerFaixa,
+    addPainel,
+    removerPainel,
+    trocarLargura,
+  };
 }
+
+export type EstadoLayout = ReturnType<typeof useLayoutDashboard>;

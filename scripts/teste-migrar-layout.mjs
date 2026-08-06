@@ -170,6 +170,60 @@ console.log("\n\x1b[1mO layout REAL do produto (defaultLayout de blocks.ts)\x1b[
   }
 }
 
+
+// ── O ENVELOPE v2 (o que o modo de edição grava) ───────────────────────────
+//
+// 🔴 UM LAYOUT v2 PASSA PELAS MESMAS REGRAS DE UM ANTIGO. Confiar na marca `v:2`
+// para pular a validação é confiar que o passado obedeceu regras que só existem
+// no presente — e o payload pode ter vindo de uma versão anterior do editor, de
+// edição manual, ou de um restore de backup.
+console.log("\n\x1b[1mO envelope v2\x1b[0m");
+{
+  const v2 = (o) => migrarLayout({ v: 2, hero: [], faixa: [], paineis: [], ...o });
+
+  eq("v2 é reconhecido e NÃO passa pela migração de grid",
+     v2({ hero: ["vendas", "cpa", "roas", "margem"], faixa: ["ctr"], paineis: [{ id: "funil", largura: "metade" }] }).hero,
+     ["vendas", "cpa", "roas", "margem"]);
+
+  /* GUARDA: hero v2 com menos de 4 — completa, igual ao caminho antigo. */
+  eq("v2 com hero de 2 é completado até 4", v2({ hero: ["vendas", "cpa"] }).hero.length, 4);
+
+  /* GUARDA: bloco que saiu do catálogo DEPOIS de gravado. */
+  const r = v2({ paineis: [{ id: "funil", largura: "metade" }, { id: "bloco-que-morreu", largura: "cheia" }] });
+  eq("v2 descarta bloco fora do catálogo", r.paineis.map((p) => p.id), ["funil"]);
+
+  /* 🔴 GUARDA: largura que o bloco NÃO declara. `funil` aceita um-terco/metade;
+     um `cheia` gravado (por versão antiga ou edição manual) cai na padrão DELE,
+     não é aceito. Sem isto o modo de edição mostraria uma largura que ele mesmo
+     não oferece. */
+  eq("v2 com largura não declarada cai na padrão do bloco",
+     v2({ paineis: [{ id: "funil", largura: "cheia" }] }).paineis[0].largura, "um-terco");
+  eq("  …e a largura declarada é mantida",
+     v2({ paineis: [{ id: "funil", largura: "metade" }] }).paineis[0].largura, "metade");
+
+  /* GUARDA: faixa acima do teto e duplicata entre hero e faixa. */
+  eq("v2 respeita o teto da faixa",
+     v2({ hero: ["a","b","c","d"], faixa: ["m1","m2","m3","m4","m5","m6","m7","m8","m9","m10"] }).faixa.length, MAX_FAIXA);
+  eq("v2 não deixa a mesma métrica no hero E na faixa",
+     v2({ hero: ["vendas","cpa","roas","margem"], faixa: ["vendas","ctr"] }).faixa, ["ctr"]);
+
+  /* GUARDA: v2 corrompido. */
+  /* 🔴 LISTA VAZIA VÁLIDA != CAMPO CORROMPIDO, e a assercao existe porque eu
+     tinha colapsado os dois. No modo de edicao o usuario PODE remover todos os
+     paineis; um `[]` legitimo caindo no padrao desfaria a escolha dele em
+     silencio no recarregamento. */
+  eq("v2 com `paineis` NÃO-array cai no padrão (corrupção)",
+     migrarLayout({ v: 2, hero: "x", faixa: null, paineis: "y" }).paineis.length, layoutPadrao().paineis.length);
+  eq("v2 com `paineis: []` RESPEITA a escolha (o usuário removeu todos)",
+     v2({ paineis: [] }).paineis.length, 0);
+  eq("  …e ainda entrega 4 heros", migrarLayout({ v: 2, hero: "x", faixa: null, paineis: "y" }).hero.length, 4);
+
+  /* O CONTROLE: sem a marca, é grid antigo. Se `ehLayoutV2` ficasse frouxo e
+     aceitasse qualquer objeto, o caminho de migração morreria em silêncio. */
+  eq("objeto SEM `v:2` não é tratado como v2 (vai para o padrão)",
+     migrarLayout({ hero: ["vendas"] }), layoutPadrao());
+}
+
 console.log(
   falhas === 0
     ? `\n\x1b[1m\x1b[32m${ok} asserções passaram, 0 falharam.\x1b[0m\n`

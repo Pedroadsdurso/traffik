@@ -31,6 +31,56 @@
 
 import { CATALOGO_META, type Largura } from "../catalogo";
 
+/** O envelope gravado hoje. `v` é o que separa dele do grid antigo. */
+export interface LayoutV2 extends LayoutZonas {
+  v: 2;
+}
+
+function ehLayoutV2(x: unknown): x is LayoutV2 {
+  return !!x && typeof x === "object" && !Array.isArray(x) && (x as LayoutV2).v === 2;
+}
+
+/**
+ * Um layout v2 vindo do banco ainda precisa passar pelas MESMAS regras.
+ *
+ * ⛔ Não é paranoia: o payload pode ter sido gravado por uma versão anterior do
+ * modo de edição, editado à mão, ou conter um bloco que saiu do catálogo depois.
+ * **Confiar em `v: 2` para pular a validação é confiar que o passado obedeceu
+ * regras que só existem no presente.**
+ */
+function sanearV2(raw: LayoutV2): LayoutZonas {
+  const padrao = layoutPadrao();
+  const hero = Array.isArray(raw.hero) ? raw.hero.filter((x) => typeof x === "string").slice(0, 4) : [];
+  for (const m of HERO_PADRAO) {
+    if (hero.length >= 4) break;
+    if (!hero.includes(m)) hero.push(m);
+  }
+  const faixa = Array.isArray(raw.faixa)
+    ? raw.faixa.filter((x) => typeof x === "string" && !hero.includes(x)).slice(0, MAX_FAIXA)
+    : padrao.faixa;
+
+  /* 🔴 LISTA VAZIA VÁLIDA ≠ CAMPO CORROMPIDO, e a diferença é uma escolha do
+     usuário. No modo de edição ele PODE remover todos os painéis; se um
+     `paineis: []` legítimo caísse no padrão, a escolha dele seria desfeita em
+     silêncio no recarregamento — e ele não teria como saber por quê.
+
+     Só o campo que NÃO É ARRAY cai no padrão: aí não houve escolha, houve
+     corrupção. É a mesma distinção de "célula vazia ≠ célula zero", aplicada a
+     um array. */
+  if (!Array.isArray(raw.paineis)) return { hero, faixa, paineis: padrao.paineis };
+
+  const paineis: LayoutZonas["paineis"] = [];
+  for (const p of raw.paineis) {
+    const meta = CATALOGO_META.find((b) => b.id === p?.id);
+    if (!meta) continue; // bloco que saiu do catálogo depois de gravado
+    if (paineis.some((x) => x.id === meta.id)) continue;
+    /* Largura que o bloco não declara vira a padrão DELE — nunca a gravada. */
+    const largura = (meta.larguras as readonly Largura[]).includes(p.largura) ? p.largura : meta.larguraPadrao;
+    paineis.push({ id: meta.id, largura });
+  }
+  return { hero, faixa, paineis };
+}
+
 /** O item do grid antigo, como está gravado no `DashboardLayout.layout`. */
 export interface ItemAntigo {
   i: string;
@@ -127,6 +177,18 @@ export function larguraMaisProxima(colunas: number, permitidas: Largura[]): Larg
  */
 export function migrarLayout(bruto: unknown): LayoutZonas {
   const padrao = layoutPadrao();
+
+  /* ── FORMA NOVA (v2) ──────────────────────────────────────────────────────
+     🔴 O PAYLOAD É VERSIONADO, e não foi capricho: as três zonas NÃO são um
+     grid, e espremê-las de volta em `{i,x,y,w,h}` para reusar o formato antigo
+     perderia informação (qual zona? qual largura declarada?) e obrigaria a
+     migração a rodar em toda leitura de um layout que ela mesma acabou de
+     escrever — reinterpretando o próprio resultado, que é onde arranjo salvo
+     vira arranjo diferente do salvo.
+
+     `v: 2` é a marca. Sem ela, é grid antigo e migra. */
+  if (ehLayoutV2(bruto)) return sanearV2(bruto);
+
   if (!Array.isArray(bruto) || bruto.length === 0) return padrao;
 
   try {

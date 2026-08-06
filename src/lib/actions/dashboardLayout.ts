@@ -95,3 +95,37 @@ export async function resetDashboardLayout(viewport: Viewport, workspaceId?: str
   await prisma.dashboardLayout.deleteMany({ where: { userId, workspaceId: wsId, viewport } });
   return { ok: true };
 }
+
+
+/* ── LAYOUT v2 — as três zonas ──────────────────────────────────────────────
+   ⚠️ Grava no MESMO `DashboardLayout.layout`, que é `Json`. O envelope leva
+   `v: 2` e a leitura decide: com a marca é forma nova, sem ela é grid antigo e
+   passa pela migração. Uma segunda tabela para o mesmo conceito daria dois
+   lugares para o layout de um usuário morar, e o dia em que divergirem ninguém
+   saberia qual vale.
+
+   ⛔ A validação NÃO acontece aqui: ela vive em `migrarLayout`, na LEITURA. É de
+   propósito — o payload pode chegar ao banco por outro caminho (edição manual,
+   versão futura, restore de backup), e validar só na escrita deixaria a leitura
+   confiando num contrato que ela não verificou. */
+export async function saveLayoutZonas(
+  layout: { hero: string[]; faixa: string[]; paineis: { id: string; largura: string }[] },
+  workspaceId?: string | null,
+): Promise<{ ok: true }> {
+  const userId = await requireUserId();
+  const wsId = await resolverArea(workspaceId);
+  const payload = { v: 2, ...layout } as unknown as Prisma.InputJsonValue;
+
+  const existente = await prisma.dashboardLayout.findFirst({
+    where: { userId, workspaceId: wsId, viewport: "desktop" },
+    select: { id: true },
+  });
+  if (existente) {
+    await prisma.dashboardLayout.update({ where: { id: existente.id }, data: { layout: payload } });
+  } else {
+    await prisma.dashboardLayout.create({
+      data: { userId, workspaceId: wsId, viewport: "desktop", layout: payload },
+    });
+  }
+  return { ok: true };
+}
