@@ -1566,6 +1566,29 @@ Hoje o comentário descreve a REGRA:
 > que virou anulável é obrigatória em toda mudança de contrato — a mudança de
 > tipo aparece no compilador, o colapso silencioso não.
 >
+> ### 🔴🔴 PROTEÇÃO MORTA — a subfamília, e ela é a pior de todas
+>
+> Os casos 1–3 eram **funcionalidade** morta: o recurso não fazia nada, e a
+> ausência era detectável usando o produto. A partir do 6º apareceu outra
+> subfamília, e ela engana de um jeito diferente:
+>
+> | | O que era | Por que é pior |
+> |---|---|---|
+> | **hachura do heatmap** | existia para distinguir "sem observação" de "zero", e saía `rgba(0,0,0,0)` | falhava exatamente no que existia para garantir |
+> | **asserção da série de lucro** | o comentário AFIRMAVA proteger a sincronia entre o teste e `buildChart`; protege só a propriedade | um teste que promete cobertura que não tem |
+>
+> **Proteção morta é pior que funcionalidade morta porque quem a colocou PARA DE
+> VIGIAR o problema.** Funcionalidade que não funciona incomoda até alguém
+> consertar; proteção que não protege produz silêncio — e o silêncio é lido como
+> "está coberto".
+>
+> ⛔ **Ao escrever qualquer guarda — filtro, asserção, validação, fallback —
+> pergunte o que a faria DISPARAR, e produza esse caso uma vez.** Guarda que
+> nunca disparou na vida não é guarda; é comentário com sintaxe de código.
+>
+> ⚠️ E se a guarda tiver limite (uma cópia que pode divergir, um caso que ela não
+> cobre), **o limite vai escrito nela**. Foi o que faltou nas duas acima.
+
 > ### 🔴🔴 O 4º É O PIOR, E POR UM MOTIVO NOVO
 > Os três primeiros deixavam **funcionalidade** morta. O quarto deixou a
 > **navegação** morta: `/dashboard/integracoes` abria por URL direta e **voltava
