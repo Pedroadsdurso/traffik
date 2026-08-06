@@ -14,6 +14,7 @@ import {
 import type { PixelConfigDTO } from "@/lib/actions/pixels";
 import type { RuleDTO } from "@/lib/actions/rules";
 import { TODAS_AS_FORMAS, corFinanceira } from "@/lib/financeiro";
+import { contarUnicasAtivas } from "@/lib/despesas/rateio";
 // A regra de denominador zero é UMA só nesta base. Ver o comentário do `div`.
 import { div } from "@/lib/ads/metrics";
 import { estadoDaConta, podeRastrear } from "@/lib/facebook/contaStatus";
@@ -667,6 +668,7 @@ export function useTraffikState(
     return "após taxas e impostos";
   })();
   const lucro = k?.profit ?? 0;
+  const unicasFora = contarUnicasAtivas(s.expenses);
   const reembolsadas = k?.reembolsadas ?? 0;
   const chargebackRate = k?.chargebackRate ?? null;
 
@@ -720,7 +722,15 @@ export function useTraffikState(
       label: "Lucro",
       value: brl(lucro),
       delta: null, invertido: false, trendColor: N, trendPath: UP_PATH,
-      trendLabel: "líquido − anúncios − despesas",
+      /* 🔴 O AVISO VAI NO CARD, não só no gráfico. Despesa única fica fora do
+         cálculo (o schema não guarda quando ela ocorreu), e o card de Lucro é a
+         primeira tela onde o número seria diferente por causa dela. Custo que
+         some sem avisar onde o lucro aparece é o mesmo erro do rateio, na
+         direção oposta. */
+      trendLabel:
+        unicasFora > 0
+          ? `líquido − anúncios − despesas · ${unicasFora} única${unicasFora > 1 ? "s" : ""} fora do cálculo`
+          : "líquido − anúncios − despesas",
       cor: corFinanceira(lucro, "lucro"),
     },
     gasto: { label: "Gasto total", value: brl(spend), ...trendOf("spend", true) },
@@ -968,6 +978,17 @@ export function useTraffikState(
          de reverter uma string em reais. O formatado FICA — quem já consome não
          pode quebrar. */
       value: e.amount,
+      /** A frequência cadastrada — hoje ela É respeitada pelo rateio. */
+      recurrence: e.recurrence,
+      /**
+       * 🔴 `true` = esta linha NÃO entra no cálculo do lucro.
+       *
+       * Despesa única não tem data de ocorrência no schema, então não há em que
+       * período somá-la. Ela fica de fora — mas a linha tem de DIZER isso, aqui
+       * e no card de Lucro. Custo que some em silêncio é o defeito que o rateio
+       * acabou de consertar, na direção oposta.
+       */
+      foraDoCalculo: e.recurrence === "UNICA",
       remove: async () => {
         await deleteExpense(e.id);
         setS((st) => ({ ...st, expenses: st.expenses.filter((x) => x.id !== e.id) }));
@@ -2008,6 +2029,24 @@ export function useTraffikState(
       liquido: brl(fin?.liquido ?? 0),
       profit: brl(fin?.lucro ?? 0),
       margin: pct(fin?.margem ?? null),
+      /**
+       * O break-even, NÚMERO e rótulo — nesta ordem, e os dois.
+       *
+       * ⛔ Só o formatado foi o defeito original de `finance` (mapa das razões,
+       * item 5): quem precisa desenhar a linha tem de reverter "R$ 1.234,00" em
+       * reais. O `LineChart` consome `breakEven`; o painel de Taxas consome
+       * `breakEvenLabel`. Nada de `?? 0` — `null` é "não dá para calcular".
+       */
+      breakEven: fin?.breakEven ?? null,
+      breakEvenLabel: brl(fin?.breakEven ?? null),
+      /**
+       * Quantas despesas ÚNICAS ativas ficaram FORA do cálculo.
+       *
+       * 🔴 Custo que sumiu do cálculo sem avisar na tela onde o lucro aparece é
+       * o mesmo erro que o rateio acabou de consertar, na direção oposta. Este
+       * número existe para o card de Lucro e o break-even poderem dizer.
+       */
+      unicasForaDoCalculo: unicasFora,
       /** Linhas com valor zero somem do painel — ver a nota na FeesView. */
       temCoproducao: (fin?.coproducao ?? 0) > 0,
       temCustoProduto: (fin?.custoProduto ?? 0) > 0,

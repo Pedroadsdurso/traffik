@@ -1,6 +1,8 @@
 import type { PaymentMethod } from "@/generated/prisma/enums";
 import type { ExpenseRecurrence } from "@/generated/prisma/enums";
 import { ratearDespesa } from "@/lib/despesas/rateio";
+// A regra de denominador zero é UMA só nesta base. Ver o comentário do `div`.
+import { div } from "@/lib/ads/metrics";
 
 /**
  * # Faturamento líquido e lucro — UMA conta, um lugar
@@ -143,6 +145,24 @@ export interface Composicao {
    * despesas). É o `expenses.total` que o resto do código já esperava.
    */
   totalDescontos: number;
+  /**
+   * A receita bruta em que o **lucro chega a zero**, no período.
+   *
+   * ⚠️ **ESTIMATIVA, não constante.** A taxa efetiva é medida sobre as vendas
+   * DESTE período, então o break-even se move com o mix de produtos: um período
+   * com mais coprodução tem break-even mais alto. A tela precisa dizer isso.
+   *
+   * ⛔ ALTERNATIVA DESCARTADA, e o motivo, para ninguém "consertar" depois:
+   * derivar a taxa das CONFIGURAÇÕES de Taxas e Despesas em vez do realizado.
+   * A configuração não sabe qual produto foi vendido, e coprodução e custo de
+   * produto variam por produto — a taxa configurada erraria em toda operação
+   * com mais de um produto, que é o caso normal. Medir o realizado erra menos e
+   * erra de forma visível.
+   *
+   * `null` = não dá para calcular: sem faturamento no período (não há taxa a
+   * medir) ou com os descontos comendo 100%+ da receita (nenhuma receita empata).
+   */
+  breakEven: number | null;
   /** Custo total: descontos + anúncios + despesas. Base do ROI. */
   custoTotal: number;
   /** `lucro / bruto` em %. `0` quando não houve faturamento. */
@@ -401,6 +421,36 @@ export function calcularFinanceiro(opts: {
   const lucro = liquido - gastoAnuncios - impostoAnuncios - recorrentes;
   const custoTotal = totalDescontos + gastoAnuncios + impostoAnuncios + recorrentes;
 
+  /* ── BREAK-EVEN ───────────────────────────────────────────────────────────
+     ⛔ ELE MORA AQUI, COLADO NO `lucro`, E ISSO É A GARANTIA. Break-even e Lucro
+     consomem os MESMOS componentes de custo — se um dia mudarem, mudam juntos,
+     e a linha de cima é a única definição de quais são. Fórmula em outro arquivo
+     divergiria da de cá, e a tela mostraria a linha de equilíbrio marcando lucro
+     zero num ponto em que o card ao lado diz prejuízo. Dois blocos vizinhos se
+     contradizendo é pior que não ter a linha.
+
+     A conta é o `lucro` acima igualado a zero e resolvido para `bruto`:
+
+       bruto − totalDescontos(bruto) − custosFixos = 0
+       bruto × (1 − taxaEfetiva)                   = custosFixos
+       bruto                                        = custosFixos / (1 − taxaEfetiva)
+
+     `custosFixos` são os três que NÃO escalam com a receita — os mesmos que o
+     card de Lucro subtrai depois do líquido. `taxaEfetiva` é o que os
+     proporcionais (gateway, coprodução, imposto, custo de produto) comeram do
+     faturamento NESTE período. */
+  const custosFixos = gastoAnuncios + impostoAnuncios + recorrentes;
+  const taxaEfetiva = div(totalDescontos, bruto);
+  const breakEven =
+    /* Sem faturamento não há como medir a taxa efetiva — e sem ela não há
+       break-even, só um chute. `null`, e a tela diz que não dá para calcular. */
+    taxaEfetiva === null || taxaEfetiva >= 1
+      ? null
+      : /* `taxaEfetiva >= 1` é o outro indefinido: os descontos comem 100% ou
+           mais da receita, e então NENHUMA receita empata. Matematicamente daria
+           infinito ou negativo; desenhar qualquer linha ali seria mentir. */
+        div(custosFixos, 1 - taxaEfetiva);
+
   return {
     bruto,
     gateway,
@@ -421,6 +471,7 @@ export function calcularFinanceiro(opts: {
      * afirmacao sobre eficiencia que ninguem mediu. Sem denominador nao existe
      * percentual; existe ausencia de percentual.
      */
+    breakEven,
     margem: bruto ? (lucro / bruto) * 100 : null,
     /**
      * ⚠️ `null` também quando NÃO HOUVE MOVIMENTO — não só quando o custo é zero.

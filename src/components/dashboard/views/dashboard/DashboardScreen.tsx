@@ -458,11 +458,17 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
               pontos={pontos}
               rotuloA="Receita"
               rotuloB="Gasto"
-              /* ⚠️ `null` de propósito: o break-even vem de Taxas e Despesas e o
-                 hook só expõe os valores JÁ FORMATADOS em texto. Desenhar uma
-                 linha em zero seria pior que omiti-la — pareceria que qualquer
-                 receita acima de zero é lucro. Ver a pergunta em aberto. */
-              breakEven={null}
+              /* ✅ O break-even agora EXISTE e é NÚMERO. Ele nasce colado ao
+                 `lucro` em `financeiro.ts`, consumindo os MESMOS custos fixos
+                 que o card de Lucro subtrai — senão a linha marcaria equilíbrio
+                 num ponto em que o card ao lado diz prejuízo. */
+              breakEven={v.finance.breakEven}
+              semBreakEven={
+                v.finance.breakEven == null && (v.metricCards.faturamento?.value ?? "") !== ""
+                  ? "Break-even indisponível: sem faturamento no período não dá para medir a taxa efetiva."
+                  : null
+              }
+              unicasFora={v.finance.unicasForaDoCalculo}
               formatar={brl0}
             />
           ) : null}

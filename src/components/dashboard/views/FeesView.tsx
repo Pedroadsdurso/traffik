@@ -295,6 +295,16 @@ function CampoForm({ children }: { children: React.ReactNode }) {
   return <div style={sx("flex:1 1 140px;min-width:0")}>{children}</div>;
 }
 
+
+/** O período de cada frequência, na voz do usuário. `UNICA` não tem sufixo. */
+const SUFIXO_FREQ: Record<string, string> = {
+  DIARIA: "/dia",
+  SEMANAL: "/semana",
+  MENSAL: "/mês",
+  ANUAL: "/ano",
+  UNICA: "",
+};
+
 export function FeesView({ v }: { v: TraffikView }) {
   /**
    * 🐛 Os campos do formulário vivem AQUI, não no `useTraffikState`.
@@ -611,9 +621,31 @@ export function FeesView({ v }: { v: TraffikView }) {
             )}
             {v.despesaRows.map((d) => (
               <div key={d.id} style={sx("display:flex;align-items:center;justify-content:space-between;gap:var(--space-3);padding:var(--space-2) 0")}>
-                <span style={sx("font-size:14px")}>{d.name}</span>
+                <span style={sx("font-size:14px;min-width:0")}>
+                  {d.name}
+                  {/* 🔴 O MARCADOR É OBRIGATÓRIO, e é aqui que ele nasce: esta é a
+                      tela onde a pessoa CADASTRA. Despesa única não tem data de
+                      ocorrência no schema, então não há período em que somá-la —
+                      ela fica fora do cálculo do lucro. Sem dizer aqui, o usuário
+                      cadastra um custo, vê a linha na lista e conclui que ele
+                      está sendo contado. */}
+                  {d.foraDoCalculo && (
+                    <span
+                      style={sx("margin-left:8px;font-size:11px;color:var(--color-accent-300)")}
+                      title="Despesa única não tem data de ocorrência, então não dá para saber em que período ela entra. Ela não é somada ao custo nem ao break-even."
+                    >
+                      fora do cálculo
+                    </span>
+                  )}
+                </span>
                 <div style={sx("display:flex;align-items:center;gap:10px")}>
-                  <span style={sx("font-variant-numeric:tabular-nums")}>{d.valueLabel}/mês</span>
+                  {/* ⚠️ Era `/mês` FIXO em toda linha — inclusive nas anuais e nas
+                      diárias. O sufixo mentia sobre a frequência que a própria
+                      tela deixa cadastrar, e agora que o rateio a respeita a
+                      mentira ficaria visível no número. */}
+                  <span style={sx("font-variant-numeric:tabular-nums")}>
+                    {d.valueLabel}{SUFIXO_FREQ[d.recurrence] ?? ""}
+                  </span>
                   <RemoveBtn onClick={d.remove} />
                 </div>
               </div>

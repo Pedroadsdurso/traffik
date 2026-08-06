@@ -19,12 +19,19 @@ import * as React from "react";
 
 export type PontoSerie = { rotulo: string; a: number; b: number };
 
+const AVISO_ESTIMATIVA =
+  "A taxa efetiva (gateway, coprodução, imposto e custo de produto) é medida sobre as vendas " +
+  "deste período, então o break-even se move com o mix de produtos vendidos. Ele é uma " +
+  "estimativa do período, não um valor fixo.";
+
 export function LineChart({
   pontos,
   rotuloA = "Receita",
   rotuloB = "Gasto",
   /** Linha tracejada. `null` = não configurado; não inventamos zero. */
   breakEven = null,
+  semBreakEven = null,
+  unicasFora = 0,
   formatar,
   altura = 260,
 }: {
@@ -32,6 +39,10 @@ export function LineChart({
   rotuloA?: string;
   rotuloB?: string;
   breakEven?: number | null;
+  /** Por que não há break-even, quando há um motivo melhor que "não configurado". */
+  semBreakEven?: string | null;
+  /** Quantas despesas ÚNICAS ativas ficaram fora do cálculo. */
+  unicasFora?: number;
   formatar: (n: number) => string;
   altura?: number;
 }) {
@@ -67,12 +78,37 @@ export function LineChart({
         <Legenda cor="var(--tk-success)" texto={rotuloA} />
         <Legenda cor="var(--tk-text-muted)" texto={rotuloB} />
         {breakEven != null ? (
-          <Legenda cor="var(--tk-warning)" texto={`Break-even ${formatar(breakEven)}`} tracejada />
-        ) : (
-          <span className="text-caption text-text-muted">
-            Break-even não configurado —{" "}
-            <a className="text-primary" href="/dashboard/taxas">defina em Taxas e Despesas</a>
+          /* ⚠️ "(estimado pelo período)" NÃO é modéstia: a taxa efetiva é medida
+             sobre as vendas DESTE período, então a linha se move com o mix de
+             produtos. Sem o aviso ela vira promessa — e uma linha de equilíbrio
+             que promete precisão é pior que uma que admite ser estimativa. A
+             explicação inteira está no `title`, que é onde cabe. */
+          <span title={AVISO_ESTIMATIVA} style={{ cursor: "help" }}>
+            <Legenda cor="var(--tk-warning)" texto={`Break-even ${formatar(breakEven)} (estimado pelo período)`} tracejada />
           </span>
+        ) : (
+          <span className="text-caption text-text-muted" title={semBreakEven ?? undefined}>
+            {semBreakEven ?? (
+              <>
+                Break-even não configurado —{" "}
+                <a className="text-primary" href="/dashboard/taxas">defina em Taxas e Despesas</a>
+              </>
+            )}
+          </span>
+        )}
+        {unicasFora > 0 && (
+          /* 🔴 O CUSTO QUE SUMIU PRECISA APARECER ONDE O NÚMERO SERIA DIFERENTE
+             POR CAUSA DELE. Despesa única fica fora do cálculo porque o schema
+             não guarda quando ela ocorreu — mas some no gráfico, no card de
+             Lucro e na linha de Taxas, nunca em silêncio. */
+          <a
+            className="text-caption"
+            href="/dashboard/taxas"
+            style={{ color: "var(--tk-warning)" }}
+            title="Despesa única não tem data de ocorrência, então não dá para saber em que período ela entra. Ela não é somada ao custo."
+          >
+            {unicasFora === 1 ? "1 despesa única fora do cálculo" : `${unicasFora} despesas únicas fora do cálculo`}
+          </a>
         )}
       </div>
 

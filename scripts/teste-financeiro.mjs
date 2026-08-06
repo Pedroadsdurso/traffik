@@ -457,6 +457,53 @@ console.log("\n\x1b[1mRateio da despesa recorrente\x1b[0m");
   eq("  …nem a anual", so([rec(6000, "ANUAL")], umDia) < 6000, true);
 }
 
+
+// ── BREAK-EVEN ─────────────────────────────────────────────────────────────
+console.log("\n\x1b[1mBreak-even\x1b[0m");
+{
+  const cenario = (janela, bruto) =>
+    calcularFinanceiro({
+      janela, bruto,
+      brutoPorPagamento: new Map([["PIX", bruto]]),
+      gastoAnuncios: 200,
+      despesas: [pct("TAXA_GATEWAY", 5, "PIX"), pct("IMPOSTO", 6), rec(500), rec(6000, "ANUAL"), rec(300, "UNICA")],
+    });
+
+  /* 🔴 A ASSERÇÃO QUE VALE POR TODAS: faturar EXATAMENTE o break-even tem de dar
+     lucro ZERO. É o round-trip, e ele prova o que nenhuma comparação de número
+     provaria — que break-even e Lucro consomem os MESMOS componentes de custo.
+     Se alguém acrescentar um custo ao Lucro e esquecer do break-even (ou o
+     contrário), esta linha cai na hora. */
+  const j30 = { startKey: "2026-07-08", endKey: "2026-08-06" };
+  const be = cenario(j30, 10000).breakEven;
+  eq("faturar o break-even exato dá lucro ZERO", Math.abs(cenario(j30, be).lucro) < 0.01, true);
+
+  /* Janela mais curta = menos custo FIXO = break-even MENOR. Se subir, o rateio
+     está invertido em algum lugar. */
+  const j1 = { startKey: "2026-08-06", endKey: "2026-08-06" };
+  const j7 = { startKey: "2026-07-31", endKey: "2026-08-06" };
+  eq("janela menor -> break-even menor (1 dia < 7 dias)", cenario(j1, 10000).breakEven < cenario(j7, 10000).breakEven, true);
+  eq("  …e 7 dias < 30 dias", cenario(j7, 10000).breakEven < be, true);
+
+  /* Os dois indefinidos. Nenhum deles pode virar 0: um break-even de zero diria
+     que qualquer receita acima de zero é lucro. */
+  eq("sem faturamento -> null (não dá para medir a taxa efetiva)", cenario(j30, 0).breakEven, null);
+  eq(
+    "descontos comendo 100%+ da receita -> null (nenhuma receita empata)",
+    calcularFinanceiro({
+      janela: j30, bruto: 1000, brutoPorPagamento: new Map([["PIX", 1000]]),
+      gastoAnuncios: 100, despesas: [pct("TAXA_GATEWAY", 60, "PIX"), pct("COPRODUCAO", 50)],
+    }).breakEven,
+    null,
+  );
+
+  /* Sem custo nenhum o break-even é 0 — e aqui o zero é MEDIÇÃO, não ausência:
+     sem custo, qualquer centavo já é lucro. */
+  eq("sem custo nenhum -> 0 (e este zero é real)", calcularFinanceiro({
+    janela: j30, bruto: 1000, brutoPorPagamento: new Map(), gastoAnuncios: 0, despesas: [],
+  }).breakEven, 0);
+}
+
 console.log(
   falhas === 0
     ? `\n\x1b[1m\x1b[32m${ok} asserções passaram, 0 falharam.\x1b[0m\n`

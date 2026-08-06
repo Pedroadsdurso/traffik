@@ -1370,7 +1370,11 @@ Depois do mapa, nesta ordem, que é do dono:
 > cheia num mês: a DIÁRIA passa a multiplicar pelos 31 dias (era cobrada uma vez
 > só) e a ANUAL vira 31/365.
 >
-> ### 📣 A frase para os testadores
+> ### 📣 A frase para os testadores — ⏳ **A ENVIAR NO PUSH, não antes**
+>
+> ⛔ Tudo isto está na branch `redesign/dashboard`, **sem push**. Os testadores
+> continuam vendo o Lucro antigo, errado. A mensagem sai quando o dono aprovar o
+> push — nem antes, nem depois.
 >
 > *Corrigimos um erro no cálculo do Lucro. Despesas recorrentes estavam sendo
 > descontadas por inteiro em qualquer período: uma mensalidade de R$ 500 era
@@ -1412,6 +1416,27 @@ schema do redesign e não entra no meio de um commit de cálculo.
 | nova `UNICA` | obrigatório |
 | linha antiga sem data | continua FORA do cálculo, com o aviso na tela |
 | backfill | ⛔ **NENHUM.** `createdAt` é quando a LINHA foi criada, não quando a despesa ocorreu — usá-lo inventaria semântica e quebraria quem cadastra hoje algo antigo |
+
+> ### 🔴 TRÊS COMENTÁRIOS QUE AFIRMAVAM EFEITO INEXISTENTE — a evidência
+>
+> Achados na mesma investigação, e juntos eles mudam o retrato: **não eram três
+> tratamentos da mesma despesa. Eram dois tratamentos e um comentário
+> descrevendo um terceiro que nunca existiu.** Documentação inventando
+> comportamento é pior que divergência.
+>
+> | Onde | Afirmava | O código fazia |
+> |---|---|---|
+> | `financeiro.ts:123` | *"Despesas recorrentes **rateadas** no período"* | `+= e.amount` — o valor cheio, 219 linhas abaixo |
+> | `Sparkline.tsx:30` | *"num bucket com denominador zero elas saem `Infinity` ou `NaN`"* | o produtor devolvia `0`; o filtro não podia disparar |
+> | `metrics.ts:923` | *"o lucro por hora rateia … **recorrentes**"* | usava `totalDescontos`, que as EXCLUI |
+>
+> ⛔ **Comentário que AFIRMA um efeito envelhece pior que comentário que EXPLICA
+> uma decisão.** Uma decisão continua verdadeira depois que o código muda; uma
+> afirmação sobre o que o código faz vira mentira no primeiro commit que a
+> contraria — e ninguém revisa comentário.
+>
+> 🔜 **A varredura completa por comentários assim está na fila, depois do
+> heatmap.** Estes três são a evidência de que ela vale a pena.
 
 # ➗ DENOMINADOR ZERO — a regra, e o dia em que ficamos limpos
 
