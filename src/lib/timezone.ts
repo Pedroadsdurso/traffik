@@ -171,6 +171,23 @@ export function hourInTz(d: Date, tz: string = DEFAULT_TIMEZONE): number {
   return partsInTz(d, tz).hour;
 }
 
+/**
+ * Dia da semana de uma chave `YYYY-MM-DD`. 0 = domingo … 6 = sábado.
+ *
+ * ⛔ RECEBE A CHAVE, NÃO UM `Date` — e isso é a correção inteira. A chave já é a
+ * data-calendário NO FUSO DO USUÁRIO (`dayKeyInTz` a produziu), então o dia da
+ * semana dela é determinístico e não tem fuso nenhum a errar. Um
+ * `data.getDay()` responderia no fuso do PROCESSO, que na Vercel é UTC: uma
+ * venda de sábado 21h em Brasília viraria domingo.
+ *
+ * O `Date.UTC` aqui não é o fuso do dado; é só a forma de perguntar "que dia da
+ * semana cai nesta data do calendário", sem que nenhuma conversão aconteça.
+ */
+export function weekdayDaChave(dayKey: string): number {
+  const [y, m, d] = dayKey.split("-").map(Number);
+  return new Date(Date.UTC(y!, m! - 1, d!)).getUTCDay();
+}
+
 /** Instante UTC da meia-noite daquele dia no fuso do usuário. */
 export function dayStart(dayKey: string, tz: string = DEFAULT_TIMEZONE): Date {
   const [y, m, d] = dayKey.split("-").map(Number);

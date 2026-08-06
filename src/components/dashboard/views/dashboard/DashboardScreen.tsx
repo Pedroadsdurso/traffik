@@ -18,6 +18,7 @@ import { DonutChart, type FatiaDonut } from "@/components/tk/DonutChart";
 import { EmptyState } from "@/components/tk/EmptyState";
 import { KpiHero, MetricStrip, type DadosKpi } from "@/components/tk/Kpi";
 import { LineChart, type PontoSerie } from "@/components/tk/LineChart";
+import { Heatmap } from "@/components/tk/Heatmap";
 import { Segmented } from "@/components/tk/Segmented";
 import { StatusFooter, type BlocoEstado } from "@/components/tk/StatusFooter";
 import { Button } from "@/components/tk/Button";
@@ -59,6 +60,9 @@ import type { TraffikView } from "../../useTraffikState";
 const HERO = ["faturamento", "gasto", "roas", "lucroLiquido"] as const;
 const FAIXA = ["ticket", "ctr", "cpa", "arpu", "margem", "pendentes", "reembolsadas"] as const;
 
+type MetricaHeat = "revenue" | "sales" | "profit";
+const ROTULO_HEAT: Record<MetricaHeat, string> = { revenue: "Receita", sales: "Vendas", profit: "Lucro" };
+
 /** Cor de canal — permitida DENTRO da plotagem e da legenda dela, nunca em selo. */
 function corDoCanal(nome: string): string {
   const n = nome.toLowerCase();
@@ -71,6 +75,7 @@ function corDoCanal(nome: string): string {
 export function DashboardScreen({ v }: { v: TraffikView }) {
   const { theme } = useTheme();
   const [granularidade, setGranularidade] = React.useState<"diario" | "semanal">("diario");
+  const [metricaHeat, setMetricaHeat] = React.useState<MetricaHeat>("revenue");
 
   /* ── KPIs ─────────────────────────────────────────────────────────────────
      `metricCards` e `sparklines` continuam vindo do hook — a camada de dados
@@ -552,6 +557,57 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
               </div>
             ))}
           </div>
+        </Card>
+      )}
+
+      {/* ── Quando compram ──────────────────────────────────────────────────
+          ⛔ SEM "GASTO" NO SELETOR, e é impossível — não é escolha de escopo.
+          `DailyAdMetric` é diária e a Meta não reporta gasto por hora; um valor
+          por hora seria o total do dia lançado às 00h, um pico de madrugada que
+          nunca houve. É o mesmo motivo pelo qual a linha de gasto desaparece na
+          granularidade horária (`gastoNaSerie`). */}
+      {v.heatmap.celulas.length > 0 && (
+        <Card
+          titulo="Quando compram"
+          descricao="Média por hora, por dia da semana"
+          acao={
+            <Segmented
+              rotuloAcessivel="Métrica do mapa de horários"
+              valor={metricaHeat}
+              aoTrocar={setMetricaHeat}
+              opcoes={[
+                { valor: "revenue", rotulo: "Receita" },
+                { valor: "sales", rotulo: "Vendas" },
+                { valor: "profit", rotulo: "Lucro" },
+              ]}
+            />
+          }
+        >
+          <Heatmap
+            celulas={v.heatmap.celulas.map((linha) =>
+              linha.map((c) => ({ valor: c[metricaHeat], observacoes: c.observacoes })),
+            )}
+            formatar={metricaHeat === "sales" ? (n) => String(Math.round(n * 10) / 10) : brl0}
+            rotuloMetrica={ROTULO_HEAT[metricaHeat]}
+          />
+          {/* 🔴 RETRATO × PADRÃO. As duas palavras carregam a diferença melhor
+              que qualquer número: com uma observação por célula o mapa é
+              honesto e não é tendência. Sem dizer isso, o usuário lê ruído de
+              uma semana como comportamento do público — e decide mídia com
+              base nisso. */}
+          <p className="text-caption text-text-muted" style={{ margin: "10px 0 0", lineHeight: 1.45 }}>
+            {/* ⚠️ A frase da hachura só aparece se HOUVER hachura. Numa janela
+                de 30 dias todos os sete dias da semana foram observados, e
+                explicar uma convenção que não está na tela ensina o leitor a
+                não confiar no que o rodapé diz. */}
+            {v.heatmap.maxObservacoes <= 1
+              ? "Janela curta: cada célula é uma observação. É um retrato, não um padrão."
+              : `Média de até ${v.heatmap.maxObservacoes} semanas.${
+                  v.heatmap.celulas.some((l) => l.some((c) => c.observacoes === 0))
+                    ? " Células hachuradas não foram observadas nesta janela."
+                    : ""
+                }`}
+          </p>
         </Card>
       )}
 

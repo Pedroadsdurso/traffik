@@ -1174,6 +1174,7 @@ npm run test:telefone    # 25 asserções, E.164 antes do hash da CAPI
 npm run db:onde          # em qual banco o .env aponta
 npm run migrate:alvo     # para qual banco o `migrate deploy` vai AGORA (so leitura)
 npm run marca:gerar      # deriva simbolo/wordmark/favicon dos PNGs de origem (saida COMMITADA)
+npm run test:heatmap    # 20 asserções, celula VAZIA != celula ZERO, fuso e escala (puro)
 npm run test:contraste   # 92 pares WCAG da paleta do redesign, NOS DOIS TEMAS. Le o globals.css
                          #   (nao uma copia dos hex) e denuncia OKLCH que diverge do comentario.
                          #   VERDE hoje. As 7 reprovacoes que restam estao em ACEITOS COM PISO:
@@ -1347,6 +1348,29 @@ Depois do mapa, nesta ordem, que é do dono:
 >   aprovou explicitamente esse comportamento.
 
 ---
+
+# 🔗 QUANDO DOIS CÁLCULOS PRECISAM CONCORDAR, TESTE A PROPRIEDADE
+
+**Teste que congela VALOR defende o bug. Teste que congela RELAÇÃO defende o
+conserto.**
+
+O break-even e o Lucro têm de consumir os mesmos custos. Uma asserção de valor
+(`breakEven === 1322.50`) prova que o número não mudou — e passa igual se os dois
+estiverem errados juntos, que é exatamente o estado em que a base já esteve
+("duas implementações que erram IGUAL são piores, porque a divergência que
+denunciaria o erro não existe").
+
+A asserção que vale é a **propriedade que liga os dois**:
+
+> *"Faturar exatamente o break-even dá lucro ZERO."*
+
+Ela não conhece número nenhum. Se alguém acrescentar um custo ao Lucro e esquecer
+do break-even — ou o contrário — ela cai na hora, sem ninguém ter previsto o
+valor novo.
+
+⚠️ **Aplique sempre que houver duas contas que precisam concordar:** total × soma
+das partes, KPI × soma das linhas da tabela, faturamento do gráfico × do card.
+A pergunta não é "qual é o número", é "que igualdade tem de valer".
 
 # 💸 DESPESA RECORRENTE — o rateio, e a mudança de número em produção
 

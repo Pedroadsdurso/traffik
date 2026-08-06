@@ -84,6 +84,16 @@ export function atalhosDePeriodo(hoje = new Date()): { label: string; range: () 
 export function gradeDoMes(ano: number, mes: number): (Date | null)[] {
   const primeiro = new Date(ano, mes, 1);
   const dias = new Date(ano, mes + 1, 0).getDate();
+  /* ⛔ ESTE `getDay()` RODA NO FUSO DO PROCESSO, e aqui isso é inofensivo: a
+     grade é um calendário VISUAL, montada a partir de ano e mês que o próprio
+     usuário escolheu na tela — não há instante a converter.
+
+     ⚠️ NÃO REAPROVEITE ESTA LINHA PARA MÉTRICA. Para agrupar dado por dia da
+     semana use `weekdayDaChave` de `lib/timezone.ts`, que parte da chave já no
+     fuso do usuário. Um `getDay()` sobre `Sale.timestamp` responderia no fuso
+     do processo (UTC na Vercel) e jogaria a venda de sábado 21h em Brasília
+     para domingo — é a mesma causa raiz do "pico às 20h" que o CLAUDE.md
+     documenta. */
   const out: (Date | null)[] = Array.from({ length: primeiro.getDay() }, () => null);
   for (let d = 1; d <= dias; d++) out.push(new Date(ano, mes, d));
   return out;

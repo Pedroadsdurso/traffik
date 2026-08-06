@@ -12,6 +12,7 @@ import {
   dayStart,
   hourInTz,
   keyToDateColumn,
+  weekdayDaChave,
   zonedToUtc,
 } from "@/lib/timezone";
 import { chaveDoPedido, contarPedidos, umPorPedido } from "@/lib/pedidos";
@@ -172,6 +173,29 @@ export interface DashboardData {
    * Regra unica de denominador zero: `lib/ads/metrics.ts`.
    */
   topCampaigns: { id: string; nome: string; receita: number; gasto: number; vendas: number; roas: number | null }[];
+  /**
+   * HEATMAP dia-da-semana × hora. 7 linhas (0=domingo) × 24 colunas.
+   *
+   * 🔴 `observacoes` É O CAMPO QUE FAZ O BLOCO SER HONESTO, e ele não é
+   * decoração: célula com `observacoes: 0` **nunca foi observada** — a janela
+   * não passou por aquele dia da semana —, e é diferente de célula observada
+   * que teve zero venda. Pintar as duas igual faria o gráfico afirmar ausência
+   * de venda onde não houve medição. É a mesma distinção do mapa das razões.
+   *
+   * ⚠️ Os valores são SOMA; a média é `valor / observacoes` e quem divide é a
+   * tela — porque é lá que o denominador precisa aparecer no tooltip.
+   *
+   * ⛔ NÃO EXISTE GASTO AQUI, e é impossível: `DailyAdMetric` é diária e a Meta
+   * não reporta gasto por hora. É o mesmo motivo pelo qual a linha de gasto
+   * desaparece na granularidade horária (`gastoNaSerie`). Um gasto por hora
+   * seria o total do dia lançado às 00h — um pico de madrugada que nunca houve.
+   */
+  heatmap: {
+    /** `[diaDaSemana][hora]` — 7 × 24. */
+    celulas: { revenue: number; sales: number; profit: number; observacoes: number }[][];
+    /** Maior número de observações de qualquer célula. 1 = retrato, não padrão. */
+    maxObservacoes: number;
+  };
   /** Vendas aprovadas por país (ISO-2), ordenado por faturamento — Bloco 5. */
   /** `code: ""` = não identificado. Nunca é descartado — ver `paisMap`. */
   byCountry: { code: string; sales: number; revenue: number; estimadas: number }[];
@@ -596,6 +620,7 @@ export async function computeDashboard(userId: string, filters: DashboardFilters
     ambientesDeTeste: current.ambientesDeTeste,
     byCountry: summary.byCountry,
     topCampaigns: summary.topCampaigns,
+    heatmap: summary.heatmap,
     approval: summary.approval,
     byHour: summary.byHour,
     byDay: summary.byDay,
@@ -1047,6 +1072,42 @@ function summarize(w: Window, impostoAnunciosPct = 0) {
   }
   // Preenche todos os dias da janela, inclusive os sem venda: o gráfico desenha
   // barra-fantasma nas lacunas, e sem elas a série temporal ficaria com buracos.
+  /* ── HEATMAP dia-da-semana × hora ────────────────────────────────────────
+     Mesma passagem sobre `approved` do `byHour`, com a segunda dimensão.
+
+     🔴 A COBERTURA VEM DO CALENDÁRIO, NÃO DO DADO. Percorrer as vendas diria
+     quantas células TIVERAM venda; o que o gráfico precisa saber é quantas
+     células a JANELA visitou. Com filtro de 3 dias, quatro dias da semana nunca
+     foram observados — e as 96 células deles têm de ficar em branco, não em
+     "zero venda". Sem isto o mapa afirmaria que ninguém compra às quartas
+     porque o recorte não tinha nenhuma quarta.
+
+     ⚠️ `weekdayDaChave` e não `getDay()`: a chave já está no fuso do usuário. */
+  const celulas = Array.from({ length: 7 }, () =>
+    Array.from({ length: 24 }, () => ({ revenue: 0, sales: 0, profit: 0, observacoes: 0 })),
+  );
+  for (const k of dayKeyRange(w.janela.startKey, w.janela.endKey)) {
+    const wd = weekdayDaChave(k);
+    for (let h = 0; h < 24; h++) celulas[wd]![h]!.observacoes += 1;
+  }
+  const vistosHeat = new Set<string>();
+  for (const s2 of approved) {
+    const wd = weekdayDaChave(dayKeyInTz(s2.timestamp, tz));
+    const h = hourInTz(s2.timestamp, tz);
+    const v = num(s2.value);
+    const c = celulas[wd]![h]!;
+    // Mesma regra do `byHour`: conversão conta por PEDIDO, faturamento soma linhas.
+    const chave = chaveDoPedido(s2);
+    if (!vistosHeat.has(chave)) {
+      vistosHeat.add(chave);
+      c.sales += 1;
+    }
+    c.revenue += v;
+    c.profit += v - v * custoSobreReceita;
+  }
+  const maxObservacoes = Math.max(...celulas.flat().map((c) => c.observacoes), 0);
+  const heatmap = { celulas, maxObservacoes };
+
   const byDay = dayKeyRange(w.janela.startKey, w.janela.endKey, 60)
     .map((k) => ({ date: k, ...(diaMap.get(k) ?? { sales: 0, revenue: 0 }) }))
     .slice(-30);
@@ -1055,7 +1116,7 @@ function summarize(w: Window, impostoAnunciosPct = 0) {
 
   return {
     revenue, origem, salesCount, pendentes, pendentesValor, reembolsadas, chargebackRate,
-    spend, clicksCount, ticket, cpa, roas, ctr, profit, roi, margin, arpu, buyers, topCampaigns,
+    spend, clicksCount, ticket, cpa, roas, ctr, profit, roi, margin, arpu, buyers, topCampaigns, heatmap,
     expenses, products, sources, byPlacement, payments, funnel, byHour, byDay, byCountry, approval,
     // A composição inteira viaja até a UI: o tooltip do Faturamento Líquido e do
     // Lucro precisa mostrar CADA desconto, senão o número é impossível de conferir.

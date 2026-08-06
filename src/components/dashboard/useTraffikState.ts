@@ -1468,6 +1468,14 @@ export function useTraffikState(
      */
     topCampaigns: d?.topCampaigns ?? [],
     /**
+     * Heatmap dia-da-semana x hora. Passagem PURA — a media e a escala moram na
+     * tela, porque e la que o denominador precisa aparecer no tooltip.
+     *
+     * ⚠️ `observacoes: 0` = a janela nao passou por aquele dia da semana. Nao e
+     * "zero venda". Quem desenhar tem de manter a distincao.
+     */
+    heatmap: d?.heatmap ?? { celulas: [], maxObservacoes: 0 },
+    /**
      * Botão "Atualizar" do Dashboard — **ponto único de sincronização manual**.
      *
      * Sincroniza com o Facebook (respeitando os intervalos) e só então recarrega
