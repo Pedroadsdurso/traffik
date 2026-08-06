@@ -39,8 +39,24 @@ export interface MetricasDerivadas {
   cpi: number | null;
 }
 
-/** Divisão que devolve `null` em vez de `Infinity`/`NaN`. */
-function div(a: number, b: number): number | null {
+/**
+ * Divisão que devolve `null` em vez de `Infinity`/`NaN`.
+ *
+ * 🔴 **ESTA É A FONTE ÚNICA da regra de denominador zero.** Ela era local, e o
+ * `dashboard/metrics.ts` declarou um `div` com o MESMO NOME e o contrato
+ * OPOSTO (`b ? a / b : 0`) — a 56 linhas de um comentário que cita esta aqui
+ * como o modelo certo. Duas implementações da mesma conta divergem sempre; com
+ * o mesmo nome, divergem sem ninguém notar, porque o `grep` acha as duas e a
+ * leitura assume que são a mesma.
+ *
+ * O contrato, em uma linha: **denominador 0 → `null` (indefinido); denominador
+ * > 0 → o valor real, inclusive 0.** "Não vendi nada" é diferente de "vendi por
+ * zero", e quem consome decide como mostrar — `"—"` na tela, condição PULADA no
+ * motor de regras.
+ *
+ * ⛔ Não escreva outra. Importe esta.
+ */
+export function div(a: number, b: number): number | null {
   return b > 0 ? a / b : null;
 }
 

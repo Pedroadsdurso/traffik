@@ -704,8 +704,12 @@ export function RuleDrawer({
                         <span style={sx("font-size:10.5px;color:#fbbf24;white-space:nowrap")}>{e.motivo}</span>
                       )}
                       <span className="text-muted" style={sx("font-size:11px;font-variant-numeric:tabular-nums")}>
+                        {/* "—" é INDEFINIDO, não zero: sem venda não existe CPA,
+                            sem gasto não existe ROAS. E aqui o traço explica por
+                            que a linha NÃO tem ✓ — a condição com valor
+                            indefinido é pulada, qualquer que seja o operador. */}
                         {Object.entries(e.valores)
-                          .map(([k, v]) => `${k} ${v.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}`)
+                          .map(([k, v]) => `${k} ${v == null ? "—" : v.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}`)
                           .join(" · ")}
                       </span>
                     </li>

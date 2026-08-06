@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { addDaysToKey, dayKeyInTz, dayStart, hourInTz, keyToDateColumn, todayKey } from "@/lib/timezone";
 import type { RuleLevel } from "@/generated/prisma/enums";
 import { CAMPOS_UTM, utmsDaVenda } from "@/lib/vendas/utmsDaVenda";
+// A regra de denominador zero é UMA só nesta base. Ver o comentário do `div`.
+import { div } from "@/lib/ads/metrics";
 
 export interface RuleCondition {
   metrica: "cpa" | "roas" | "ctr" | "gasto" | "vendas";
@@ -71,18 +73,54 @@ function num(v: unknown): number {
   return typeof v === "number" ? v : Number(v ?? 0);
 }
 
-function metricValue(m: EntityMetrics, key: RuleCondition["metrica"]): number {
+/**
+ * 🔴 `null` É "NÃO TENHO DADO", E ELE NÃO PODE VIRAR ZERO. AQUI ISSO CUSTA
+ * DINHEIRO — não é questão de exibição.
+ * ────────────────────────────────────────────────────────────────────────────
+ * As três derivadas devolviam `0` quando o denominador era zero. A guarda
+ * existia, e ela evitava o `Infinity`: o medo era `Infinity > 50` fazer uma
+ * regra de "CPA alto" pausar campanha nova, e isso de fato nunca aconteceu.
+ *
+ * **O zero é o espelho do mesmo erro, e é o lado que gasta.** Zero satisfaz
+ * TODA comparação com `<` e `<=`:
+ *
+ * | Regra cadastrada | Estado sem dado | O que fazia |
+ * |---|---|---|
+ * | `AJUSTAR_ORCAMENTO` se **CPA < 20** | zero conversões → CPA = 0 | 🔴 **escalava o orçamento de campanha que não vendeu nada** |
+ * | `PAUSAR` se **ROAS < 1** | zero gasto → ROAS = 0 | 🔴 pausava campanha que nem começou |
+ * | `PAUSAR` se **CTR < 1** | zero impressões → CTR = 0 | 🔴 pausava |
+ * | `PAUSAR` se **CPA > 50** | zero conversões → CPA = 0 | ✅ não disparava |
+ *
+ * Uma campanha que não vendeu nada tinha **o melhor CPA possível** aos olhos do
+ * motor. `>` e `>=` erram para o lado de não agir; `<` e `<=` agiam por falta de
+ * dado, e o primeiro caso manda gastar mais.
+ *
+ * ⚠️ O risco já tinha sido pensado — o comentário da consulta de vendas, mais
+ * abaixo, diz que "clique apagado não pode zerar o faturamento aqui: seria uma
+ * regra de CPA alto agindo por falta de dado". A proteção foi posta na ORIGEM
+ * do dado e a mesma classe de erro ficou aberta na guarda da divisão. É o padrão
+ * "ao endurecer um alarme, procure as outras saídas do mesmo módulo".
+ *
+ * ⚠️ `gasto` e `vendas` continuam `number`: eles são CONTAGEM, e zero conta é
+ * uma medição de verdade ("não gastou"), não uma ausência de denominador.
+ *
+ * O contrato é o do `div()` de `lib/ads/metrics.ts`, que é a fonte única desta
+ * base para razão com denominador zero.
+ */
+function metricValue(m: EntityMetrics, key: RuleCondition["metrica"]): number | null {
   switch (key) {
     case "gasto":
       return m.spend;
     case "vendas":
       return m.results;
     case "cpa":
-      return m.results ? m.spend / m.results : 0;
+      return div(m.spend, m.results);
     case "roas":
-      return m.spend ? m.revenue / m.spend : 0;
-    case "ctr":
-      return m.impressions ? (m.clicks / m.impressions) * 100 : 0;
+      return div(m.revenue, m.spend);
+    case "ctr": {
+      const r = div(m.clicks, m.impressions);
+      return r === null ? null : r * 100;
+    }
   }
 }
 
@@ -100,6 +138,17 @@ function conditionsMet(conds: RuleCondition[], m: EntityMetrics): boolean {
   if (!conds.length) return false;
   return conds.every((c) => {
     const actual = metricValue(m, c.metrica);
+    /* ⛔ INDEFINIDO NÃO SATISFAZ COMPARAÇÃO NENHUMA — nem `<`, nem `>`, nem `=`.
+       A condição inteira falha, e como todas estão em E, a regra não dispara.
+
+       Isto é o conserto, e ele é de UMA linha porque `metricValue` é o único
+       ponto por onde os três valores derivados passam. Antes, "não tenho dado"
+       chegava aqui como `0` e o `<` dizia sim.
+
+       ⚠️ Errar para o lado de NÃO AGIR é o único lado seguro numa função que
+       pausa campanha e altera orçamento — a mesma razão pela qual o `default`
+       abaixo devolve `false` em vez de virar igualdade. */
+    if (actual === null) return false;
     switch (c.operador) {
       case ">": return actual > c.valor;
       case "<": return actual < c.valor;
@@ -441,7 +490,8 @@ export interface RulePreviewEntity {
   nome: string;
   status: string;
   bateu: boolean;
-  valores: Record<string, number>;
+  /** `null` = indefinido (denominador zero). A prévia mostra "—", não "0". */
+  valores: Record<string, number | null>;
   /** A AÇÃO alteraria esta entidade? Só faz sentido quando `bateu`. */
   acionavel: boolean;
   /** Por que a ação NÃO a alcançaria (ex.: "sem orçamento diário (CBO?)"). */

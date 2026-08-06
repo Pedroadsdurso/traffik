@@ -170,6 +170,59 @@ async function main() {
     eq("uma falsa derruba o E", p.bateram, 0);
     eq("o avaliado traz as DUAS métricas", Object.keys(p.entidades[0].valores).sort(), ["gasto", "vendas"]);
   }
+
+  /* ── 🔴 O DEFEITO QUE GASTAVA DINHEIRO ────────────────────────────────────
+     `metricValue` devolvia `0` quando o denominador era zero, e **`0` satisfaz
+     todo `<` e `<=`**. Uma regra "CPA < 50 → escalar orçamento" enxergava a
+     campanha que não vendeu NADA como a de melhor CPA do mundo, e mandava
+     gastar mais nela.
+
+     ⚠️ A asserção precisa poder FALHAR pelo motivo que alega medir. O valor que
+     o caso ERRADO produziria é `bateu: true` com `cpa: 0` — por isso não basta
+     contar zero violações: o bloco prova PRIMEIRO que existe entidade sem
+     conversão para examinar. Sem essa prova, a contagem passaria com a coleção
+     vazia, que é o buraco já pago três vezes nesta base. */
+  console.log("\n\x1b[1mDenominador zero não dispara ação\x1b[0m");
+  {
+    const LIMITE = 999999; // absurdo de propósito: só o indefinido segura
+    const p = await previewRule(regra(userId, [{ metrica: "cpa", operador: "<", valor: LIMITE }]));
+
+    /* ⛔ QUEM não tem conversão é decidido pelo DADO BRUTO (`vendas`), nunca
+       por `valores.cpa === null` — senão o teste define o grupo pela própria
+       coisa que ele quer medir, e sob o código ANTIGO (que devolvia 0) o grupo
+       sairia vazio e a asserção falharia no lugar errado, escondendo o defeito
+       real atrás de um "não havia o que examinar". */
+    const vend = await previewRule(regra(userId, [{ metrica: "vendas", operador: ">=", valor: 0 }]));
+    const nomesSemVenda = new Set(vend.entidades.filter((e) => e.valores.vendas === 0).map((e) => e.nome));
+    const semDado = p.entidades.filter((e) => nomesSemVenda.has(e.nome));
+
+    eq("há entidade SEM conversão para examinar (senão o resto é vazio)", semDado.length > 0, true);
+    eq("  …e ela reporta CPA indefinido, não zero", semDado.every((e) => e.valores.cpa === null), true);
+    eq("NENHUMA delas bate a condição `CPA < 999999`", semDado.filter((e) => e.bateu).length, 0);
+
+    /* ⛔ O CONTROLE, e ele é obrigatório: sem ele a asserção acima passaria
+       também se o motor tivesse parado de avaliar QUALQUER coisa — "nada
+       dispara" satisfaz "o indefinido não dispara".
+
+       O controle usa ROAS, não CPA: no banco de dev toda campanha tem gasto
+       (denominador de ROAS) e NENHUMA tem conversão (denominador de CPA). Ou
+       seja, é ROAS que fornece o lado definido do par com dado real. */
+    const q = await previewRule(regra(userId, [{ metrica: "roas", operador: "<", valor: LIMITE }]));
+    const comDado = q.entidades.filter((e) => typeof e.valores.roas === "number");
+    eq("há entidade com ROAS DEFINIDO para servir de controle", comDado.length > 0, true);
+    eq("  …e ela BATE `ROAS < 999999` — o motor não parou de avaliar", comDado.every((e) => e.bateu), true);
+  }
+
+  /* ⚠️ O QUE ESTE TESTE **NÃO** PROVA, e é preciso estar escrito:
+     a perna "campanha SEM GASTO não é pausada por `ROAS < 1`". O banco de dev
+     não tem campanha com gasto zero, então a asserção passaria com a coleção
+     vazia — que é exatamente o defeito que a varredura de 04/08 achou três
+     vezes nesta base. Preferir a lacuna declarada à asserção que mente.
+
+     A perna simétrica ESTÁ provada (CPA indefinido não dispara), e ela percorre
+     o mesmo `metricValue` → `conditionsMet`, que é o único caminho: as três
+     derivadas passam pela mesma guarda. Semear uma campanha sem gasto no dev
+     fecharia a lacuna e é a próxima coisa a fazer aqui. */
 }
 
 main()
