@@ -39,6 +39,7 @@ As **v1 (13 fases)** estão completas e reais. O **roteiro v2 (13 blocos)** tamb
 > | `docs/design/04-CONFERENCIA-COM-AS-REFERENCIAS.md.txt` | 🥇 **o inventário do que precisa existir, tela por tela, conferido contra as 11 imagens.** Tem **precedência sobre todos** os outros documentos de design | **antes de qualquer tela do redesign** |
 > | `docs/design/03-ARQUITETURA-DE-TELAS.md` | estrutura das telas, catálogo de blocos, as três zonas do Dashboard. **Perde para o `04`** em divergência | desenhar uma tela ou o modo de edição |
 > | `docs/design/03-FASE-1-DECISOES.md` | arquitetura de **tokens** (`--tk-*`, `@theme inline`), não de telas. O nome engana | mexer em token ou no `globals.css` |
+> | `docs/design/05-MAPA-DAS-RAZOES.md` | 🚧 **levantamento INCOMPLETO** das razões com denominador zero. **Só o item 4 (regras de automação) está pronto** — e é o urgente | **antes de mexer em qualquer métrica derivada** |
 > | `docs/design/05-MOCKUPS-VS-TOKENS.md` | os 4 conflitos mockup × sistema e **como cada um foi decidido** (canal só dentro do gráfico, roxo como categoria, selo tingido, gradiente não preenche botão) | mexer em cor, selo ou botão |
 > | `docs/design/06-CRIADOR-DE-REGRAS.md` | ⛔ **especificação de algo que NÃO existe** — fora do escopo do redesign, por decisão | só se for decidir construir o motor |
 > | `docs/design/07-DASHBOARD-MIGRADO.md` | a ponte `.tk-tema` e por que o re-skin do Dashboard foi jogado fora | mexer no shell ou numa tela ainda não migrada |
@@ -1204,3 +1205,112 @@ arquivo local, de propósito.
   EXERCIDO".
 - **`WebhookLog` sem retenção**, e logs sem dono não aparecem na UI.
 
+
+---
+
+# 📌 ESTADO DA SESSÃO — 06/08/2026
+
+> Escrito para quem abre contexto limpo amanhã. **Esta seção é tudo que você tem
+> da sessão de 06/08.** Se ela contradisser algo acima, ela é mais nova.
+>
+> ⚠️ **Nada foi enviado ao GitHub.** Tudo é commit LOCAL na branch
+> `redesign/dashboard`. A `main` está intacta. O push é decisão do dono, e ele
+> não a tomou.
+
+## ✅ O que ficou PRONTO
+
+| | O quê |
+|---|---|
+| ✅ | **Dashboard reescrito do zero** (vinha da sessão anterior, `24f36a6`) |
+| ✅ | **SHELL reescrito do zero** — `Sidebar`/`Header`/`DashboardShell`/`integracoes/layout` **deletados** (463 linhas) → 9 arquivos em `components/tk/`. Rail recolhível, navegação de dois níveis, paleta ⌘K própria, rodapé com área + perfil. Nos dois temas |
+| ✅ | **`WorkspaceSelect` órfão deletado** — o comentário dele dizia "no topo da sidebar", que é o comportamento que mudou |
+| ✅ | **Conserto do `@layer`** — a regra `a` do `globals.css` foi para `@layer base` |
+| ✅ | **Seção SHELL do `04` preenchida** item a item, com o motivo escrito em cada 🔧 |
+
+### O conserto do `@layer`, em uma linha
+
+`a { color: … }` estava **sem camada**, e CSS sem camada vence utilitário do
+Tailwind (que sai em `@layer utilities`). Os sete itens do rail saíam azuis,
+ativos ou não. **6 de 10 âncoras com a cor errada antes; 0 de 10 depois.** A
+mecânica completa está na seção própria, acima — procure por *"CSS SEM CAMADA
+VENCE UTILITÁRIO DO TAILWIND"*.
+
+## 🚧 EM ANDAMENTO — o mapa das razões com denominador zero
+
+**Documento: `docs/design/05-MAPA-DAS-RAZOES.md`.** Levantamento, **não**
+correção — o dono foi explícito: *"NÃO CORRIJA NADA. Quero decidir com o mapa na
+mão."*
+
+| Item | Estado |
+|---|---|
+| 1 — onde cada métrica é calculada | ⛔ não começou |
+| 2 — por que hero mostra `0,00x` e faixa mostra `—` | ⛔ não começou |
+| 3 — quem consome | ⛔ não começou |
+| **4 — regras de automação** | ✅ **PRONTO** |
+| 5 — padrão da string formatada | ⛔ não começou |
+
+### 🔴 O achado do item 4 — leia antes de mexer no motor de regras
+
+A hipótese do dono era que `Infinity > 50` pausaria campanha sozinha. **É falso:**
+`metricValue` (`engine.ts:74-87`) tem guarda de denominador zero e devolve `0`.
+
+**Mas o `0` é a outra metade do mesmo erro**, e o defeito real é o espelho:
+
+> **`0` satisfaz toda comparação com `<` e `<=`.** Uma regra `PAUSAR quando
+> ROAS < 1` **pausa campanha que não gastou nada**. Uma regra
+> `AJUSTAR_ORCAMENTO quando CPA < 20` **escala o orçamento de campanha que não
+> converteu nada** — essa gasta dinheiro.
+>
+> `>` e `>=` erram para o lado seguro. `<` e `<=` agem por falta de dado.
+
+⚠️ **Não se sabe se existe regra assim em produção.** As credenciais não existem
+em arquivo local, de propósito. Quem responde é
+`npm run regras:auditar -- --url '<conn>'`, rodado pelo dono.
+
+## ⏳ PENDÊNCIAS ABERTAS, com o motivo de cada uma
+
+| Pendência | Por que está aberta |
+|---|---|
+| **Envolver `h1`–`h6`, `p`, `img`, `figcaption` em `@layer base`** | ✅ **APROVADO pelo dono**, com ordem de fazer **depois do mapa** para não interromper o levantamento. Mesmo raciocínio do `a`: o legado pinta por `sx()` inline e não é afetado; cada elemento nu é armadilha para o próximo componente novo. **É a primeira tarefa a executar quando o mapa fechar** |
+| **`Integrações › Visão geral` fora da sidebar** | a tela não existe (`integracoes/page.tsx` é `redirect`). Entra como PRIMEIRO filho no passo de Integrações |
+| **`/dashboard/integracoes/testes` fora da navegação** | decisão do `03`. Ela **morre** no passo de Integrações. ⛔ Não religue link para ela — ver a seção própria acima |
+| **Medidor de plano no rail** | não há backend de billing. Confirmado por `grep` no schema |
+| **Modo de edição do Dashboard** | `useDashboardLayout.ts` órfão; usuários com layout salvo perderam a customização. Desenho já decidido (três zonas) |
+| **Guarda estático de CSS sem camada** | proposto e **não construído**. Reprovaria o `test:contraste` quando o `globals.css` declarasse `color` em seletor de elemento fora de `@layer`. ~15 linhas, sem dependência. Medir a cor PINTADA automaticamente é caro (navegador + servidor + sessão `httpOnly`) e foi **descartado** |
+| **Item (d) — viewport estreito** | segue bloqueado por ambiente (`resize_window` mente) |
+
+## ➡️ PRÓXIMO PASSO, e por quê
+
+**Terminar o mapa — itens 1, 2, 3 e 5** de `05-MAPA-DAS-RAZOES.md`.
+
+O item 2 é o de maior valor: *"hero mostra `0,00x`, faixa mostra `—` para o mesmo
+período — são dois caminhos de código ou o mesmo valor formatado de dois jeitos?"*
+A resposta diz se o problema é de **cálculo** ou de **apresentação**, e isso muda
+onde a correção inteira vai morar.
+
+Depois do mapa, nesta ordem, que é do dono:
+
+1. os seis elementos nus para `@layer base` (aprovado, só falta executar);
+2. decidir a regra do denominador zero **com o mapa na mão** — a proposta está no
+   fim do `05`, e o que já se sabe é que ela resolve o motor de regras e que
+   **muda comportamento em produção** (regra `ROAS < 1` deixa de pausar campanha
+   parada);
+3. **Integrações** → modo de edição do Dashboard → `metrics.ts`.
+
+> ### ⛔ COMO O DONO TRABALHA — o que respeitar sem precisar perguntar
+>
+> - **`git push` NUNCA** sem ele dizer "pode subir". Commit local, sim.
+> - **`seed:dev:limpar` NUNCA** — mata a sessão dele. Se precisar mudar dado de
+>   seed, `UPDATE`. Recriar exige avisar ANTES.
+> - **Regra das duas tentativas:** se algo não resolve em duas, PARE e avise. Não
+>   encadeie.
+> - **O arquivo antigo da tela é DELETADO, não editado.** Pode abri-lo uma vez
+>   para listar QUAIS DADOS ele consome, nunca para reaproveitar layout.
+> - **Componente novo mora em `components/tk/`**, nunca na pasta da tela. Antes de
+>   criar, veja se já existe algo que serve; se quase serve, **estenda com prop**
+>   em vez de criar irmão quase igual.
+> - **Se achar algo pior do que o descrito, diga NA HORA**, não no fim do
+>   relatório.
+> - Ao fim de cada tela: **teste do cinza**. E quando o quadro for dominado por
+>   tela que você não tocou, **recorte a parte que você tocou** e diga isso — ele
+>   aprovou explicitamente esse comportamento.
