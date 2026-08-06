@@ -140,7 +140,34 @@ h4 { font-size: 20px; }
 h5 { font-size: 16px; }
 h6 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
 p { margin: 0 0 var(--space-3); }
-a { color: var(--color-accent); text-underline-offset: 3px; }
+
+/* ⛔ ESTA REGRA MORA NUMA CAMADA, E ISSO NÃO É ESTILO — É A CORREÇÃO DE UM BUG.
+   ────────────────────────────────────────────────────────────────────────────
+   CSS **sem camada vence CSS em camada**, e o Tailwind emite todo utilitário
+   dentro de `@layer utilities`. Enquanto este `a` era uma regra nua, ele ganhava
+   de `.text-text-secondary`, `.text-text` e qualquer outra cor de utilitário —
+   ou seja, TODO link de componente novo saía pintado de accent, pedisse o que
+   pedisse.
+
+   Medido em 06/08/2026, no rail recém-reescrito: 10 âncoras com utilitário de
+   cor dentro do `.tk-tema`, **6 pintadas com a cor errada**. Os sete itens de
+   menu saíam azuis, ativos ou não — a distinção ativo/inativo por cor havia
+   sumido, e só não virou defeito de legibilidade porque o item ativo carrega
+   fundo tingido e barra como sinais redundantes (WCAG 1.4.1).
+
+   ⚠️ POR QUE NUNCA TINHA APARECIDO: as telas antigas pintam com `sx()`, que
+   produz `style` inline — e inline vence tudo, inclusive regra sem camada. A
+   proteção era acidental, e ela some no instante em que um arquivo passa a usar
+   Tailwind. `tsc`, `lint`, `build` e `test:contraste` passaram os quatro.
+
+   ⚠️ AS VIZINHAS TÊM O MESMO DEFEITO LATENTE (`h1`–`h6`, `p`, `img`,
+   `figcaption`, logo acima e abaixo). Não foram movidas junto de propósito: o
+   raio de explosão é outro, e a decisão é do dono. Se um componente novo tiver
+   tipografia sobrescrita sem explicação, é aqui que se procura. */
+@layer base {
+  a { color: var(--color-accent); text-underline-offset: 3px; }
+}
+
 img { display: block; max-width: 100%; }
 figure { margin: 0; }
 figcaption {

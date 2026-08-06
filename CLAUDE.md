@@ -774,6 +774,48 @@ a expor `value` numérico **ao lado** do `valueLabel` (o formatado fica: quem j�
 consome não pode quebrar). **O que falta:** o mapa de onde as razões são
 calculadas, por que hero e faixa divergem, e quem mais consome.
 
+### 🔴 CSS SEM CAMADA VENCE UTILITÁRIO DO TAILWIND — e o `sx()` escondia isso
+
+O Tailwind emite **todo** utilitário dentro de `@layer utilities`, e **CSS sem
+camada vence CSS em camada**. Então uma regra de elemento nua no `globals.css`
+(`a { color: … }`) ganha de `.text-text-secondary`, `.text-text` e de qualquer
+outra classe de cor — o componente pede uma cor e recebe outra.
+
+**Por que só apareceu no shell:** as 41 telas legadas pintam com `sx()`, que
+produz `style` inline, e inline vence tudo, inclusive regra sem camada. A
+proteção era **acidental**, e ela some no instante em que um arquivo passa a usar
+Tailwind — que é o que o redesign faz em toda tela nova.
+
+Medido em 06/08/2026, no rail recém-reescrito: **6 de 10 âncoras pintadas com a
+cor errada**. Os sete itens de menu saíam azuis, ativos ou não, e a distinção
+ativo/inativo por cor havia sumido — só não virou defeito de legibilidade porque
+o item ativo carrega fundo tingido **e** barra, os sinais redundantes que o
+WCAG 1.4.1 obrigou a ter.
+
+> ### ⛔ REGRA QUE FICA
+> **Toda regra de elemento no `globals.css` que declare `color` precisa estar em
+> `@layer base`.** Sem camada, ela sequestra a cor de todo componente novo.
+>
+> ⚠️ Só o `a` foi movido. **`h1`–`h6`, `p`, `img` e `figcaption` continuam nus** —
+> o raio de explosão deles é outro e a decisão é do dono. Se um componente novo
+> aparecer com tipografia sobrescrita sem explicação, é ali que se procura.
+
+> ### 🔴 E NENHUMA FERRAMENTA DESTA BASE PEGOU
+> `tsc`, `lint`, `build` e **`test:contraste`** passaram os quatro. O teste de
+> contraste lê o `globals.css` e mede **pares de token** — ele não pergunta que
+> cor um elemento acabou recebendo na árvore. É o mesmo buraco do "resumo do
+> gargalo do funil": a coisa está no DOM, correta em teoria, e errada na tela.
+>
+> **Medir a cor PINTADA automaticamente é caro** — navegador headless + dev server
+> + sessão, e o cookie do NextAuth é `httpOnly` (o mesmo bloqueio que travou o
+> item (d)). O que é barato é o **guarda estático**: reprovar quando o
+> `globals.css` declarar `color` em seletor de elemento fora de `@layer`. Mede a
+> causa estrutural em vez do sintoma, e é ~15 linhas sem dependência nova.
+>
+> Para medir à mão, a técnica é **rasterizar num canvas 1×1** —
+> `getComputedStyle` devolve `lab(...)` neste projeto, e comparar string de cor
+> não mede nada (§6 de `docs/design/03-FASE-1-DECISOES.md`).
+
 ### Ativo GERADO e commitado também precisa de alguém que o consuma
 
 O `npm run marca:gerar` produz `public/marca/wordmark-*.webp` — "track hub", na
