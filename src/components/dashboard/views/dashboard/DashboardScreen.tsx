@@ -6,6 +6,8 @@ import { bandeiraDe, centroide, nomePais } from "@/lib/countries";
 import { nomeDaFonte } from "@/lib/fontes";
 import { brl, brl0 } from "@/lib/format";
 import { useTheme } from "@/components/theme/ThemeProvider";
+// A conta do token é UMA só nesta base — a mesma que Integrações usa.
+import { detalheDoToken, estadoDoToken, rotuloDoToken, tokenPedeAtencao } from "@/lib/integracoes/token";
 
 import { AlertList, type Alerta } from "@/components/tk/AlertList";
 import { useRegistrarFaixaDeFiltros } from "@/components/tk/AppShell";
@@ -170,6 +172,18 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
   const semPais = v.byCountry.reduce((s, c) => s + (c.code ? 0 : c.sales), 0);
   const { visao: visaoPais, setVisao: setVisaoPais } = useVisaoPais(paises.length);
 
+  /* `Date.now()` no corpo do componente é impuro: o lint recusa, e com razão —
+     o número mudaria entre dois renders sem o estado ter mudado. Fica num
+     inicializador PREGUIÇOSO, que roda uma vez só. Consequência aceita: o "em
+     execução" e o "expira em N dias" são do momento em que a tela montou, e se
+     atualizam no próximo carregamento — não é um relógio ao vivo.
+
+     ⚠️ DECLARADO AQUI, e não junto de `regrasRodando` lá embaixo: o bloco de
+     alertas usa este valor, e `const` num corpo de componente tem zona morta —
+     usá-lo antes da linha de declaração é `ReferenceError` em tempo de
+     execução, não erro de compilação. O `tsc` não pega. */
+  const [agora] = React.useState(() => Date.now());
+
   /* ── Alertas — DERIVADOS do que já existe, sem dado novo ─────────────────── */
   const alertas: Alerta[] = React.useMemo(() => {
     const lista: Alerta[] = [];
@@ -181,6 +195,33 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
         titulo: "Nenhuma conta de anúncio conectada",
         detalhe: "Sem ela não há gasto, ROAS nem ROI.",
         href: "/dashboard/integracoes/anuncios",
+      });
+    }
+
+    /* ── TOKEN DA META EXPIRANDO ───────────────────────────────────────────
+       🔴 É a falha mais cara que esta ferramenta tem, e ela é MUDA: o token
+       vence, a sincronização para, o gasto congela — e o ROAS passa a mentir
+       por omissão enquanto o motor de regras decide com dado velho. Nada no
+       Dashboard avisava.
+
+       ⛔ A conta NÃO é feita aqui. `lib/integracoes/token.ts` é a fonte única,
+       e a tela de Integrações usa exatamente as mesmas funções. Reimplementar
+       "faltam N dias" numa segunda tela é como nasceram os dois `div` de
+       contratos opostos.
+
+       ⚠️ `desconhecido` ENTRA na lista, e é o caso mais perigoso: são os perfis
+       conectados antes de a coluna existir — os mais antigos, logo os mais
+       prováveis de já estarem vencidos. Um alerta que só aparece quando a data
+       é conhecida cala justamente onde deveria falar. */
+    for (const p of v.perfisCrus) {
+      const t = estadoDoToken(p.tokenExpiresAt, new Date(agora));
+      if (!tokenPedeAtencao(t)) continue;
+      lista.push({
+        id: `token-${p.id}`,
+        severidade: t.tipo === "expira" ? "warning" : "danger",
+        titulo: `${p.name}: ${rotuloDoToken(t)}`,
+        detalhe: detalheDoToken(t) ?? undefined,
+        href: "/dashboard/integracoes",
       });
     }
 
@@ -226,18 +267,12 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
     }
 
     return lista;
-  }, [v.fbConnected, v.adProfiles, v.metricCards.roi, v.chartSerie]);
+  }, [v.fbConnected, v.adProfiles, v.perfisCrus, v.metricCards.roi, v.chartSerie, agora]);
 
   /* ── Rodapé de estado ────────────────────────────────────────────────────── */
   const contasComErro = (v.adProfiles ?? []).flatMap((p) => p.accounts ?? []).filter((c) => c.erroSync).length;
   const regras = v.rules ?? [];
   const regrasAtivas = regras.filter((r) => r.active).length;
-  /* `Date.now()` no corpo do componente é impuro: o lint recusa, e com razão —
-     o número mudaria entre dois renders sem o estado ter mudado. Fica num
-     inicializador PREGUIÇOSO, que roda uma vez só. Consequência aceita: o "em
-     execução" é do momento em que a tela montou, e se atualiza no próximo
-     carregamento — não é um relógio ao vivo, e não precisa ser. */
-  const [agora] = React.useState(() => Date.now());
   const regrasRodando = regras.filter(
     (r) => r.active && r.lastRunAt && agora - new Date(r.lastRunAt).getTime() < 15 * 60 * 1000,
   ).length;
