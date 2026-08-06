@@ -1434,6 +1434,19 @@ export function useTraffikState(
     ambientesDeTeste: d?.ambientesDeTeste ?? [],
     sparklines: d?.chart.sparklines ?? {},
     /**
+     * As 5 campanhas que mais faturaram NA JANELA DO DASHBOARD.
+     *
+     * ⛔ NAO use `adsData.campaigns` nem `filteredCampaigns` para isto. Aquelas
+     * obedecem a janela do GERENCIADOR (`period=7d` fixo) e ao filtro de status
+     * daquela tela — o bloco mostraria um periodo diferente do filtro que esta
+     * logo acima dele, e com o campo de busca vazio (o caso comum) as duas
+     * listas sao identicas, entao o defeito seria MUDO.
+     *
+     * ⚠️ Valores CRUS. `roas` e `null` quando nao houve gasto — a tela mostra
+     * "—". Nada de `?? 0` no caminho.
+     */
+    topCampaigns: d?.topCampaigns ?? [],
+    /**
      * Botão "Atualizar" do Dashboard — **ponto único de sincronização manual**.
      *
      * Sincroniza com o Facebook (respeitando os intervalos) e só então recarrega

@@ -16,7 +16,7 @@ import {
 } from "@/lib/timezone";
 import { chaveDoPedido, contarPedidos, umPorPedido } from "@/lib/pedidos";
 import { nomeDaFonte } from "@/lib/fontes";
-import { ehTemplateNaoSubstituido } from "@/lib/utm/parse";
+import { ehTemplateNaoSubstituido, splitPipe } from "@/lib/utm/parse";
 import { CAMPOS_UTM, utmsDaVenda } from "@/lib/vendas/utmsDaVenda";
 import { getImpostoAnunciosPct } from "@/lib/impostoAnuncios";
 import { calcularFinanceiro, type Composicao } from "@/lib/financeiro";
@@ -165,6 +165,13 @@ export interface DashboardData {
   bots: { motivo: string; total: number }[];
   /** Eventos de pixel fora do funil por virem de ambiente efêmero. */
   ambientesDeTeste: { ambiente: string; total: number }[];
+  /**
+   * As campanhas que mais faturaram NA JANELA DO DASHBOARD.
+   *
+   * ⚠️ `roas` e `null` quando a campanha nao teve gasto — indefinido, nao zero.
+   * Regra unica de denominador zero: `lib/ads/metrics.ts`.
+   */
+  topCampaigns: { id: string; nome: string; receita: number; gasto: number; vendas: number; roas: number | null }[];
   /** Vendas aprovadas por país (ISO-2), ordenado por faturamento — Bloco 5. */
   /** `code: ""` = não identificado. Nunca é descartado — ver `paisMap`. */
   byCountry: { code: string; sales: number; revenue: number; estimadas: number }[];
@@ -365,7 +372,19 @@ async function windowAggregate(
           ...(contas ? { adAccountId: { in: contas } } : {}),
         },
       },
-      select: { date: true, spend: true, impressions: true, clicks: true },
+      /* ⚠️ `ad.campaign` entrou para o bloco Top Campanhas. É leitura ADITIVA na
+         MESMA consulta — nao ha query nova, e o gasto por campanha nao existia
+         em lugar nenhum do lado do Dashboard.
+
+         ⛔ E ele NAO pode vir de `adsData`: aquela lista obedece a janela do
+         GERENCIADOR (`period=7d` fixo) e ao filtro de status daquela tela. Usar
+         a de la faria o bloco mostrar um periodo diferente do filtro que esta
+         em cima dele, EM SILENCIO — e com o campo de busca vazio, que e o caso
+         comum, as duas listas sao identicas, entao o defeito seria mudo. */
+      select: {
+        date: true, spend: true, impressions: true, clicks: true,
+        ad: { select: { campaign: { select: { id: true, name: true, fbCampaignId: true } } } },
+      },
     }),
     prisma.expense.findMany({
       // 🔴 `workspaceId` NULO = vale para TODAS as áreas. Taxa de gateway e
@@ -572,6 +591,7 @@ export async function computeDashboard(userId: string, filters: DashboardFilters
     bots: current.bots,
     ambientesDeTeste: current.ambientesDeTeste,
     byCountry: summary.byCountry,
+    topCampaigns: summary.topCampaigns,
     approval: summary.approval,
     byHour: summary.byHour,
     byDay: summary.byDay,
@@ -750,6 +770,55 @@ function summarize(w: Window, impostoAnunciosPct = 0) {
     else if (utms.utmCampaign?.trim()) origem.campanha += v;
     else origem.direto += v;
   }
+
+
+  /* ── TOP CAMPANHAS ────────────────────────────────────────────────────────
+     Faturamento, gasto e ROAS por campanha, na JANELA DO DASHBOARD.
+
+     🔴 A ATRIBUICAO PREFERE O ID, e cai no nome — a mesma regra de
+     `ads/overview.ts` e `ads/creatives.ts`. O `utm_campaign` do Bloco 11 vem
+     como `nome|id`; para trafego antigo so ha o nome, e ai o casamento e
+     ambiguo quando duas campanhas se chamam igual (divida #3, conhecida).
+
+     ⚠️ CONTAGEM POR PEDIDO, SOMA POR LINHA — a mesma decisao de
+     `ads/overview.ts`. `vendas` conta pedidos distintos (contar itens inflaria
+     order bump); `receita` soma as linhas, porque o dinheiro do bump e real. */
+  const campPorId = new Map<string, { id: string; nome: string; gasto: number }>();
+  const campPorNome = new Map<string, string>(); // nome minusculo -> id do fb
+  for (const m of w.metrics) {
+    const c = m.ad?.campaign;
+    if (!c) continue;
+    const cur = campPorId.get(c.fbCampaignId) ?? { id: c.fbCampaignId, nome: c.name, gasto: 0 };
+    cur.gasto += num(m.spend);
+    campPorId.set(c.fbCampaignId, cur);
+    campPorNome.set(c.name.toLowerCase(), c.fbCampaignId);
+  }
+
+  const receitaPorCamp = new Map<string, { receita: number; pedidos: Set<string> }>();
+  for (const v of approved) {
+    const { name, id } = splitPipe(utmsDaVenda(v).utms.utmCampaign);
+    /* Sem id E sem nome nao ha a que atribuir. A venda continua no faturamento
+       total — ela so nao aparece NESTE bloco, e o rodape diz quanto ficou de
+       fora, senao a soma das linhas nao bate com o KPI e parece erro. */
+    const chave = id ?? (name ? campPorNome.get(name.toLowerCase()) ?? null : null);
+    if (!chave) continue;
+    const cur = receitaPorCamp.get(chave) ?? { receita: 0, pedidos: new Set<string>() };
+    cur.receita += num(v.value);
+    cur.pedidos.add(chaveDoPedido(v));
+    receitaPorCamp.set(chave, cur);
+    if (!campPorId.has(chave)) campPorId.set(chave, { id: chave, nome: name ?? chave, gasto: 0 });
+  }
+
+  const topCampaigns = [...campPorId.values()]
+    .map((c) => {
+      const r = receitaPorCamp.get(c.id);
+      const receita = r?.receita ?? 0;
+      return { id: c.id, nome: c.nome, receita, gasto: c.gasto, vendas: r?.pedidos.size ?? 0, roas: div(receita, c.gasto) };
+    })
+    /* Campanha sem faturamento E sem gasto e ruido — nem rodou, nem vendeu. */
+    .filter((c) => c.receita > 0 || c.gasto > 0)
+    .sort((a, b) => b.receita - a.receita)
+    .slice(0, 5);
 
   // Vendas por produto
   const prodMap = new Map<string, { total: number; sales: number }>();
@@ -968,7 +1037,7 @@ function summarize(w: Window, impostoAnunciosPct = 0) {
 
   return {
     revenue, origem, salesCount, pendentes, pendentesValor, reembolsadas, chargebackRate,
-    spend, clicksCount, ticket, cpa, roas, ctr, profit, roi, margin, arpu, buyers,
+    spend, clicksCount, ticket, cpa, roas, ctr, profit, roi, margin, arpu, buyers, topCampaigns,
     expenses, products, sources, byPlacement, payments, funnel, byHour, byDay, byCountry, approval,
     // A composição inteira viaja até a UI: o tooltip do Faturamento Líquido e do
     // Lucro precisa mostrar CADA desconto, senão o número é impossível de conferir.

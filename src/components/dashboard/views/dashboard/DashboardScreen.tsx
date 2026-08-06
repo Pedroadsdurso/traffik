@@ -5,6 +5,7 @@ import * as React from "react";
 import { bandeiraDe, centroide, nomePais } from "@/lib/countries";
 import { nomeDaFonte } from "@/lib/fontes";
 import { brl, brl0 } from "@/lib/format";
+import { corFinanceira } from "@/lib/financeiro";
 import { useTheme } from "@/components/theme/ThemeProvider";
 // A conta do token é UMA só nesta base — a mesma que Integrações usa.
 import { detalheDoToken, estadoDoToken, rotuloDoToken, tokenPedeAtencao } from "@/lib/integracoes/token";
@@ -508,6 +509,46 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
         </Card>
       </div>
 
+      {/* ── Top campanhas ───────────────────────────────────────────────────
+          ⛔ ELE OBEDECE O FILTRO DE PERIODO DE CIMA. O dado vem de
+          `computeDashboard`, nao de `adsData` — que roda numa janela fixa de 7
+          dias. Dois blocos na mesma tela mostrando periodos diferentes sem
+          avisar foi o defeito que o aparo do sparkline consertou; este nasce
+          com a janela certa em vez de precisar de aviso. */}
+      {v.topCampaigns.length > 0 && (
+        <Card titulo="Top campanhas" descricao="As que mais faturaram no período">
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            {v.topCampaigns.map((c, i) => (
+              <div
+                key={c.id}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "minmax(0,2fr) repeat(4, minmax(0,86px))",
+                  gap: 10,
+                  alignItems: "baseline",
+                  padding: "9px 0",
+                  borderTop: i ? "1px solid var(--tk-border)" : undefined,
+                }}
+              >
+                <span className="text-label text-text" style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {c.nome}
+                </span>
+                <ColunaCamp rotulo="Receita" valor={brl0(c.receita)} />
+                <ColunaCamp rotulo="Gasto" valor={brl0(c.gasto)} />
+                <ColunaCamp rotulo="Vendas" valor={String(c.vendas)} />
+                {/* 🔴 "—" quando nao houve gasto. `0,00x` diria "gastou e nao
+                    voltou nada", que e uma acusacao diferente de "nao gastou". */}
+                <ColunaCamp
+                  rotulo="ROAS"
+                  valor={c.roas == null ? "—" : `${c.roas.toFixed(2).replace(".", ",")}x`}
+                  cor={c.roas == null ? undefined : corFinanceira(c.roas, "roas")}
+                />
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {/* ── Países ──────────────────────────────────────────────────────────── */}
       <div style={{ display: "grid", gap: "var(--tk-gap-grid)", gridTemplateColumns: "minmax(0,1fr)" }}>
         <Card
@@ -529,5 +570,17 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
       {/* ── Rodapé de estado ────────────────────────────────────────────────── */}
       <StatusFooter blocos={rodape} />
     </div>
+  );
+}
+
+/** Uma coluna do Top campanhas: rótulo miúdo em cima, número embaixo. */
+function ColunaCamp({ rotulo, valor, cor }: { rotulo: string; valor: string; cor?: string }) {
+  return (
+    <span style={{ textAlign: "right", minWidth: 0 }}>
+      <span className="text-caption text-text-muted" style={{ display: "block" }}>{rotulo}</span>
+      <span className="text-label" style={{ display: "block", color: cor ?? "var(--tk-text)", fontVariantNumeric: "tabular-nums" }}>
+        {valor}
+      </span>
+    </span>
   );
 }
