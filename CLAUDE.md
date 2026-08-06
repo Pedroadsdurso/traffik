@@ -1350,6 +1350,32 @@ Depois do mapa, nesta ordem, que é do dono:
 
 ---
 
+# 🕳️ A DISTINÇÃO CENTRAL DESTE PROJETO — ausência de observação ≠ observação de zero
+
+> **Não é um detalhe de cada lugar. É a mesma distinção, e ela já apareceu em
+> TRÊS camadas diferentes.**
+
+| Camada | Onde | "Ausência" | "Zero" |
+|---|---|---|---|
+| **Cálculo** | denominador zero (o mapa das razões) | `null` → `"—"` | `0` → `0,00x` |
+| **Gráfico** | heatmap dia × hora | célula hachurada, nunca observada | célula pintada no piso, observada e sem venda |
+| **Persistência** | `paineis` no layout salvo | campo **não é array** → corrompido, cai no padrão | `[]` → o usuário removeu todos, e a escolha é respeitada |
+
+**A pergunta é sempre a mesma: houve medição?** Se não houve, o produto não pode
+afirmar nada sobre o valor — nem zero, nem padrão, nem "tudo bem".
+
+E o custo é sempre o mesmo: colapsar as duas faz o produto **afirmar** onde
+deveria dizer que não sabe. Um CPA de `R$ 0,00` se lê como aquisição de graça;
+uma célula pintada diz "ninguém compra nesse horário" onde ninguém olhou; um
+`paineis: []` restaurado desfaz a escolha do usuário em silêncio.
+
+⛔ **Ao escrever qualquer valor de saída — número, cor, lista, estado — pergunte
+se ele consegue distinguir "não sei" de "sei que é zero".** Se não consegue, o
+tipo está errado antes de o código estar.
+
+⚠️ Ela reaparece onde não se procura. O caso da persistência foi achado por uma
+asserção escrita para outra coisa, num arquivo que não tem gráfico nem métrica.
+
 # 🔒 REGRA QUE DEPENDE DE LEMBRAR VIRA GARANTIA DE TIPO
 
 **Quando uma regra do projeto depende de alguém lembrar dela, procure a forma de
@@ -1396,7 +1422,20 @@ compilador cobrar isto?*
 > |---|---|---|
 > | **A** | blocos e catálogo | ✅ `2750258` |
 > | **B** | persistência e migração | ✅ **aqui** |
-> | **C** | interface de edição | ⛔ **não começou** — zonas, arrasto, painéis laterais, Salvar/Cancelar/Redefinir |
+> | **C** | interface de edição | 🚧 **base pronta** (`2c59e8e`: estado, snapshot, guardas, envelope v2 — 52 asserções). **Falta toda a interface** |
+>
+> ### A ordem do que falta no C, e uma exigência dentro dela
+>
+> 1. zonas com contorno + rótulo que diz a REGRA ("Principais — sempre 4")
+> 2. painéis laterais + adicionar/remover + a pergunta do hero cheio
+> 3. Salvar/Cancelar/Redefinir na tela + **o ciclo de verificação: entrar, mudar 3 coisas, cancelar, RECARREGAR**
+> 4. arrasto — por último, é o mais caro
+> 5. limpeza: deletar `/dashboard/blocos`, absorver o salvar do `useDashboardLayout` e deletá-lo, tirar este ⛔, preencher o `04`
+>
+> ⛔ **O BOTÃO DE REORDENAR ENTRA NO PASSO 2, NÃO NO 4.** Se o arrasto ficar por
+> último e o orçamento acabar antes dele, a zona precisa reordenar de ALGUM
+> jeito. Zona que promete reordenação e não reordena é controle inerte — e o
+> `moverMetrica`/`moverPainel` do hook já existe, então o botão é só a ponta.
 >
 > ⚠️ `useDashboardLayout.ts` **continua órfão de propósito**: ele tem a lógica de
 > SALVAR, que o C vai reaproveitar. Quem ler o `useLayoutDashboard` novo e achar
