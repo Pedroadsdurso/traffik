@@ -30,6 +30,17 @@ export interface WebhookRowDTO {
    * pudesse resolver de lá. Menos superfície, mesma utilidade.
    */
   secret: string | null;
+  /**
+   * Ultimo evento RECEBIDO. `null` = nunca recebeu nada.
+   *
+   * ⚠️ Campo ADITIVO, so leitura. A coluna ja existia e ja era escrita a cada
+   * webhook processado; o que faltava era ela chegar a tela. E o que distingue
+   * "webhook configurado e funcionando" de "configurado e mudo ha 30 dias" —
+   * e o segundo caso e indistinguivel do primeiro sem esta data.
+   */
+  lastEventAt: Date | null;
+  /** Quando o webhook foi criado. Alimenta "Criada em" no painel. */
+  createdAt: Date;
 }
 
 /**
@@ -48,6 +59,8 @@ function toDTO(w: {
   active: boolean;
   eventCount: number;
   secret: string | null;
+  lastEventAt: Date | null;
+  createdAt: Date;
 }): WebhookRowDTO {
   const def = gatewayDoWebhook(w.platform);
   const nosGeramos = def.auth.tipo === "segredo" && def.auth.geradoPorNos;
@@ -61,6 +74,8 @@ function toDTO(w: {
     eventCount: w.eventCount,
     hasSecret: Boolean(w.secret),
     secret: nosGeramos ? w.secret : null,
+    lastEventAt: w.lastEventAt,
+    createdAt: w.createdAt,
   };
 }
 

@@ -31,8 +31,7 @@ const TITULOS: [teste: (p: string) => boolean, titulo: string, apoio: string][] 
   [(p) => p.startsWith("/dashboard/regras"), "Regras de Automação", "Automatize pausas, escalas e alertas por condição"],
   [(p) => p.startsWith("/dashboard/notificacoes"), "Notificações", "Alertas de venda e relatórios programados"],
   [(p) => p.startsWith("/dashboard/taxas"), "Taxas e Despesas", "Configure custos para um cálculo de lucro preciso"],
-  [(p) => p.startsWith("/dashboard/integracoes/testes"), "Testes de integração", "Confira se o rastreamento está chegando"],
-  [(p) => p.startsWith("/dashboard/integracoes"), "Integrações", "Contas, webhooks, UTMs e pixel"],
+  [(p) => p.startsWith("/dashboard/integracoes"), "Integrações", "Conecte e gerencie todas as plataformas e serviços da sua operação"],
   [(p) => p.startsWith("/dashboard/areas"), "Áreas de Trabalho", "Separe operações diferentes sem misturar os números"],
 ];
 

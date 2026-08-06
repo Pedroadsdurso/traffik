@@ -21,10 +21,10 @@ import { Popover } from "./Popover";
  * PIOR que uma tela fora do menu — a primeira parece disponível e não é
  * encontrável; a segunda é honesta sobre o próprio estado.
  *
- * `/dashboard/integracoes/testes` está fora da navegação **de propósito**, com
- * prazo: morre no passo de Integrações, junto da reescrita daquela área. Ela
- * segue achável pela paleta ⌘K, que é busca global — o que é diferente de estar
- * escondida num menu de atalhos. Ver o CLAUDE.md.
+ ⛔ A tela de Testes NÃO EXISTE MAIS. O prazo dela era o passo de Integrações, e
+ * ele chegou em 06/08/2026: `TestesView` (911 linhas) e `TestadorPayloadCard`
+ * (244, importado só por ela) foram DELETADOS, junto da rota. Saiu também da
+ * paleta ⌘K — link de paleta para rota inexistente é 404 com cara de recurso.
  *
  * ⚠️ Ela tem UM item hoje, e isso não é preguiça: ⌘K é o único atalho que existe
  * de verdade. Vazia e honesta é melhor que cheia de link improvisado. Guia de

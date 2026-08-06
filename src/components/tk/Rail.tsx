@@ -41,15 +41,14 @@ type ItemNav = {
 };
 
 /**
- * ⚠️ "Visão geral" NÃO está entre os filhos de Integrações, e a ausência é
- * PENDÊNCIA registrada, não decisão de escopo: a tela ainda não existe
- * (`integracoes/page.tsx` é um `redirect` para `anuncios`). Um item de menu que
- * promete uma tela e entrega outra é affordance mentindo. Ele entra como
- * PRIMEIRO filho quando a tela for construída.
+ * ✅ "Visão geral" É O PRIMEIRO FILHO de Integrações desde 06/08/2026. A ausência
+ * anterior era pendência registrada, não decisão: `integracoes/page.tsx` era um
+ * `redirect` para `anuncios`, e um item de menu que promete uma tela e entrega
+ * outra é affordance mentindo. A tela existe agora, então o item entrou.
  *
- * ⚠️ "Testes" também não está aqui, e por outro motivo: o `03` decidiu que a aba
- * morre da navegação. A tela continua existindo e é alcançada pela Central de
- * ajuda — ver o comentário em `HelpMenu.tsx`.
+ * ⛔ "Testes" saiu de vez: a `TestesView` foi DELETADA na reescrita de
+ * Integrações, junto do `TestadorPayloadCard` que só ela importava. Ela estava
+ * fora da navegação desde o `03` e o prazo era este passo. Não recrie o link.
  */
 function montarNav(naoLidas: number): { grupo: string; itens: ItemNav[] }[] {
   return [
@@ -76,6 +75,7 @@ function montarNav(naoLidas: number): { grupo: string; itens: ItemNav[] }[] {
           label: "Integrações",
           icone: "integracoes",
           filhos: [
+            { href: "/dashboard/integracoes", label: "Visão geral" },
             { href: "/dashboard/integracoes/anuncios", label: "Anúncios" },
             { href: "/dashboard/integracoes/webhooks", label: "Webhooks" },
             { href: "/dashboard/integracoes/utms", label: "UTMs" },

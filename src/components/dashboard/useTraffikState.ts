@@ -1647,6 +1647,20 @@ export function useTraffikState(
     // a vitrine da área continua vazia.
     connectHref: s.workspaceAtiva ? `/api/auth/facebook?ws=${encodeURIComponent(s.workspaceAtiva)}` : "/api/auth/facebook",
     adProfiles,
+    /**
+     * Os DTOs CRUS dos perfis, sem os handlers.
+     *
+     * ⚠️ Existe ao lado de `adProfiles` de proposito, e nao e duplicacao: aquele
+     * e um MODELO DE TELA para Integracoes › Anuncios — traz `expanded`,
+     * `toggleExpanded`, `disconnect`, erros ja traduzidos. A Visao geral precisa
+     * do dado bruto (`tokenExpiresAt`, `connectedAt`, contagens) para derivar
+     * inventario e saude, e enfiar esses campos no modelo de tela faria uma
+     * estrutura servir a duas telas com necessidades opostas.
+     *
+     * ⛔ Nao derive nada aqui. A derivacao vive em `lib/integracoes/`, pura e
+     * testavel sem React.
+     */
+    perfisCrus: s.adProfiles,
 
     /**
      * 🔎 Os dois campos abaixo existem para a PALETA ⌘K do shell, e são

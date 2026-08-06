@@ -131,45 +131,110 @@ Referência: imagem 1. **Decisão: tudo da imagem 1 + tudo que já construímos.
 
 Referências: imagens 3, 5 e 6. É a tela com mais material de referência e a mais rica.
 
+> ### ✅ COMMIT 1 ENTREGUE — 06/08/2026. Estrutura, não conteúdo de aba.
+>
+> O passo foi dividido em dois de propósito: reacomodar as 1.700 linhas da
+> `PixelView` + `WebhooksView` dentro de um painel de 45% junto com a estrutura
+> nova misturaria dois trabalhos e dois motivos de revisão. **As abas
+> `Configurações / Sincronização / Logs / Webhooks` são o commit 2.**
+>
+> ### 🔴 A DIVERGÊNCIA DE FUNDO ENTRE AS REFERÊNCIAS E O PRODUTO
+>
+> As três imagens descrevem um produto **multi-plataforma**: catálogo de 15
+> integrações, abas por rede de anúncios, cards de Google Ads, TikTok, Stripe,
+> RD Station, Microsoft Ads, Taboola, GTM.
+>
+> **Esta ferramenta integra Meta e gateways brasileiros, e mais nada.** As
+> "integrações" reais são `1 AdProfile + N Webhooks + N PixelConfigs` — três
+> naturezas diferentes, não 15 linhas homogêneas.
+>
+> Reproduzir o catálogo literal produziria **cinco cards mentindo lado a lado**:
+> card de plataforma que não conecta é botão que não faz nada, em escala. Quando
+> Google Ads existir, ele entra sozinho — o inventário monta a partir do que há.
+
 ### Sub-navegação (imagem 3)
 
-`Integrações` vira seção com: **Visão geral · Anúncios · Webhooks · UTMs · Pixel/Eventos** 🔧 *(as referências mostram isso como abas horizontais; decisão sua foi sidebar)*
+| Elemento | Status |
+|---|---|
+| `Visão geral · Anúncios · Webhooks · UTMs · Pixel/Eventos` | ✅ **Visão geral entrou como primeiro filho.** 🔧 sidebar em vez de abas horizontais, decisão do dono |
+| Aba `Testes` | ⛔ **A tela foi DELETADA** (911 linhas + `TestadorPayloadCard`, 244, que só ela importava). Saiu também da paleta ⌘K: link para rota inexistente é 404 com cara de recurso |
 
 ### Visão geral
 
 | Elemento | Status |
 |---|---|
-| Faixa de estado: `Conectadas 12` · `Com erro 2` · `Inativas 1` · `Total 15` | ❌ |
-| Cada card da faixa com ícone em caixa e linha de contexto (`100% operacionais`, `Precisam de atenção`, `+1 este mês`) | ❌ |
-| Filtro de texto + `Status: Todos` + `Ordenar: Recentes` | ❌ |
-| Tabela: INTEGRAÇÃO · CATEGORIA · STATUS · ÚLTIMA SINCRONIZAÇÃO · `⋮` | ❌ |
-| Ícone real de cada plataforma na linha | ❌ |
-| Badge de categoria colorido (`Anúncios`, `Webhooks`, `Pixel`, `UTMs`) | ❌ |
-| Linha selecionada com borda e destaque persistente | ❌ |
-| Paginação `Mostrando 1 a 10 de 15` + `‹ 1 2 ›` | ❌ |
-| Botão `+ Nova integração` | ❌ |
-| **Painel de detalhe** à direita | ❌ |
-| Painel: cabeçalho com ícone, nome, `Conta principal · ID`, badge de status, `⋮` | ❌ |
-| Painel: abas `Visão geral / Configurações / Sincronização / Logs / Webhooks` | ❌ |
-| Painel: descrição da integração em caixa | ❌ |
-| Painel: grade de metadados (Conta, Tipo, Moeda, Criada em, Fuso, Última atualização) com ícone por campo | ❌ |
-| Painel: `Dados sincronizados` — 6 itens com ✓ e uma linha de descrição cada | ❌ |
-| Painel: rodapé `Testar conexão` + `Desconectar integração` (destrutivo) | ❌ |
+| Faixa de estado: `Conectadas` · `Com erro` · `Inativas` · `Total` | ✅ |
+| Cards com ícone em caixa e linha de contexto | ✅ |
+| `+1 este mês` no card Total | 🔧 **REMOVIDO.** Numa base com 1 perfil e 2 webhooks diria "+0" quase sempre. Número que nunca muda num card de estado ensina a não olhar o card |
+| **Cada card é FILTRO clicável** | ✅ **acrescentado** — não estava na referência. Card de contagem que não leva à lista obriga o usuário a reproduzir o filtro à mão logo abaixo |
+| Filtro de texto | ✅ |
+| `Status: Todos` + `Ordenar: Recentes` | 🔧 o Status virou os cards da faixa (mesma função, menos controle). Ordenar não entrou: com 5 itens não ordena nada |
+| Tabela: INTEGRAÇÃO · CATEGORIA · STATUS · ÚLTIMA SINCRONIZAÇÃO | ✅ |
+| Ícone real de cada plataforma na linha | 🔧 **fora.** Não há ativo de marca de gateway nesta base, e o `/marca/` só tem a nossa. Buscar logotipo de terceiro é decisão de produto, não de layout |
+| Badge de categoria | ✅ derivado do TIPO (`Anúncios`, `Webhooks`, `Pixel`) |
+| Categorias semânticas (`Pagamentos`, `Leads`, `Conversões`) | 🔧 **não existem.** `Webhook.platform` guarda o GATEWAY, não classificação. Selo que não separa nada |
+| Linha selecionada com borda e destaque persistente | ✅ borda ESQUERDA + fundo — fundo sozinho some no tema claro |
+| Paginação `Mostrando 1 a N de M` + `‹ 1 2 ›` | ✅ |
+| `+ Nova integração` | ✅ |
+| **Painel de detalhe** persistente à direita | ✅ |
+| Painel: cabeçalho com nome, subtítulo, badge de status | ✅ |
+| Painel: ícone da plataforma e `⋮` | 🔧 ícone pelo mesmo motivo da linha; `⋮` sem menu seria controle inerte |
+| Painel: abas `Visão geral / Configurações / Sincronização / Logs / Webhooks` | ⏳ **commit 2.** Desenhá-las vazias agora seria 4 abas que não fazem nada |
+| Painel: descrição em caixa | ✅ vira a caixa de MOTIVO quando há erro; sem erro não há texto a inventar |
+| Painel: grade de metadados | ✅ Conta, Tipo, contagens, Conectada em, Fuso |
+| Metadado `Moeda` | 🔧 é da CONTA, não do perfil, e contas do mesmo perfil podem ter moedas diferentes. Aparece no bloco de Contas |
+| Ícone por campo na grade | 🔧 seis ícones decorativos numa grade de texto — ruído sem função |
+| Painel: `Dados sincronizados` — 6 itens ✓ | 🔧 **fora.** Seriam seis ✓ fixos, iguais para toda conta: não medimos por-tipo o que sincronizou. Seis marcas de confirmação que confirmam nada |
+| Painel: `Testar conexão` + `Desconectar integração` | ⏳ **commit 2** — `disconnect` já existe no hook, mas o par de botões pertence ao rodapé das abas |
 
 ### Saúde e plataformas (imagem 6)
 
 | Elemento | Status |
 |---|---|
-| Painel `Saúde da integração`: API Meta, Pixel, Webhook, CAPI, Conversões Offline, Permissões, Token de acesso | ❌ |
-| **`Tokens expiram em N dias`** em cor de atenção | ❌ |
-| Bloco de plataforma em destaque: contas, campanhas, pixels, business managers, última sincronização | ❌ |
-| `Plataformas conectadas` — cards horizontais selecionáveis com contagem e status | ❌ |
-| `Contas conectadas` — linha com BM / Contas / Campanhas / Pixels / status de sync | ❌ |
-| Badge `Principal` na conta primária | ❌ |
-| Painel `Atividade recente` com timestamp, ícone e descrição | ❌ |
-| `Ver todas as N contas ⌄` | ❌ |
+| Painel `Saúde da integração` | ✅ **com 5 das 7 linhas** |
+| API Meta · Pixel · Webhook · CAPI · Token de acesso | ✅ todos derivados de dado real |
+| `Conversões Offline` | 🔧 **a ferramenta não faz isso.** Zero ocorrências no código e no schema |
+| `Permissões 100%` | 🔧 **não guardamos os scopes do token.** Exigiria consultar a Graph API |
+| **`Tokens expiram em N dias`** em cor de atenção | ✅ **e é o item de maior valor da tela** — ver abaixo |
+| Bloco de plataforma em destaque com contas/campanhas/pixels | ✅ no painel de detalhe |
+| …com `business managers` | 🔧 **NÃO EXISTE.** Nem model, nem campo, nem chamada — `grep -i business` no schema devolve zero |
+| `Plataformas conectadas` — cards com contagem e status | ✅ **só o que está conectado** |
+| Cards de Google/TikTok/Stripe/Taboola | 🔧 ver a divergência de fundo, acima |
+| `Contas conectadas` com Campanhas / Pixels / status | ✅ |
+| …com coluna `BM` | 🔧 mesmo motivo |
+| Badge `Principal` na conta primária | 🔧 **não há conceito de conta principal** nesta base. Todas as contas de um perfil são pares |
+| `Ver todas as N contas ⌄` | ✅ |
+| Painel `Atividade recente` | ⏳ **commit 2**, por decisão do dono: LIMIT 20, sem paginação, e depois do resto |
 
-Nossos gateways brasileiros (Kirvano, Cakto, OnyxPag, Hotmart, Kiwify) entram nesse mesmo padrão de `Plataformas conectadas`.
+> ### 🔴 O TOKEN — por que este item justifica a tela sozinho
+>
+> Token de Marketing API vencendo em silêncio para a sincronização inteira: o
+> gasto congela, o ROAS passa a mentir por omissão, e o motor de regras decide
+> com dado velho.
+>
+> O dado **já existia e já era escrito** (`AdProfile.tokenExpiresAt`, no callback
+> do OAuth) e o `/api/cron/manutencao` **já notificava**. O que faltava era
+> aparecer na TELA — notificação se perde.
+>
+> **São TRÊS estados, e o terceiro é o mais perigoso:**
+>
+> | Estado | Texto |
+> |---|---|
+> | vencido | "Token expirado há N dias" |
+> | vence | "Expira em N dias" |
+> | **`null`** | **"Data de expiração desconhecida"** |
+>
+> `null` é *"não sabemos quando expira"*, **nunca** *"não expira"*. São perfis
+> conectados antes de a coluna existir — os mais antigos da base, logo os mais
+> prováveis de já estarem vencidos. Um "—" discreto ali faria o mais perigoso
+> parecer o mais inofensivo.
+>
+> A derivação vive em `lib/integracoes/token.ts`, **pura e sem React**, porque o
+> alerta de token pendente no `metrics.ts` do Dashboard vai usar a mesma conta.
+> Duas implementações da mesma conta divergem sempre.
+
+Nossos gateways brasileiros entram no mesmo padrão de `Plataformas conectadas` —
+e entram **pelo webhook cadastrado**, não por um catálogo fixo.
 
 ---
 

@@ -55,6 +55,19 @@ type Props = Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "className"> & 
   /** Só ícone: vira quadrado e EXIGE `aria-label`. */
   apenasIcone?: boolean;
   blocoInteiro?: boolean;
+  /**
+   * Navega em vez de executar. Renderiza `<a>`, nao `<button>`.
+   *
+   * 🔴 Existe porque a alternativa era pior: envolver um `<button>` num `<a>`
+   * aninha dois controles interativos — o leitor de tela anuncia dois, o Tab
+   * para duas vezes e o comportamento do Enter fica indefinido. E copiar o
+   * estilo do botao num link solto criaria a sexta variante visual da base.
+   *
+   * ⚠️ `carregando` e `disabled` NAO se aplicam: link nao tem estado ocupado
+   * nem desabilitado no HTML. Se precisar bloquear, o certo e nao renderizar o
+   * link — por isso os dois sao ignorados aqui em vez de fingirem funcionar.
+   */
+  href?: string;
 };
 
 const BASE =
@@ -92,6 +105,7 @@ export function Button({
   iconeFim,
   apenasIcone = false,
   blocoInteiro = false,
+  href,
   disabled,
   children,
   style,
@@ -140,14 +154,26 @@ export function Button({
     </>
   );
 
+  const comum = {
+    style: medidas,
+    className: `${BASE} ${PELA_VARIANTE[variante]}`,
+  };
+
+  if (href !== undefined) {
+    return (
+      <a {...(resto as React.AnchorHTMLAttributes<HTMLAnchorElement>)} href={href} {...comum}>
+        {ehCta ? <MioloCta padRotulo={padRotulo}>{miolo}</MioloCta> : miolo}
+      </a>
+    );
+  }
+
   return (
     <button
       {...resto}
       type={type}
       disabled={bloqueado}
       aria-busy={carregando || undefined}
-      style={medidas}
-      className={`${BASE} ${PELA_VARIANTE[variante]}`}
+      {...comum}
     >
       {ehCta ? (
         /* O rótulo mora sobre `primary-solid`, nunca sobre o gradiente. O raio
@@ -166,6 +192,18 @@ export function Button({
         miolo
       )}
     </button>
+  );
+}
+
+/** O interior do CTA — extraido para o `<a>` e o `<button>` usarem o MESMO. */
+function MioloCta({ padRotulo, children }: { padRotulo: string | number; children: React.ReactNode }) {
+  return (
+    <span
+      className="inline-flex h-full w-full items-center justify-center gap-2 bg-primary-solid text-on-primary"
+      style={{ padding: padRotulo, borderRadius: `calc(var(--tk-radius-controle) - ${ANEL}px)` }}
+    >
+      {children}
+    </span>
   );
 }
 

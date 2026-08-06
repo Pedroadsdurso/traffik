@@ -22,6 +22,12 @@ export interface AdAccountDTO {
   /** Falhas consecutivas. Distingue "falhou agora" de "falha ha dois dias". */
   syncErrorCount: number;
   trackingEnabled: boolean;
+  /** Fuso da conta na Meta. `null` = a Meta nao informou. */
+  timezone: string | null;
+  /** Campanhas desta conta no banco. Contagem, nao as linhas. */
+  campanhas: number;
+  /** Configuracoes de pixel vinculadas a esta conta. */
+  pixels: number;
 }
 
 export interface AdProfileDTO {
@@ -33,6 +39,20 @@ export interface AdProfileDTO {
   lastDiscoveryError: string | null;
   /** `true` enquanto o perfil nunca completou uma sincronizacao. */
   nuncaSincronizou: boolean;
+  /**
+   * Quando o token da Marketing API expira. **`null` = NAO SABEMOS**, nunca
+   * "nao expira" — ver `lib/integracoes/token.ts`.
+   *
+   * ⚠️ Campo ADITIVO, so leitura, exposto para a tela de Integracoes poder
+   * avisar ANTES de a sincronizacao parar. A coluna ja existia e ja era escrita
+   * no callback do OAuth; o que faltava era ela chegar ate a tela. O
+   * `/api/cron/manutencao` ja notificava, mas notificacao se perde.
+   */
+  tokenExpiresAt: Date | null;
+  /** Quando o perfil foi conectado. Alimenta "Criada em" no painel. */
+  connectedAt: Date;
+  /** Ultima sincronizacao COMPLETA bem-sucedida. `null` = nunca. */
+  lastSyncedAt: Date | null;
   accounts: AdAccountDTO[];
 }
 
@@ -61,7 +81,15 @@ export async function listAdProfiles(workspaceId?: string | null): Promise<AdPro
   const profiles = await prisma.adProfile.findMany({
     where: { userId },
     orderBy: { connectedAt: "asc" },
-    include: { adAccounts: { where: escopo.where, orderBy: { name: "asc" } } },
+    include: {
+      adAccounts: {
+        where: escopo.where,
+        orderBy: { name: "asc" },
+        // Contagens para a tela de Integracoes. `_count` e uma subquery do
+        // Prisma — nao carrega as linhas.
+        include: { _count: { select: { campaigns: true, pixelConfigs: true } } },
+      },
+    },
   });
   return profiles
     .filter((p) => p.adAccounts.length > 0)
@@ -75,6 +103,9 @@ export async function listAdProfiles(workspaceId?: string | null): Promise<AdPro
     // isso, `accountStatus` nulo dizia "Status nao informado" nos dois casos —
     // e so um deles pede acao.
     nuncaSincronizou: p.lastSyncedAt == null,
+    tokenExpiresAt: p.tokenExpiresAt,
+    connectedAt: p.connectedAt,
+    lastSyncedAt: p.lastSyncedAt,
     accounts: p.adAccounts.map((a) => ({
       id: a.id,
       fbAccountId: a.fbAccountId,
@@ -87,6 +118,9 @@ export async function listAdProfiles(workspaceId?: string | null): Promise<AdPro
       backfillFeitoEm: a.backfillFeitoEm,
       syncErrorCount: a.syncErrorCount,
       trackingEnabled: a.trackingEnabled,
+      timezone: a.timezone,
+      campanhas: a._count.campaigns,
+      pixels: a._count.pixelConfigs,
     })),
   }));
 }
@@ -98,6 +132,7 @@ export async function toggleAccountTracking(accountId: string): Promise<AdAccoun
   const updated = await prisma.adAccount.update({
     where: { id: accountId },
     data: { trackingEnabled: !acc.trackingEnabled },
+    include: { _count: { select: { campaigns: true, pixelConfigs: true } } },
   });
   return {
     id: updated.id,
@@ -111,6 +146,9 @@ export async function toggleAccountTracking(accountId: string): Promise<AdAccoun
     backfillFeitoEm: updated.backfillFeitoEm,
     syncErrorCount: updated.syncErrorCount,
     trackingEnabled: updated.trackingEnabled,
+    timezone: updated.timezone,
+    campanhas: updated._count.campaigns,
+    pixels: updated._count.pixelConfigs,
   };
 }
 
