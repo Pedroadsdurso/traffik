@@ -131,7 +131,16 @@ Referência: imagem 1. **Decisão: tudo da imagem 1 + tudo que já construímos.
 
 Referências: imagens 3, 5 e 6. É a tela com mais material de referência e a mais rica.
 
-> ### ✅ COMMIT 1 ENTREGUE — 06/08/2026. Estrutura, não conteúdo de aba.
+> ### ✅ COMMITS 1 E 2 ENTREGUES — 06/08/2026.
+>
+> ### 🔜 E O ESCOPO CRESCEU DUAS TELAS
+> `PixelView` (1.181) e `WebhooksView` (532) **sobreviveram**, e viram as telas
+> próprias de `/integracoes/pixel` e `/integracoes/webhooks`. O motivo é de
+> hierarquia: **o painel é POR INTEGRAÇÃO, essas views são POR USUÁRIO.**
+> Deletá-las agora deixaria três rotas do menu sem tela. Entram depois de
+> UTM & Snippets.
+>
+> ### O commit 1 foi estrutura, o 2 foi conteúdo de aba.
 >
 > O passo foi dividido em dois de propósito: reacomodar as 1.700 linhas da
 > `PixelView` + `WebhooksView` dentro de um painel de 45% junto com a estrutura
@@ -179,13 +188,16 @@ Referências: imagens 3, 5 e 6. É a tela com mais material de referência e a m
 | **Painel de detalhe** persistente à direita | ✅ |
 | Painel: cabeçalho com nome, subtítulo, badge de status | ✅ |
 | Painel: ícone da plataforma e `⋮` | 🔧 ícone pelo mesmo motivo da linha; `⋮` sem menu seria controle inerte |
-| Painel: abas `Visão geral / Configurações / Sincronização / Logs / Webhooks` | ⏳ **commit 2.** Desenhá-las vazias agora seria 4 abas que não fazem nada |
+| Painel: abas `Configurações / Sincronização / Logs` | ✅ **commit 2** — e são POR ITEM: "Logs" só aparece para webhook, o único tipo com fluxo de log |
+| Aba `Webhooks` | 🔧 **fora.** Para uma integração de webhook a aba seria ela mesma; o perfil da Meta não tem webhook associado |
+| Aba `Visão geral` dentro do painel | 🔧 redundante — o painel inteiro já é a visão geral do item |
 | Painel: descrição em caixa | ✅ vira a caixa de MOTIVO quando há erro; sem erro não há texto a inventar |
 | Painel: grade de metadados | ✅ Conta, Tipo, contagens, Conectada em, Fuso |
 | Metadado `Moeda` | 🔧 é da CONTA, não do perfil, e contas do mesmo perfil podem ter moedas diferentes. Aparece no bloco de Contas |
 | Ícone por campo na grade | 🔧 seis ícones decorativos numa grade de texto — ruído sem função |
 | Painel: `Dados sincronizados` — 6 itens ✓ | 🔧 **fora.** Seriam seis ✓ fixos, iguais para toda conta: não medimos por-tipo o que sincronizou. Seis marcas de confirmação que confirmam nada |
-| Painel: `Testar conexão` + `Desconectar integração` | ⏳ **commit 2** — `disconnect` já existe no hook, mas o par de botões pertence ao rodapé das abas |
+| Painel: `Desconectar` com confirmação | ✅ nomeia o que se perde **e o que NÃO se perde** (histórico fica) |
+| Painel: `Testar conexão` | 🔧 **virou `Testar e sincronizar`.** `/api/sync/manual` ESCREVE no banco; um botão que diz "testar" e grava é affordance mentindo. Só aparece no perfil da Meta — em webhook e pixel não há o que testar sem evento real, e controle desabilitado sem explicação é pior que ausência |
 
 ### Saúde e plataformas (imagem 6)
 
@@ -204,7 +216,7 @@ Referências: imagens 3, 5 e 6. É a tela com mais material de referência e a m
 | …com coluna `BM` | 🔧 mesmo motivo |
 | Badge `Principal` na conta primária | 🔧 **não há conceito de conta principal** nesta base. Todas as contas de um perfil são pares |
 | `Ver todas as N contas ⌄` | ✅ |
-| Painel `Atividade recente` | ⏳ **commit 2**, por decisão do dono: LIMIT 20, sem paginação, e depois do resto |
+| Painel `Atividade recente` | ✅ **união de 3 fontes** (`WebhookLog` + `Notification` + falha de sync), ordenada por tempo. LIMIT 20, sem paginação — o `WebhookLog` não tem retenção |
 
 > ### 🔴 O TOKEN — por que este item justifica a tela sozinho
 >

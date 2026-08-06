@@ -40,10 +40,17 @@ export interface WebhookLogDTO {
 }
 
 /** Últimos payloads recebidos, do mais recente para o mais antigo. */
-export async function listWebhookLogs(limit = 20): Promise<WebhookLogDTO[]> {
+/**
+ * @param webhookId Quando informado, so os logs DAQUELE webhook.
+ *
+ * ⚠️ Filtro ADITIVO, so leitura. A aba Logs do painel de Integracoes mostra o
+ * historico da integracao SELECIONADA — sem o filtro ela mostraria os eventos
+ * de todos os gateways sob o titulo de um so, que e pior que nao ter a aba.
+ */
+export async function listWebhookLogs(limit = 20, webhookId?: string): Promise<WebhookLogDTO[]> {
   const userId = await requireUserId();
   const rows = await prisma.webhookLog.findMany({
-    where: { userId },
+    where: { userId, ...(webhookId ? { webhookId } : null) },
     orderBy: { createdAt: "desc" },
     take: Math.min(Math.max(limit, 1), 100),
   });

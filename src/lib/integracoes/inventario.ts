@@ -93,6 +93,14 @@ export interface ItemIntegracao {
   meta: { rotulo: string; valor: string }[];
   /** Só o perfil da Meta tem token. `null` no resto. */
   token: EstadoToken | null;
+  /**
+   * Para onde a aba "Configurações" manda. **`null` = não há tela dedicada**, e
+   * aí a aba não oferece link nenhum em vez de oferecer um que não leva a lugar
+   * nenhum.
+   */
+  rotaConfig: string | null;
+  /** Linhas da aba Sincronização — pares rótulo/valor, já em português. */
+  sincronizacao: { rotulo: string; valor: string }[];
 }
 
 function texto(d: Date | null | undefined): string {
@@ -151,6 +159,15 @@ export function montarInventario(
       rotuloSinal: "Última sincronização",
       detalhe,
       token,
+      rotaConfig: "/dashboard/integracoes/anuncios",
+      sincronizacao: [
+        { rotulo: "Contas rastreando", valor: `${rastreando} de ${p.accounts.length}` },
+        { rotulo: "Contas com erro", valor: String(contasComErro) },
+        /* ⚠️ "nunca" e diferente de "ha muito tempo": conta cujo historico nunca
+           foi buscado mostra ZERO em toda metrica, e sem esta linha isso e
+           indistinguivel de "nao gastou nada". Ver `backfillFeitoEm` no schema. */
+        { rotulo: "Histórico já buscado", valor: `${p.accounts.filter((a) => a.backfillFeitoEm).length} de ${p.accounts.length} contas` },
+      ],
       meta: [
         { rotulo: "Conta", valor: p.email ?? p.name },
         { rotulo: "Tipo", valor: "Anúncios" },
@@ -198,6 +215,15 @@ export function montarInventario(
       rotuloSinal: "Último evento recebido",
       detalhe,
       token: null,
+      rotaConfig: "/dashboard/integracoes/webhooks",
+      sincronizacao: [
+        { rotulo: "Eventos recebidos", valor: w.eventCount.toLocaleString("pt-BR") },
+        { rotulo: "Situação", valor: w.active ? "Ligado, recebendo" : "Desligado" },
+        {
+          rotulo: "Dias sem evento",
+          valor: diasSemEvento === null ? "nunca recebeu" : String(diasSemEvento),
+        },
+      ],
       meta: [
         { rotulo: "Gateway", valor: rotuloGateway(w.platform) },
         { rotulo: "Tipo", valor: "Webhook" },
@@ -239,6 +265,14 @@ export function montarInventario(
       rotuloSinal: "Último evento",
       detalhe,
       token: null,
+      rotaConfig: "/dashboard/integracoes/pixel",
+      /* ⚠️ Pixel NAO SINCRONIZA. Ele despacha evento na hora em que acontece —
+         nao ha ciclo, nao ha "ultima sincronizacao", nao ha o que reprocessar.
+         Dizer isso e diferente de mostrar a aba vazia. */
+      sincronizacao: [
+        { rotulo: "Modo", valor: "Envio no momento do evento (não há ciclo de sincronização)" },
+        { rotulo: "Pixels com token de CAPI", valor: `${comToken} de ${px.metaPixels.length}` },
+      ],
       meta: [
         { rotulo: "Tipo", valor: "Pixel e CAPI" },
         { rotulo: "Pixels da Meta", valor: String(px.metaPixels.length) },

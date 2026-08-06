@@ -14,7 +14,8 @@ import {
   updateRule,
   type RuleDTO,
 } from "@/lib/actions/rules";
-import { brl, elapsed, plural } from "@/lib/format";
+import { brl, plural } from "@/lib/format";
+import { Desde } from "@/components/tk/Desde";
 import { sx } from "@/lib/sx";
 import { Icone } from "../ui/Icone";
 import { Drawer } from "../ui/Drawer";
@@ -325,7 +326,11 @@ function CardRegra({
           {ultimo ? (
             <>
               <span style={sx(`width:7px;height:7px;border-radius:50%;background:${STATUS_COR[ultimo.status] ?? "var(--color-text)"}`)} />
-              <span>{STATUS_LABEL[ultimo.status] ?? ultimo.status} · {elapsed(new Date(ultimo.ranAt).getTime())}</span>
+              {/* 🔴 `Desde`, nao `elapsed()` direto: `initialRules` vem do SERVIDOR
+                  (layout, `Promise.all`), entao esta linha renderiza nas duas
+                  pontas e o texto divergia — mismatch de hidratacao. Mesmo
+                  defeito que derrubou a navegacao da Visao geral. */}
+              <span>{STATUS_LABEL[ultimo.status] ?? ultimo.status} · <Desde quando={ultimo.ranAt} /></span>
             </>
           ) : (
             <span>Nunca executou</span>

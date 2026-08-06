@@ -18,7 +18,10 @@ import {
   type ItemIntegracao,
 } from "@/lib/integracoes/inventario";
 import { detalheDoToken, rotuloDoToken, tokenPedeAtencao } from "@/lib/integracoes/token";
-import { elapsed } from "@/lib/format";
+import { Desde } from "@/components/tk/Desde";
+import { Modal } from "@/components/dashboard/ui/Modal";
+import { listWebhookLogs, type WebhookLogDTO } from "@/lib/actions/diagnostics";
+import { traduzirErroMeta } from "@/lib/facebook/erroMeta";
 
 import { Icone, type NomeIcone } from "../../ui/Icone";
 import type { TraffikView } from "../../useTraffikState";
@@ -67,37 +70,6 @@ const COR_SERVICO: Record<EstadoServico, string> = {
 };
 
 const POR_PAGINA = 10;
-
-/**
- * "há 4 minutos" — e `suppressHydrationWarning` NÃO é preguiça aqui.
- *
- * 🔴 O DEFEITO QUE ISTO CONSERTA, e que só a tela mostrou: `elapsed()` lê
- * `Date.now()`. O servidor renderiza "há 4 minutos", o cliente hidrata alguns
- * instantes depois e calcula "há 5 minutos" — os dois textos divergem, o React
- * aborta a hidratação da árvore e **a navegação voltava para `/dashboard`**. A
- * tela simplesmente não abria pelo menu.
- *
- * `tsc`, `lint` e `build` passaram os três. O log do servidor de desenvolvimento
- * é que denunciou, e só depois de abrir a página.
- *
- * ⚠️ Por que não um `useEffect` de "montado": ele trocaria o texto por um
- * placeholder no primeiro quadro, e uma coluna inteira piscando em toda carga é
- * pior que um texto que se corrige sozinho. `suppressHydrationWarning` é a
- * saída que o React documenta para exatamente este caso — carimbo de tempo.
- *
- * ⛔ Só vale para TEXTO DE TEMPO. Não espalhe para conteúdo que possa divergir
- * por outro motivo: aí a divergência é bug e o silenciador esconde o bug.
- */
-function Desde({ quando }: { quando: Date | null }) {
-  return (
-    <span suppressHydrationWarning>
-      {/* "nunca" é diferente de "há 0 minutos", e a diferença importa: um
-          webhook que nunca recebeu evento não é o mesmo que um que acabou de
-          receber. */}
-      {quando ? elapsed(new Date(quando).getTime()) : "nunca"}
-    </span>
-  );
-}
 
 type FiltroEstado = "todos" | EstadoIntegracao;
 
@@ -344,7 +316,7 @@ export function VisaoGeralScreen({ v }: { v: TraffikView }) {
           </Card>
 
           {/* ── Painel de detalhe ───────────────────────────────────────── */}
-          {item ? <PainelDetalhe item={item} /> : null}
+          {item ? <PainelDetalhe item={item} v={v} /> : null}
         </div>
       )}
 
@@ -354,6 +326,7 @@ export function VisaoGeralScreen({ v }: { v: TraffikView }) {
           <PlataformasConectadas v={v} itens={itens} />
           <ContasConectadas v={v} />
         </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "var(--tk-gap-grid)" }}>
         <Card titulo="Saúde da integração" descricao="Cinco serviços, cinco respostas reais">
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {saude.map((l) => (
@@ -371,6 +344,8 @@ export function VisaoGeralScreen({ v }: { v: TraffikView }) {
             Conversões offline e permissões do token não aparecem: a ferramenta ainda não lê esses dados da Meta.
           </p>
         </Card>
+        <AtividadeRecente v={v} />
+        </div>
       </div>
     </div>
   );
@@ -420,8 +395,32 @@ function CardEstado({
   );
 }
 
-/* ── Painel de detalhe ───────────────────────────────────────────────────── */
-function PainelDetalhe({ item }: { item: ItemIntegracao }) {
+/* ── Painel de detalhe ─────────────────────────────────────────────────────
+   ⛔ A aba "Webhooks" da referência NÃO existe aqui, e o motivo é de
+   hierarquia: para uma integração de webhook a aba seria ela mesma, e o perfil
+   da Meta não tem webhook associado. Uma quarta aba que só se repete ou fica
+   vazia é a definição de controle que não controla nada.
+
+   ⛔ E as abas são POR ITEM: "Logs" só aparece para webhook, que é o único tipo
+   com fluxo de log (`WebhookLog`). Mostrar a aba vazia nos outros dois — ou
+   desabilitada — deixaria a pessoa procurando o que destrava. */
+type Aba = "config" | "sync" | "logs";
+
+function PainelDetalhe({ item, v }: { item: ItemIntegracao; v: TraffikView }) {
+  const [aba, setAba] = React.useState<Aba>("config");
+  const ehWebhook = item.categoria === "webhooks";
+  const ehPerfil = item.categoria === "anuncios";
+
+  const abas: { id: Aba; rotulo: string }[] = [
+    { id: "config", rotulo: "Configurações" },
+    { id: "sync", rotulo: "Sincronização" },
+    ...(ehWebhook ? [{ id: "logs" as const, rotulo: "Logs" }] : []),
+  ];
+
+  /* Trocar de item volta para a primeira aba: manter "Logs" selecionada ao
+     pular para um perfil mostraria uma aba que aquele item nem tem. */
+  const abaAtual = abas.some((a) => a.id === aba) ? aba : "config";
+
   return (
     <Card>
       <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
@@ -431,13 +430,6 @@ function PainelDetalhe({ item }: { item: ItemIntegracao }) {
         </div>
         <Badge tom={TOM_ESTADO[item.estado]} ponto>{ROTULO_ESTADO[item.estado]}</Badge>
       </div>
-
-      {/* ⛔ As abas (Configurações / Sincronização / Logs / Webhooks) NÃO estão
-          aqui de propósito. O conteúdo delas é o que hoje mora na `PixelView`
-          (1181 linhas) e na `WebhooksView` (532), e trazer isso junto com a
-          estrutura misturaria dois trabalhos e dois motivos de revisão.
-          Desenhar as abas VAZIAS agora seria pior: cinco abas em que quatro não
-          fazem nada é exatamente o "controle que não controla nada". */}
 
       {item.detalhe && (
         <p
@@ -453,47 +445,269 @@ function PainelDetalhe({ item }: { item: ItemIntegracao }) {
         </p>
       )}
 
-      {/* ── Token — a razão de o painel existir ──────────────────────────── */}
-      {item.token && (
-        <div
-          style={{
-            margin: "12px 0 0", padding: "11px",
-            borderRadius: "var(--tk-radius-controle)",
-            border: `1px solid ${tokenPedeAtencao(item.token) ? "var(--tk-warning)" : "var(--tk-border)"}`,
-            background: tokenPedeAtencao(item.token) ? "color-mix(in oklch, var(--tk-warning) 10%, transparent)" : "transparent",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-            <span aria-hidden="true" style={{ color: tokenPedeAtencao(item.token) ? "var(--tk-warning)" : "var(--tk-text-muted)", display: "flex" }}>
-              <Icone nome={tokenPedeAtencao(item.token) ? "aviso" : "ok"} tamanho={14} />
-            </span>
-            <span className="text-label" style={{ color: tokenPedeAtencao(item.token) ? "var(--tk-warning)" : "var(--tk-text)" }}>
-              {rotuloDoToken(item.token)}
-            </span>
-          </div>
-          {detalheDoToken(item.token) && (
-            <p className="text-caption text-text-secondary" style={{ margin: "5px 0 0", lineHeight: 1.45 }}>
-              {detalheDoToken(item.token)}
-            </p>
-          )}
-        </div>
-      )}
+      {item.token && <BlocoToken token={item.token} />}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "10px 14px", marginTop: 14 }}>
-        {item.meta.map((m) => (
-          <div key={m.rotulo} style={{ minWidth: 0 }}>
-            <span className="text-caption text-text-muted" style={{ display: "block" }}>{m.rotulo}</span>
-            <span className="text-label text-text" style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis" }}>{m.valor}</span>
-          </div>
+      <div role="tablist" style={{ display: "flex", gap: 2, marginTop: 14, borderBottom: "1px solid var(--tk-border)" }}>
+        {abas.map((a) => (
+          <button
+            key={a.id}
+            type="button"
+            role="tab"
+            aria-selected={abaAtual === a.id}
+            onClick={() => setAba(a.id)}
+            className={`text-label ${abaAtual === a.id ? "text-text" : "text-text-secondary"}`}
+            style={{
+              background: "none", border: "none", cursor: "pointer", padding: "7px 10px",
+              borderBottom: `2px solid ${abaAtual === a.id ? "var(--tk-primary)" : "transparent"}`,
+              marginBottom: -1,
+            }}
+          >
+            {a.rotulo}
+          </button>
         ))}
       </div>
 
-      <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--tk-border)" }}>
-        <span className="text-caption text-text-muted">
-          {item.rotuloSinal}: <Desde quando={item.ultimoSinal} />
+      <div style={{ paddingTop: 12 }}>
+        {abaAtual === "config" && <AbaConfig item={item} />}
+        {abaAtual === "sync" && <AbaSync item={item} />}
+        {abaAtual === "logs" && <AbaLogs item={item} />}
+      </div>
+
+      <RodapeAcoes item={item} v={v} ehPerfil={ehPerfil} />
+    </Card>
+  );
+}
+
+function BlocoToken({ token }: { token: NonNullable<ItemIntegracao["token"]> }) {
+  const atencao = tokenPedeAtencao(token);
+  return (
+    <div
+      style={{
+        margin: "12px 0 0", padding: "11px",
+        borderRadius: "var(--tk-radius-controle)",
+        border: `1px solid ${atencao ? "var(--tk-warning)" : "var(--tk-border)"}`,
+        background: atencao ? "color-mix(in oklch, var(--tk-warning) 10%, transparent)" : "transparent",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+        <span aria-hidden="true" style={{ color: atencao ? "var(--tk-warning)" : "var(--tk-text-muted)", display: "flex" }}>
+          <Icone nome={atencao ? "aviso" : "ok"} tamanho={14} />
+        </span>
+        <span className="text-label" style={{ color: atencao ? "var(--tk-warning)" : "var(--tk-text)" }}>
+          {rotuloDoToken(token)}
         </span>
       </div>
-    </Card>
+      {detalheDoToken(token) && (
+        <p className="text-caption text-text-secondary" style={{ margin: "5px 0 0", lineHeight: 1.45 }}>
+          {detalheDoToken(token)}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function Grade({ linhas }: { linhas: { rotulo: string; valor: string }[] }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "10px 14px" }}>
+      {linhas.map((m) => (
+        <div key={m.rotulo} style={{ minWidth: 0 }}>
+          <span className="text-caption text-text-muted" style={{ display: "block" }}>{m.rotulo}</span>
+          <span className="text-label text-text" style={{ display: "block" }}>{m.valor}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function AbaConfig({ item }: { item: ItemIntegracao }) {
+  return (
+    <>
+      <Grade linhas={item.meta} />
+      {/* ⛔ A configuração COMPLETA não cabe aqui, e não é questão de largura: a
+          `PixelView` e a `WebhooksView` são telas POR USUÁRIO ("todos os meus
+          pixels"), enquanto este painel é POR INTEGRAÇÃO. Enfiar uma lista de N
+          itens no detalhe de 1 item é contradição de hierarquia. O link leva à
+          tela que tem o escopo certo. */}
+      {item.rotaConfig && (
+        <div style={{ marginTop: 14 }}>
+          <Button href={item.rotaConfig} iconeFim={<Icone nome="chevronDireita" tamanho={13} />}>
+            Abrir configuração completa
+          </Button>
+        </div>
+      )}
+    </>
+  );
+}
+
+function AbaSync({ item }: { item: ItemIntegracao }) {
+  return (
+    <>
+      <Grade linhas={item.sincronizacao} />
+      <p className="text-caption text-text-muted" style={{ margin: "12px 0 0" }}>
+        {item.rotuloSinal}: <Desde quando={item.ultimoSinal} />
+      </p>
+    </>
+  );
+}
+
+/**
+ * Logs do gateway — só para webhook, que é o único tipo com fluxo de log.
+ *
+ * ⚠️ **LIMIT 20 e sem paginação**, por decisão de 06/08/2026. O `WebhookLog` não
+ * tem retenção nem purga (dívida registrada no CLAUDE.md): paginar sobre uma
+ * tabela que cresce sem teto convidaria a percorrer o histórico inteiro.
+ */
+/**
+ * ⚠️ Os quatro estados do `WebhookLog`, e sao QUATRO — nao "ok/erro".
+ * `RECEBIDO` e diferente de `PROCESSADO`: o primeiro chegou e ainda nao virou
+ * venda, o segundo virou. Colapsar os dois em verde esconderia justamente o
+ * caso em que o gateway envia e a venda nao aparece no Dashboard.
+ */
+const PONTO_LOG: Record<string, string> = {
+  PROCESSADO: "var(--tk-success)",
+  RECEBIDO: "var(--tk-primary)",
+  REJEITADO: "var(--tk-warning)",
+  ERRO: "var(--tk-danger)",
+};
+
+function AbaLogs({ item }: { item: ItemIntegracao }) {
+  const [logs, setLogs] = React.useState<WebhookLogDTO[] | null>(null);
+  const [erro, setErro] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let vivo = true;
+    listWebhookLogs(20, item.id)
+      .then((r) => { if (vivo) setLogs(r); })
+      .catch(() => { if (vivo) setErro("Não foi possível carregar os logs."); });
+    return () => { vivo = false; };
+  }, [item.id]);
+
+  if (erro) return <p className="text-caption text-danger" style={{ margin: 0 }}>{erro}</p>;
+  if (logs === null) return <p className="text-caption text-text-muted" style={{ margin: 0 }}>Carregando…</p>;
+  if (logs.length === 0) {
+    return (
+      <p className="text-caption text-text-muted" style={{ margin: 0, lineHeight: 1.45 }}>
+        Nenhum evento registrado para este webhook. Os logs aparecem quando o gateway começar a enviar.
+      </p>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      {logs.map((l, i) => (
+        <div key={l.id} style={{ display: "flex", gap: 9, alignItems: "baseline", padding: "7px 0", borderTop: i ? "1px solid var(--tk-border)" : undefined }}>
+          <span
+            aria-hidden="true"
+            style={{ width: 7, height: 7, borderRadius: 99, flex: "none", background: PONTO_LOG[l.status] ?? "var(--tk-text-muted)" }}
+          />
+          <span className="text-caption text-text" style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+            {l.message ?? l.status}
+            {l.httpStatus != null && <span className="text-text-muted"> · HTTP {l.httpStatus}</span>}
+          </span>
+          <span className="text-caption text-text-muted" style={{ whiteSpace: "nowrap" }}>
+            <Desde quando={l.createdAt} />
+          </span>
+        </div>
+      ))}
+      <p className="text-caption text-text-muted" style={{ margin: "10px 0 0" }}>
+        Mostrando os 20 eventos mais recentes.
+      </p>
+    </div>
+  );
+}
+
+/* ── Rodapé de ações ─────────────────────────────────────────────────────── */
+function RodapeAcoes({ item, v, ehPerfil }: { item: ItemIntegracao; v: TraffikView; ehPerfil: boolean }) {
+  const [confirmar, setConfirmar] = React.useState(false);
+  const [resultado, setResultado] = React.useState<{ ok: boolean; texto: string } | null>(null);
+  const [ocupado, setOcupado] = React.useState(false);
+
+  async function testar() {
+    setOcupado(true);
+    setResultado(null);
+    try {
+      const r = await fetch("/api/sync/manual", { method: "POST" });
+      const j = await r.json();
+      /* A mensagem CRUA da Graph API passa pelo tradutor que já existe. Inglês
+         truncado com URL de documentação no meio não é resposta para o usuário
+         — foi para isso que o `erroMeta.ts` foi escrito. */
+      /* ⚠️ `traduzirErroMeta` devolve `null` quando NAO conhece a mensagem, e
+         a lista dele e necessariamente incompleta — a Meta muda o texto sem
+         avisar. Cair no texto cru e melhor que engolir o erro: ilegivel e pior
+         que ausente, mas ausente e o unico que impede o diagnostico. */
+      const cru = String(j.mensagem ?? "Falha ao sincronizar.");
+      const texto = r.ok ? cru : (traduzirErroMeta(cru)?.mensagem ?? cru);
+      setResultado({ ok: r.ok, texto });
+    } catch {
+      setResultado({ ok: false, texto: "Não foi possível falar com o servidor." });
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  const podeDesconectar = ehPerfil || item.categoria === "webhooks";
+
+  return (
+    <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--tk-border)", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+      {/* ⛔ SÓ O PERFIL DA META TEM ESTE BOTÃO. Para webhook e pixel não há o
+          que testar sem um evento real chegando do lado de fora — e um controle
+          DESABILITADO sem explicação é pior que ausência: a pessoa fica
+          procurando o que o destrava. */}
+      {ehPerfil && (
+        <Button onClick={testar} carregando={ocupado} iconeInicio={<Icone nome="atualizar" tamanho={14} />}>
+          {/* 🔴 O NOME DIZ O QUE ELE FAZ. `/api/sync/manual` SINCRONIZA — escreve
+              no banco. Um botão rotulado "Testar conexão" que grava seria
+              affordance mentindo, a mesma regra que removeu a interação do globo
+              e tirou Testes da Central de ajuda. */}
+          Testar e sincronizar
+        </Button>
+      )}
+      {podeDesconectar && (
+        <Button variante="destrutivo" onClick={() => setConfirmar(true)} iconeInicio={<Icone nome="excluir" tamanho={14} />}>
+          Desconectar
+        </Button>
+      )}
+      {resultado && (
+        <span className="text-caption" style={{ color: resultado.ok ? "var(--tk-success)" : "var(--tk-danger)" }}>
+          {resultado.texto}
+        </span>
+      )}
+
+      {confirmar && (
+        <Modal aberta titulo={`Desconectar ${item.nome}?`} onClose={() => setConfirmar(false)}>
+          {/* 🔴 A CONFIRMAÇÃO NOMEIA O QUE SE PERDE **E O QUE NÃO SE PERDE**.
+              Sem a segunda metade a pessoa presume o pior — que vai perder o
+              histórico — e deixa uma integração quebrada no lugar por medo. É a
+              mesma afirmação que os alertas do Dashboard já fazem. */}
+          <p className="text-body text-text-secondary" style={{ margin: 0, lineHeight: 1.5 }}>
+            {ehPerfil
+              ? "Isto remove o vínculo com a Meta: o token de acesso é apagado e as contas de anúncio deixam de ser listadas e sincronizadas."
+              : "Isto apaga o webhook e a URL dele. O gateway passa a receber erro ao enviar, até você reconfigurar."}
+          </p>
+          <p className="text-body text-text-secondary" style={{ margin: "10px 0 0", lineHeight: 1.5 }}>
+            <strong className="text-text">O que NÃO se perde:</strong> vendas, cliques e métricas já
+            sincronizados continuam no seu histórico e seguem aparecendo nos relatórios.
+          </p>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 16 }}>
+            <Button onClick={() => setConfirmar(false)}>Cancelar</Button>
+            <Button
+              variante="destrutivo"
+              onClick={async () => {
+                if (ehPerfil) {
+                  const p = v.adProfiles.find((x) => x.id === item.id);
+                  await p?.disconnect();
+                } else {
+                  await v.removeWebhook(item.id);
+                }
+                setConfirmar(false);
+              }}
+            >
+              Desconectar
+            </Button>
+          </div>
+        </Modal>
+      )}
+    </div>
   );
 }
 
@@ -607,5 +821,109 @@ function Contagem({ n, rotulo }: { n: number; rotulo: string }) {
       <span className="text-label text-text" style={{ display: "block" }}>{n}</span>
       <span className="text-caption text-text-muted" style={{ display: "block" }}>{rotulo}</span>
     </span>
+  );
+}
+
+/* ── Atividade recente ─────────────────────────────────────────────────────
+   🔴 NÃO EXISTE FEED DE ATIVIDADE DE INTEGRAÇÃO nesta base — o que existe são
+   três fontes com formatos e ciclos diferentes. Este painel as UNE na leitura,
+   sem criar tabela nem coluna:
+
+     WebhookLog     evento recebido de gateway   (tem carimbo próprio)
+     Notification   o que a ferramenta avisou    (já vem do servidor)
+     AdAccount      falha de sincronização       (`lastSyncErrorAt`)
+
+   ⚠️ **LIMIT 20 e sem paginação**, por decisão de 06/08/2026. O `WebhookLog`
+   não tem retenção nem purga — é dívida registrada —, e paginar sobre uma
+   tabela que cresce sem teto convidaria a percorrer o histórico inteiro. Vinte
+   linhas respondem "o que aconteceu agora", que é a pergunta do painel.
+
+   ⚠️ E a união é por TEMPO, não por fonte: intercalar é o ponto. Três listas
+   separadas obrigariam a pessoa a comparar horários entre blocos para montar a
+   sequência na cabeça — que é exatamente o trabalho que o painel deveria poupar. */
+const LIMITE_ATIVIDADE = 20;
+
+type LinhaAtividade = { id: string; quando: Date; texto: string; cor: string; icone: NomeIcone };
+
+function AtividadeRecente({ v }: { v: TraffikView }) {
+  const [logs, setLogs] = React.useState<WebhookLogDTO[]>([]);
+
+  React.useEffect(() => {
+    let vivo = true;
+    listWebhookLogs(LIMITE_ATIVIDADE)
+      .then((r) => { if (vivo) setLogs(r); })
+      /* Falha aqui NÃO derruba o painel: as outras duas fontes continuam
+         valendo, e um painel com 2 de 3 fontes é melhor que um painel vazio. */
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+
+  const linhas = React.useMemo<LinhaAtividade[]>(() => {
+    const out: LinhaAtividade[] = [];
+
+    for (const l of logs) {
+      out.push({
+        id: `log-${l.id}`,
+        quando: new Date(l.createdAt),
+        texto: `${l.gateway}: ${l.message ?? l.status.toLowerCase()}`,
+        cor: PONTO_LOG[l.status] ?? "var(--tk-text-muted)",
+        icone: "link",
+      });
+    }
+
+    for (const n of v.notifItems.slice(0, LIMITE_ATIVIDADE)) {
+      out.push({
+        id: `notif-${n.id}`,
+        quando: new Date(n.timestamp),
+        texto: n.title,
+        cor: "var(--tk-primary)",
+        icone: "sino",
+      });
+    }
+
+    for (const p of v.perfisCrus) {
+      for (const a of p.accounts) {
+        if (!a.lastSyncErrorAt) continue;
+        out.push({
+          id: `sync-${a.id}`,
+          quando: new Date(a.lastSyncErrorAt),
+          texto: `${a.name}: falha ao sincronizar`,
+          cor: "var(--tk-danger)",
+          icone: "aviso",
+        });
+      }
+    }
+
+    return out
+      .filter((x) => !Number.isNaN(x.quando.getTime()))
+      .sort((a, b) => b.quando.getTime() - a.quando.getTime())
+      .slice(0, LIMITE_ATIVIDADE);
+  }, [logs, v.notifItems, v.perfisCrus]);
+
+  return (
+    <Card titulo="Atividade recente" descricao="Eventos, avisos e falhas de sincronização">
+      {linhas.length === 0 ? (
+        <p className="text-caption text-text-muted" style={{ margin: 0, lineHeight: 1.45 }}>
+          Nada registrado ainda. Aqui aparecem os eventos recebidos dos gateways, os avisos da
+          ferramenta e as falhas de sincronização.
+        </p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column" }}>
+          {linhas.map((l, i) => (
+            <div key={l.id} style={{ display: "flex", gap: 9, alignItems: "baseline", padding: "7px 0", borderTop: i ? "1px solid var(--tk-border)" : undefined }}>
+              <span aria-hidden="true" style={{ color: l.cor, display: "flex", flex: "none" }}>
+                <Icone nome={l.icone} tamanho={13} />
+              </span>
+              <span className="text-caption text-text" style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+                {l.texto}
+              </span>
+              <span className="text-caption text-text-muted" style={{ whiteSpace: "nowrap" }}>
+                <Desde quando={l.quando} />
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }

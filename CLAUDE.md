@@ -1297,6 +1297,26 @@ Depois do mapa, nesta ordem, que é do dono:
    parada);
 3. **Integrações** → modo de edição do Dashboard → `metrics.ts`.
 
+> ### 🔜 O ESCOPO CRESCEU DUAS TELAS — 06/08/2026
+>
+> Não estavam na lista original de 8. Apareceram ao construir a Visão geral, e o
+> motivo é estrutural: **o painel de detalhe é POR INTEGRAÇÃO; a `PixelView` e a
+> `WebhooksView` são telas POR USUÁRIO** ("todos os meus pixels"). Enfiar uma
+> lista de N itens no detalhe de 1 item é contradição de hierarquia, não
+> problema de largura — e a sub-navegação já promete as duas rotas.
+>
+> | Tela | Vem de | Linhas a reescrever |
+> |---|---|---|
+> | **Integrações › Pixel/Eventos** | `PixelView` | 1.181 |
+> | **Integrações › Webhooks** | `WebhooksView` | 532 |
+>
+> **Entram depois de UTM & Snippets**, que é o passo vizinho e provavelmente
+> compartilha componente de código e de cópia (as três lidam com snippet
+> instalável e parâmetro de URL).
+>
+> ⚠️ A `AnunciosView` (322) continua servindo `/integracoes/anuncios` e morre no
+> passo dela.
+
 > ### ⛔ COMO O DONO TRABALHA — o que respeitar sem precisar perguntar
 >
 > - **`git push` NUNCA** sem ele dizer "pode subir". Commit local, sim.
@@ -1408,17 +1428,70 @@ Hoje o comentário descreve a REGRA:
 **Ao escrever advertência em comentário, descreva a regra, não a lista.** A lista
 é ilustração; quem protege é a frase.
 
-> ### 🔴 TERCEIRA VEZ NESTA SESSÃO: "PASSA NO BUILD COM A COISA DESLIGADA"
-> | O quê | Como estava |
-> |---|---|
-> | Anel de venda nova no globo | dependia de dado que não existe — foi REMOVIDO, não deixado inerte |
-> | Botão "Filtros" no header | resolvido com CONTRATO: a tela registra a faixa, o header só desenha se alguém registrou |
-> | **`?? 0` sobre valor recém-nulo** | tipo certo, build verde, correção não chega à tela |
+> ### 🔴 QUARTA VEZ: "PASSA NO BUILD COM A COISA DESLIGADA"
+> | # | O quê | Como estava | O que morria |
+> |---|---|---|---|
+> | 1 | Anel de venda nova no globo | dependia de dado que não existe | o recurso — foi REMOVIDO, não deixado inerte |
+> | 2 | Botão "Filtros" no header | sem dono | resolvido com CONTRATO: a tela registra a faixa, o header só desenha se alguém registrou |
+> | 3 | `?? 0` sobre valor recém-nulo | tipo certo, build verde | a correção, que não chegava à tela |
+> | 4 | **`elapsed()` renderizado no servidor** | **build verde** | 🔴 **a NAVEGAÇÃO** |
 >
 > O denominador comum é sempre o mesmo: **`tsc`, `lint` e `build` não perguntam
 > se a coisa está ligada.** A varredura por `?? 0` / `|| 0` / `|| 1` sobre valor
 > que virou anulável é obrigatória em toda mudança de contrato — a mudança de
 > tipo aparece no compilador, o colapso silencioso não.
+>
+> ### 🔴🔴 O 4º É O PIOR, E POR UM MOTIVO NOVO
+> Os três primeiros deixavam **funcionalidade** morta. O quarto deixou a
+> **navegação** morta: `/dashboard/integracoes` abria por URL direta e **voltava
+> para `/dashboard` ao ser aberta pelo menu**. E passava verde nos três.
+>
+> **A causa:** `elapsed()` lê `Date.now()`. Num componente que renderiza no
+> servidor, o HTML sai com "há 4 minutos", o cliente hidrata instantes depois e
+> calcula "há 5" — os textos divergem e **o React aborta a hidratação da árvore
+> inteira**. O efeito visível não é o texto errado; é a página não funcionar.
+>
+> ### ⛔ REGRA QUE FICA
+> **Nenhum `elapsed()`, "há N minutos" ou `Date.now()` renderizado direto em
+> componente que passa pelo servidor.** Use **`components/tk/Desde.tsx`**.
+>
+> ⚠️ **"Client component" NÃO protege** — no App Router todo componente cliente
+> é renderizado no servidor para o HTML inicial. O que protege é uma destas duas
+> coisas, e a diferença importa:
+>
+> | Proteção | Por quê | Fragilidade |
+> |---|---|---|
+> | **por ESTRUTURA** | o nó não existe no HTML do servidor — `Popover` faz `return null` enquanto fechado | robusta |
+> | **por TIMING** | o dado nasce `null` e só chega por `fetch` no cliente | 🔴 **quebra no dia em que alguém passar dado inicial do servidor** |
+>
+> **Varredura de 06/08/2026** — `elapsed()` tem 5 call sites fora do `Desde`:
+>
+> | Local | Proteção |
+> |---|---|
+> | `NotificationsBell:117` | ✅ estrutura (`Popover` fechado) |
+> | `useTraffikState` feed (`dashData`) | ⚠️ **timing** — anotado no código |
+> | `useTraffikState` `syncLabel` | ⚠️ **timing** — anotado no código |
+> | `RulesView:328` | 🔴 **estava EXPOSTO** (`initialRules` vem do layout) — corrigido |
+> | `PixelView` (2×) | a conferir na reescrita daquela tela |
+>
+> Os dois casos de timing levam a frase **"SEGURO POR TIMING, NÃO POR
+> ESTRUTURA"** no comentário, com o que quebraria — senão a próxima pessoa
+> confia sem saber por quê.
+
+## 📊 O MONOLITO `useTraffikState` — a dívida, com número
+
+**1.953 linhas e 18 dependentes** antes da reescrita de Integrações. Cada acessor
+novo aumenta o que um dia vai precisar ser quebrado.
+
+**A reescrita de Integrações acrescentou 2 acessores:**
+
+| Acessor | Por quê |
+|---|---|
+| `perfisCrus` | os DTOs sem handlers. `adProfiles` é modelo de TELA para Integrações › Anúncios; a Visão geral precisa do bruto |
+| `notifItems[].timestamp` | o instante cru, para `<Desde>`. O `timeLabel` ao lado só é seguro dentro do popover |
+
+⛔ **Não pare de adicionar quando precisar — só mantenha este número.** Dívida
+sem número cresce sem ninguém perceber.
 
 ---
 

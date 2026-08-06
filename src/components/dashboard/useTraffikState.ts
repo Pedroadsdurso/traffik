@@ -867,6 +867,13 @@ export function useTraffikState(
       typeLabel: meta.label,
       cor: meta.cor,
       valueLabel: f.value != null ? brl(f.value) : "—",
+      /* ⚠️ SEGURO POR TIMING, NAO POR ESTRUTURA — e a diferenca importa.
+         `elapsed()` le `Date.now()` e produz mismatch de hidratacao quando o
+         mesmo dado renderiza no servidor e no cliente. Aqui nao acontece
+         porque `dashData` nasce `null` e so e preenchido por `fetch` no
+         cliente: na passagem do servidor esta lista esta VAZIA.
+         ⛔ Isso quebra no dia em que alguem passar `initialDashData` do
+         layout. Se for fazer isso, troque por `<Desde>` (tk/Desde.tsx). */
       timeLabel: elapsed(f.ts),
     };
   });
@@ -1303,7 +1310,15 @@ export function useTraffikState(
     title: n.title,
     content: n.content,
     read: n.read,
+    /* ⚠️ SEGURO POR ESTRUTURA, nao por timing: `timeLabel` so e renderizado
+       dentro do `Popover` do sino, que faz `return null` enquanto fechado — e
+       ele nasce fechado, entao o texto nunca entra no HTML do servidor.
+       ⛔ Quem renderiza notificacao FORA do popover nao pode usar este campo:
+       use `timestamp` com `<Desde>` (tk/Desde.tsx). Foi o que a Visao geral de
+       Integracoes fez. */
     timeLabel: elapsed(new Date(n.timestamp).getTime()),
+    /** O instante CRU, para quem precisa renderizar com `<Desde>`. */
+    timestamp: n.timestamp,
   }));
 
 
@@ -1573,6 +1588,9 @@ export function useTraffikState(
     syncLabel: s.syncRodando
       ? "Sincronizando…"
       : s.syncLastAt
+        /* ⚠️ SEGURO POR TIMING, NAO POR ESTRUTURA — ver a nota do `feed`.
+           `syncLastAt` nasce `null` e so e preenchido pelo fetch do cliente.
+           Passar isto do servidor reintroduz o mismatch. */
         ? `Atualizado ${elapsed(new Date(s.syncLastAt).getTime())}`
         : "Aguardando 1ª sincronização",
     syncRodando: s.syncRodando,
