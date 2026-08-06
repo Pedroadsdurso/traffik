@@ -1098,6 +1098,17 @@ O raciocínio completo de cada item está em **`docs/FILA.md`**.
 > detalhe técnico cru, Pagamento pendente) — 0 de 63 descendentes vazam num
 > painel de 560px.
 
+### ✅ Integrações › Visão geral — o que FOI exercitado (06/08/2026)
+
+| Ação | Estado |
+|---|---|
+| **Testar e sincronizar** | ✅ **exercitado.** Desfecho `pulado` → *"Tudo já está atualizado."* em verde. Legível, curto, na voz do usuário |
+| **Desconectar** | ⚠️ **caminho destrutivo NÃO exercitado, confirmação verificada.** O diálogo abre, nomeia o que se perde e o que NÃO se perde, e **Cancelar não escreveu nada** — o perfil seguiu com as 2 contas e 2 campanhas |
+
+Os outros dois desfechos do `Testar e sincronizar` (`metricas` e `erro`) não
+apareceram: o dev estava sincronizado. O caminho de erro é o que vale exercitar
+quando houver um token realmente vencido.
+
 ### ⚠️ Não exercitados, e não exercite sozinho
 
 **Ações em massa, duplicar e excluir na Graph API nunca rodaram.** Excluir é
