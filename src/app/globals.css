@@ -127,19 +127,7 @@ body {
   line-height: 1.55;
   font-weight: 400;
 }
-h1, h2, h3, h4 { font-family: var(--font-heading); font-weight: var(--font-heading-weight); }
 *, *::before, *::after { box-sizing: border-box; }
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-heading); font-weight: var(--font-heading-weight);
-  line-height: 1.12; letter-spacing: -0.015em; margin: 0 0 var(--space-2);
-}
-h1 { font-size: 42px; }
-h2 { font-size: 32px; }
-h3 { font-size: 25px; }
-h4 { font-size: 20px; }
-h5 { font-size: 16px; }
-h6 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
-p { margin: 0 0 var(--space-3); }
 
 /* ⛔ ESTA REGRA MORA NUMA CAMADA, E ISSO NÃO É ESTILO — É A CORREÇÃO DE UM BUG.
    ────────────────────────────────────────────────────────────────────────────
@@ -160,19 +148,48 @@ p { margin: 0 0 var(--space-3); }
    proteção era acidental, e ela some no instante em que um arquivo passa a usar
    Tailwind. `tsc`, `lint`, `build` e `test:contraste` passaram os quatro.
 
-   ⚠️ AS VIZINHAS TÊM O MESMO DEFEITO LATENTE (`h1`–`h6`, `p`, `img`,
-   `figcaption`, logo acima e abaixo). Não foram movidas junto de propósito: o
-   raio de explosão é outro, e a decisão é do dono. Se um componente novo tiver
-   tipografia sobrescrita sem explicação, é aqui que se procura. */
+   ✅ AS VIZINHAS ENTRARAM JUNTO em 06/08/2026, por decisão do dono. Estavam
+   nuas logo acima e abaixo daqui, e o defeito é o mesmo mecanismo com dois
+   raios de explosão diferentes:
+
+     · `figcaption` declara `color` — é o caso do `a`, idêntico. Uma legenda com
+       `className="text-text-secondary"` recebia a cor daqui.
+     · `h1`–`h6`, `p` e `img` não declaram cor, mas vencem os utilitários de
+       TAMANHO e ESPAÇO do Tailwind, que também saem em `@layer utilities`:
+       `<h2 className="text-sm">` continuava com 32px, `<p className="mb-0">`
+       continuava com a margem daqui, `<img className="inline">` continuava
+       `block`. Silencioso do mesmo jeito, e mais difícil de atribuir à origem
+       porque ninguém procura o culpado de um tamanho de fonte no reset.
+
+   ⚠️ `figure` entrou junto por estar no meio do bloco e ter o mesmo defeito —
+   não estava na lista, e fica dito. E o `h1, h2, h3, h4` que repetia
+   `font-family`/`font-weight` uma linha antes do `h1`–`h6` foi REMOVIDO: era
+   duplicação integral, não uma exceção.
+
+   ⚠️ Continuam nus de propósito: `body` (é a raiz — a cor dele é o padrão de
+   tudo, não uma disputa) e o `a` de `transition` lá embaixo, que não declara
+   `color`. */
 @layer base {
   a { color: var(--color-accent); text-underline-offset: 3px; }
-}
 
-img { display: block; max-width: 100%; }
-figure { margin: 0; }
-figcaption {
-  font-size: 11px; margin-top: var(--space-1);
-  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-heading); font-weight: var(--font-heading-weight);
+    line-height: 1.12; letter-spacing: -0.015em; margin: 0 0 var(--space-2);
+  }
+  h1 { font-size: 42px; }
+  h2 { font-size: 32px; }
+  h3 { font-size: 25px; }
+  h4 { font-size: 20px; }
+  h5 { font-size: 16px; }
+  h6 { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; }
+  p { margin: 0 0 var(--space-3); }
+
+  img { display: block; max-width: 100%; }
+  figure { margin: 0; }
+  figcaption {
+    font-size: 11px; margin-top: var(--space-1);
+    color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  }
 }
 .text-muted { color: color-mix(in srgb, var(--color-text) 55%, transparent); }
 :focus { outline: none; }
