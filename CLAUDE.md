@@ -1350,6 +1350,31 @@ Depois do mapa, nesta ordem, que é do dono:
 
 ---
 
+# 🔒 REGRA QUE DEPENDE DE LEMBRAR VIRA GARANTIA DE TIPO
+
+**Quando uma regra do projeto depende de alguém lembrar dela, procure a forma de
+fazer o COMPILADOR cobrar.** É a diferença entre "nada entra sem renderizar"
+escrito num documento e escrito no tipo.
+
+O caso que produziu a regra (06/08/2026): o catálogo do Dashboard tinha
+metadados e render no mesmo objeto, e nada impedia um `render: () => null` para
+calar a consciência. A regra existia — estava escrita em maiúsculas no topo do
+arquivo — e dependia de ninguém tomar o atalho.
+
+A separação em `catalogo.ts` (metadados puros) + `catalogoRender.tsx`
+(`Record<IdBloco, …>`) transformou a regra em **erro de compilação**: um id
+declarado sem render não passa no `tsc`.
+
+⚠️ **E ela nasceu de uma limitação de ferramenta**, não de projeto: a migração
+precisa das larguras, é pura, e é testada com `--experimental-strip-types`, que
+não lê `.tsx`. Vale registrar por isso — *a restrição que parecia um obstáculo
+apontou para o desenho melhor*. Metadado que só um componente pode ler é
+metadado que nenhum teste alcança.
+
+⛔ Não é para transformar toda regra em tipo — algumas não cabem. É para
+PERGUNTAR, toda vez que escrever "⛔ sempre faça X" num comentário: *dá para o
+compilador cobrar isto?*
+
 # 🧩 MODO DE EDIÇÃO DO DASHBOARD — ⏳ ESTADO INTERMEDIÁRIO DECLARADO
 
 > ### ⛔ NÃO LEIA "modo de edição" COMO FEITO. Ele NÃO existe.
