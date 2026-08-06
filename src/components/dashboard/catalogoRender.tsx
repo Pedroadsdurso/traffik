@@ -7,7 +7,7 @@ import { BreakdownPanel } from "@/components/tk/BreakdownPanel";
 import { FeedVendas } from "@/components/tk/FeedVendas";
 import { Funil } from "@/components/tk/Funil";
 import { SerieTemporal } from "@/components/tk/SerieTemporal";
-import { CATALOGO_META, type IdBloco } from "./catalogo";
+import type { IdBloco } from "./catalogo";
 import type { TraffikView } from "./useTraffikState";
 
 /**
@@ -95,5 +95,8 @@ export const RENDERS: Record<IdBloco, RenderBloco> = {
   },
 };
 
-/** Metadado + render, para quem precisa dos dois (a rota de verificação). */
-export const CATALOGO = CATALOGO_META.map((m) => ({ ...m, ...RENDERS[m.id] }));
+/* ⛔ O `CATALOGO` (metadado + render juntos) foi DELETADO com a rota
+   `/dashboard/blocos`, que era o único consumidor. Quem precisa dos dois hoje é
+   o modo de edição, e ele já tem os dois separados: `CATALOGO_META` para a lista
+   de escolha e `RENDERS` para desenhar. Um terceiro objeto que junta os dois
+   seria uma cópia que envelhece sozinha. */

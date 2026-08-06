@@ -1,23 +1,22 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { loadDashboardLayouts, resetDashboardLayout, saveLayoutZonas } from "@/lib/actions/dashboardLayout";
+import { loadLayoutZonas, resetDashboardLayout, saveLayoutZonas } from "@/lib/actions/dashboardLayout";
 import { MAX_FAIXA, layoutPadrao, migrarLayout, type LayoutZonas } from "./migrar";
 import { CATALOGO_META, type Largura } from "../catalogo";
 
 /**
  * Lê o layout salvo e o entrega já MIGRADO para as três zonas.
  *
- * 🔴 SUBSTITUI `useDashboardLayout.ts`, que ficou órfão na reescrita do
- * Dashboard e falava a língua do grid antigo (`react-grid-layout`, 12 colunas,
- * `x`/`y`/`w`/`h`). Aquele hook não some agora: ele ainda tem a lógica de
- * SALVAR, que a entrega C vai reaproveitar. O que este faz é a metade que o
- * produto precisa hoje — **respeitar** o layout de quem já tinha um.
+ * ⛔ SUBSTITUIU E DELETOU `useDashboardLayout.ts` (06/08/2026), que falava a
+ * língua do grid antigo (`react-grid-layout`, 12 colunas, `x`/`y`/`w`/`h`).
+ * Ele sobreviveu à reescrita do Dashboard porque tinha a lógica de SALVAR que
+ * faltava aqui; com o modo de edição pronto, essa lógica virou o `salvar`/
+ * `redefinir` abaixo e não havia mais nada dele para absorver.
  *
- * ⛔ ESTE HOOK NÃO EDITA NADA, e é intencional. O estado do produto depois desta
- * entrega é: **o layout salvo é respeitado, mas não é editável.** Ninguém fica
- * pior que antes — quem customizou vê o dele, quem não customizou vê o padrão —
- * e o modo de edição é a entrega seguinte.
+ * ⚠️ Foram com ele `components/dashboard/blocks.ts`, `loadDashboardLayouts` e
+ * `saveDashboardLayout`. **A compatibilidade com o layout antigo NÃO se perdeu
+ * nisso** — quem lê o grid salvo é `migrarLayout`, sobre o Json cru.
  *
  * ### Por que carrega no cliente e não vem do layout do servidor
  *
@@ -58,13 +57,19 @@ export function useLayoutDashboard(workspaceId?: string | null) {
      o próximo recarregamento — e o usuário não teria como saber por quê. */
   useEffect(() => {
     let vivo = true;
-    loadDashboardLayouts(workspaceId)
-      .then((dto) => {
-        /* ⚠️ `desktop` só. O layout `mobile` do grid antigo existia porque o
-           grid tinha breakpoints; as três zonas são responsivas por CSS. Migrar
-           os dois produziria duas verdades para a mesma pergunta — e a de
-           `mobile` nunca seria editável. */
-        if (vivo) setLayout(migrarLayout(dto.desktop));
+    /* 🔴 `loadLayoutZonas`, NÃO `loadDashboardLayouts`. A segunda passa o valor
+       por `sanitizeLayout`, que recusa tudo que não é array — e o envelope v2 é
+       um objeto. O layout salvo voltava `null` e caía no padrão: **salvar
+       parecia funcionar e o arranjo sumia no recarregamento seguinte.** O caso
+       está escrito por extenso na action.
+
+       ⚠️ `desktop` só. O layout `mobile` do grid antigo existia porque o grid
+       tinha breakpoints; as três zonas são responsivas por CSS. Migrar os dois
+       produziria duas verdades para a mesma pergunta — e a de `mobile` nunca
+       seria editável. */
+    loadLayoutZonas(workspaceId)
+      .then((cru) => {
+        if (vivo) setLayout(migrarLayout(cru));
       })
       .catch(() => {
         /* Falha na leitura NÃO pode deixar o Dashboard sem layout. O padrão é

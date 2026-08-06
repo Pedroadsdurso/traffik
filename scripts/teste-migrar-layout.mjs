@@ -15,7 +15,25 @@
  * layout corrompido, e o layout que só tem blocos mortos.
  */
 import { migrarLayout, layoutPadrao, larguraMaisProxima, MAX_FAIXA } from "@/components/dashboard/layout/migrar";
-import { defaultLayout } from "@/components/dashboard/blocks";
+import { readFileSync } from "node:fs";
+
+/**
+ * O LAYOUT REAL DO PRODUTO, CONGELADO.
+ *
+ * ⛔ Ele vinha de `defaultLayout()` de `components/dashboard/blocks.ts`, que foi
+ * DELETADO em 06/08/2026 com o resto do grid antigo. O arranjo não podia morrer
+ * junto: ele é o que está gravado nos `DashboardLayout` de quem nunca
+ * customizou, e migrar ELE é o caso mais próximo de produção que este teste tem.
+ *
+ * ⚠️ Congelar é melhor do que importar, e não é só consequência da remoção: um
+ * teste de MIGRAÇÃO cuja entrada vem do código vivo passa a medir o presente
+ * contra o presente. O que ele precisa medir é o passado — e o passado não muda
+ * mais, então tem de ser um arquivo.
+ */
+const LAYOUT_ANTIGO = JSON.parse(
+  readFileSync(new URL("./fixtures/layout-antigo-padrao.json", import.meta.url), "utf8"),
+);
+const defaultLayout = (vp) => LAYOUT_ANTIGO[vp];
 
 /** Cópia do `DE_PARA` da migração — para a asserção saber o que É migrável. */
 const DESTINOS = {
@@ -140,7 +158,7 @@ console.log("\n\x1b[1mLargura: a mais próxima ENTRE AS DO BLOCO\x1b[0m");
 
 // ── O LAYOUT REAL DO PRODUTO ────────────────────────────────────────────────
 //
-// 🔴 `defaultLayout()` de `blocks.ts` NÃO é um exemplo inventado: o comentário
+// 🔴 A fixture NÃO é um exemplo inventado: o comentário
 // dele diz "transcrito do arranjo do usuário (30/07/2026)". É o layout que toda
 // conta viu por semanas, e o que está gravado nos `DashboardLayout` de quem
 // nunca customizou. Migrar ELE é o teste que mais se aproxima de produção.

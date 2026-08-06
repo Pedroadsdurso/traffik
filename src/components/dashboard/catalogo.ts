@@ -136,15 +136,49 @@ export function metaDoBloco(id: string): MetaBloco | undefined {
  * ⛔ BLOCOS ESTRUTURAIS — a categoria que NÃO entra no catálogo, por decisão de
  * produto. Não é omissão, e a lista existe para não rediscutirmos caso a caso.
  *
- * | Bloco | Por que é estrutural |
- * |---|---|
- * | Alertas | **alerta que o usuário pode esconder é alerta que ninguém vê** |
- * | Receita × Gasto | é a leitura central do Dashboard; sem ela a tela não responde nada |
- * | Vendas por país | idem — e o globo não cabe em nenhuma largura de painel |
- * | Rodapé de estado | diz se o sistema está funcionando, não dinheiro |
- *
  * ⚠️ A regra: **bloco cuja ausência faz o usuário tomar decisão errada, ou
  * deixar de saber que o sistema falhou, é estrutural.** Não é sobre importância
  * — é sobre o que a ausência CAUSA.
+ *
+ * ### 🔴 O `motivo` é DADO, e não prosa neste comentário
+ *
+ * Ele era uma tabela em Markdown aqui em cima, legível só por quem abrisse o
+ * arquivo. **O modo de edição precisa dizer ao usuário por que aquele bloco não
+ * tem ✕**, e a alternativa era escrever a frase de novo na tela — segunda cópia
+ * da mesma decisão, que diverge no primeiro dia em que alguém mudar uma delas.
+ *
+ * ⛔ O bloco estrutural aparece no modo de edição **sem o ✕**, não desabilitado.
+ * Um ✕ apagado é um controle que existe e não funciona; a ausência dele, com o
+ * motivo ao alcance, é uma afirmação sobre o produto.
  */
-export const IDS_ESTRUTURAIS = ["alertas", "receita-gasto", "paises", "rodape"] as const;
+export interface MetaEstrutural {
+  id: string;
+  titulo: string;
+  /** Uma frase curta, na voz do usuário. Vai para a tooltip do selo "Fixo". */
+  motivo: string;
+}
+
+export const ESTRUTURAIS_META = [
+  {
+    id: "alertas",
+    titulo: "Alertas",
+    motivo: "Alerta que dá para esconder é alerta que ninguém vê.",
+  },
+  {
+    id: "receita-gasto",
+    titulo: "Receita vs. gasto",
+    motivo: "É a leitura central do painel — sem ela a tela não responde nada.",
+  },
+  {
+    id: "paises",
+    titulo: "Vendas por país",
+    motivo: "O globo não cabe em nenhuma das larguras de painel.",
+  },
+  {
+    id: "rodape",
+    titulo: "Estado do sistema",
+    motivo: "Diz se a ferramenta está funcionando. Não é sobre dinheiro.",
+  },
+] as const satisfies readonly MetaEstrutural[];
+
+export const IDS_ESTRUTURAIS = ESTRUTURAIS_META.map((b) => b.id);

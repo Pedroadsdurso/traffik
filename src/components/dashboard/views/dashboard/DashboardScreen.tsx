@@ -19,8 +19,13 @@ import { EmptyState } from "@/components/tk/EmptyState";
 import { KpiHero, MetricStrip, type DadosKpi } from "@/components/tk/Kpi";
 import { LineChart, type PontoSerie } from "@/components/tk/LineChart";
 import { RENDERS } from "../../catalogoRender";
-import { metaDoBloco, type Largura } from "../../catalogo";
+import { CATALOGO_META, ESTRUTURAIS_META, metaDoBloco, type Largura, type Zona } from "../../catalogo";
 import { useLayoutDashboard } from "../../layout/useLayoutDashboard";
+import { MAX_FAIXA } from "../../layout/migrar";
+import { BarraEdicao } from "@/components/tk/BarraEdicao";
+import { CatalogoLateral } from "@/components/tk/CatalogoLateral";
+import { ItemEdicao } from "@/components/tk/ItemEdicao";
+import { ZonaEdicao } from "@/components/tk/ZonaEdicao";
 import { Heatmap } from "@/components/tk/Heatmap";
 import { Segmented } from "@/components/tk/Segmented";
 import { StatusFooter, type BlocoEstado } from "@/components/tk/StatusFooter";
@@ -70,6 +75,12 @@ import type { TraffikView } from "../../useTraffikState";
    — inteiros exatos. Com doze, um terço daria 4 e a conta ainda fecharia, mas a
    grade aceitaria larguras que o catálogo não oferece, e alguém acabaria usando. */
 const COLUNAS: Record<Largura, number> = { "um-terco": 2, metade: 3, cheia: 6 };
+
+/** O rótulo curto de cada largura, no seletor do modo de edição. */
+const ROTULO_LARGURA: Record<Largura, string> = { "um-terco": "⅓", metade: "½", cheia: "cheia" };
+
+/** Onde um item estava quando o arrasto começou. */
+type Posicao = { zona: Zona; indice: number };
 
 type MetricaHeat = "revenue" | "sales" | "profit";
 const ROTULO_HEAT: Record<MetricaHeat, string> = { revenue: "Receita", sales: "Vendas", profit: "Lucro" };
@@ -127,13 +138,74 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
     [v, inicioAparado],
   );
 
-  /* 🔴 O LAYOUT SALVO É RESPEITADO. Quem customizou no grid antigo vê o arranjo
-     dele migrado; quem nunca customizou vê o padrão. **Ainda não é editável** —
-     essa é a entrega seguinte, e o estado intermediário está declarado no
-     CLAUDE.md para ninguém ler "modo de edição" como feito. */
-  const { layout } = useLayoutDashboard(v.workspaceAtiva);
+  /* 🔴 O LAYOUT SALVO É RESPEITADO, E AGORA É EDITÁVEL. Quem customizou no grid
+     antigo vê o arranjo dele migrado; quem nunca customizou vê o padrão.
+
+     ⛔ TODAS as regras de zona moram no hook — hero com 4, teto da faixa,
+     largura só entre as declaradas. A tela desenha três listas parecidas, e se
+     as regras estivessem aqui a terceira acabaria sem a validação da primeira. */
+  const ed = useLayoutDashboard(v.workspaceAtiva);
+  const { layout, editando } = ed;
   const heros = layout.hero.map(kpi).filter((k): k is DadosKpi => k !== null);
   const faixa = layout.faixa.map(kpi).filter((k): k is DadosKpi => k !== null);
+
+  /* ── ARRASTO ──────────────────────────────────────────────────────────────
+     🔴 A RECUSA ENTRE ZONAS APARECE DURANTE O GESTO, NÃO NA SOLTURA.
+
+     O mecanismo é o `preventDefault` do `dragover`: **só o item da MESMA zona o
+     chama**. Sem ele o navegador põe `dropEffect: "none"` e desenha o cursor de
+     proibido enquanto o ponteiro passa — e a `ZonaEdicao` de destino pinta o
+     contorno de perigo junto, com a frase do porquê.
+
+     ⚠️ Recusar depois de soltar faria o usuário executar o gesto inteiro para
+     descobrir que ele não era possível, e ainda não diria o que fazer. */
+  const [origem, setOrigem] = React.useState<Posicao | null>(null);
+  const [sobre, setSobre] = React.useState<Posicao | null>(null);
+
+  const propsArrasto = React.useCallback(
+    (zona: Zona, indice: number, mover: (de: number, para: number) => void) => ({
+      arrastando: origem?.zona === zona && origem.indice === indice,
+      alvo: origem?.zona === zona && sobre?.zona === zona && sobre.indice === indice,
+      aoIniciarArrasto: () => setOrigem({ zona, indice }),
+      aoTerminarArrasto: () => {
+        setOrigem(null);
+        setSobre(null);
+      },
+      aoPassarPorCima: (e: React.DragEvent) => {
+        // ⛔ Zona estrangeira: sai SEM `preventDefault`. É o que produz o 🚫.
+        if (!origem || origem.zona !== zona) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        setSobre({ zona, indice });
+      },
+      aoSoltar: (e: React.DragEvent) => {
+        if (!origem || origem.zona !== zona) return;
+        e.preventDefault();
+        mover(origem.indice, indice);
+        setOrigem(null);
+        setSobre(null);
+      },
+    }),
+    [origem, sobre],
+  );
+
+  /* ── O que ainda não está no painel ───────────────────────────────────────
+     ⚠️ A lista de métricas sai de `metricCards`, que é o catálogo REAL do hook —
+     não de uma lista escrita aqui. Uma segunda lista ofereceria a métrica que
+     alguém acrescentou lá e esqueceu de espelhar aqui, ou o contrário: oferecer
+     uma que não existe mais e não desenha nada. */
+  const rotuloMetrica = React.useCallback(
+    (chave: string) => v.metricCards[chave as keyof typeof v.metricCards]?.label ?? chave,
+    [v],
+  );
+  const metricasDisponiveis = Object.keys(v.metricCards)
+    .filter((c) => !layout.hero.includes(c) && !layout.faixa.includes(c))
+    .map((chave) => ({ chave, rotulo: rotuloMetrica(chave) }));
+  const paineisDisponiveis = CATALOGO_META.filter((b) => !layout.paineis.some((p) => p.id === b.id)).map((b) => ({
+    id: b.id,
+    titulo: b.titulo,
+    descricao: b.descricao,
+  }));
 
   /* ── Receita × gasto ─────────────────────────────────────────────────────── */
   const pontos: PontoSerie[] = React.useMemo(() => {
@@ -357,8 +429,8 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
   const carregando = v.dashLoading;
   const filtrosVisiveis = useRegistrarFaixaDeFiltros();
 
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "var(--tk-gap-grid)" }}>
+  const conteudo = (
+    <>
       <BannerPendencias workspaceId={v.workspaceAtiva} />
 
       {/* ── Filtros ─────────────────────────────────────────────────────────────
@@ -447,14 +519,74 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
       )}
 
       {/* ── 4 KPIs hero ─────────────────────────────────────────────────────── */}
-      <div style={{ display: "grid", gap: "var(--tk-gap-grid)", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-        {heros.map((k) => (
-          <KpiHero key={k.chave} dados={k} carregando={carregando} />
-        ))}
-      </div>
+      {editando ? (
+        <ZonaEdicao titulo="Principais" regra="sempre 4" recusaSe={origem != null && origem.zona !== "hero"}>
+          <div style={{ display: "grid", gap: "var(--tk-gap-grid)", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+            {heros.map((k, i) => (
+              <ItemEdicao
+                key={k.chave}
+                titulo={k.rotulo}
+                /* O card já escreve "Faturamento" logo abaixo — repetir no
+                   cabeçalho da moldura é a mesma palavra duas vezes em 40px. */
+                tituloVisivel={false}
+                /* ⛔ SEM ✕ NO HERO, e não é esquecimento: remover deixaria a zona
+                   com 3, que é o estado que a regra proíbe. Aqui só se TROCA, e
+                   quem faz a pergunta é o catálogo lateral. */
+                aoMover={(dir) => ed.moverMetrica("hero", i, i + dir)}
+                podeAntes={i > 0}
+                podeDepois={i < heros.length - 1}
+                {...propsArrasto("hero", i, (de, para) => ed.moverMetrica("hero", de, para))}
+              >
+                <KpiHero dados={k} carregando={carregando} />
+              </ItemEdicao>
+            ))}
+          </div>
+        </ZonaEdicao>
+      ) : (
+        <div style={{ display: "grid", gap: "var(--tk-gap-grid)", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+          {heros.map((k) => (
+            <KpiHero key={k.chave} dados={k} carregando={carregando} />
+          ))}
+        </div>
+      )}
 
       {/* ── Faixa compacta ──────────────────────────────────────────────────── */}
-      <MetricStrip itens={faixa} carregando={carregando} />
+      {editando ? (
+        <ZonaEdicao
+          titulo="Resumo"
+          regra="até 8"
+          contador={`${layout.faixa.length} de ${MAX_FAIXA}`}
+          recusaSe={origem != null && origem.zona !== "faixa"}
+        >
+          {faixa.length === 0 ? (
+            <p className="text-caption text-text-muted" style={{ margin: 0 }}>
+              O resumo está vazio. Escolha métricas ao lado — ou deixe assim, se a faixa não te serve.
+            </p>
+          ) : (
+            <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))" }}>
+              {faixa.map((k, i) => (
+                <ItemEdicao
+                  key={k.chave}
+                  titulo={k.rotulo}
+                  aoRemover={() => ed.removerFaixa(k.chave)}
+                  aoMover={(dir) => ed.moverMetrica("faixa", i, i + dir)}
+                  podeAntes={i > 0}
+                  podeDepois={i < faixa.length - 1}
+                  {...propsArrasto("faixa", i, (de, para) => ed.moverMetrica("faixa", de, para))}
+                >
+                  {/* O valor, e não só o nome: escolher "ARPU" sem ver que ele
+                      está em R$ 0,00 neste período é escolher às cegas. */}
+                  <span className="text-metric-md" style={{ color: k.cor ?? "var(--tk-text)" }}>
+                    {carregando ? "—" : k.valor}
+                  </span>
+                </ItemEdicao>
+              ))}
+            </div>
+          )}
+        </ZonaEdicao>
+      ) : (
+        <MetricStrip itens={faixa} carregando={carregando} />
+      )}
 
       {/* ── Receita × gasto · Canais · Alertas ──────────────────────────────── */}
       <div style={{ display: "grid", gap: "var(--tk-gap-grid)", gridTemplateColumns: "minmax(0,2fr) minmax(0,1.1fr) minmax(0,1fr)" }}>
@@ -635,7 +767,76 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
           ⚠️ A largura vem do LAYOUT, e o layout só carrega larguras que o bloco
           declarou — a migração garante isso. A tela não valida de novo: duas
           validações da mesma regra divergem, e a de cá não tem como avisar. */}
+      {editando ? (
+        <ZonaEdicao
+          titulo="Painéis"
+          regra="reordene, redimensione e oculte"
+          recusaSe={origem != null && origem.zona !== "paineis"}
+        >
+          {layout.paineis.length === 0 ? (
+            <p className="text-caption text-text-muted" style={{ margin: 0 }}>
+              Nenhum painel. Escolha ao lado — ou salve assim: a escolha de não ter nenhum é respeitada.
+            </p>
+          ) : (
+            <div style={{ display: "grid", gap: "var(--tk-gap-grid)", gridTemplateColumns: "repeat(6, minmax(0, 1fr))" }}>
+              {layout.paineis.map((p, i) => {
+                const r = RENDERS[p.id as keyof typeof RENDERS];
+                const meta = metaDoBloco(p.id);
+                if (!r || !meta) return null;
+                return (
+                  <div key={p.id} style={{ gridColumn: `span ${COLUNAS[p.largura]}`, minWidth: 0 }}>
+                    <ItemEdicao
+                      titulo={meta.titulo}
+                      aoRemover={() => ed.removerPainel(p.id)}
+                      aoMover={(dir) => ed.moverPainel(i, i + dir)}
+                      podeAntes={i > 0}
+                      podeDepois={i < layout.paineis.length - 1}
+                      larguras={{
+                        atual: p.largura,
+                        opcoes: meta.larguras.map((l) => ({ valor: l, rotulo: ROTULO_LARGURA[l] })),
+                        aoTrocar: (valor) => ed.trocarLargura(p.id, valor as Largura),
+                      }}
+                      {...propsArrasto("paineis", i, ed.moverPainel)}
+                    >
+                      {/* 🔴 NO MODO DE EDIÇÃO O PAINEL SEM DADO CONTINUA NA TELA,
+                          com a frase. Fora dele ele some — mas sumir enquanto se
+                          edita faria o usuário achar que o removeu, e ele
+                          tentaria adicionar de novo um bloco que já está lá. */}
+                      {r.temDado(v) ? (
+                        r.render(v)
+                      ) : (
+                        <p className="text-caption text-text-muted" style={{ margin: 0 }}>
+                          Sem dado neste período. Ele aparece no painel quando houver.
+                        </p>
+                      )}
+                    </ItemEdicao>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </ZonaEdicao>
+      ) : null}
+
+      {/* ── Sempre visíveis ─────────────────────────────────────────────────
+          ⛔ Eles NÃO estão numa zona: não se movem, não se redimensionam e não
+          saem. Aparecem aqui, no modo de edição, porque a alternativa é o
+          usuário procurar por que "Alertas" não está em lista nenhuma — e
+          concluir que a ferramenta perdeu o bloco dele.
+
+          O motivo de cada um vem do CATÁLOGO, não escrito nesta tela. */}
+      {editando && (
+        <ZonaEdicao titulo="Sempre visíveis" regra="não podem ser ocultados">
+          <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}>
+            {ESTRUTURAIS_META.map((b) => (
+              <ItemEdicao key={b.id} titulo={b.titulo} fixo={b.motivo} />
+            ))}
+          </div>
+        </ZonaEdicao>
+      )}
+
       {(() => {
+        if (editando) return null;
         const visiveis = layout.paineis.filter((p) => RENDERS[p.id as keyof typeof RENDERS]?.temDado(v));
         if (visiveis.length === 0) return null;
         return (
@@ -676,6 +877,41 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
 
       {/* ── Rodapé de estado ────────────────────────────────────────────────── */}
       <StatusFooter blocos={rodape} />
+    </>
+  );
+
+  const coluna = { display: "flex", flexDirection: "column" as const, gap: "var(--tk-gap-grid)", minWidth: 0 };
+
+  return (
+    <div style={coluna}>
+      <BarraEdicao
+        editando={editando}
+        salvando={ed.salvando}
+        aoEditar={ed.abrirEdicao}
+        aoSalvar={ed.salvar}
+        aoCancelar={ed.cancelar}
+        aoRedefinir={ed.redefinir}
+      />
+
+      {editando ? (
+        /* ⚠️ `alignItems: start` é o que deixa o `position: sticky` da coluna
+           lateral funcionar: com o alongamento padrão do grid, o item tem a
+           altura da linha inteira e nunca há o que grudar. */
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 300px", gap: "var(--tk-gap-grid)", alignItems: "start" }}>
+          <div style={coluna}>{conteudo}</div>
+          <CatalogoLateral
+            metricas={metricasDisponiveis}
+            heroAtual={layout.hero.map((chave) => ({ chave, rotulo: rotuloMetrica(chave) }))}
+            faixaCheia={ed.faixaCheia}
+            aoAdicionarFaixa={ed.addFaixa}
+            aoTrocarHero={ed.trocarHero}
+            paineis={paineisDisponiveis}
+            aoAdicionarPainel={ed.addPainel}
+          />
+        </div>
+      ) : (
+        conteudo
+      )}
     </div>
   );
 }
