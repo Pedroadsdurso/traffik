@@ -69,8 +69,13 @@ export function Sparkline({
   if (limpos.length < 3) {
     return (
       <div style={{ height: altura, display: "grid", placeItems: "center" }}>
+        {/* 🔴 O TEXTO FALA DA TENDÊNCIA, NÃO DO VALOR — e a diferença apareceu
+            na tela: o card mostrava "4,55x" e, uma linha abaixo, "dados
+            insuficientes". O número existe e está certo; o que falta é o
+            HISTÓRICO para desenhar a linha. "Dados insuficientes" negava o
+            valor que o próprio card acabou de afirmar. */}
         <span className="text-caption text-text-muted" style={{ opacity: 0.7 }}>
-          dados insuficientes
+          sem histórico para a tendência
         </span>
       </div>
     );

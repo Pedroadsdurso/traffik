@@ -72,6 +72,21 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
   /* ── KPIs ─────────────────────────────────────────────────────────────────
      `metricCards` e `sparklines` continuam vindo do hook — a camada de dados
      não foi tocada. O que mudou é só quais aparecem grandes. */
+  /* ── O APARO É UM SÓ, E OS DOIS DESENHOS OBEDECEM A ELE ───────────────────
+     🔴 Estavam divergindo na tela: o gráfico grande mostrava 04/08–06/08 e
+     avisava "27 dias sem movimento omitidos", enquanto os sparklines dos heros
+     mostravam os 30 dias inteiros. Dois componentes lado a lado exibindo
+     PERÍODOS diferentes, sem nada avisando — quem olhasse os dois via duas
+     histórias do mesmo dado.
+
+     O índice é calculado UMA vez, aqui, e vale para os dois. Duas decisões de
+     recorte separadas divergiriam de novo no primeiro que alguém mexesse. */
+  const inicioAparado = React.useMemo(() => {
+    const { revenue, spend } = v.chartSerie;
+    const i = v.chartSerie.labels.findIndex((_, n) => (revenue[n] ?? 0) > 0 || (spend[n] ?? 0) > 0);
+    return i > 0 ? i : 0;
+  }, [v.chartSerie]);
+
   const kpi = React.useCallback(
     (chave: string): DadosKpi | null => {
       const k = v.metricCards[chave as keyof typeof v.metricCards];
@@ -84,10 +99,13 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
         invertido: k.invertido,
         trendLabel: k.trendLabel,
         cor: k.cor,
-        serie: v.sparklines[chave] ?? [],
+        /* Mesma janela do gráfico. ⚠️ A série do sparkline tem um bucket por
+           rótulo do gráfico — é o mesmo `buckets` do servidor —, então o índice
+           vale para as duas sem conversão. */
+        serie: (v.sparklines[chave] ?? []).slice(inicioAparado),
       };
     },
-    [v],
+    [v, inicioAparado],
   );
 
   const heros = HERO.map(kpi).filter((k): k is DadosKpi => k !== null);
@@ -100,9 +118,10 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
     /* 🔴 26 dias de linha zerada desperdiçavam 85% da largura. O eixo começa no
        PRIMEIRO dia com movimento — e quantos dias ficaram de fora é dito abaixo
        do gráfico, porque cortar em silêncio faria a janela parecer menor do que
-       o filtro diz. Só apara o começo: buraco no MEIO da série é informação. */
-    const primeiro = base.findIndex((p) => p.a > 0 || p.b > 0);
-    const aparada = primeiro > 0 ? base.slice(primeiro) : base;
+       o filtro diz. Só apara o começo: buraco no MEIO da série é informação.
+
+       O índice vem de `inicioAparado`, compartilhado com os sparklines. */
+    const aparada = base.slice(inicioAparado);
     if (granularidade === "diario") return aparada;
     // Semanal: agrupa de 7 em 7 e rotula pelo primeiro dia do bloco.
     const semanas: PontoSerie[] = [];
@@ -115,7 +134,7 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
       });
     }
     return semanas;
-  }, [v.chartSerie, granularidade]);
+  }, [v.chartSerie, granularidade, inicioAparado]);
 
   const temSerie = pontos.some((p) => p.a > 0 || p.b > 0);
   const diasAparados = Math.max(0, v.chartSerie.labels.length - (granularidade === "diario" ? pontos.length : 0));
@@ -342,7 +361,19 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
               <Badge tom="neutral">{v.syncManualMsg}</Badge>
             </span>
           )}
-          {v.syncLabel && !v.syncManualBusy && !carregando && (
+          {/* 🔴 UM DE CADA VEZ. O selo dizia "Tudo já está atualizado." e o
+              rótulo, ao lado, "Atualizado 7s atrás" — a mesma afirmação duas
+              vezes, e a segunda com mais informação (ela diz QUANDO).
+
+              O selo vence enquanto está na tela porque é o transitório: ele
+              responde ao clique que a pessoa acabou de dar, e é o único dos
+              dois que sabe dizer que a sincronização FALHOU. Dispensado ou
+              expirado, o rótulo volta.
+
+              ⚠️ Não é filtro por texto. Casar a string da mensagem quebraria
+              no dia em que a rota mudasse uma palavra, e quebraria em silêncio
+              — voltando a duplicar sem ninguém notar. */}
+          {v.syncLabel && !v.syncManualMsg && !v.syncManualBusy && !carregando && (
             <span className="text-caption text-text-muted" style={{ whiteSpace: "nowrap" }}>{v.syncLabel}</span>
           )}
           <Button
@@ -414,7 +445,7 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
           )}
         </Card>
 
-        <Card preencher titulo="Canais" descricao="Distribuição por receita">
+        <Card preencher distribuir titulo="Canais" descricao="Distribuição por receita">
           {totalCanais > 0 ? (
             <DonutChart fatias={fatias} totalLabel={brl0(totalCanais)} formatar={brl0} />
           ) : (
@@ -433,6 +464,7 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
 
         <Card
           preencher
+          distribuir
           titulo="Alertas"
           descricao="O que exige ação"
           acao={alertas.length > 0 ? <Badge tom={alertas.some((a) => a.severidade === "danger") ? "danger" : "warning"}>{alertas.length}</Badge> : undefined}

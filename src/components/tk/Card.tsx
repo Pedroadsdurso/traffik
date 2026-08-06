@@ -42,6 +42,23 @@ type PropsCard = {
      rodapé do card, e um segundo componente quase igual é como esta base virou
      seis dialetos de card. */
   preencher?: boolean;
+  /**
+   * Centra o conteúdo na altura sobrando, em vez de colá-lo no topo.
+   *
+   * 🔴 Nasceu de um defeito visto na tela: três blocos lado a lado igualam pela
+   * altura do maior (o gráfico), e Canais e Alertas ficavam com ~300px de vazio
+   * EMBAIXO do conteúdo. A regra de igualar altura está certa; o que estava
+   * errado era o conteúdo ancorado no topo de uma caixa que cresceu por causa
+   * do vizinho.
+   *
+   * ⚠️ É `center`, não `space-between`: os dois cards têm UM filho, e
+   * `space-between` com um filho só não distribui nada — teria a aparência de
+   * conserto sem efeito nenhum, que é pior que não consertar.
+   *
+   * Só faz sentido junto de `preencher` — sem altura sobrando não há o que
+   * centrar.
+   */
+  distribuir?: boolean;
   style?: React.CSSProperties;
 };
 
@@ -54,6 +71,7 @@ export function Card({
   aoVivo = false,
   semPadding = false,
   preencher = false,
+  distribuir = false,
   style,
 }: PropsCard) {
   const Tag = aoClicar ? "button" : "div";
@@ -82,7 +100,17 @@ export function Card({
         <CardCabecalho titulo={titulo} descricao={descricao} acao={acao} embutido={semPadding} />
       )}
       {preencher ? (
-        <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>{children}</div>
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+            ...(distribuir ? { justifyContent: "center" } : null),
+          }}
+        >
+          {children}
+        </div>
       ) : (
         children
       )}
