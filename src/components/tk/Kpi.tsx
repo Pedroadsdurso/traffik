@@ -28,7 +28,8 @@ export type DadosKpi = {
   trendLabel?: string;
   /** Cor do número quando a métrica é financeira e está negativa. */
   cor?: string | null;
-  serie?: number[];
+  /** `null` num bucket = sem denominador. O `Sparkline` interrompe a linha ali. */
+  serie?: (number | null)[];
 };
 
 /** Verde/vermelho pelo que o número SIGNIFICA, não pelo sinal aritmético. */
@@ -135,7 +136,7 @@ export function KpiHero({ dados, carregando = false }: { dados: DadosKpi; carreg
  * horizontal em tela estreita em vez de quebrar em grade, porque quebrar em
  * grade a transforma de volta em "mais cards".
  */
-export function MetricStrip({ itens }: { itens: DadosKpi[] }) {
+export function MetricStrip({ itens, carregando = false }: { itens: DadosKpi[]; carregando?: boolean }) {
   if (itens.length === 0) return null;
   return (
     <div
@@ -162,13 +163,20 @@ export function MetricStrip({ itens }: { itens: DadosKpi[] }) {
           }}
         >
           <span className="text-caption text-text-muted" style={{ whiteSpace: "nowrap" }}>{m.rotulo}</span>
+          {/* 🔴 SEM ISTO A FAIXA MENTIA DURANTE O CARREGAMENTO. O `KpiHero`
+              recebia `carregando` e mostrava "—"; a faixa não recebia e seguia
+              imprimindo os SETE números do período ANTERIOR. Trocar o filtro e
+              ler dado velho achando que é novo não é detalhe de polimento — é a
+              tela afirmando um número que não corresponde ao filtro na tela.
+
+              Os dois pesos de número agora dizem a mesma coisa ao mesmo tempo. */}
           <span
             className="text-metric-md"
             style={{ color: m.cor ?? "var(--tk-text)", whiteSpace: "nowrap" }}
           >
-            {m.valor}
+            {carregando ? "—" : m.valor}
           </span>
-          {m.delta != null && (
+          {!carregando && m.delta != null && (
             <span className="text-caption" style={{ color: COR_TOM[tomDoDelta(m.delta, m.invertido)], whiteSpace: "nowrap" }}>
               {m.delta > 0 ? "↑" : m.delta < 0 ? "↓" : "—"} {Math.abs(m.delta).toFixed(1).replace(".", ",")}%
             </span>

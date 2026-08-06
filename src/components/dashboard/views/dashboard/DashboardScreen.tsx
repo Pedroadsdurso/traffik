@@ -366,7 +366,7 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
       </div>
 
       {/* ── Faixa compacta ──────────────────────────────────────────────────── */}
-      <MetricStrip itens={faixa} />
+      <MetricStrip itens={faixa} carregando={carregando} />
 
       {/* ── Receita × gasto · Canais · Alertas ──────────────────────────────── */}
       <div style={{ display: "grid", gap: "var(--tk-gap-grid)", gridTemplateColumns: "minmax(0,2fr) minmax(0,1.1fr) minmax(0,1fr)" }}>

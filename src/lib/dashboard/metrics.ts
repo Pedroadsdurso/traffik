@@ -1,4 +1,6 @@
 import { carregarMapaDeAreas, whereDespesasDaArea } from "@/lib/areas/atribuicao";
+// A regra de denominador zero é UMA só nesta base. Ver o comentário do `div`.
+import { div } from "@/lib/ads/metrics";
 import { getUserTimezone } from "@/lib/userTimezone";
 import { prisma } from "@/lib/prisma";
 import {
@@ -122,8 +124,15 @@ export interface DashboardData {
     gastoNaSerie: boolean;
     periodLabel: string;
     granularity: "hour" | "day";
-    /** Série por bucket de cada KPI, para os mini-gráficos dos cards. */
-    sparklines: Record<string, number[]>;
+    /**
+     * Série por bucket de cada KPI, para os mini-gráficos dos cards.
+     *
+     * ⚠️ `null` = bucket com denominador zero (dia sem gasto, dia sem venda).
+     * **Não é zero**, e o desenho tem de INTERROMPER a linha ali — ver o
+     * `Sparkline`. Um zero plotado no chão é indistinguível de uma queda real,
+     * e foi por isso que o defeito passou tanto tempo invisível.
+     */
+    sparklines: Record<string, (number | null)[]>;
   };
   expenses: { gateway: number; tax: number; recurring: number; total: number };
   /**
@@ -1061,13 +1070,20 @@ function buildChart(
     const emails = new Set(nesse.map((s) => s.buyerEmail?.trim().toLowerCase()).filter(Boolean));
     return emails.size + nesse.filter((s) => !s.buyerEmail?.trim()).length;
   });
-  const div = (a: number, b: number) => (b ? a / b : 0);
-  // ⚠️ Sem gasto na série, as três métricas que DIVIDEM por ele saem vazias em
-  // vez de zeradas. Um array de zeros do mesmo tamanho passaria pelo
-  // `serie.length > 1` do card e desenharia uma linha reta no chão — um ROAS
-  // que parece medido e é só a ausência do denominador.
-  const serieVazia: number[] = [];
-  const sparklines: Record<string, number[]> = {
+  /* ⛔ O `div` LOCAL FOI DELETADO. Ele era `(a, b) => (b ? a / b : 0)` — mesmo
+     NOME e contrato OPOSTO ao de `lib/ads/metrics.ts`, a 56 linhas do
+     comentário desta função que cita aquele como o modelo certo.
+
+     Duas implementações da mesma conta divergem sempre; com o mesmo nome,
+     divergem sem ninguém notar, porque o `grep` acha as duas e a leitura assume
+     que são a mesma. Agora há UMA, importada. */
+
+  // ⚠️ Sem gasto na série INTEIRA, as três métricas que dividem por ele saem
+  // vazias em vez de zeradas — a série nem chega ao componente. Isto continua
+  // valendo, e é diferente do buraco NO MEIO: aquele agora é `null` bucket a
+  // bucket, e a linha se interrompe em vez de descer ao chão.
+  const serieVazia: (number | null)[] = [];
+  const sparklines: Record<string, (number | null)[]> = {
     faturamento: revenue,
     gasto: gastoNaSerie ? spend : serieVazia,
     vendas: vendasPorBucket,

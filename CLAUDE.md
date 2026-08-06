@@ -1314,3 +1314,99 @@ Depois do mapa, nesta ordem, que é do dono:
 > - Ao fim de cada tela: **teste do cinza**. E quando o quadro for dominado por
 >   tela que você não tocou, **recorte a parte que você tocou** e diga isso — ele
 >   aprovou explicitamente esse comportamento.
+
+---
+
+# ➗ DENOMINADOR ZERO — a regra, e o dia em que ficamos limpos
+
+> Mapa completo em **`docs/design/05-MAPA-DAS-RAZOES.md`**. O que muda
+> comportamento está aqui.
+
+### A regra, decidida em 06/08/2026
+
+```
+denominador = 0  →  null (INDEFINIDO)
+denominador > 0  →  a / b, inclusive 0 (valor real)
+```
+
+**Fonte única: `div()` de `src/lib/ads/metrics.ts`, exportado.** ⛔ Não escreva
+outra — importe. Foi assim que nasceu: existiam **duas funções `div` com o mesmo
+nome e contratos opostos**, e o arquivo do Dashboard citava a do Gerenciador
+como modelo certo 56 linhas antes de declarar a própria ao contrário.
+
+| Consumidor | O que faz com `null` |
+|---|---|
+| Apresentação | `"—"` (`format.ts`, `TRACO`) |
+| **Motor de regras** | **a condição é PULADA** — não satisfaz operador nenhum |
+| Sparkline | **interrompe a linha**; ponto isolado vira `<circle>` |
+
+⚠️ **`gasto` e `vendas` seguem `number`.** São CONTAGEM: zero gasto é medição de
+verdade, não ausência de denominador.
+
+### 🔴 O defeito era o ESPELHO do que se temia — e ele mandava GASTAR
+
+A hipótese era `Infinity > 50` pausar campanha nova. **Falso:** a guarda devolvia
+`0`, nunca `Infinity`. Mas **`0` satisfaz todo `<` e `<=`**:
+
+| Regra | Sem dado | O que fazia |
+|---|---|---|
+| `AJUSTAR_ORCAMENTO` se **CPA < 20** | zero conversões → CPA = 0 | 🔴 **escalava o orçamento de campanha que não vendeu nada** |
+| `PAUSAR` se **ROAS < 1** | zero gasto → ROAS = 0 | 🔴 pausava campanha que nem começou |
+| `PAUSAR` se **CPA > 50** | zero conversões → CPA = 0 | ✅ não disparava |
+
+`>` e `>=` erram para o lado de não agir. **`<` e `<=` agiam por falta de dado**,
+e o primeiro caso gasta dinheiro. Medido no dev: **2 campanhas disparavam**.
+
+> ### ✅ 06/08/2026 — A CORREÇÃO FOI PREVENTIVA, NÃO REATIVA
+> O dono rodou `regras:auditar` contra **produção (`dgaoucxkmpdxeenpfqth`)**:
+> **nenhuma regra cadastrada**. Ninguém foi afetado — o conserto entrou **antes
+> de a primeira regra existir**.
+>
+> Isto é registro de estado, não de conforto: a partir do momento em que existir
+> regra em produção, a mesma pergunta deixa de ter resposta barata.
+
+### Quantos pontos ainda usam o contrato errado: **8 de 24**
+
+Dos 24 pontos de cálculo, 15 estavam errados; 7 foram corrigidos (motor de
+regras ×3, séries de sparkline ×4). **Faltam 8:**
+
+| # | Onde | Devolve |
+|---|---|---|
+| 1–2 | `ads/creatives.ts:150-151` (CTR, ROAS) | `0` |
+| 3 | `financeiro.ts:385` (margem) | `0` — **e o tipo é `number`, não `number \| null`** |
+| 4 | `dashboard/metrics.ts:603` (chargeback) | `0` — idem |
+| 5 | `funnel.ts:62` | `0` — e a linha 67, na MESMA função, devolve `null` |
+| 6 | `useTraffikState.ts:812` (`rate` do funil) | `"0%"` |
+| 7 | `useTraffikState.ts:770` e `:805` (`pctLabel`) | `0%` via `\|\| 1` — guarda contra `NaN`, não contra indefinido |
+| 8 | `Donut.tsx:79,151,186` · `DonutChart.tsx:46` · `CountryMap.tsx:388` | misto |
+
+⚠️ **3 e 4 mudam de TIPO**, e `reports/generate.ts:41,48` faz `k.margin.toFixed(0)`
+sem checagem — quebra alto no `tsc`, que é o desejado.
+
+---
+
+## 🛠️ DOIS DEFEITOS DO `regras:auditar` — anotados, NÃO corrigidos
+
+▸ 🔴 **O script ignora `$env:DATABASE_URL`.** Ele faz `import "dotenv/config"`,
+que carrega o `.env` **por cima** do ambiente. Variável de ambiente tem de
+vencer arquivo — o oposto disso fez o dono **rodar duas vezes contra o banco
+errado achando que auditava produção**. Vale para todo script com `dotenv/config`
+nesta base, não só este.
+
+▸ ✅ **Ele imprime o projeto no cabeçalho**, e foi o que salvou a auditoria.
+**Replique em qualquer script que aceite `--url`:** a primeira linha da saída diz
+em qual banco a operação está acontecendo.
+
+## 🟨 A FAIXA DO TOPO É DERIVADA DO BANCO CONECTADO — não de flag
+
+Verificado em 06/08/2026, a pedido do dono. **Não existe `NODE_ENV` nem variável
+separada** no caminho: `dbEnv.ts:41` lê `process.env.DATABASE_URL`, e
+`prisma.ts:59` lê **a mesma variável** para abrir a conexão. Não há como a faixa
+apontar um projeto diferente daquele em que a consulta roda.
+
+Os limites são fail-safe: URL fora do padrão → `BANCO NÃO IDENTIFICADO` **com**
+faixa; ref desconhecido → `BANCO DESCONHECIDO` **com** faixa. Só o ref
+explicitamente marcado como produção não ganha faixa, que é a decisão registrada.
+
+⛔ **Se alguém um dia trocar isso por uma flag, a garantia acaba.** A propriedade
+inteira vem de as duas coisas lerem a mesma string.
