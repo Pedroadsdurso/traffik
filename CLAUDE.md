@@ -1174,6 +1174,7 @@ npm run test:telefone    # 25 asserções, E.164 antes do hash da CAPI
 npm run db:onde          # em qual banco o .env aponta
 npm run migrate:alvo     # para qual banco o `migrate deploy` vai AGORA (so leitura)
 npm run marca:gerar      # deriva simbolo/wordmark/favicon dos PNGs de origem (saida COMMITADA)
+npm run test:migrar-layout  # 41 assercoes, migracao do layout antigo (puro)
 npm run test:heatmap    # 20 asserções, celula VAZIA != celula ZERO, fuso e escala (puro)
 npm run test:contraste   # 92 pares WCAG da paleta do redesign, NOS DOIS TEMAS. Le o globals.css
                          #   (nao uma copia dos hex) e denuncia OKLCH que diverge do comentario.
@@ -1348,6 +1349,33 @@ Depois do mapa, nesta ordem, que é do dono:
 >   aprovou explicitamente esse comportamento.
 
 ---
+
+# 🧩 MODO DE EDIÇÃO DO DASHBOARD — ⏳ ESTADO INTERMEDIÁRIO DECLARADO
+
+> ### ⛔ NÃO LEIA "modo de edição" COMO FEITO. Ele NÃO existe.
+>
+> **O que existe hoje (06/08/2026):** o layout salvo é LIDO, MIGRADO e
+> RESPEITADO. **O que não existe:** qualquer forma de editá-lo pela tela.
+>
+> | Quem | O que vê |
+> |---|---|
+> | tinha layout customizado | **o dele**, migrado para as três zonas |
+> | nunca customizou | o padrão |
+>
+> **Ninguém fica pior que antes.** Antes da migração, quem customizou via o
+> padrão — a customização estava no banco e a tela nova a ignorava.
+>
+> ### As três entregas, e onde estamos
+>
+> | | | |
+> |---|---|---|
+> | **A** | blocos e catálogo | ✅ `2750258` |
+> | **B** | persistência e migração | ✅ **aqui** |
+> | **C** | interface de edição | ⛔ **não começou** — zonas, arrasto, painéis laterais, Salvar/Cancelar/Redefinir |
+>
+> ⚠️ `useDashboardLayout.ts` **continua órfão de propósito**: ele tem a lógica de
+> SALVAR, que o C vai reaproveitar. Quem ler o `useLayoutDashboard` novo e achar
+> que o antigo virou lixo vai deletar o que o C precisa.
 
 # 🔗 QUANDO DOIS CÁLCULOS PRECISAM CONCORDAR, TESTE A PROPRIEDADE
 

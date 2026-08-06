@@ -82,7 +82,8 @@
     "migrate:alvo": "node scripts/migrate-alvo.mjs",
     "marca:gerar": "node scripts/gen-marca.mjs",
     "test:contraste": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-contraste.mjs",
-    "test:heatmap": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-heatmap.mjs"
+    "test:heatmap": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-heatmap.mjs",
+    "test:migrar-layout": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-migrar-layout.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",

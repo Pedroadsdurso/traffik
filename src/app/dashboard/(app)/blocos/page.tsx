@@ -14,7 +14,7 @@
  * tela de produto.
  */
 import { useTraffik } from "@/components/dashboard/TraffikContext";
-import { CATALOGO } from "@/components/dashboard/catalogo";
+import { CATALOGO } from "@/components/dashboard/catalogoRender";
 import { Card } from "@/components/tk/Card";
 import { Badge } from "@/components/tk/Badge";
 
@@ -51,7 +51,7 @@ export default function BlocosPage() {
                 {/* As larguras permitidas ficam visíveis aqui: é o que o modo de
                     edição vai oferecer, e conferir agora evita descobrir no C
                     que um bloco declarou uma largura em que não cabe. */}
-                zona {b.zona} · larguras: {(b.larguras ?? []).join(" · ") || "—"}
+                zona {b.zona} · larguras: {b.larguras.join(" · ")}
               </p>
             </Card>
           );

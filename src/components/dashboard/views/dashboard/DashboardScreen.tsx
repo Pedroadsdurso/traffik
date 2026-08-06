@@ -18,6 +18,9 @@ import { DonutChart, type FatiaDonut } from "@/components/tk/DonutChart";
 import { EmptyState } from "@/components/tk/EmptyState";
 import { KpiHero, MetricStrip, type DadosKpi } from "@/components/tk/Kpi";
 import { LineChart, type PontoSerie } from "@/components/tk/LineChart";
+import { RENDERS } from "../../catalogoRender";
+import { metaDoBloco, type Largura } from "../../catalogo";
+import { useLayoutDashboard } from "../../layout/useLayoutDashboard";
 import { Heatmap } from "@/components/tk/Heatmap";
 import { Segmented } from "@/components/tk/Segmented";
 import { StatusFooter, type BlocoEstado } from "@/components/tk/StatusFooter";
@@ -56,9 +59,17 @@ import type { TraffikView } from "../../useTraffikState";
  * `components/tk/` direto — a ponte existe só para as telas ainda não refeitas.
  */
 
-/* ── As quatro do hero, na ordem. O resto desce para a faixa. ───────────────── */
-const HERO = ["faturamento", "gasto", "roas", "lucroLiquido"] as const;
-const FAIXA = ["ticket", "ctr", "cpa", "arpu", "margem", "pendentes", "reembolsadas"] as const;
+/* ⛔ AS CONSTANTES `HERO` e `FAIXA` SUMIRAM DAQUI. Elas viraram o layout PADRÃO
+   em `layout/migrar.ts`, e a tela agora lê o layout — que pode ser o do usuário.
+
+   ⚠️ A regra de "exatamente 4 heros" não afrouxou: ela migrou para a MIGRAÇÃO,
+   que completa o hero até 4 quando o salvo tem menos. Um hero com 3 quebra a
+   fileira, e o estado não pode nascer nem do banco. */
+
+/* A grade da zona 3 tem SEIS colunas, não doze: com seis, 1/3 são 2 e 1/2 são 3
+   — inteiros exatos. Com doze, um terço daria 4 e a conta ainda fecharia, mas a
+   grade aceitaria larguras que o catálogo não oferece, e alguém acabaria usando. */
+const COLUNAS: Record<Largura, number> = { "um-terco": 2, metade: 3, cheia: 6 };
 
 type MetricaHeat = "revenue" | "sales" | "profit";
 const ROTULO_HEAT: Record<MetricaHeat, string> = { revenue: "Receita", sales: "Vendas", profit: "Lucro" };
@@ -116,8 +127,13 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
     [v, inicioAparado],
   );
 
-  const heros = HERO.map(kpi).filter((k): k is DadosKpi => k !== null);
-  const faixa = FAIXA.map(kpi).filter((k): k is DadosKpi => k !== null);
+  /* 🔴 O LAYOUT SALVO É RESPEITADO. Quem customizou no grid antigo vê o arranjo
+     dele migrado; quem nunca customizou vê o padrão. **Ainda não é editável** —
+     essa é a entrega seguinte, e o estado intermediário está declarado no
+     CLAUDE.md para ninguém ler "modo de edição" como feito. */
+  const { layout } = useLayoutDashboard(v.workspaceAtiva);
+  const heros = layout.hero.map(kpi).filter((k): k is DadosKpi => k !== null);
+  const faixa = layout.faixa.map(kpi).filter((k): k is DadosKpi => k !== null);
 
   /* ── Receita × gasto ─────────────────────────────────────────────────────── */
   const pontos: PontoSerie[] = React.useMemo(() => {
@@ -610,6 +626,35 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
           </p>
         </Card>
       )}
+
+      {/* ── ZONA 3 — os painéis do layout ───────────────────────────────────
+          ⛔ SÓ os que TÊM DADO no período aparecem. Um painel corretamente vazio
+          na tela do usuário parece defeito; o catálogo continua listando todos,
+          com o aviso, para ele não procurar um bloco que sumiu.
+
+          ⚠️ A largura vem do LAYOUT, e o layout só carrega larguras que o bloco
+          declarou — a migração garante isso. A tela não valida de novo: duas
+          validações da mesma regra divergem, e a de cá não tem como avisar. */}
+      {(() => {
+        const visiveis = layout.paineis.filter((p) => RENDERS[p.id as keyof typeof RENDERS]?.temDado(v));
+        if (visiveis.length === 0) return null;
+        return (
+          <div style={{ display: "grid", gap: "var(--tk-gap-grid)", gridTemplateColumns: "repeat(6, minmax(0, 1fr))" }}>
+            {visiveis.map((p) => {
+              const r = RENDERS[p.id as keyof typeof RENDERS];
+              const meta = metaDoBloco(p.id);
+              if (!r || !meta) return null;
+              return (
+                <div key={p.id} style={{ gridColumn: `span ${COLUNAS[p.largura]}`, minWidth: 0 }}>
+                  <Card titulo={meta.titulo} descricao={meta.descricao}>
+                    {r.render(v)}
+                  </Card>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {/* ── Países ──────────────────────────────────────────────────────────── */}
       <div style={{ display: "grid", gap: "var(--tk-gap-grid)", gridTemplateColumns: "minmax(0,1fr)" }}>
