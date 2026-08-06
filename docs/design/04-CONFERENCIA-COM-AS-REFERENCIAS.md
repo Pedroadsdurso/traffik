@@ -83,6 +83,12 @@ em `components/tk/`.
 
 Referência: imagem 1. **Decisão: tudo da imagem 1 + tudo que já construímos.**
 
+> ### ✅ `metrics.ts` FECHADO em 06/08/2026 — só o modo de edição falta
+>
+> Dos 6 itens que faltavam para bater com a imagem 1, **4 estão feitos**, 1 saiu
+> 🔧 com motivo e 1 é impossível hoje. **Tudo o que resta é o modo de edição** —
+> que não está em referência nenhuma e é inteiramente seu.
+
 ### O que já está de pé
 
 | Elemento | |
@@ -96,21 +102,29 @@ Referência: imagem 1. **Decisão: tudo da imagem 1 + tudo que já construímos.
 | Saudação com nome e horário | ✅ feito — 🔧 pedido seu |
 | Vendas por país: globo + ranking | ✅ feito — 🔧 **não existe em nenhuma referência**, pedido seu |
 | Estados vazios que explicam a causa e linkam a solução | ✅ feito — 🔧 não visível em mockup, fica |
+| **Alerta de token da Meta expirando** | ✅ **06/08** — 🔧 **não está na referência.** Token vencendo em silêncio para a sincronização inteira; 13 linhas, porque `lib/integracoes/token.ts` nasceu puro prevendo este segundo consumidor |
 
-### O que falta para bater com a imagem 1
+### O que faltava para bater com a imagem 1
 
 | Elemento | Status |
 |---|---|
-| **Top Campanhas** — tabela com ícone da plataforma, receita, gasto, ROI, conversões, badge de status, menu `⋮`, link `Ver todas` | ❌ depende de `metrics.ts` |
-| **Performance por hora** — heatmap hora × dia com seletor de métrica e escala lateral `Alta / Baixa` | ❌ depende de `metrics.ts` — 🔧 fica por decisão sua |
-| **Break-even** no gráfico Receita vs Gasto | ❌ depende de `metrics.ts` — 🔧 fica por decisão sua |
-| Link `Ver todos` no painel de Alertas + contador `+2 alertas` | ❌ |
-| Sparkline no card de Lucro | ❌ série `lucroLiquido` não existe no servidor |
-| Ícone em caixa colorida ao lado de cada KPI | ❌ imagens 8 e 9 — ver nota |
-
-**Nota sobre ícone em caixa nos KPIs:** aparece nas imagens 8 e 9 (Snippets e Criativos), não na imagem 1 (Dashboard). Aplicar **nas telas onde a referência mostra**, não no Dashboard. Consistência com a referência vence consistência interna aqui.
+| **Break-even** no gráfico Receita vs Gasto | ✅ **06/08.** Linha tracejada, com `(estimado pelo período)` na legenda e a explicação no tooltip |
+| **Top Campanhas** | ✅ **06/08.** Receita · Gasto · Vendas · ROAS, na **janela do Dashboard** |
+| …com ícone da plataforma | 🔧 **fora.** Não há ativo de marca de terceiro nesta base — mesmo motivo de Integrações |
+| …com badge de status e menu `⋮` | 🔧 **fora.** Status de campanha é do Gerenciador, que é onde se age; `⋮` sem menu seria controle inerte |
+| …com link `Ver todas` | ✅ o Gerenciador **é** o "ver todas" — e ele já está no rail |
+| **Performance por hora** — heatmap hora × dia com seletor de métrica | ✅ **06/08.** Receita · Vendas · Lucro |
+| …com `Gasto` no seletor | 🔧 **IMPOSSÍVEL, não é escopo.** `DailyAdMetric` é diária e a Meta não reporta gasto por hora — o valor seria o total do dia lançado às 00h. Mesmo motivo do `gastoNaSerie` |
+| …com escala lateral `Alta / Baixa` | 🔧 **substituída por algo mais honesto.** Uma régua de gradiente não distingue **célula vazia de célula zero**, que é a informação principal do bloco. O rodapé diz o denominador (`Média de até 5 semanas`) e a hachura marca o não observado |
+| Link `Ver todos` no painel de Alertas + contador `+2 alertas` | ✅ **já existia** — o `+ N alerta` aparece quando passa de 3 |
+| Sparkline no card de Lucro | ❌ **série `lucroLiquido` não existe no servidor.** Aditivo em `metrics.ts`, mesma forma das outras 4 séries. Fica para quando alguém pedir — o card já diz a composição em texto |
+| Ícone em caixa colorida ao lado de cada KPI | 🔧 **fora do Dashboard, de propósito.** Aparece nas imagens 8 e 9 (Snippets e Criativos), **não na imagem 1**. Aplicar onde a referência mostra: consistência com a referência vence consistência interna |
 
 ### Modo de edição — 🔧 inteiramente seu, não está nas referências
+
+**É tudo o que falta.** O catálogo agora está completo — foi por isso que a ordem
+foi invertida: Top Campanhas e heatmap precisavam existir antes, senão o catálogo
+nasceria e teria de ser revisitado para acrescentá-los.
 
 | Elemento | |
 |---|---|
@@ -121,9 +135,15 @@ Referência: imagem 1. **Decisão: tudo da imagem 1 + tudo que já construímos.
 | Zona 3 — painéis: reordenar, ocultar, larguras declaradas | ❌ |
 | Painel lateral `Métricas disponíveis` / `Painéis disponíveis` | ❌ |
 | `Salvar` · `Cancelar` · `Redefinir configurações` | ❌ |
-| Migração dos layouts salvos | ❌ |
-| Catálogo completo de blocos (ver `03`) | ❌ |
+| **Migração dos layouts salvos** | ❌ 🔴 **usuários com layout customizado perderam a customização** na reescrita, e `useDashboardLayout.ts` está órfão desde então |
+| Catálogo completo de blocos (ver `03`) | ❌ — mas os blocos **existem**: hero, faixa, Receita×Gasto, Canais, Alertas, Top Campanhas, Quando compram, Vendas por país, rodapé |
 | `BreakdownPanel` único parametrizado por dimensão | ❌ |
+
+⚠️ **O catálogo do `blocks.ts` antigo tinha blocos que a reescrita não recriou:**
+funil, fontes, produtos, pagamentos, vendas por dia, aprovação e atividade
+recente. Decidir um a um se voltam **antes** de construir o painel de "Painéis
+disponíveis" — um catálogo que oferece bloco inexistente é o pior tipo de
+controle inerte, porque o usuário o escolhe e nada aparece.
 
 ---
 
