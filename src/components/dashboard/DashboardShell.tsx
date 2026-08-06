@@ -9,6 +9,7 @@ import type { ExpenseDTO } from "@/lib/actions/expenses";
 import type { AdProfileDTO } from "@/lib/actions/facebook";
 import type { NotificationDTO, NotificationSettingsDTO } from "@/lib/actions/notifications";
 import type { PixelConfigDTO } from "@/lib/actions/pixels";
+import type { RuleDTO } from "@/lib/actions/rules";
 import type { ApiCredentialDTO } from "@/lib/actions/apiCredentials";
 import type { WebhookRowDTO } from "@/lib/actions/webhooks";
 import type { WorkspaceDTO } from "@/lib/actions/workspaces";
@@ -31,6 +32,7 @@ export function DashboardShell({
   initialNotifSettings,
   initialNotifications,
   initialExpenses,
+  initialRules,
   timezone,
   workspaces,
   lastWorkspaceId,
@@ -49,6 +51,8 @@ export function DashboardShell({
   initialNotifSettings?: NotificationSettingsDTO;
   initialNotifications?: NotificationDTO[];
   initialExpenses?: ExpenseDTO[];
+  /** Regras de automação — o rodapé de estado do Dashboard as conta. */
+  initialRules?: RuleDTO[];
   /** Fuso de referência do usuário — ver `src/lib/timezone.ts`. */
   timezone?: string;
   workspaces?: WorkspaceDTO[];
@@ -71,6 +75,7 @@ export function DashboardShell({
     initialNotifSettings,
     initialNotifications,
     initialExpenses,
+    initialRules,
     timezone,
     workspaces,
     lastWorkspaceId,
@@ -99,10 +104,17 @@ export function DashboardShell({
         </div>
       )}
 
-      <div style={sx(`min-height:100vh;display:flex;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);${banco?.avisar ? "padding-top:26px" : ""}`)}>
+      {/* `tk-tema` é a ponte para o sistema novo — ver a nota no globals.css.
+          Ela fica AQUI, na raiz do shell, e não na página: a moldura (rail +
+          cabeçalho) é o que se vê primeiro, e moldura antiga em volta de tela
+          nova tem costura pior do que o contrário. */}
+      <div
+        className="tk-tema"
+        style={sx(`min-height:100vh;display:flex;${banco?.avisar ? "padding-top:26px" : ""}`)}
+      >
         <Sidebar user={user} />
-        <div style={sx("flex:1;min-width:0;padding:var(--space-8);display:flex;flex-direction:column;gap:var(--space-6);overflow:auto")}>
-          <Header />
+        <div style={sx("flex:1;min-width:0;padding:var(--space-6) var(--space-8);display:flex;flex-direction:column;gap:var(--space-6);overflow:auto")}>
+          <Header user={user} />
           <div key={pathname} className="page-enter" style={sx("display:flex;flex-direction:column;gap:var(--space-6)")}>
             {children}
           </div>

@@ -749,3 +749,798 @@ a {
 @media (prefers-reduced-motion: reduce) {
   @keyframes tipEntra { from { opacity: 0; } to { opacity: 1; } }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   FUNDAÇÃO DO REDESIGN — Fase 1
+   ══════════════════════════════════════════════════════════════════════════════
+
+   Este bloco NÃO altera nenhuma tela existente. Ele existe ao lado do sistema
+   antigo, sob o prefixo `--tk-*`, e só é consumido por /design-system até a
+   Fase 3.
+
+   🔴 POR QUE O PREFIXO EXISTE — quatro nomes COLIDEM com os legados:
+
+     legado --color-surface #232532   ×   novo surface #151D2D
+     legado --color-text    #e9e9ed   ×   novo text    #F8FAFC
+     legado --color-border  branco16% ×   novo border  #243044
+     legado --color-accent  #9184d9   ×   novo accent  #22D3EE   ← INVERSÃO
+
+   A quarta não é um tom diferente: é outro significado. O `--color-accent`
+   legado é quem pinta botão, link, item ativo e foco — ele é o `primary` do
+   sistema novo. No sistema novo, `accent` é ciano e é PROIBIDO em botão e em
+   navegação. Redefinir `--color-accent` para o azul viraria a aplicação inteira
+   num commit, com as rampas `--color-accent-100..900` continuando roxas.
+
+   ⚠️ NÃO MOVA o bloco legado (linhas 9–119) para antes do `@import
+   "tailwindcss"`. O `@theme inline` do fim deste arquivo emite
+   `--color-surface: var(--tk-surface)` na camada `theme` do Tailwind; ele é
+   inofensivo só porque CSS sem camada vence CSS em camada. Inverter isso trocaria
+   a cor de todas as telas antigas em silêncio.
+
+   Cores em OKLCH, e não em HSL, para que a diferença de luminosidade PERCEBIDA
+   entre os dois temas se mantenha. O hexadecimal ao lado é conferência, não
+   fonte: quem a página pinta é o OKLCH, e é ele que `npm run test:contraste` lê.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Primitivos de marca ───────────────────────────────────────────────────────
+   Iguais nos dois temas de propósito: são o logotipo, não uma superfície. Só o
+   gradiente da marca os consome direto; todo o resto passa pelos semânticos. */
+
+:root {
+  --tk-brand-blue-deep: oklch(0.5461 0.2152 262.88); /* #2563EB */
+  --tk-brand-blue:      oklch(0.6231 0.1880 259.81); /* #3B82F6 */
+  --tk-brand-cyan:      oklch(0.7971 0.1339 211.53); /* #22D3EE */
+}
+
+/* ── Tokens semânticos — tema ESCURO (principal) ───────────────────────────── */
+
+:root,
+[data-theme="dark"] {
+  /* superfície — a elevação no escuro se faz com COR, não com sombra:
+     background → surface → surface-hover */
+  --tk-background:      oklch(0.1584 0.0164 261.32); /* #090D14  fundo raiz */
+  --tk-background-alt:  oklch(0.2036 0.0288 259.86); /* #0F1724  rail, barra de contexto */
+  --tk-surface:         oklch(0.2312 0.0334 263.60); /* #151D2D  card, painel */
+  --tk-surface-hover:   oklch(0.2687 0.0384 262.72); /* #1C2639  hover, cabeçalho, input, overlay */
+
+  --tk-border:          oklch(0.3077 0.0399 260.39); /* #243044  contorno e separador */
+
+  /* texto */
+  --tk-text:            oklch(0.9842 0.0034 247.86); /* #F8FAFC  número, título */
+  --tk-text-secondary:  oklch(0.7107 0.0351 256.79); /* #94A3B8  rótulo, apoio */
+  /* 🔴 SUBIU de #64748B (L 0.5544) para passar em AA — ver a nota de contraste
+     no fim deste bloco. Mesmo matiz e mesmo croma: só a luminosidade mudou. */
+  --tk-text-muted:      oklch(0.6500 0.0407 257.42); /* #8090A8  placeholder, metadado */
+
+  /* marca — 15% azul (onde eu clico) · 5% ciano (o que está acontecendo) */
+  --tk-primary:         oklch(0.6231 0.1880 259.81); /* #3B82F6  texto, link, ícone, nav, ativo */
+  --tk-primary-hover:   oklch(0.5461 0.2152 262.88); /* #2563EB */
+  --tk-accent:          oklch(0.7971 0.1339 211.53); /* #22D3EE  série de gráfico, dado ao vivo */
+
+  /* Preenchimento SÓLIDO e o rótulo que vai em cima — ver a nota de contraste. */
+  --tk-primary-solid:       oklch(0.5461 0.2152 262.88); /* #2563EB  fundo de botão primário */
+  --tk-primary-solid-hover: oklch(0.4882 0.2172 264.38); /* #1D4ED8 */
+  --tk-on-primary:          oklch(0.9842 0.0034 247.86); /* #F8FAFC  rótulo sobre primary-solid */
+  --tk-on-accent:           oklch(0.1584 0.0164 261.32); /* #090D14  rótulo sobre accent */
+
+  /* semântica — ficam fora da conta 80/15/5: não decoram, informam */
+  --tk-success:         oklch(0.7227 0.1920 149.58); /* #22C55E  lucro, variação favorável */
+  --tk-warning:         oklch(0.7686 0.1647 70.08);  /* #F59E0B  limite, atenção, pendente */
+  --tk-danger:          oklch(0.6368 0.2078 25.33);  /* #EF4444  prejuízo, erro */
+}
+
+/* ── Tema CLARO — mesmos nomes de token ─────────────────────────────────────── */
+
+[data-theme="light"] {
+  --tk-background:      oklch(0.9807 0.0051 247.88); /* #F6F9FC */
+  --tk-background-alt:  oklch(1.0000 0.0000 0.00);   /* #FFFFFF */
+  --tk-surface:         oklch(1.0000 0.0000 0.00);   /* #FFFFFF */
+  --tk-surface-hover:   oklch(0.9683 0.0069 247.90); /* #F1F5F9 */
+
+  --tk-border:          oklch(0.9288 0.0126 255.51); /* #E2E8F0 */
+
+  --tk-text:            oklch(0.2077 0.0398 265.75); /* #0F172A */
+  /* 🔴 FASE 6 — os dois DESCERAM juntos, e tinham de descer juntos. Ver a nota
+     "a hierarquia do claro não cabia" logo abaixo do bloco. */
+  --tk-text-secondary:  oklch(0.4820 0.0407 257.42); /* #505F75  era #64748B (4.34:1) */
+  --tk-text-muted:      oklch(0.5427 0.0351 256.79); /* #637184  era #94A3B8 (2.34:1) */
+
+  --tk-primary:         oklch(0.5461 0.2152 262.88); /* #2563EB */
+  --tk-primary-hover:   oklch(0.4882 0.2172 264.38); /* #1D4ED8 */
+  --tk-accent:          oklch(0.7148 0.1257 215.22); /* #06B6D4 */
+
+  /* No claro o preenchimento sólido COINCIDE com o primary — não há tensão aqui,
+     porque o fundo da página é claro e o mesmo azul serve de texto e de fundo. */
+  --tk-primary-solid:       oklch(0.5461 0.2152 262.88); /* #2563EB */
+  --tk-primary-solid-hover: oklch(0.4882 0.2172 264.38); /* #1D4ED8 */
+  --tk-on-primary:          oklch(1.0000 0.0000 0.00);   /* #FFFFFF  5.17:1 sobre o sólido */
+  --tk-on-accent:           oklch(0.2077 0.0398 265.75); /* #0F172A  7.35:1 sobre o ciano claro */
+
+  /* 🔴 FASE 6 — os três DESCERAM. O matiz é o mesmo; o croma só desceu o que a
+     gama sRGB obrigou (não existe verde/âmbar escuro E saturado em sRGB).
+
+     O custo é real e vale registrar: no tema claro o âmbar deixa de ser vivo e
+     o verde deixa de ser brilhante. Não é calibragem tímida — é o que 4.5:1
+     sobre branco permite. Antes: success 3.01, warning 2.91, danger 4.41. */
+  --tk-success:         oklch(0.5271 0.1480 149.21); /* #008136  era #16A34A */
+  --tk-warning:         oklch(0.5528 0.1319 58.32);  /* #AA5B00  era #D97706 (escuro usa #F59E0B) */
+  --tk-danger:          oklch(0.5691 0.2152 27.33);  /* #D92223  era #DC2626 */
+}
+
+/* ══ FASE 6 — o tema claro, e as DUAS coisas que a previsão errou ══════════════
+
+   O tema claro aparece em 3 das 7 telas de referência: não é modo secundário, e
+   por isso a Fase 6 subiu na fila e foi feita ANTES dos primitivos da Fase 2 —
+   um primitivo que nasce certo só no escuro é o padrão do detector congelado.
+
+   As cinco reprovações listadas em docs/design/04-FASE-6-CONTRASTE.md foram
+   corrigidas. Duas previsões daquele documento estavam ERRADAS, e as duas só
+   apareceram ao medir:
+
+   1. ⛔ "Escurecer o surface-hover salva text-secondary e danger" — é ao
+      CONTRÁRIO. Fundo mais escuro reduz o contraste de texto escuro: é por isso
+      que os dois reprovam justamente sobre `surface-hover` (#F1F5F9) e passam
+      sobre `surface` (#FFFFFF). O que ajudaria seria CLAREAR o surface-hover, e
+      medido ele custa caro demais:
+
+        surface-hover  text-secondary  danger   distinção do surface (#FFF)
+        #F1F5F9 (hoje)     4.34         4.41            1.096:1
+        #F5F8FB            4.46         4.53            1.066:1
+        #F7F9FC            4.51         4.58            1.055:1
+
+      Ou seja: o hover teria de quase sumir para os dois passarem. Rejeitado —
+      os dois textos desceram, e os dois desceram pouco (danger de #DC2626 para
+      #D92223 é 0.008 de luminosidade).
+
+   2. 🔴 A HIERARQUIA DO CLARO NÃO CABIA — e este é o achado que muda a forma da
+      correção. `text-muted` precisava ir de L 0.7107 a **0.5427** para chegar a
+      4.5:1. Só que `text-secondary` valia L 0.5544, ou seja: corrigir o muted
+      sozinho o deixaria MAIS FORTE que o secondary, invertendo os dois níveis
+      em silêncio — cada um passando no teste, e a escada de leitura de cabeça
+      para baixo.
+
+      Então o secondary desceu junto, e desceu para o lugar que o próprio sistema
+      já definia: o degrau entre secondary e muted no tema ESCURO é 0.0607 de L.
+      O claro passou a usar o mesmo degrau (0.5427 − 0.0607 = 0.4820), e a
+      diferença percebida entre os dois níveis fica igual nos dois temas.
+
+        text            L 0.2077   #0F172A   16.30:1
+        text-secondary  L 0.4820   #505F75    5.91:1   (era #64748B, 4.34)
+        text-muted      L 0.5427   #637184    4.56:1   (era #94A3B8, 2.34)
+
+   ⚠️ O que NÃO foi mexido: as duas exceções do tema ESCURO (`primary` 4.12 e
+   `danger` 4.03 sobre surface-hover) seguem aceitas por decisão de 05/08/2026.
+   Não são descuido — se forem reabertas, que seja de propósito.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ══ NOTA DE CONTRASTE — as duas correções aprovadas em 05/08/2026 ═════════════
+
+   1. 🔴 UM AZUL SÓ NÃO PODE SER TEXTO **E** FUNDO DE BOTÃO. Não é preferência,
+      é impossível — e a conta cabe em três linhas:
+
+        rótulo #F8FAFC legível EM CIMA dele  exige luminância ≤ 0.1730
+        legível COMO texto sobre background  exige luminância ≥ 0.1928
+        legível COMO texto sobre surface     exige luminância ≥ 0.2302
+
+      O teto é MENOR que o piso: o intervalo é vazio. Por isso o `primary`
+      (#3B82F6) continua sendo a cor de TEXTO/ícone/link/estado ativo — onde ele
+      rende 4.59 a 5.29:1 — e o botão sólido ganhou tokens próprios, um degrau
+      abaixo na rampa da marca:
+
+        primary-solid #2563EB + rótulo #F8FAFC → 4.94:1  ✓  (era 3.52:1)
+        primary-solid-hover #1D4ED8            → 6.41:1  ✓
+
+      Nenhum matiz novo entrou no sistema: #2563EB e #1D4ED8 já eram o
+      `primary-hover` do escuro e o par `primary`/`primary-hover` do claro.
+
+      ⚠️ Consequência para a Fase 2: `bg-primary` NÃO é botão. Botão sólido é
+      `bg-primary-solid` com `text-on-primary`. Quem usar `bg-primary` com
+      rótulo claro reintroduz exatamente o 3.52:1 que esta nota corrigiu.
+
+      ⚠️ E o CTA com `--tk-gradient-brand` continua em aberto: o gradiente vai de
+      azul a CIANO, e nenhuma cor de rótulo atravessa os dois extremos (claro
+      morre no ciano, escuro morre no azul). Decidir na Fase 2, ao desenhar o
+      botão — não invente rótulo em gradiente antes disso.
+
+   2. `text-muted` subiu de #64748B para #8090A8 (OKLCH: L 0.5544 → 0.6500, com
+      croma e matiz intactos). Ele é texto de apoio — placeholder e metadado —,
+      não decoração, e reprovava em TODOS os quatro fundos (3.18 a 4.09:1). Hoje
+      rende 4.67 a 6.00:1, e continua visivelmente abaixo do `text-secondary`
+      (#94A3B8), que é o degrau acima dele.
+
+   ⛔ REGRA: `accent` NÃO É COR DE TEXTO. Ele é série de gráfico, indicador de
+   dado ao vivo e seleção — objeto gráfico, cujo critério é 3:1 (WCAG 1.4.11), e
+   não 4.5:1. Quando precisar de rótulo SOBRE um preenchimento de accent, a cor é
+   `--tk-on-accent`, nunca `text` nem `background` escolhidos na hora.
+
+   Esta regra precisa estar escrita porque o tema ESCURO não a força: lá o accent
+   rende 9.33:1 como texto e passaria despercebido. Quem o usasse como cor de
+   texto na Fase 4 veria tudo certo no escuro e quebraria o claro (2.22:1) — é o
+   padrão do detector congelado, que só aparece meses depois.
+
+   As demais reprovações (danger e primary sobre `surface-hover`, 4.03–4.41:1)
+   ficam como estão, por decisão: hover não é onde se lê texto longo, e mexer nas
+   cores mudaria a identidade por pouco ganho. As do TEMA CLARO são escopo da
+   Fase 6 e estão listadas em `docs/design/04-FASE-6-CONTRASTE.md`.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Canal — exclusivo de série de gráfico e identificação de plataforma ──────
+   Proibido em qualquer outro contexto, e iguais nos dois temas.
+
+   Meta não é azul e TikTok não é ciano de propósito: azul é `primary` e ciano é
+   `accent` NESTE sistema. Uma série de Meta em azul seria lida como estado ativo
+   da interface; uma de TikTok em ciano, como dado ao vivo. Índigo, rosa e
+   laranja ficam fora da faixa da marca e continuam distinguíveis em
+   deuteranopia. Consequência: `warning` NUNCA aparece como série de gráfico,
+   para o laranja do Google não ficar ambíguo.
+
+   ══ ONDE ESTE TOKEN PODE E NÃO PODE APARECER — decisão de 05/08/2026 ═════════
+   As telas de referência pintam os canais na rampa da MARCA (azul/ciano/roxo), e
+   ficam mais coesas por isso. A decisão foi o meio-termo, e ela mora aqui e não
+   só no documento, porque é aqui que alguém lê antes de usar o token:
+
+     ✅ PODE: dentro da área de plotagem de um gráfico — fatia de donut, série de
+        linha, barra, faixa de área. Ali a cor é o próprio dado, e nada em volta
+        é clicável, então a rampa da marca não compete com controle nenhum.
+
+     ⛔ NÃO PODE: selo, pill, ponto de status, ícone de linha de tabela, texto,
+        borda de card, ou qualquer lugar em que a cor seja lida como CONTROLE ou
+        ESTADO. Nesses lugares o canal se identifica por nome ou por logotipo —
+        nunca por cor.
+
+   O motivo da fronteira: azul e ciano já significam "onde eu clico" e "o que
+   está acontecendo agora". Um selo de canal em azul apaga essa distinção fora do
+   gráfico, que é justamente onde ela é lida. Dentro do gráfico não há o que
+   apagar. E a legenda do gráfico conta como DENTRO — ela é parte da leitura da
+   série, não um controle.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --tk-channel-meta:    oklch(0.6801 0.1583 276.93); /* #818CF8  índigo */
+  --tk-channel-tiktok:  oklch(0.7253 0.1752 349.76); /* #F472B6  rosa */
+  --tk-channel-google:  oklch(0.7576 0.1590 55.93);  /* #FB923C  laranja */
+  --tk-channel-outros:  oklch(0.5544 0.0407 257.42); /* #64748B  cinza */
+}
+
+/* ── Categoria — o roxo, com nome próprio e uma fronteira dura ────────────────
+   Decisão de 05/08/2026. As telas de referência têm selos roxos ("Analytics") e
+   uma fatia roxa em "Outros", e não havia roxo nenhum na paleta.
+
+   Ele entra como cor de CATEGORIA — "que TIPO de coisa é esta" — e nunca como
+   cor de interface. As três perguntas do sistema continuam com dono único:
+
+     onde eu clico          → primary   (azul)
+     o que está acontecendo → accent    (ciano)
+     como está indo         → success / warning / danger
+     que tipo de coisa é    → category  (roxo)   ← o eixo novo
+
+   ⛔ Se aparecer em botão, link, item de navegação, foco, estado ativo ou
+   qualquer affordance, é ERRO — e é um erro que se disfarça de acerto, porque
+   #9184d9 era exatamente o `--color-accent` do design ANTIGO, aquele de que o
+   redesign está saindo. Roxo em botão aqui não vai parecer uma cor nova: vai
+   parecer que o redesign não aconteceu.
+
+   #8B5CF6 é mais saturado e mais frio que o lavanda legado, de propósito.
+
+   Igual nos dois temas: categoria não é superfície, é identidade — o mesmo
+   motivo pelo qual os canais também não mudam com o tema. */
+
+:root {
+  --tk-category:        oklch(0.6056 0.2189 292.72); /* #8B5CF6  roxo */
+}
+
+/* ── Selo tingido — o par de tokens que TODO primitivo da Fase 2 consome ───────
+   É o padrão mais repetido das telas de referência: quadradinho de ícone com
+   fundo tingido, e selo (Pixel, CAPI, Ativo, Pausado) em texto colorido sobre o
+   mesmo tom. Medido, ele reprovava quase todo par — e a causa é ESTRUTURAL, não
+   de calibragem: quando o texto e o fundo são a mesma cor, mudar a porcentagem
+   do tingimento não separa os dois. A 10% dava 4.05 e a 18% dava 3.62; nenhuma
+   porcentagem resolve, porque a conta não depende dela.
+
+   A saída é o texto NÃO ser a mesma cor do tingimento: um degrau mais claro no
+   escuro, mais escuro no claro, até passar 4.5:1 sobre o próprio tingimento —
+   medido sobre os QUATRO fundos, porque o mesmo selo aparece em card, em linha
+   de tabela e na barra de contexto.
+
+   Por isso o par mora na Fase 1 e não na Fase 2: Badge, Card, Button-ghost e o
+   KPI da Fase 4 consomem os mesmos dois tokens. Se ele nascesse dentro do Badge,
+   os outros três chegariam com a cor pura e reprovando.
+
+   ⚠️ Em quatro casos do tema escuro o `on-tint` é IGUAL à cor pura — accent,
+   success, warning e neutral já passavam. Eles existem assim mesmo, e não como
+   "use a cor pura aqui e o token ali": duas vias para a mesma decisão é como o
+   caso errado entra sem ninguém escolher. O componente consome UM nome.
+
+   O tingimento é ALFA (e não uma cor opaca composta sobre `surface`) porque o
+   selo aparece sobre fundos diferentes; opaco, ele viraria um retângulo da cor
+   errada assim que saísse do card.
+
+   ⚠️ O FALLBACK do `color-mix`, conferido no bundle e não deduzido. O Lightning
+   CSS não consegue calcular a mistura quando o argumento é uma `var()`, então
+   ele emite:
+
+     :root { --tk-tint-danger: var(--tk-danger) }              ← fallback OPACO
+     @supports (color: color-mix(in lab, red, red)) {
+       :root { --tk-tint-danger: color-mix(in oklch, var(--tk-danger) 14%, transparent) }
+     }
+
+   Num navegador SEM `color-mix`, o selo fica com fundo VERMELHO SÓLIDO e o
+   rótulo em `on-tint-danger` (um vermelho claro) por cima — ilegível. O piso é
+   Chrome 111 / Safari 16.2 / Firefox 113 (2023).
+
+   Fica assim de propósito, e vale saber por quê antes de "consertar": este
+   arquivo JÁ depende do mesmo mecanismo em `--tk-glow-live`, em
+   `--tk-gradient-chart` e em todo o sistema legado (divisor, borda, hover). A
+   alternativa — escrever o alfa direto, `oklch(0.6368 0.2078 25.33 / 0.14)` —
+   tem fallback correto, mas duplica L, C e H do token base em 14 declarações, e
+   aí um ajuste no `--tk-danger` deixa o tingimento para trás em silêncio. Trocar
+   um risco de 2023 por uma segunda fonte de verdade não é lucro; se um dia for
+   trocado, a duplicação precisa vir com asserção que compare tingimento e base. */
+
+:root,
+[data-theme="dark"] {
+  --tk-tint-primary:   color-mix(in oklch, var(--tk-primary)  14%, transparent);
+  --tk-tint-accent:    color-mix(in oklch, var(--tk-accent)   14%, transparent);
+  --tk-tint-success:   color-mix(in oklch, var(--tk-success)  14%, transparent);
+  --tk-tint-warning:   color-mix(in oklch, var(--tk-warning)  14%, transparent);
+  --tk-tint-danger:    color-mix(in oklch, var(--tk-danger)   14%, transparent);
+  --tk-tint-neutral:   color-mix(in oklch, var(--tk-text-secondary) 14%, transparent);
+  --tk-tint-category:  color-mix(in oklch, var(--tk-category) 14%, transparent);
+
+  /* Um degrau MAIS CLARO que a cor pura — no escuro o tingimento escurece. */
+  --tk-on-tint-primary:   oklch(0.6931 0.1618 259.81); /* #5D9AFF  4.56:1  (puro: 3.44) */
+  --tk-on-tint-accent:    oklch(0.7971 0.1339 211.53); /* #22D3EE  6.22:1  (= a cor pura) */
+  --tk-on-tint-success:   oklch(0.7227 0.1920 149.58); /* #22C55E  5.20:1  (= a cor pura) */
+  --tk-on-tint-warning:   oklch(0.7686 0.1647 70.08);  /* #F59E0B  5.52:1  (= a cor pura) */
+  --tk-on-tint-danger:    oklch(0.6988 0.1922 25.33);  /* #FF625D  4.56:1  (puro: 3.55) */
+  --tk-on-tint-neutral:   oklch(0.7107 0.0351 256.79); /* #94A3B8  4.63:1  (= a cor pura) */
+  --tk-on-tint-category:  oklch(0.6986 0.1743 292.72); /* #A385FF  4.57:1  (puro: 3.07) */
+}
+
+[data-theme="light"] {
+  /* Um degrau MAIS ESCURO que a cor pura — no claro o tingimento clareia. Aqui
+     NENHUM par passava com a cor pura: o pior era o accent, a 1.97:1. */
+  --tk-on-tint-primary:   oklch(0.5111 0.2152 262.88); /* #1A57DF  4.56:1  (puro: 3.91) */
+  --tk-on-tint-accent:    oklch(0.5068 0.0897 215.22); /* #007285  4.56:1  (puro: 1.97) */
+  --tk-on-tint-success:   oklch(0.4841 0.1359 149.21); /* #007330  4.57:1  (puro: 3.78) */
+  --tk-on-tint-warning:   oklch(0.5098 0.1217 58.32);  /* #985100  4.55:1  (puro: 3.81) */
+  --tk-on-tint-danger:    oklch(0.5181 0.2114 27.33);  /* #C50012  4.55:1  (puro: 3.67) */
+  --tk-on-tint-neutral:   oklch(0.4820 0.0407 257.42); /* #505F75  4.88:1  (= a cor pura) */
+  --tk-on-tint-category:  oklch(0.5286 0.2189 292.72); /* #7542DB  4.56:1  (puro: 3.27) */
+}
+
+/* ── Gradientes e o glow de dado ao vivo ────────────────────────────────────── */
+
+:root {
+  /* Logotipo, CTA principal, indicador de estado ativo, barra de progresso.
+     NUNCA como fundo de área grande, e nunca em mais de um elemento por tela.
+     Usa os primitivos: a marca não muda de cor quando o tema muda. */
+  --tk-gradient-brand: linear-gradient(
+    90deg,
+    var(--tk-brand-blue-deep) 0%,
+    var(--tk-brand-blue) 45%,
+    var(--tk-brand-cyan) 100%
+  );
+
+  /* Preenchimento de área em gráfico. Derivado dos SEMÂNTICOS, não dos
+     primitivos: no escuro accent/primary são exatamente #22D3EE/#3B82F6 (idêntico
+     à especificação), e no claro ele desce junto com a paleta em vez de virar um
+     borrão de neon sobre branco. */
+  --tk-gradient-chart: linear-gradient(
+    180deg,
+    color-mix(in oklch, var(--tk-accent) 38%, transparent) 0%,
+    color-mix(in oklch, var(--tk-primary) 14%, transparent) 55%,
+    transparent 100%
+  );
+
+  /* Lista FECHADA de onde o glow pode aparecer — qualquer uso fora dela é erro:
+     LiveIndicator · linha entrando na Atividade Recente (2s) · card de webhook
+     ao disparar · card de regra em execução · indicador de CAPI enviando ·
+     linha selecionada de tabela (sem pulso, só o anel).
+     Intensidade máxima 40%. Nunca em elemento estático. */
+  --tk-glow-live:
+    0 0 0 1px color-mix(in oklch, var(--tk-accent) 22%, transparent),
+    0 0 14px -3px color-mix(in oklch, var(--tk-accent) 38%, transparent);
+}
+
+/* ── Raio, elevação e movimento ─────────────────────────────────────────────── */
+
+:root {
+  --tk-radius-controle: 6px;   /* botão, input, badge */
+  --tk-radius-card:     10px;  /* card, painel de conteúdo */
+  --tk-radius-painel:   14px;  /* modal, gaveta */
+  --tk-radius-pill:     999px; /* pill, avatar, indicador */
+
+  /* Sombra existe APENAS em overlay (popover, dropdown, modal, toast). Em
+     superfície fixa, a elevação é a escada de cor background→surface→surface-hover. */
+  --tk-shadow-overlay: 0 8px 24px -4px rgb(0 0 0 / .55);
+
+  /* Só três momentos merecem animação: pulso do LiveIndicator, hover de linha de
+     tabela, entrada de painel lateral. */
+  --tk-dur-rapida: 90ms;
+  --tk-dur-padrao: 150ms;
+  --tk-dur-painel: 220ms;
+  --tk-ease-padrao: cubic-bezier(.2, 0, 0, 1);
+
+  /* Fontes registradas pelo next/font no <html> (app/layout.tsx). O `body`
+     continua em --font-body (Inter) — a troca é da Fase 3, junto com o shell
+     que a verifica. Trocar aqui reflui 21 rotas sem ninguém ter olhado nenhuma. */
+  --tk-font-sans: var(--font-instrument-sans), "Inter", system-ui, sans-serif;
+  --tk-font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --tk-dur-rapida: 0ms;
+    --tk-dur-padrao: 0ms;
+    --tk-dur-painel: 0ms;
+  }
+}
+
+/* O pulso do dado ao vivo. Mora aqui, e não no componente, porque o contrato do
+   `--tk-glow-live` inclui o que acontece com `prefers-reduced-motion`: o pulso
+   sai e o ANEL fica. Sem o anel, quem desliga movimento perde a informação — o
+   glow deixaria de existir em vez de deixar de se mexer. */
+@keyframes tk-pulso-live {
+  0%, 100% { box-shadow: var(--tk-glow-live); }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in oklch, var(--tk-accent) 40%, transparent),
+      0 0 22px -3px color-mix(in oklch, var(--tk-accent) 40%, transparent);
+  }
+}
+.tk-live-pulso { animation: tk-pulso-live 2s var(--tk-ease-padrao) infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .tk-live-pulso { animation: none; box-shadow: var(--tk-glow-live); }
+}
+
+/* Varredura do esqueleto de carregamento. Mora aqui, e não no componente, pelo
+   mesmo motivo do pulso: o contrato inclui o que acontece com
+   `prefers-reduced-motion`. Aqui a animação some por inteiro e o retângulo FICA
+   — ele já comunica "vem conteúdo aqui" pela forma, então parar de brilhar não
+   tira informação nenhuma. É o oposto do glow, onde o anel precisava sobrar. */
+@keyframes tk-varredura {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+.tk-skeleton {
+  background-image: linear-gradient(
+    90deg,
+    transparent 20%,
+    color-mix(in oklch, var(--tk-text) 7%, transparent) 50%,
+    transparent 80%
+  );
+  background-size: 200% 100%;
+  animation: tk-varredura 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tk-skeleton { animation: none; background-image: none; }
+}
+
+/* ── Densidade ─────────────────────────────────────────────────────────────────
+   Componente NENHUM conhece densidade — todos só consomem estas variáveis. O
+   padrão da aplicação é `compact`, então a ausência do atributo já entrega os
+   valores compactos: sem isso, quem carregasse a página antes do JS aplicar a
+   preferência veria o layout saltar de tamanho. */
+
+:root,
+[data-density="compact"] {
+  --tk-pad-card:        16px;
+  --tk-gap-grid:        12px;
+  --tk-altura-linha:    36px;  /* linha de tabela */
+  --tk-altura-controle: 32px;  /* botão, input, select */
+  --tk-escala-dado:     0.95;  /* multiplica SÓ a fonte de número */
+  --tk-leading-dado:    1.15;
+}
+
+[data-density="default"] {
+  --tk-pad-card:        20px;
+  --tk-gap-grid:        16px;
+  --tk-altura-linha:    44px;
+  --tk-altura-controle: 36px;
+  --tk-escala-dado:     1;
+  --tk-leading-dado:    1.2;
+}
+
+[data-density="comfortable"] {
+  --tk-pad-card:        24px;
+  --tk-gap-grid:        20px;
+  --tk-altura-linha:    52px;
+  --tk-altura-controle: 40px;
+  --tk-escala-dado:     1.06;
+  --tk-leading-dado:    1.3;
+}
+
+/* ── @theme inline — a ponte para os utilitários do Tailwind ───────────────────
+   O `inline` é o que faz `bg-surface` sair como `var(--tk-surface)`. SEM ele o
+   utilitário sairia `var(--color-surface)` — que o bloco legado, por não estar
+   em camada, sobrescreve para #232532. Ou seja: sem o `inline`, todo utilitário
+   novo pintaria com a cor ANTIGA, em silêncio, e nem tsc nem lint nem build
+   acusariam. Medido rodando o PostCSS contra este projeto.
+
+   Não existe `tailwind.config.ts` aqui e não deve passar a existir: o Tailwind 4
+   é configurado pelo CSS, e um arquivo de config seria uma segunda fonte de verdade.
+
+   Sobre os nomes: o utilitário de texto de apoio é `text-text-secondary`, e não
+   `text-secondary`. Para ele se chamar `text-secondary`, o token teria de ser
+   `--color-secondary` — e aí `bg-secondary` passaria a existir significando
+   "fundo com a cor do texto de apoio". Pior: `.text-muted` JÁ é classe legada
+   deste arquivo, usada em ~20 arquivos, e um utilitário homônimo colidiria com
+   ela. Verboso e inequívoco, com uma via só. */
+
+@theme inline {
+  --color-background:       var(--tk-background);
+  --color-background-alt:   var(--tk-background-alt);
+  --color-surface:          var(--tk-surface);
+  --color-surface-hover:    var(--tk-surface-hover);
+  --color-border:           var(--tk-border);
+
+  --color-text:             var(--tk-text);
+  --color-text-secondary:   var(--tk-text-secondary);
+  --color-text-muted:       var(--tk-text-muted);
+
+  --color-primary:          var(--tk-primary);
+  --color-primary-hover:    var(--tk-primary-hover);
+  --color-accent:           var(--tk-accent);
+
+  /* Botão sólido: `bg-primary-solid` + `text-on-primary`. NÃO use `bg-primary`
+     com rótulo claro — é o par de 3.52:1 que a nota de contraste corrigiu. */
+  --color-primary-solid:       var(--tk-primary-solid);
+  --color-primary-solid-hover: var(--tk-primary-solid-hover);
+  --color-on-primary:          var(--tk-on-primary);
+  --color-on-accent:           var(--tk-on-accent);
+
+  --color-success:          var(--tk-success);
+  --color-warning:          var(--tk-warning);
+  --color-danger:           var(--tk-danger);
+
+  /* Canal: só DENTRO da área de plotagem e da legenda. Selo, pill, ponto de
+     status e ícone de linha nunca — ver a fronteira escrita junto do token. */
+  --color-channel-meta:     var(--tk-channel-meta);
+  --color-channel-tiktok:   var(--tk-channel-tiktok);
+  --color-channel-google:   var(--tk-channel-google);
+  --color-channel-outros:   var(--tk-channel-outros);
+
+  /* Categoria (roxo): "que tipo de coisa é". Nunca affordance. */
+  --color-category:         var(--tk-category);
+
+  /* Selo tingido: `bg-tint-X` + `text-on-tint-X`, sempre os dois do mesmo X.
+     `bg-tint-danger` com `text-danger` é o par de 3.55:1 que estes tokens
+     existem para não deixar acontecer. */
+  --color-tint-primary:     var(--tk-tint-primary);
+  --color-tint-accent:      var(--tk-tint-accent);
+  --color-tint-success:     var(--tk-tint-success);
+  --color-tint-warning:     var(--tk-tint-warning);
+  --color-tint-danger:      var(--tk-tint-danger);
+  --color-tint-neutral:     var(--tk-tint-neutral);
+  --color-tint-category:    var(--tk-tint-category);
+
+  --color-on-tint-primary:  var(--tk-on-tint-primary);
+  --color-on-tint-accent:   var(--tk-on-tint-accent);
+  --color-on-tint-success:  var(--tk-on-tint-success);
+  --color-on-tint-warning:  var(--tk-on-tint-warning);
+  --color-on-tint-danger:   var(--tk-on-tint-danger);
+  --color-on-tint-neutral:  var(--tk-on-tint-neutral);
+  --color-on-tint-category: var(--tk-on-tint-category);
+
+  --radius-controle:        var(--tk-radius-controle);
+  --radius-card:            var(--tk-radius-card);
+  --radius-painel:          var(--tk-radius-painel);
+  --radius-pill:            var(--tk-radius-pill);
+
+  --shadow-overlay:         var(--tk-shadow-overlay);
+  --shadow-live:            var(--tk-glow-live);
+
+  --font-sans:              var(--tk-font-sans);
+  --font-mono:              var(--tk-font-mono);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   `.tk-tema` — A PONTE, e é ela que faz o redesign aparecer numa tela de verdade
+   ══════════════════════════════════════════════════════════════════════════════
+
+   Aplicada na raiz do shell do painel (`DashboardShell`). Tudo que estiver
+   dentro passa a resolver os tokens LEGADOS para os valores do sistema NOVO.
+
+   🔴 POR QUE ISTO EXISTE, se a Fase 1 inteira foi feita para os dois sistemas
+   NÃO se tocarem:
+
+   Porque o alvo mudou. Até aqui o destino do trabalho era a `/design-system`, e
+   ali o isolamento é o que se quer. Agora o destino é a TELA — e a tela do
+   Dashboard é feita, em boa parte, de componentes compartilhados que ainda não
+   foram migrados: os seis gráficos, `Icone`, `InfoTip`, `FiltroPeriodo`. Eles
+   leem `--color-accent`, que é ROXO.
+
+   Migrar só os cards e deixar os gráficos roxos por dentro deles produziria a
+   tela do aviso da Fase 1 ao contrário: "card azul e gráfico roxo". A ponte
+   resolve o miolo enquanto os componentes vão sendo migrados de verdade.
+
+   ⚠️ ISTO NÃO É A MIGRAÇÃO. É um andaime, e ele mente sobre o progresso se for
+   confundido com o fim: quem estiver dentro da ponte ganha as CORES novas, mas
+   continua com o espaçamento, o raio e a tipografia antigos até ser reescrito.
+   O jeito de saber se um componente foi migrado de verdade é ele consumir
+   `--tk-*` ou os primitivos de `components/tk/` — nunca "está com a cor certa".
+
+   ⚠️ E ELA ALCANÇA AS 21 ROTAS, porque o shell é um só. Foi decisão consciente:
+   um painel com a moldura nova e o conteúdo antigo tem costura, mas um com a
+   moldura ANTIGA e uma tela nova por dentro tem costura pior — a moldura é o
+   que se vê primeiro. As outras rotas ficam "cor nova, layout antigo" até serem
+   migradas uma a uma.
+
+   ⚠️ NÃO precisa de variante por tema: cada `--tk-*` já muda sozinho com
+   `[data-theme]`, então a ponte herda os dois temas de graça. Ela vence o bloco
+   legado por ser seletor de classe em elemento descendente — não mexa na ordem
+   do arquivo achando que é isso que a sustenta.
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.tk-tema {
+  /* Superfície e texto — mapeamento direto. */
+  --color-bg:          var(--tk-background);
+  --color-surface:     var(--tk-surface);
+  --color-surface-2:   var(--tk-surface-hover);
+  --color-text:        var(--tk-text);
+  --color-text-muted:  var(--tk-text-muted);
+  --color-divider:     var(--tk-border);
+  --color-border:      var(--tk-border);
+
+  /* 🔴 A INVERSÃO da Fase 1, resolvida no único lugar onde ela podia ser:
+     o `--color-accent` legado é quem pinta botão, link, item ativo e foco — ou
+     seja, ele é o `primary` do sistema novo, e NÃO o `accent` (ciano). Mapear
+     accent→accent aqui pintaria toda affordance de ciano e quebraria a regra
+     dura do sistema numa linha só. */
+  --color-accent:      var(--tk-primary);
+  --color-accent-2:    var(--tk-accent);
+
+  --color-success:     var(--tk-success);
+  --color-warning:     var(--tk-warning);
+  --color-danger:      var(--tk-danger);
+
+  /* Rampa de accent. O uso real dela nesta base é quase todo "fundo tingido +
+     texto por cima" (`.tag-accent`, `.opcao-logo`, `.bloco-alca`, o avatar da
+     sidebar) — então os dois degraus que importam viram o PAR do selo tingido,
+     que é medido em AA. Sem isto, `.tag-accent` continuaria roxo. */
+  --color-accent-100:  var(--tk-on-tint-primary);
+  --color-accent-200:  var(--tk-on-tint-primary);
+  --color-accent-300:  var(--tk-primary);
+  --color-accent-400:  var(--tk-primary);
+  --color-accent-500:  var(--tk-primary);
+  --color-accent-600:  var(--tk-primary-hover);
+  --color-accent-700:  var(--tk-primary-solid);
+  --color-accent-800:  var(--tk-tint-primary);
+  --color-accent-900:  var(--tk-tint-primary);
+
+  --color-accent-2-100: var(--tk-on-tint-accent);
+  --color-accent-2-500: var(--tk-accent);
+  --color-accent-2-700: var(--tk-accent);
+  --color-accent-2-800: var(--tk-tint-accent);
+
+  /* Neutros: a rampa legada é usada para texto de apoio, trilho de gráfico e
+     fundo de cabeçalho de tabela. */
+  --color-neutral-100: var(--tk-text);
+  --color-neutral-200: var(--tk-text);
+  --color-neutral-300: var(--tk-text-secondary);
+  --color-neutral-400: var(--tk-text-secondary);
+  --color-neutral-500: var(--tk-text-muted);
+  --color-neutral-600: var(--tk-text-muted);
+  --color-neutral-700: var(--tk-border);
+  --color-neutral-800: var(--tk-border);
+  --color-neutral-900: var(--tk-surface-hover);
+
+  /* Espaçamento: a escala legada é 2.8 / 5.6 / 8.4 / 11.2 / 16.8 / 22.4 — herança
+     de um `rem` de 0.7. Números fracionários viram meio pixel em telas 1×, que é
+     parte do "borrado" de hoje. A escala nova é inteira. */
+  --space-1: 4px;
+  --space-2: 6px;
+  --space-3: 10px;
+  --space-4: 14px;
+  --space-6: 20px;
+  --space-8: 28px;
+
+  --radius-sm: 4px;
+  --radius-md: var(--tk-radius-card);
+  --radius-lg: var(--tk-radius-painel);
+
+  /* Sombra só em overlay. Em superfície fixa a elevação é a escada de cor, então
+     as duas primeiras viram contorno em vez de sombra. */
+  --shadow-sm: 0 0 0 1px var(--tk-border);
+  --shadow-md: 0 0 0 1px var(--tk-border);
+  --shadow-lg: var(--tk-shadow-overlay);
+
+  /* A troca de fonte que a Fase 1 adiou — agora com a tela na frente para
+     conferir, e limitada ao painel em vez de reflurar as 21 rotas às cegas. */
+  --font-body: var(--tk-font-sans);
+  --font-heading: var(--tk-font-sans);
+  --font-heading-weight: 600;
+
+  font-family: var(--tk-font-sans);
+  background: var(--tk-background);
+  color: var(--tk-text);
+}
+
+/* O `.card` legado é o que os blocos do grid ainda usam. Dentro da ponte ele
+   passa a ter o contorno e o raio do sistema novo — sem contorno, card sobre
+   fundo quase preto some no tema escuro. */
+.tk-tema .card {
+  border: 1px solid var(--tk-border);
+  padding: var(--tk-pad-card);
+  gap: 10px;
+}
+
+/* `.card-kicker` era o rótulo em ROXO no topo de cada bloco — o tell visual mais
+   forte do design antigo. Vira o `text-micro` do sistema, em texto de apoio. */
+.tk-tema .card-kicker {
+  color: var(--tk-text-secondary);
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.tk-tema .btn { border-radius: var(--tk-radius-controle); font-weight: 500; }
+.tk-tema .btn-primary {
+  background: var(--tk-primary-solid);
+  color: var(--tk-on-primary);
+  border-color: transparent;
+}
+.tk-tema .btn-primary:hover { background: var(--tk-primary-solid-hover); }
+.tk-tema .input, .tk-tema .tk-select { background: var(--tk-surface-hover); }
+.tk-tema .tag { border-radius: var(--tk-radius-pill); font-weight: 500; }
+
+/* ── Escala tipográfica — 8 níveis, compostos ──────────────────────────────────
+   Cada classe já embute tamanho, altura, peso e tracking: a Fase 0 achou 19
+   tamanhos de fonte distintos nesta base justamente porque tamanho e peso eram
+   escolhidos separados, caso a caso. Aqui a escolha é UMA.
+
+   Os dois níveis de número multiplicam pela densidade (--tk-escala-dado) e
+   carregam tabular-nums, para a coluna não dançar quando o valor muda. */
+
+.text-display {
+  font-family: var(--tk-font-sans);
+  font-size: 28px; line-height: 34px; font-weight: 600; letter-spacing: -0.02em;
+}
+
+.text-metric-xl {
+  font-family: var(--tk-font-sans);
+  font-size: calc(30px * var(--tk-escala-dado));
+  line-height: var(--tk-leading-dado);
+  font-weight: 600; letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.text-metric-md {
+  font-family: var(--tk-font-sans);
+  font-size: calc(20px * var(--tk-escala-dado));
+  line-height: var(--tk-leading-dado);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* O nível que FALTA na base de hoje: título de card. */
+.text-title {
+  font-family: var(--tk-font-sans);
+  font-size: 15px; line-height: 20px; font-weight: 600; letter-spacing: -0.005em;
+}
+
+.text-body {
+  font-family: var(--tk-font-sans);
+  font-size: 14px; line-height: 20px; font-weight: 400;
+}
+
+.text-label {
+  font-family: var(--tk-font-sans);
+  font-size: 13px; line-height: 18px; font-weight: 500;
+}
+
+.text-caption {
+  font-family: var(--tk-font-sans);
+  font-size: 12px; line-height: 16px; font-weight: 400;
+}
+
+/* RESTRITO a dois lugares: cabeçalho de tabela e eyebrow de seção. Rótulo de KPI
+   e de filtro usam `label` em caixa de frase — só isso já resolve metade do
+   problema visual de hoje. */
+.text-micro {
+  font-family: var(--tk-font-sans);
+  font-size: 11px; line-height: 14px; font-weight: 500;
+  letter-spacing: 0.04em; text-transform: uppercase;
+}

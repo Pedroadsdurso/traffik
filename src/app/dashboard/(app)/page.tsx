@@ -1,8 +1,9 @@
 "use client";
 
+import { DashboardScreen } from "@/components/dashboard/views/dashboard/DashboardScreen";
 import { useTraffik } from "@/components/dashboard/TraffikContext";
-import { DashboardView } from "@/components/dashboard/views/DashboardView";
 
 export default function DashboardPage() {
-  return <DashboardView v={useTraffik()} />;
+  const v = useTraffik();
+  return <DashboardScreen v={v} />;
 }

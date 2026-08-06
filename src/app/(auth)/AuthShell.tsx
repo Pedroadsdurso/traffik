@@ -26,10 +26,13 @@ export function AuthShell({
       <div style={sx("width:min(400px,100%);display:flex;flex-direction:column;gap:var(--space-6)")}>
         <div style={sx("display:flex;justify-content:center")}>
           <Image
-            src="/logos/traffik-claro.webp"
-            alt="Trackhub"
-            width={904}
-            height={230}
+            /* Ativo de `/marca/`, gerado por `npm run marca:gerar`. O de
+               `/logos/` desenha "Traffik" na paleta antiga. A tela de login é
+               fundo escuro, logo o wordmark do TEMA ESCURO. */
+            src="/marca/wordmark-escuro.webp"
+            alt="TrackHub"
+            width={764}
+            height={192}
             priority
             style={{ width: 168, height: "auto", objectFit: "contain" }}
           />

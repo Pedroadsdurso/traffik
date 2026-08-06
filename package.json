@@ -80,7 +80,8 @@
     "test:checkout-detector": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-checkout-detector.mjs",
     "test:checkout-jornada": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-checkout-jornada.mjs",
     "migrate:alvo": "node scripts/migrate-alvo.mjs",
-    "marca:gerar": "node scripts/gen-marca.mjs"
+    "marca:gerar": "node scripts/gen-marca.mjs",
+    "test:contraste": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-contraste.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
@@ -97,6 +98,7 @@
     "prisma": "^7.9.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "react-globe.gl": "^2.38.0",
     "react-grid-layout": "^2.2.3",
     "recharts": "^3.10.0"
   },
@@ -107,6 +109,7 @@
     "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/three": "^0.185.4",
     "eslint": "^9",
     "eslint-config-next": "16.2.11",
     "tailwindcss": "^4",

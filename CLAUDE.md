@@ -36,6 +36,8 @@ As **v1 (13 fases)** estão completas e reais. O **roteiro v2 (13 blocos)** tamb
 > | `docs/arquivo-morto.md` | o que saiu do fluxo **e o motivo** | desconfiar de doc que contradiz o código |
 > | `docs/auditoria.md` | 🔜 auditoria pré-redesign: 310 cores hardcoded, 5 problemas estruturais, o que PRESERVAR | trabalhar no redesign |
 > | `docs/design/00-CRITERIOS-CORRIGIDOS.md` | 🔜 **decisões e critérios do redesign** — o que foi corrigido em cima do prompt master | **antes de qualquer fase do redesign** |
+| `docs/design/05-MOCKUPS-VS-TOKENS.md` | os 4 conflitos mockup × sistema e **como cada um foi decidido** (canal só dentro do gráfico, roxo como categoria, selo tingido, gradiente não preenche botão) | mexer em cor, selo ou botão |
+| `docs/design/06-CRIADOR-DE-REGRAS.md` | ⛔ **especificação de algo que NÃO existe** — fora do escopo do redesign, por decisão | só se for decidir construir o motor |
 >
 > ⚠️ **`docs/arquivo-morto.md` não é lixo.** Vários "obsoletos" desta base
 > voltaram a importar. O que está lá é o que **descreve comportamento que
@@ -743,6 +745,59 @@ ser incômodo e vira **dado errado permanente** no site do cliente.
 + chamada **sem o argumento** + `useEffect` com deps `[]`.
 → `docs/historico/2026-08-01-ux-e-ambiente.md`
 
+### 🔴 RAZÃO COM DENOMINADOR ZERO — o mesmo defeito, TRÊS vezes numa sessão
+
+Registrado em 06/08/2026, na reescrita do Dashboard. **A decisão está PENDENTE**
+e o mapa completo é a próxima dívida a levantar.
+
+| Onde | Como apareceu |
+|---|---|
+| Sparkline do ROAS | série do servidor com `Infinity`/`NaN` → `Math.max` vira `Infinity`, todo `y` vira `NaN`, e o `<path>` da área degenera num **retângulo cheio**: na tela, "uma barra azul sólida" |
+| ROAS no hero × na faixa | o mesmo período mostrava **`0,00x` no hero e `—` na faixa**. Dois lugares, duas respostas para a mesma divisão por zero |
+| `finance` e `despesaRows` | expunham **só a string formatada** (`"R$ 1.234,00"`). Quem precisa somar tem de reverter texto em reais |
+
+O denominador comum: **cálculo e apresentação estão grudados em pelo menos três
+lugares.** A pergunta que não tem dono é "divisão por zero é ZERO ou é
+INDEFINIDO?" — e hoje ela é respondida de forma diferente em cada consumidor.
+
+⚠️ **`0,00x` e `—` não são a mesma afirmação.** "ROAS zero" quer dizer que se
+gastou e não voltou nada; "ROAS indefinido" quer dizer que **não se gastou**. A
+primeira é um alerta, a segunda é ausência de dado — e a tela hoje mostra as duas
+para o mesmo estado.
+
+**Paliativo aplicado:** o `Sparkline` filtra não-finitos, e o `despesaRows` passou
+a expor `value` numérico **ao lado** do `valueLabel` (o formatado fica: quem já
+consome não pode quebrar). **O que falta:** o mapa de onde as razões são
+calculadas, por que hero e faixa divergem, e quem mais consome.
+
+### Ativo GERADO e commitado também precisa de alguém que o consuma
+
+O `npm run marca:gerar` produz `public/marca/wordmark-*.webp` — "track hub", na
+rampa azul do sistema novo. Estava gerado, commitado e **apontado por ninguém**:
+o rail seguia servindo `/logos/traffik-*.webp`, que desenha **"Traffik"** na
+paleta antiga. Sétimo caso do padrão nesta base, e o mais visível de todos — era
+a primeira coisa da tela, e três sessões de redesign passaram por cima dele.
+
+⚠️ E a convenção de nome **inverteu** entre as duas pastas: em `/logos/` o sufixo
+era a cor das LETRAS (`claro` = letras claras, fundo escuro); em `/marca/` é o
+TEMA servido (`claro` = para o tema claro, letras escuras). Trocar um pelo outro
+dá logotipo invisível. → `docs/temas/ui-e-microcopia.md`
+
+### "Compila e mede certo" não responde COMO FICOU — layout só a tela responde
+
+Os 4 primitivos da Fase 2 foram entregues com `tsc`, `lint`, `build` e
+`test:contraste` verdes, e o contraste **provado**. Ao abrir a página no
+navegador, 3 dos 4 tinham defeito visível: 30px de gradiente cru vazando no CTA
+(padding inline vencendo a classe), "carregando" pintado igual a "desabilitado",
+e um botão de ícone **vazio**. Nenhuma ferramenta desta base pergunta "como isto
+ficou" — é o mesmo buraco do "resumo do gargalo do funil", que ficou invisível no
+DOM por uma sessão inteira.
+
+⚠️ E quando o viewport é grande demais para forçar o caso (`resize_window` mente
+aqui), dá para exercitar o CÓDIGO em vez do tamanho: mover o gatilho para a borda
+com `position:fixed` prova o clamp do popover sem precisar de janela estreita.
+→ `docs/design/05-MOCKUPS-VS-TOKENS.md`
+
 ### Nunca confie na mensagem de sucesso do `resize_window`
 
 Com a janela maximizada ele reporta êxito e **não redimensiona**. Depois de
@@ -837,7 +892,52 @@ O raciocínio completo de cada item está em **`docs/FILA.md`**.
 
 | # | Item | Estado |
 |---|---|---|
-| 1 | **Redesign do design system** | 🔜 **o próximo.** O usuário traz o roteiro; o documento vive fora do repo |
+| 1 | **Redesign — Fase 1 (fundação de tokens)** | ✅ **feita e APROVADA em 05/08/2026.** Camada `--tk-*` em OKLCH nos dois temas, `@theme inline`, next/font, 8 níveis de tipografia, `[data-density]`, rota `/design-system`. **Nenhuma tela existente alterada** — verificado na `/dashboard` real. Contraste corrigido nos 2 estruturais do escuro; o resto em `ACEITOS` com piso |
+| 1a | **Redesign — Fase 6 (tema claro)** | ✅ **feita em 05/08/2026, ANTES da Fase 2** — 3 das 7 telas são claras, então um primitivo que nascesse certo só no escuro seria detector congelado. As 5 reprovações **corrigidas** e removidas de `ACEITOS`. Duas previsões do documento estavam erradas: escurecer o `surface-hover` era ao contrário, e corrigir `text-muted` sozinho **invertia** a hierarquia com `text-secondary` |
+| 1b | **Redesign — Fase 2 (primitivos)** | ⏸️ **PARADA por decisão de 05/08/2026.** 10 primitivos prontos em `src/components/tk/` (Button, Badge, Card, Input, Popover, Select, Tooltip, Checkbox/Radio/Switch, Skeleton, Separator). O resto **nasce quando a tela pedir**, no contexto dela — não numa vitrine |
+| 1c | ~~Redesign — Dashboard "migrado"~~ | ⚠️ **ERA RE-SKIN, e foi jogado fora.** Trocou cor e fonte sobre o mesmo JSX: no teste do cinza, a mesma tela. Ver `docs/design/03-ARQUITETURA-DE-TELAS.md` |
+| 1d | **Dashboard REESCRITO do zero** | ✅ **06/08/2026.** `DashboardView`/`BlockContent`/`DashboardGrid` **deletados** (744 linhas). 4 KPIs hero com sparkline · faixa compacta · Receita×Gasto com aparo de dias zerados · Canais · **Alertas** (novo) · Vendas por país (globo + ranking) · rodapé de estado. Passa no teste do cinza |
+
+> ### ⛔ DECISÕES TOMADAS NO DASHBOARD — não reabrir sem motivo novo
+>
+> - **Países coloridos no globo: NÃO.** Exigiria um GeoJSON por país (~100 KB);
+>   o `worldGeo.ts` é um MultiPolygon de terra só, sem fronteiras. E o ranking ao
+>   lado já nomeia os 7 países com valor — colorir o polígono seria a **terceira**
+>   forma de dizer a mesma coisa. Decisão do usuário em 06/08/2026.
+> - **Arcos no globo: NUNCA.** Arco representa TRAJETO (voo, remessa, rota). Uma
+>   venda no Chile não vem de lugar nenhum — é ponto, não caminho. Arco ali é
+>   decoração se passando por dado, que é o pior defeito possível numa ferramenta
+>   de atribuição. Quando houver "país da venda mais recente", volta como
+>   `ringsData` (anel que expande e some), nunca como arco.
+> - **O anel de venda nova foi REMOVIDO**, não deixado inerte: ele dependia de um
+>   dado que não existe (`byCountry` é agregado sem carimbo de tempo, e o feed não
+>   traz país). Implementado-e-desligado seria mais um "controle que não controla
+>   nada".
+>
+> ### 🔜 PENDENTE do Dashboard
+>
+> - **Modo de edição / `useDashboardLayout.ts` órfão.** A reescrita não consome o
+>   hook: **usuários com layout customizado perderam a customização**, e o
+>   catálogo de `blocks.ts` (funil, fontes, produtos, pagamentos, vendas por dia
+>   e por hora, aprovação, atividade recente) sumiu da tela. O desenho já está
+>   decidido — **três zonas** (hero fixo em 4 · faixa livre até 8 · painéis com
+>   larguras declaradas), sem arrasto entre zonas, mais a migração dos layouts
+>   salvos.
+> - **`metrics.ts` (aditivo apenas):** break-even → Top Campanhas → token
+>   expirando → heatmap hora × dia.
+> - **Clique no globo não abre o popover.** Duas tentativas gastas (colunas finas
+>   demais para acertar; marcadores `htmlElementsData` não montaram). O popover
+>   está escrito e não foi possível exercê-lo.
+
+> ### 🔁 A ORDEM DO ROTEIRO MUDOU — 05/08/2026
+> Pedido do usuário, e a razão é boa: várias sessões e milhares de dólares sem
+> **uma única tela da ferramenta mudar**. A `/design-system` cumpriu o papel dela
+> (pegou 3 defeitos de Button que o build não pegava), mas deixou de ser o
+> destino do trabalho.
+>
+> **Cada sessão passa a entregar TELA, não fundação.** Primitivo que falta nasce
+> dentro da tela que precisa dele. A `/design-system` continua existindo como
+> referência e como lugar de conferir contraste.
 | 2 | **Item (d) — varredura de viewport estreito** | ⏸️ **DEPOIS do redesign, de propósito** — ver abaixo |
 | 3 | Evento de TESTE da Cakto contando como venda | ⛔ bloqueado até a Cakto ser reativada (precisa do payload real) |
 | 4 | Import/export de regras (Bloco 8) | ficou fora de propósito: não havia regra para exportar |
@@ -928,6 +1028,11 @@ npm run test:telefone    # 25 asserções, E.164 antes do hash da CAPI
 npm run db:onde          # em qual banco o .env aponta
 npm run migrate:alvo     # para qual banco o `migrate deploy` vai AGORA (so leitura)
 npm run marca:gerar      # deriva simbolo/wordmark/favicon dos PNGs de origem (saida COMMITADA)
+npm run test:contraste   # 92 pares WCAG da paleta do redesign, NOS DOIS TEMAS. Le o globals.css
+                         #   (nao uma copia dos hex) e denuncia OKLCH que diverge do comentario.
+                         #   VERDE hoje. As 7 reprovacoes que restam estao em ACEITOS COM PISO:
+                         #   nao reprovam, mas se PIORAREM o teste volta a sair 1. Lista e prazo
+                         #   em docs/design/04-FASE-6-CONTRASTE.md
 npm run script:onde      # onde falta reinstalar o script de UTM
 npm run backup -- --url '<connection string>'   # SEMPRE com --url
 ```

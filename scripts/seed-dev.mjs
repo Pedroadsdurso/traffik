@@ -49,7 +49,7 @@ async function main() {
   await q(
     `INSERT INTO "User" ("id","email","name","passwordHash","timezone","updatedAt")
      VALUES ($1,$2,$3,$4,'America/Sao_Paulo',now())`,
-    [userId, EMAIL, `${MARCA} Operador`, await bcrypt.hash(SENHA, 10)],
+    [userId, EMAIL, "Pedro Durso", await bcrypt.hash(SENHA, 10)],
   );
 
   const perfil = id();
@@ -60,8 +60,8 @@ async function main() {
   );
 
   const ofertas = [
-    { suf: "A", conta: "Oferta Emagrecimento", produto: "Protocolo 21 Dias", ticket: 197, vendas: 6, gasto: 420 },
-    { suf: "B", conta: "Oferta Renda Extra", produto: "Mentoria Alta Renda", ticket: 997, vendas: 2, gasto: 380 },
+    { suf: "A", conta: "Oferta Emagrecimento", produto: "Protocolo 21 Dias", ticket: 197, vendas: 21, gasto: 420 },
+    { suf: "B", conta: "Oferta Renda Extra", produto: "Mentoria Alta Renda", ticket: 997, vendas: 14, gasto: 380 },
   ];
 
   for (const o of ofertas) {
@@ -91,15 +91,25 @@ async function main() {
       [pixel, userId, `${MARCA} Pixel — ${o.conta}`]);
 
     for (let n = 0; n < o.vendas; n++) {
+      /* País e multiplicador de ticket. A distribuição é DESIGUAL de propósito:
+         o globo usa escala logarítmica no raio e na altura dos pontos, e com
+         valores parecidos não dá para ver se ela funciona. Aqui o maior fatura
+         ~60x o menor — se a escala estivesse linear, cinco países sumiriam. */
+      const PAISES = [
+        ["BR", 1.0], ["US", 0.55], ["PT", 0.22],
+        ["MX", 0.12], ["ES", 0.06], ["AR", 0.03], ["CL", 0.016],
+      ];
+      const [pais, pesoPais] = PAISES[n % PAISES.length];
       const clique = id(), fbclid = `dev-${o.suf}-${n}`;
       const quando = new Date(Date.now() - (n + 1) * 90 * 60 * 1000);
       await q(`INSERT INTO "Click" ("id","clickId","userId","fbclid","utmSource","utmCampaign","timestamp") VALUES ($1,$1,$2,$3,'facebook',$4,$5)`,
         [clique, userId, fbclid, `${campNome}|${campFb}`, quando]);
       await q(
         `INSERT INTO "Sale" ("id","userId","clickId","webhookId","externalId","product","value","status","paymentMethod","buyerEmail","country","timestamp","updatedAt")
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'PIX',$9,'BR',$10,now())`,
-        [id(), userId, clique, hook, `dev-${o.suf}-${n}`, `${MARCA} ${o.produto}`, o.ticket,
-         n % 4 === 3 ? "PENDENTE" : "APROVADA", `comprador${n}@exemplo.dev`, quando],
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'PIX',$9,$11,$10,now())`,
+        [id(), userId, clique, hook, `dev-${o.suf}-${n}`, `${MARCA} ${o.produto}`,
+         Math.round(o.ticket * pesoPais * 100) / 100,
+         n % 4 === 3 ? "PENDENTE" : "APROVADA", `comprador${n}@exemplo.dev`, quando, pais],
       );
       await q(
         `INSERT INTO "PixelEvent" ("id","userId","event","eventId","url","fbclid","pixelConfigId","timestamp")

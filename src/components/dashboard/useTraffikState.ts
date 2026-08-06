@@ -12,6 +12,7 @@ import {
   type AdProfileDTO,
 } from "@/lib/actions/facebook";
 import type { PixelConfigDTO } from "@/lib/actions/pixels";
+import type { RuleDTO } from "@/lib/actions/rules";
 import { TODAS_AS_FORMAS, corFinanceira } from "@/lib/financeiro";
 import { estadoDaConta, podeRastrear } from "@/lib/facebook/contaStatus";
 import { explicarErroDeConta } from "@/lib/facebook/erroMeta";
@@ -142,6 +143,8 @@ interface State {
   metricOrder: MetricKey[];
   metricVisible: Record<MetricKey, boolean>;
   expenses: ExpenseDTO[];
+  /** Passagem pura, sem cálculo: o rodapé do Dashboard conta ativas/em execução. */
+  rules: RuleDTO[];
   newDespesaName: string;
   newDespesaValue: string;
   newGatewayMethod: string;
@@ -199,6 +202,7 @@ function initialState(
   initialNotifications: NotificationDTO[] = [],
   initialExpenses: ExpenseDTO[] = [],
   initialApiCredentials: ApiCredentialDTO[] = [],
+  initialRules: RuleDTO[] = [],
 ): State {
   const order = prefs?.order?.length
     ? (prefs.order.filter((k) => DEFAULT_METRIC_ORDER.includes(k as MetricKey)) as MetricKey[])
@@ -288,6 +292,7 @@ function initialState(
     notifications: initialNotifications,
     notifUnread: initialNotifications.filter((n) => !n.read).length,
     notifOpen: false,
+    rules: initialRules ?? [],
   };
 }
 
@@ -358,13 +363,14 @@ export function useTraffikState(
     initialNotifSettings?: NotificationSettingsDTO;
     initialNotifications?: NotificationDTO[];
     initialExpenses?: ExpenseDTO[];
+  initialRules?: RuleDTO[];
     initialApiCredentials?: ApiCredentialDTO[];
     timezone?: string;
     workspaces?: WorkspaceDTO[];
     lastWorkspaceId?: string | null;
   } = {},
 ) {
-  const brandName = opts.brandName || "Trackhub";
+  const brandName = opts.brandName || "TrackHub";
   const liveUpdates = opts.liveUpdates !== false;
   const trackingId = opts.trackingId || "SEU_ID";
   const appUrl = (opts.appUrl || "https://app.traffik.io").replace(/\/+$/, "");
@@ -380,7 +386,7 @@ export function useTraffikState(
   const ultimaArea = opts.lastWorkspaceId ?? null;
 
   const router = useRouter();
-  const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks, opts.dashboardPrefs, opts.initialProfiles, opts.initialPixels, opts.initialNotifSettings, opts.initialNotifications, opts.initialExpenses, opts.initialApiCredentials));
+  const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks, opts.dashboardPrefs, opts.initialProfiles, opts.initialPixels, opts.initialNotifSettings, opts.initialNotifications, opts.initialExpenses, opts.initialApiCredentials, opts.initialRules));
 
   // Semeia as áreas vindas do servidor. Só quando MUDAM de verdade: o layout
   // remonta a cada navegação e reescrever o estado igual derrubaria a área
@@ -921,6 +927,11 @@ export function useTraffikState(
       id: e.id,
       name: e.name,
       valueLabel: brl0(e.amount),
+      /* O NÚMERO ao lado do formatado. Expor só `valueLabel` é a mesma doença do
+         `finance`: cálculo e apresentação misturados, e quem precisa somar tem
+         de reverter uma string em reais. O formatado FICA — quem já consome não
+         pode quebrar. */
+      value: e.amount,
       remove: async () => {
         await deleteExpense(e.id);
         setS((st) => ({ ...st, expenses: st.expenses.filter((x) => x.id !== e.id) }));
@@ -1763,6 +1774,8 @@ export function useTraffikState(
     coproducaoExpenses,
     custoProdutoExpenses,
     despesaRows,
+    /** Passagem pura — o rodapé do Dashboard conta ativas e em execução. */
+    rules: s.rules,
     // Novo gateway
     newGatewayMethod: s.newGatewayMethod,
     newGatewayPct: s.newGatewayPct,

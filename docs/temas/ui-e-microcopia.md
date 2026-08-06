@@ -457,8 +457,26 @@ Arquivos em `public/logos/` (webp, vindos do designer):
 
 | Arquivo | Onde |
 |---|---|
-| `traffik-claro.webp` | Wordmark de letras **brancas** — sidebar (o tema é escuro) |
-| `traffik-escuro.webp` | Wordmark de letras pretas — reservado para fundo claro, **ainda sem uso** |
+| ~~`trackhub-claro.webp`~~ | ⛔ **APOSENTADO em 05/08/2026** — desenha "Traffik" na paleta ANTIGA |
+| ~~`trackhub-escuro.webp`~~ | ⛔ **APOSENTADO** pelo mesmo motivo |
+
+> ### 🔴 O wordmark em uso mora em `public/marca/`, não em `public/logos/`
+> Os dois arquivos acima ficaram servindo a interface por três sessões de
+> redesign desenhando **"Traffik"** na cor do design antigo, enquanto o ativo
+> certo — **"track hub"**, na rampa azul do sistema novo — já existia em
+> `public/marca/`, gerado por `npm run marca:gerar` e commitado, **sem nenhum
+> consumidor**.
+>
+> ⚠️ **A CONVENÇÃO DE NOME INVERTEU entre as duas pastas:**
+>
+> | Pasta | O sufixo significa | `claro` = |
+> |---|---|---|
+> | `/logos/` (aposentado) | a cor das **letras** | letras claras → fundo escuro |
+> | `/marca/` (em uso) | o **tema** servido | tema claro → letras escuras |
+>
+> Trocar um pelo outro dá logotipo **invisível**: letra escura sobre fundo quase
+> preto. O mapeamento certo é direto:
+> `theme === "light" ? "/marca/wordmark-claro.webp" : "/marca/wordmark-escuro.webp"`.
 | `kirvano/hotmart/cartpanda/kiwify/facebook.webp` | Gateways e plataformas |
 | `favicon.webp` | Origem do favicon |
 

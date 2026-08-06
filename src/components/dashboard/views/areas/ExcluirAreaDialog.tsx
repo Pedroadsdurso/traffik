@@ -145,7 +145,7 @@ export function ExcluirAreaDialog({
     const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = `traffik-${(previa?.nome ?? "area").replace(/[^\w-]+/g, "-").toLowerCase()}.json`;
+    a.download = `trackhub-${(previa?.nome ?? "area").replace(/[^\w-]+/g, "-").toLowerCase()}.json`;
     a.click();
     URL.revokeObjectURL(url);
     setBaixou(true);
@@ -158,7 +158,7 @@ export function ExcluirAreaDialog({
     const url = URL.createObjectURL(new Blob([json], { type: "application/json" }));
     const a = document.createElement("a");
     a.href = url;
-    a.download = `traffik-automacoes-${(previa?.nome ?? "area").replace(/[^\w-]+/g, "-").toLowerCase()}.json`;
+    a.download = `trackhub-automacoes-${(previa?.nome ?? "area").replace(/[^\w-]+/g, "-").toLowerCase()}.json`;
     a.click();
     URL.revokeObjectURL(url);
     setBaixouHistorico(true);
