@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import { auth } from "@/auth";
-import { DashboardShell } from "@/components/dashboard/DashboardShell";
+import { AppShell } from "@/components/tk/AppShell";
 import { listApiCredentials } from "@/lib/actions/apiCredentials";
 import { loadDashboardPrefs } from "@/lib/actions/dashboardPrefs";
 import { listExpenses } from "@/lib/actions/expenses";
@@ -40,7 +40,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     ]);
 
   return (
-    <DashboardShell
+    <AppShell
       user={{ name: session?.user?.name, email: session?.user?.email }}
       trackingId={session?.user?.id}
       appUrl={getAppUrl()}
@@ -59,6 +59,6 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       lastWorkspaceId={lastWorkspaceId}
     >
       {children}
-    </DashboardShell>
+    </AppShell>
   );
 }

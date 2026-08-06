@@ -36,8 +36,12 @@ As **v1 (13 fases)** estão completas e reais. O **roteiro v2 (13 blocos)** tamb
 > | `docs/arquivo-morto.md` | o que saiu do fluxo **e o motivo** | desconfiar de doc que contradiz o código |
 > | `docs/auditoria.md` | 🔜 auditoria pré-redesign: 310 cores hardcoded, 5 problemas estruturais, o que PRESERVAR | trabalhar no redesign |
 > | `docs/design/00-CRITERIOS-CORRIGIDOS.md` | 🔜 **decisões e critérios do redesign** — o que foi corrigido em cima do prompt master | **antes de qualquer fase do redesign** |
-| `docs/design/05-MOCKUPS-VS-TOKENS.md` | os 4 conflitos mockup × sistema e **como cada um foi decidido** (canal só dentro do gráfico, roxo como categoria, selo tingido, gradiente não preenche botão) | mexer em cor, selo ou botão |
-| `docs/design/06-CRIADOR-DE-REGRAS.md` | ⛔ **especificação de algo que NÃO existe** — fora do escopo do redesign, por decisão | só se for decidir construir o motor |
+> | `docs/design/04-CONFERENCIA-COM-AS-REFERENCIAS.md.txt` | 🥇 **o inventário do que precisa existir, tela por tela, conferido contra as 11 imagens.** Tem **precedência sobre todos** os outros documentos de design | **antes de qualquer tela do redesign** |
+> | `docs/design/03-ARQUITETURA-DE-TELAS.md` | estrutura das telas, catálogo de blocos, as três zonas do Dashboard. **Perde para o `04`** em divergência | desenhar uma tela ou o modo de edição |
+> | `docs/design/03-FASE-1-DECISOES.md` | arquitetura de **tokens** (`--tk-*`, `@theme inline`), não de telas. O nome engana | mexer em token ou no `globals.css` |
+> | `docs/design/05-MOCKUPS-VS-TOKENS.md` | os 4 conflitos mockup × sistema e **como cada um foi decidido** (canal só dentro do gráfico, roxo como categoria, selo tingido, gradiente não preenche botão) | mexer em cor, selo ou botão |
+> | `docs/design/06-CRIADOR-DE-REGRAS.md` | ⛔ **especificação de algo que NÃO existe** — fora do escopo do redesign, por decisão | só se for decidir construir o motor |
+> | `docs/design/07-DASHBOARD-MIGRADO.md` | a ponte `.tk-tema` e por que o re-skin do Dashboard foi jogado fora | mexer no shell ou numa tela ainda não migrada |
 >
 > ⚠️ **`docs/arquivo-morto.md` não é lixo.** Vários "obsoletos" desta base
 > voltaram a importar. O que está lá é o que **descreve comportamento que
@@ -895,7 +899,8 @@ O raciocínio completo de cada item está em **`docs/FILA.md`**.
 | 1 | **Redesign — Fase 1 (fundação de tokens)** | ✅ **feita e APROVADA em 05/08/2026.** Camada `--tk-*` em OKLCH nos dois temas, `@theme inline`, next/font, 8 níveis de tipografia, `[data-density]`, rota `/design-system`. **Nenhuma tela existente alterada** — verificado na `/dashboard` real. Contraste corrigido nos 2 estruturais do escuro; o resto em `ACEITOS` com piso |
 | 1a | **Redesign — Fase 6 (tema claro)** | ✅ **feita em 05/08/2026, ANTES da Fase 2** — 3 das 7 telas são claras, então um primitivo que nascesse certo só no escuro seria detector congelado. As 5 reprovações **corrigidas** e removidas de `ACEITOS`. Duas previsões do documento estavam erradas: escurecer o `surface-hover` era ao contrário, e corrigir `text-muted` sozinho **invertia** a hierarquia com `text-secondary` |
 | 1b | **Redesign — Fase 2 (primitivos)** | ⏸️ **PARADA por decisão de 05/08/2026.** 10 primitivos prontos em `src/components/tk/` (Button, Badge, Card, Input, Popover, Select, Tooltip, Checkbox/Radio/Switch, Skeleton, Separator). O resto **nasce quando a tela pedir**, no contexto dela — não numa vitrine |
-| 1c | ~~Redesign — Dashboard "migrado"~~ | ⚠️ **ERA RE-SKIN, e foi jogado fora.** Trocou cor e fonte sobre o mesmo JSX: no teste do cinza, a mesma tela. Ver `docs/design/03-ARQUITETURA-DE-TELAS.md` |
+| 1c | ~~Redesign — Dashboard "migrado"~~ | ⚠️ **ERA RE-SKIN, e foi jogado fora.** Trocou cor e fonte sobre o mesmo JSX: no teste do cinza, a mesma tela. Ver `docs/design/07-DASHBOARD-MIGRADO.md` |
+| 1e | **SHELL reescrito do zero** | ✅ **06/08/2026.** `Sidebar`/`Header`/`DashboardShell`/`integracoes/layout` **deletados** (463 linhas) → 9 arquivos em `components/tk/`. Rail recolhível (236↔60px, `localStorage`) · navegação de **dois níveis** (Integrações com filhos inline) · badge de contagem · rodapé com área + perfil · header com **paleta ⌘K própria** (sem `cmdk`), Filtros, Central de ajuda, sino, tema, avatar, Ao vivo. Nos dois temas. Conferência preenchida em `docs/design/04-*.md` |
 | 1d | **Dashboard REESCRITO do zero** | ✅ **06/08/2026.** `DashboardView`/`BlockContent`/`DashboardGrid` **deletados** (744 linhas). 4 KPIs hero com sparkline · faixa compacta · Receita×Gasto com aparo de dias zerados · Canais · **Alertas** (novo) · Vendas por país (globo + ranking) · rodapé de estado. Passa no teste do cinza |
 
 > ### ⛔ DECISÕES TOMADAS NO DASHBOARD — não reabrir sem motivo novo
@@ -925,6 +930,46 @@ O raciocínio completo de cada item está em **`docs/FILA.md`**.
 >   salvos.
 > - **`metrics.ts` (aditivo apenas):** break-even → Top Campanhas → token
 >   expirando → heatmap hora × dia.
+> ### ⛔ SHELL: o que NÃO foi construído, e por quê (06/08/2026)
+>
+> - **Medidor de plano e uso de eventos** (`Pro · 1.250 / 5.000`, imagem 5 da
+>   referência): **não existe backend.** `grep -iE "plan|billing|subscription|quota|usage"`
+>   no `schema.prisma` devolve 4 acertos, e os quatro são `PENDING_BILLING_INFO` —
+>   status de conta de anúncio da Meta, nada a ver com cobrança nossa. Inventar o
+>   número seria pior que a ausência: uma barra de consumo que não mede consumo.
+> - **`Integrações › Visão geral`** não está entre os filhos da sidebar porque a
+>   tela não existe — `integracoes/page.tsx` é um `redirect`. É **pendência**, e
+>   entra como primeiro filho quando a tela for construída.
+> - **`Integrações › Testes` saiu da navegação** (decisão do `03`), mas a tela
+>   continua entregue. ⚠️ O que a mantém alcançável é o **link da Central de
+>   ajuda**. Remover aquele link deixa uma tela real órfã.
+>
+> ### 🔎 A PALETA ⌘K usa `useOverlay`, NÃO o `Popover` — e a diferença é de contrato
+>
+> O `Popover` documenta que **não prende o foco** e **não trava o scroll**, e as
+> duas ausências são deliberadas (dropdown que faz isso é bug). A paleta precisa
+> das duas, e não é ancorada a gatilho nenhum. O primitivo certo é o `useOverlay`,
+> o mesmo de `Drawer` e `Modal` — que é o que a paleta estruturalmente é.
+>
+> ⚠️ **Campanhas na paleta vêm de `v.adsData`, nunca de `v.filteredCampaigns`.** A
+> lista `filtered*` já passou pelo `adsMatch`, que aplica a busca **e o status do
+> Gerenciador**. Usá-la faria o resultado do ⌘K depender do que estivesse digitado
+> numa caixa de outra tela — e o defeito seria mudo, porque com o campo vazio (o
+> caso comum) as duas listas são idênticas.
+>
+> ### ✅ O BOTÃO "FILTROS" NÃO PODE FICAR INERTE — e o contrato é o que garante
+>
+> A faixa de filtros mora na TELA; o botão, no header. A tela chama
+> `useRegistrarFaixaDeFiltros()` (de `tk/AppShell`), que registra a faixa e devolve
+> se ela deve aparecer. O header só desenha o botão **se alguém registrou**.
+>
+> Não há como o botão existir sem ter o que controlar. **Provado pelo lado
+> negativo**, que é o que a regra da asserção exige: no Gerenciador, que não
+> registra faixa, `botaoFiltrosNoHeader === false`.
+>
+> ⚠️ O `registrar(false)` na limpeza do efeito não é ritual: sem ele, sair do
+> Dashboard para Taxas deixaria o botão no header de uma tela sem faixa nenhuma.
+>
 > ### 🌍 O GLOBO NÃO TEM INTERAÇÃO — medido, e o código foi REMOVIDO
 >
 > **Clique e hover não funcionam: o raycaster do three.js não acerta as colunas**

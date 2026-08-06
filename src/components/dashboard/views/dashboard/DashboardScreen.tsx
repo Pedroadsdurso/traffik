@@ -8,6 +8,7 @@ import { brl, brl0 } from "@/lib/format";
 import { useTheme } from "@/components/theme/ThemeProvider";
 
 import { AlertList, type Alerta } from "@/components/tk/AlertList";
+import { useRegistrarFaixaDeFiltros } from "@/components/tk/AppShell";
 import { Card } from "@/components/tk/Card";
 import { AlternadorPais, CountryPanel, useVisaoPais, type LinhaPais } from "@/components/tk/CountryPanel";
 import { DonutChart, type FatiaDonut } from "@/components/tk/DonutChart";
@@ -278,12 +279,18 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
   ];
 
   const carregando = v.dashLoading;
+  const filtrosVisiveis = useRegistrarFaixaDeFiltros();
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "var(--tk-gap-grid)" }}>
       <BannerPendencias workspaceId={v.workspaceAtiva} />
 
-      {/* ── Filtros ─────────────────────────────────────────────────────────── */}
+      {/* ── Filtros ─────────────────────────────────────────────────────────────
+          A faixa é REGISTRADA no shell (`useRegistrarFaixaDeFiltros`), e é esse
+          registro que faz o botão `Filtros` aparecer no header. Sem ele, o botão
+          não existiria; sem o `filtrosVisiveis` aqui, ele existiria e não
+          controlaria nada. As duas pontas do mesmo contrato. */}
+      {filtrosVisiveis && (
       <div
         className="bg-surface border border-border"
         style={{
@@ -349,6 +356,7 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
           </Button>
         </div>
       </div>
+      )}
 
       {/* ── 4 KPIs hero ─────────────────────────────────────────────────────── */}
       <div style={{ display: "grid", gap: "var(--tk-gap-grid)", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>

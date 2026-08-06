@@ -1618,6 +1618,20 @@ export function useTraffikState(
     // a vitrine da área continua vazia.
     connectHref: s.workspaceAtiva ? `/api/auth/facebook?ws=${encodeURIComponent(s.workspaceAtiva)}` : "/api/auth/facebook",
     adProfiles,
+
+    /**
+     * 🔎 Os dois campos abaixo existem para a PALETA ⌘K do shell, e são
+     * acessores puros do estado — nada é derivado aqui.
+     *
+     * ⚠️ `adsData` é a lista CRUA de propósito. O que já era exposto,
+     * `filteredCampaigns`, passa pelo `adsMatch`, que aplica a busca e o filtro
+     * de status DO GERENCIADOR. A paleta consumindo aquela lista faria o
+     * resultado da busca global depender do que estivesse digitado numa caixa de
+     * outra tela — e o defeito seria invisível, porque com o campo vazio (o caso
+     * comum) as duas listas são idênticas.
+     */
+    adsData: s.adsData,
+    pixels: s.pixels,
     syncBusy: s.syncBusy,
     syncResult: s.syncResult,
     runSync: async () => {
