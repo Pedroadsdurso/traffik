@@ -151,6 +151,30 @@ function celulaDaGrade(col: number, linhas: number | undefined, temDado: boolean
   };
 }
 
+/**
+ * 🔴 KPIs QUE SÃO RAZÃO ENTRE POPULAÇÕES DIFERENTES DECLARAM A BASE.
+ *
+ * O ROAS do Dashboard divide **toda** a receita aprovada (`metrics.ts:668`,
+ * sem filtro de origem: orgânico, Google, TikTok, Meta) pelo `spend` do
+ * `DailyAdMetric`, que é **só da Meta**. Medido no dev em 07/08/2026: a tela
+ * mostra **3,54x** enquanto o ROAS real da Meta é **0,71x** — inflação de 5×,
+ * cruzando o 1,0x que separa "se paga" de "dá prejuízo".
+ *
+ * ⛔ **A CONTA NÃO FOI ALTERADA, por decisão do dono.** O redesign não muda
+ * funcionalidade nem lógica — ver o topo do `CLAUDE.md`. O que a tela ganhou é
+ * a declaração da base, do mesmo jeito que o funil declara a cobertura de
+ * rastreamento: o usuário não pode ler um número sem saber o que ele mede.
+ *
+ * 🔜 Reabrir quando existir a segunda plataforma de anúncio. Hoje "gasto" e
+ * "Meta" são sinônimos nesta base, e é isso que torna o erro invisível.
+ *
+ * ⚠️ O ROAS **por campanha** (`ads/overview.ts`) não tem este defeito — lá as
+ * duas pontas são da mesma campanha. Não unifique os dois.
+ */
+const BASE_DECLARADA: Record<string, string | undefined> = {
+  roas: "receita de todos os canais ÷ gasto da Meta",
+};
+
 export function DashboardScreen({ v }: { v: TraffikView }) {
   /* ── O CONTEXTO DOS BLOCOS ────────────────────────────────────────────────
      Estado de lente e derivações caras, num objeto só. Ele existe porque um
@@ -177,6 +201,7 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
         invertido: k.invertido,
         trendLabel: k.trendLabel,
         cor: k.cor,
+        base: BASE_DECLARADA[chave],
         /* Mesma janela do gráfico. ⚠️ A série do sparkline tem um bucket por
            rótulo do gráfico — é o mesmo `buckets` do servidor —, então o índice
            vale para as duas sem conversão. */

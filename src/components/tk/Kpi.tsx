@@ -26,6 +26,22 @@ export type DadosKpi = {
   invertido?: boolean;
   /** Texto quando não há delta — "12 vendas aguardando", não "vs. período". */
   trendLabel?: string;
+  /**
+   * 🔴 QUAL POPULAÇÃO ESTÁ EM CIMA E QUAL ESTÁ EMBAIXO.
+   *
+   * Uma linha pequena e neutra sob o número, quando ele é uma RAZÃO entre duas
+   * medições que não cobrem a mesma coisa. O caso que criou o campo: o ROAS do
+   * Dashboard divide receita de **todos os canais** pelo gasto **só da Meta**.
+   *
+   * ⛔ **NÃO é alerta.** Sem cor, sem ícone, sem juízo — declarar a base não é
+   * dizer que o número está errado, é dizer o que ele mede. Tingir isto de
+   * atenção transformaria uma nota de rodapé honesta numa acusação, e ela
+   * apareceria em toda conta, sempre.
+   *
+   * É a mesma solução da faixa de cobertura do funil, e pelo mesmo motivo: o
+   * usuário não pode ler um número sem saber o que ele cobre.
+   */
+  base?: string;
   /** Cor do número quando a métrica é financeira e está negativa. */
   cor?: string | null;
   /** `null` num bucket = sem denominador. O `Sparkline` interrompe a linha ali. */
@@ -249,6 +265,22 @@ export function KpiHero({ dados, carregando = false }: { dados: DadosKpi; carreg
            existia; isto explica a ausência dela. */
         <span className="text-caption text-text-muted" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           sem período anterior para comparar
+        </span>
+      )}
+
+      {/* ── A BASE DA RAZÃO ─────────────────────────────────────────────────
+          Ver `DadosKpi.base`. Fica ABAIXO da legenda de comparação porque
+          responde outra pergunta: aquela diz contra o que a variação foi
+          medida, esta diz o que o número cobre.
+
+          ⛔ `--tk-text-muted` e nada mais. Sem cor de atenção — declarar a base
+          não é acusar o número. */}
+      {dados.base && (
+        <span
+          className="text-caption text-text-muted"
+          style={{ marginTop: 2, lineHeight: 1.35, opacity: 0.85 }}
+        >
+          {dados.base}
         </span>
       )}
     </div>

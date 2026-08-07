@@ -1,5 +1,39 @@
 @AGENTS.md
 
+# ⛔⛔ O REDESIGN NÃO MUDA FUNCIONALIDADE, CONTAS NEM LÓGICA
+
+> **Regra do dono, 07/08/2026. Vale daqui até o fim do redesign, e vence
+> qualquer outra instrução deste arquivo.**
+
+**Tudo funciona exatamente como antes.** O redesign troca a APRESENTAÇÃO — cor,
+tipografia, layout, componente, microcópia. Ele não troca o que um número vale,
+o que um botão faz, nem o que uma consulta devolve.
+
+**Mudança de comportamento só com aprovação EXPLÍCITA do dono, item a item** —
+como foi no rateio de despesa recorrente e no denominador zero. Os dois foram
+propostos, medidos, discutidos e aprovados um a um. Nenhum dos dois entrou "de
+passagem" num commit de tela.
+
+> ### ⛔ O PADRÃO AO ACHAR ALGO ERRADO NO CAMINHO
+> **MEDE · REGISTRA · AVISA. NÃO CONSERTA.**
+>
+> | | |
+> |---|---|
+> | **Mede** | contra dado real, não por leitura do código. Se a medição contradisser a intuição, meça de novo antes de reportar |
+> | **Registra** | no `CLAUDE.md` como bug conhecido, com o número medido e a decisão adiada |
+> | **Avisa** | na hora, não no fim do relatório |
+> | ⛔ **Não conserta** | nem "enquanto está aberto", nem "é só uma linha", nem "obviamente era isso que se queria" |
+
+⚠️ **Por que a tentação é forte e por que ela é errada:** achar o defeito dá a
+sensação de que consertar é o passo seguinte óbvio. Mas um conserto embutido num
+commit de redesign muda número em produção **sem ninguém ter decidido isso**, e
+some no meio de um diff que o revisor está lendo como mudança visual. O dono
+descobre pelo suporte.
+
+⚠️ **Isto NÃO impede corrigir defeito do próprio trabalho novo.** Componente que
+você acabou de escrever e está errado se conserta na hora — ele não tem
+comportamento anterior a preservar. A regra protege o que já estava lá.
+
 # Trackhub — guia do projeto
 
 Ferramenta de tracking de tráfego/vendas + Facebook Ads (estilo Utmify).
@@ -1954,6 +1988,65 @@ do Gerenciador vai construir afirmações em cima dele.
 ninguém consegue explicar por quê olhando o negócio. Quando isso acontecer, a
 primeira pergunta não é "o cálculo está certo?" — é **"esses dois números vêm do
 mesmo lugar?"**.
+
+# 🐛 BUG CONHECIDO: o ROAS do DASHBOARD mistura populações
+
+> **Medido em 07/08/2026 contra o banco de dev. Decisão do dono: NÃO ALTERAR o
+> cálculo no redesign.** É a primeira aplicação da regra do topo deste arquivo.
+
+`metrics.ts:729` faz `revenue / spend`, e as duas pontas vêm de populações
+diferentes:
+
+| | |
+|---|---|
+| numerador | **todas** as vendas aprovadas — organico, Google, TikTok, Meta |
+| denominador | `DailyAdMetric.spend`, que é **só Meta** |
+
+### O número medido
+
+| origem | vendas | receita |
+|---|---|---|
+| organico | 3 | R$ 1.044,28 |
+| google | 7 | R$ 795,32 |
+| **facebook** | **11** | **R$ 566,56** |
+| tiktok | 4 | R$ 424,99 |
+
+```
+ROAS que a tela mostra  (TUDO / gasto Meta) ... 3,54x
+ROAS real da Meta       (Meta / gasto Meta) ... 0,71x
+```
+
+🔴 **Inflação de 5×, e ela CRUZA O 1,0x** — a linha entre "o anúncio se paga" e
+"o anúncio dá prejuízo". A tela diz 3,54x enquanto a campanha perde dinheiro.
+
+⚠️ **O tamanho do erro é propriedade da CONTA, não do código:** ele é
+proporcional a quanto da receita do cliente **não** vem da Meta. Numa conta que
+só roda Meta, some. Numa com metade orgânica, dobra.
+
+> ### ✅ A DECISÃO: declarar a base, não mexer na conta
+> O número fica. A tela passa a dizer o que ele cobre, exatamente como o funil
+> declara a cobertura de rastreamento:
+>
+> ```
+> ROAS 3,54x
+> receita de todos os canais ÷ gasto da Meta
+> ```
+>
+> Sem cor de alarme e sem juízo — só qual população está em cima e qual embaixo.
+> **O usuário não pode ler um número sem saber o que ele mede.**
+>
+> 🔜 **Reabrir quando a segunda plataforma existir.** Hoje "gasto" e "Meta" são
+> sinônimos nesta base, e é isso que torna o erro invisível.
+
+### ⛔ O ROAS POR CAMPANHA ESTÁ CERTO — não "unifique" os dois
+
+`overview.ts:393` divide a receita **atribuída àquela campanha** pelo gasto
+**daquela campanha**. Mesma população nos dois lados. É ele que alimenta a
+tabela do Gerenciador e os 4 cartões de `Insights`.
+
+⚠️ **Os dois ROAS têm o mesmo nome e contratos diferentes, de propósito.**
+Quem um dia "unificar" para eliminar a duplicação vai reintroduzir a mistura no
+lugar onde ela é mais cara — o Insights faz *recomendação*, não só exibe número.
 
 # 🔤 O BUG QUE NASCEU DE UMA AMBIGUIDADE DE NOME, não de lógica
 
