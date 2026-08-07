@@ -6,6 +6,30 @@
 
 ---
 
+## ⚖️ PRECEDÊNCIA — quando este documento e a imagem 1 discordam
+
+**Elas discordam, e vai voltar a acontecer nas outras nove telas.** Em 07/08/2026
+apareceram três divergências numa sessão só: célula de heatmap (colada na imagem
+1, com folga aqui), segmento de rosca (ponta reta lá, arredondada aqui) e ponto
+de série. A regra que resolve as três:
+
+| Assunto | Quem vence | Por quê |
+|---|---|---|
+| **Acabamento** — raio, folga, sombra, textura, movimento, curva | **este documento (`06`)** | veio das referências mais novas (12–15) e é mais específico |
+| **Conteúdo e estrutura** — que blocos existem, o que cada um mostra, onde fica | **imagem 1 e o `04`** | a imagem é o inventário; este documento não fala de conteúdo |
+
+⛔ **Não é "o mais novo vence".** É um recorte por ASSUNTO: a imagem 1 continua
+sendo a autoridade sobre *o que existe na tela*, e este documento sobre *como
+aquilo é desenhado*. Uma divergência de acabamento resolvida pela imagem 1
+reintroduz o aspecto cru que este documento existe para tirar; uma divergência de
+conteúdo resolvida por aqui inventa bloco que ninguém pediu.
+
+⚠️ E toda divergência resolvida vai **anotada no componente**, com os dois lados.
+Sem isso a próxima pessoa lê a imagem 1, acha que o código está errado, e
+"corrige" de volta.
+
+---
+
 ## ONDE ESTÃO AS QUATRO REFERÊNCIAS — e por que o número é duplo
 
 Elas chegaram ao repositório em 07/08/2026, com nome de download (`preview
@@ -85,7 +109,26 @@ Hoje a variação é texto solto embaixo. Na pílula ela vira um objeto, e é a 
 | Área sob a linha | gradiente da cor da série a **18%** no topo até **0%** embaixo |
 | Grade | só linhas horizontais, 1px, neutro a 6%. Sem grade vertical |
 | Eixo | sem linha de eixo. Só os rótulos |
-| Pontos | invisíveis por padrão; aparecem no hover |
+| Pontos | **depende da densidade** — ver abaixo |
+
+**O PONTO DEPENDE DA DENSIDADE — e não é meio-termo entre as duas opções.**
+
+```
+até ~15 pontos  →  VISÍVEIS
+acima de 15     →  só no hover
+```
+
+> ⚠️ Este parágrafo dizia *"invisíveis por padrão; aparecem no hover"*, e **estava
+> errado**. Corrigido em 07/08/2026, por decisão do dono.
+
+O motivo é o do projeto inteiro: **o ponto existe para mostrar ONDE houve
+observação.** Com três pontos — que é o dado real de hoje — uma linha lisa parece
+medição contínua e esconde que só existem três dias medidos. Com trinta, os
+pontos viram ruído e a própria linha já mostra a densidade.
+
+⛔ Não confunda com o marcador de hover. O ponto diz *"houve medição aqui"*; o
+marcador diz *"você está olhando para este"*. São perguntas diferentes, e por
+isso o marcador aparece nas duas faixas de densidade.
 
 **Série secundária com hachura.** É o achado das referências 2 e 3: o Gasto não precisa de uma segunda cor competindo com a Receita. Ele vira **listra diagonal a 45°** em neutro, sobre fundo transparente. A Receita fica sólida com gradiente, o Gasto fica texturizado. Duas séries, um matiz, zero ambiguidade — e respeita a regra de cor do master.
 
@@ -226,6 +269,72 @@ linha, não num bloco.
 ⚠️ O tingimento usa `--tk-tint-*` com o texto em `--tk-on-tint-*`, sempre o par
 do mesmo tom. Cor pura sobre tingimento é o par de 3,55:1 que esses tokens
 existem para não deixar acontecer.
+
+---
+
+## 14. OS CINCO DA VARREDURA DA IMAGEM 1
+
+> Achados em 07/08/2026 percorrendo a imagem 1 atrás de acabamento que as doze
+> seções não cobriam. Todos entram, por decisão do dono.
+
+### 14.1 Controle do cabeçalho do cartão — **UM só**
+
+`Diário ⌄` · `Ver todas ⌄` · `Receita ⌄` são o **mesmo objeto** na imagem 1:
+mesma caixa, mesma altura, mesmo chevron, alinhado à direita na linha do título.
+
+Hoje temos **três tratamentos** para isso — `Segmented`, `Segmented` e nada. É o
+problema-raiz nº 2 (duas implementações da mesma coisa divergem sempre)
+aparecendo na camada de apresentação.
+
+| | |
+|---|---|
+| Altura | `--tk-altura-controle` |
+| Raio | `--tk-radius-controle` |
+| Borda | 1px neutra · fundo `surface` |
+| Chevron | 14px, `text-muted`, à direita |
+
+⛔ **Faça este primeiro dos cinco.** Ele toca três cartões e some com uma
+inconsistência em vez de acrescentar um enfeite.
+
+### 14.2 Dois controles de lista, com papéis diferentes
+
+Na imagem 1 a lista de Alertas tem **dois**, e a distinção é por POSIÇÃO:
+
+| Controle | Onde | O que faz |
+|---|---|---|
+| `Ver todos` | **cabeçalho**, à direita do título | **navega** para outra tela |
+| `+ 2 alertas ⌄` | **rodapé**, centrado, com chevron | **expande no lugar** |
+
+⛔ Que a referência os separe por posição é desenho, não acaso. Trocar um pelo
+outro promete navegação e entrega expansão — ou o contrário. **Respeite os dois
+lugares.**
+
+### 14.3 Carimbo de tempo relativo
+
+À direita da linha, alinhado à **primeira linha do texto** — não centrado
+verticalmente. `há 2h`, `há 3h`, `há 1d`, em `text-caption text-muted`.
+
+⚠️ Sempre via `components/tk/Desde.tsx`. `elapsed()` renderizado no servidor mata
+a hidratação da árvore inteira — ver o 4º caso do PROCEDIMENTO no `CLAUDE.md`.
+
+### 14.4 Sub-rótulo na célula
+
+`Black Friday 24` com `Google Ads` embaixo, na mesma célula: `text-label` no
+principal, `text-caption text-muted` no apoio, sem espaço entre as linhas além do
+`line-height`.
+
+Serve para qualificar sem gastar coluna — é o mesmo raciocínio da barra atrás do
+texto (§8).
+
+### 14.5 Par valor + qualificador colorido
+
+Repetido quatro vezes no rodapé de estado: `12 Conectadas` + `2 Com erro` em
+vermelho · `34` + `2 Em execução` em âmbar · `R$ 18.742,33` + `+12,4%` em verde.
+
+O valor é neutro e grande; o qualificador é pequeno e **só ele** recebe cor
+semântica. ⚠️ E a cor obedece a regra do `CLAUDE.md`: só entra em cor semântica o
+que É a grandeza semântica. `2 Com erro` é estado, então pode; `12 Conectadas` é
+contagem, então não.
 
 ---
 

@@ -35,8 +35,13 @@ export function DonutChart({
   const total = fatias.reduce((s, f) => s + f.valor, 0);
 
   const R = 70;
-  const ESPESSURA = 20;
+  /* 14% do raio (`06` §5) — anel FINO, não pizza grossa. Era 20px, quase o
+     dobro: com o anel gordo o buraco do meio encolhe e o total no miolo, que é
+     o número que a pessoa procura primeiro, fica espremido. */
+  const ESPESSURA = Math.round(R * 0.14);
   const C = 2 * Math.PI * R;
+  /* Folga de 2° entre segmentos (`06` §5), em comprimento de arco. */
+  const FOLGA = (2 / 360) * C;
 
   /* Soma acumulada SEM mutação. O acumulador clássico (`let acc` dentro do map)
      é recusado pelo lint, e com razão: em Strict Mode o React roda o corpo do
@@ -48,14 +53,33 @@ export function DonutChart({
        nenhuma fatia tem arco, que e o desenho certo. O percentual que a pessoa
        LE vem da legenda, e esse passa por `pct1`, que devolve "—". */
     const fracoes = fatias.map((f) => (total ? f.valor / total : 0));
-    return fatias.map((f, i) => ({
-      ...f,
-      i,
-      fracao: fracoes[i]!,
-      dash: fracoes[i]! * C,
-      offset: -fracoes.slice(0, i).reduce((s, x) => s + x, 0) * C,
-    }));
-  }, [fatias, total, C]);
+    return fatias.map((f, i) => {
+      const inicio = fracoes.slice(0, i).reduce((s, x) => s + x, 0) * C;
+      const vaga = fracoes[i]! * C;
+
+      /* ⛔ A PONTA ARREDONDADA COME ARCO DOS DOIS LADOS — meia espessura em
+         cada. Sem descontar `ESPESSURA` junto com a folga, os segmentos
+         voltariam a se tocar e o `strokeLinecap` viraria enfeite invisível:
+         seria "raio implementado e desligado", que é a família de defeito que
+         este projeto persegue.
+
+         O piso de 0.1 deixa a fatia minúscula virar um PONTO em vez de sumir.
+         Some seria pior: a legenda ao lado a lista, e o olho procuraria no anel
+         uma fatia que não está lá. Todas as minúsculas ficam do mesmo tamanho,
+         e é o preço aceito — quem precisa do valor lê a legenda. */
+      const desconto = FOLGA + ESPESSURA;
+      const dash = Math.max(0.1, vaga - desconto);
+
+      return {
+        ...f,
+        i,
+        fracao: fracoes[i]!,
+        dash,
+        // O traço fica CENTRADO na vaga: metade do desconto de cada lado.
+        offset: -(inicio + Math.min(desconto, vaga) / 2),
+      };
+    });
+  }, [fatias, total, C, FOLGA, ESPESSURA]);
 
   /* 🔴 UM ANEL DE 100% NÃO INFORMA NADA — só ocupa espaço para dizer "tudo veio
      de um lugar", que a frase diz melhor e em uma linha. A rosca existe para
@@ -98,7 +122,8 @@ export function DonutChart({
               cx="90" cy="90" r={R}
               fill="none"
               stroke={a.cor}
-              strokeWidth={ativa === a.i ? ESPESSURA + 4 : ESPESSURA}
+              strokeWidth={ativa === a.i ? ESPESSURA + 3 : ESPESSURA}
+              strokeLinecap="round"
               strokeDasharray={`${a.dash} ${C - a.dash}`}
               strokeDashoffset={a.offset}
               onMouseEnter={() => setAtiva(a.i)}

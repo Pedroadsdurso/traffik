@@ -101,6 +101,9 @@ export function LineChart({
 
   const linhas = [0, 0.25, 0.5, 0.75, 1].map((f) => max * f);
 
+  /** `06` §3 — acima disto o ponto vira ruído e a linha já mostra a densidade. */
+  const mostrarPontos = pontos.length <= 15;
+
   const p0 = alvo ? pontos[alvo.i] : undefined;
   /* "O ponto está no terço de cima?" — decide o lado da pílula. Ver o comentário
      dela: é booleano de propósito, para não depender da escala do SVG. */
@@ -244,8 +247,23 @@ export function LineChart({
 
         {pontos.map((p, i) => (
           <g key={i}>
-            <circle cx={x(i)} cy={y(p.b)} r={3} fill="var(--tk-text-muted)" />
-            <circle cx={x(i)} cy={y(p.a)} r={3} fill="var(--tk-primary)" />
+            {/* 📍 O PONTO DIZ "HOUVE MEDIÇÃO AQUI" — por isso ele depende da
+                densidade, e não é meio-termo entre sempre e nunca (`06` §3).
+
+                Com 3 pontos, que é o dado real de hoje, a linha lisa parece
+                medição contínua e esconde que só existem três dias medidos. Com
+                30, os pontos viram ruído e a própria linha mostra a densidade.
+
+                ⛔ Não confunda com o marcador de hover: o ponto responde "houve
+                medição?", o marcador responde "você está olhando para qual?".
+                Perguntas diferentes — por isso o marcador aparece nas duas
+                faixas e o ponto não. */}
+            {mostrarPontos && (
+              <>
+                <circle cx={x(i)} cy={y(p.b)} r={3} fill="var(--tk-text-muted)" />
+                <circle cx={x(i)} cy={y(p.a)} r={3} fill="var(--tk-primary)" />
+              </>
+            )}
             {/* Faixa invisível de captura: mirar num ponto de 3px é o que faz
                 gráfico custom parecer quebrado no mouse.
 

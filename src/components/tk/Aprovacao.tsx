@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { MedidorRadial } from "./MedidorRadial";
+
 /**
  * Taxa de aprovação por forma de pagamento.
  *
@@ -41,29 +43,46 @@ export function Aprovacao({ linhas }: { linhas: LinhaAprovacao[] }) {
   }
 
   return (
-    <div className="tk-aprov" style={{ display: "flex", flexDirection: "column" }}>
-      {linhas.map((l, i) => {
-        const cor = tom(l.rate, l.geradas);
-        return (
-          <div key={l.name} style={{ padding: "8px 0", borderTop: i ? "1px solid var(--tk-border)" : undefined }}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-              <span className="text-label text-text" style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+    /* 🎨 MEDIDOR RADIAL POR FORMA, em vez de barra reta empilhada (`06` §6).
+       A barra reta é a leitura errada para uma TAXA: ela se lê como "quanto de
+       um total", e aqui não há total — cada forma tem o seu próprio
+       denominador. O arco fechado diz "de tudo que esta forma gerou", que é a
+       pergunta do bloco.
+
+       ⛔ `flex-wrap` e não grade de N colunas: são 1 a 6 formas de pagamento, e
+       uma grade fixa deixaria buraco com duas ou espremeria com seis. */
+    <div className="tk-aprov" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "center" }}>
+        {linhas.map((l) => {
+          const cor = tom(l.rate, l.geradas);
+          return (
+            <div
+              key={l.name}
+              title={`${l.name}: ${l.pagas} aprovadas de ${l.geradas} geradas`}
+              style={{ display: "grid", justifyItems: "center", gap: 2, minWidth: 0 }}
+            >
+              <MedidorRadial
+                valor={l.rate}
+                cor={cor}
+                rotulo={`${l.rate.toFixed(0)}%`}
+                /* `pagas de geradas` fica DENTRO do medidor de propósito: é o
+                   denominador, e é ele que permite desconfiar de uma taxa alta
+                   sobre 3 tentativas. Longe do número, ninguém liga os dois. */
+                texto={`${l.pagas} de ${l.geradas}`}
+                tamanho={124}
+              />
+              <span
+                className="text-label text-text"
+                style={{ maxWidth: 124, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textAlign: "center" }}
+              >
                 {l.name}
               </span>
-              <span className="text-caption text-text-muted" style={{ fontVariantNumeric: "tabular-nums" }}>
-                {l.pagas} de {l.geradas}
-              </span>
-              <span className="text-label" style={{ color: cor, width: 52, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-                {l.rate.toFixed(0)}%
-              </span>
             </div>
-            <div style={{ marginTop: 5, height: 4, borderRadius: 2, background: "var(--tk-surface-hover)", overflow: "hidden" }}>
-              <div style={{ width: `${Math.min(100, Math.max(0, l.rate))}%`, height: "100%", background: cor, borderRadius: 2 }} />
-            </div>
-          </div>
-        );
-      })}
-      <p className="text-caption text-text-muted" style={{ margin: "8px 0 0", lineHeight: 1.4 }}>
+          );
+        })}
+      </div>
+
+      <p className="text-caption text-text-muted" style={{ margin: 0, lineHeight: 1.4 }}>
         Formas com menos de 5 tentativas ficam sem cor — a taxa ainda não é sinal.
       </p>
     </div>

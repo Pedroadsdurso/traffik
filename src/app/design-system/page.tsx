@@ -11,6 +11,8 @@ import { Select } from "@/components/tk/Select";
 import { Tooltip } from "@/components/tk/Tooltip";
 import { Checkbox, Radio, Switch } from "@/components/tk/Controles";
 import { Skeleton, AreaCarregando, Separator } from "@/components/tk/Skeleton";
+import { DonutChart } from "@/components/tk/DonutChart";
+import { Aprovacao } from "@/components/tk/Aprovacao";
 
 /**
  * /design-system — a página de verificação visual de todas as fases.
@@ -166,11 +168,23 @@ const TIPOGRAFIA = [
   { classe: "text-micro", spec: "11/14 · 500 · +0.04em · caixa alta", uso: "RESTRITO: cabeçalho de tabela e eyebrow" },
 ];
 
+/**
+ * 🐛 O VALOR NÃO É MAIS ESCRITO AQUI — ele é LIDO do CSS em tempo de execução.
+ *
+ * Estava fixo em `"10px"` e `"14px"`, e em 07/08/2026 os tokens subiram para 16
+ * e 20. A página que existe para documentar o sistema passou a documentar o
+ * sistema ANTIGO, e ninguém percebeu porque `tsc`, `lint` e `build` não leem
+ * string de documentação.
+ *
+ * É o mesmo defeito que esta sessão inteira perseguiu do outro lado — comentário
+ * que afirma um efeito. A correção estrutural é a mesma: em vez de copiar o
+ * valor, leia a fonte. Agora só dá para ficar errado se o próprio token sumir.
+ */
 const RAIOS = [
-  { nome: "controle", valor: "6px", uso: "botão, input, badge" },
-  { nome: "card", valor: "10px", uso: "card, painel de conteúdo" },
-  { nome: "painel", valor: "14px", uso: "modal, gaveta" },
-  { nome: "pill", valor: "999px", uso: "pill, avatar, indicador" },
+  { nome: "controle", uso: "botão, input, badge" },
+  { nome: "card", uso: "card, painel de conteúdo" },
+  { nome: "painel", uso: "modal, gaveta" },
+  { nome: "pill", uso: "pill, avatar, indicador" },
 ];
 
 /** Os quatro nomes que colidem com o sistema legado — o motivo do prefixo. */
@@ -258,8 +272,10 @@ export default function DesignSystemPage() {
 
     const estilo = getComputedStyle(document.documentElement);
     const nomes = [
-      "pad-card", "gap-grid", "altura-linha", "altura-controle", "escala-dado",
+      "pad-card", "pad-hero", "gap-grid", "altura-linha", "altura-controle", "escala-dado",
       "dur-rapida", "dur-padrao", "dur-painel",
+      // Lidos, e não escritos à mão — ver a nota do `RAIOS`.
+      ...RAIOS.map((r) => `radius-${r.nome}`),
     ];
 
     // eslint-disable-next-line react-hooks/set-state-in-effect -- lê um sistema externo (o CSS que o navegador resolveu), que é exatamente o caso que a doc do React permite: o valor não existe até a página pintar
@@ -616,6 +632,54 @@ export default function DesignSystemPage() {
         </Secao>
 
         {/* ── 9. Raio ── */}
+        {/* ── Rosca e medidor radial ──────────────────────────────────────────
+            ⛔ ELES ESTÃO AQUI POR NECESSIDADE, NÃO POR VITRINE. O banco de
+            desenvolvimento tem UM canal e UMA forma de pagamento, então no
+            Dashboard real a rosca cai no atalho de fatia única e o medidor
+            aparece sozinho. Os estados que este acabamento mudou — folga entre
+            segmentos, ponta arredondada, fatia minúscula, vários medidores lado
+            a lado — são literalmente invisíveis lá.
+
+            É a regra do projeto aplicada: guarda que nunca disparou não é
+            guarda, e raio que nunca foi visto não é raio. Aqui o caso é
+            produzido de propósito. */}
+        <Secao
+          titulo="Rosca e medidor radial"
+          resumo="Os dois têm estados que o banco de desenvolvimento não produz — um canal e uma forma de pagamento só. Aqui eles existem para serem CONFERIDOS, não para enfeitar."
+        >
+          <div style={{ display: "flex", gap: 28, flexWrap: "wrap", alignItems: "flex-start" }}>
+            <div style={{ minWidth: 320, flex: "1 1 340px" }}>
+              <p className="text-caption text-text-muted" style={{ marginTop: 0 }}>
+                Rosca — 4 fatias, com uma minúscula (0,4%) para provar que ela vira ponto e não some.
+              </p>
+              <DonutChart
+                fatias={[
+                  { nome: "Meta Ads", valor: 54023, cor: "var(--tk-primary)"  },
+                  { nome: "Google Ads", valor: 36828, cor: "var(--tk-accent)"  },
+                  { nome: "TikTok Ads", valor: 21012, cor: "var(--tk-category)"  },
+                  { nome: "Orgânico", valor: 520, cor: "var(--tk-text-muted)"  },
+                ]}
+                totalLabel="R$ 112.383"
+                formatar={(n) => `R$ ${n.toLocaleString("pt-BR")}`}
+              />
+            </div>
+
+            <div style={{ minWidth: 320, flex: "1 1 340px" }}>
+              <p className="text-caption text-text-muted" style={{ marginTop: 0 }}>
+                Medidor radial — os quatro tons, incluindo o NEUTRO de amostra pequena (1 de 1).
+              </p>
+              <Aprovacao
+                linhas={[
+                  { name: "Pix", geradas: 128, pagas: 118, rate: 92.2 },
+                  { name: "Cartão", geradas: 96, pagas: 61, rate: 63.5 },
+                  { name: "Boleto", geradas: 40, pagas: 11, rate: 27.5 },
+                  { name: "PayPal", geradas: 1, pagas: 1, rate: 100 },
+                ]}
+              />
+            </div>
+          </div>
+        </Secao>
+
         <Secao titulo="Raio" resumo="Quatro valores, um por classe de objeto.">
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
             {RAIOS.map((r) => (
@@ -632,7 +696,9 @@ export default function DesignSystemPage() {
                 <p className="text-caption" style={{ marginTop: 6, marginBottom: 0 }}>
                   <code style={mono}>rounded-{r.nome}</code>
                 </p>
-                <p className="text-caption text-text-muted" style={{ margin: 0 }}>{r.valor}</p>
+                <p className="text-caption text-text-muted" style={{ margin: 0 }}>
+                  {outras[`radius-${r.nome}`] || "—"}
+                </p>
                 <p className="text-caption text-text-muted" style={{ margin: 0, maxWidth: 110 }}>{r.uso}</p>
               </div>
             ))}
@@ -642,15 +708,27 @@ export default function DesignSystemPage() {
         {/* ── 10. Elevação ── */}
         <Secao
           titulo="Elevação"
-          resumo="Sombra existe APENAS em overlay (popover, dropdown, modal, toast). Em superfície fixa a elevação é a escada de cor da primeira seção."
+          /* 🔄 ESTE RESUMO DIZIA "sombra existe APENAS em overlay", e a regra
+             mudou em 07/08/2026 (`06` §1). Segunda documentação desta página
+             pega desatualizada na mesma varredura — a outra era o raio do card,
+             fixo em "10px" depois de o token virar 16. */
+          resumo="Sombra existe em CARD e em overlay — e em mais nada. Faixa, rail, linha de tabela e header continuam sem: neles a elevação é a escada de cor da primeira seção."
         >
           <div style={{ display: "flex", gap: 20, flexWrap: "wrap", alignItems: "flex-start" }}>
             <div
               className="bg-surface"
-              style={{ padding: "var(--tk-pad-card)", borderRadius: "var(--tk-radius-card)", border: "1px solid var(--tk-border)", width: 240 }}
+              style={{
+                padding: "var(--tk-pad-card)",
+                borderRadius: "var(--tk-radius-card)",
+                border: "1px solid var(--tk-border)",
+                boxShadow: "var(--tk-shadow-card)",
+                width: 240,
+              }}
             >
               <p className="text-title" style={{ margin: 0 }}>Card</p>
-              <p className="text-caption text-text-muted" style={{ margin: 0 }}>sem sombra — só cor e borda</p>
+              <p className="text-caption text-text-muted" style={{ margin: 0 }}>
+                <code style={mono}>shadow-card</code> — mais forte no escuro, e não é engano: 6% de preto sobre o fundo escuro não existe
+              </p>
             </div>
             <div
               className="bg-surface-hover"
