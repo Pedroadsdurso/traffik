@@ -65,13 +65,40 @@ for (const l of linhas) {
   if (cab) {
     const nome = cab[1].replace(/[—–].*$/, "").trim();
     const limpo = semEnfeite(nome);
-    atual = NAO_E_TELA.test(semEnfeite(cab[1])) ? null : { nome: limpo, ok: 0, falta: 0, dec: 0 };
+    atual = NAO_E_TELA.test(semEnfeite(cab[1])) ? null : { nome: limpo, ok: 0, falta: 0, dec: 0, tabelas: 0, dentroDeItens: false };
     if (atual) telas.push(atual);
     continue;
   }
   if (!atual) continue;
-  // Só conta em LINHA DE TABELA: a prosa do documento também usa ✅ e ❌.
-  if (!l.trimStart().startsWith("|")) continue;
+
+  /* ⛔ SÓ CONTA DENTRO DE UMA TABELA DE ITEM — `| Elemento | Status |`.
+     Não basta "é linha de tabela": uma seção pode ter tabela EXPLICATIVA junto
+     da de inventário, e um ✅ ilustrativo lá dentro virava "um item feito" no
+     CLAUDE.md. Aconteceu em 07/08, ao escrever os 🔧 do Gerenciador: uma tabela
+     de duas linhas comparando "hoje × na tela nova" somou um ✅ que não existia
+     como item.
+
+     O cabeçalho é o discriminador porque ele JÁ ERA a convenção das 13 tabelas
+     de inventário — não foi preciso inventar marcador. Exigir marcador novo
+     teria o defeito de sempre: vale só para quem lembrar de pôr, e a tabela sem
+     ele volta a contar errado em silêncio.
+
+     ⚠️ Uma linha que não começa com `|` FECHA a tabela. É o que impede a prosa
+     entre duas tabelas de continuar somando na primeira. */
+  const ehLinhaDeTabela = l.trimStart().startsWith("|");
+  if (!ehLinhaDeTabela) { atual.dentroDeItens = false; continue; }
+  /* ⚠️ Ancorado só na PRIMEIRA coluna. O cabeçalho não é uniforme no `04` — há
+     `| Elemento | Status |` e `| Elemento | |` (a segunda coluna vazia), e a
+     primeira versão desta guarda exigia as duas palavras: o DASHBOARD despencou
+     de 29 ✅ para 6 em silêncio, porque a tabela maior dele usa a forma curta.
+     Nenhuma tabela EXPLICATIVA do documento começa com `Elemento` — elas abrem
+     com `Estado`, `Gatilho`, `hoje`, `Item`. */
+  if (/^\|\s*Elemento\s*\|/.test(l.trimStart())) {
+    atual.dentroDeItens = true;
+    atual.tabelas++;
+    continue;
+  }
+  if (!atual.dentroDeItens) continue;
 
   /* ⛔ UM MARCADOR POR LINHA — o PRIMEIRO, e não todos.
      Cada linha da tabela tem UM status; os outros marcadores que aparecem nela
@@ -87,6 +114,30 @@ for (const l of linhas) {
 }
 
 if (telas.length === 0) morrer(`nenhuma seção de tela encontrada em ${ORIGEM}. O formato mudou?`);
+
+/* ⛔ TELA SEM TABELA DE ITEM É ERRO, NÃO "zero itens".
+   O modo de falha desta contagem é SILENCIOSO: um cabeçalho renomeado faz a
+   seção reportar 0/0/0, que se lê como "tela sem inventário" em vez de "o
+   script parou de achar a tabela". Foi assim que o DASHBOARD despencou de 29 ✅
+   para 6 quando a regra do cabeçalho nasceu apertada demais — e o número errado
+   já tinha sido escrito no CLAUDE.md antes de alguém olhar.
+
+   Uma tela do `04` sempre tem pelo menos uma tabela de item. Zero significa que
+   o formato mudou, e aí o certo é parar.
+
+   ⚠️ **O LIMITE:** ela só pega a seção que perde TODAS as tabelas. Uma seção com
+   duas tabelas que perde UMA continua com `tabelas >= 1`, passa aqui, e a
+   contagem cai em silêncio — que é exatamente o caso do DASHBOARD (ele tem
+   duas). Cobrir isso exigiria saber quantas tabelas cada seção deve ter, ou
+   seja, uma lista à mão — e lista à mão fica atrás do código, sempre. */
+const semTabela = telas.filter((t) => t.tabelas === 0);
+if (semTabela.length > 0) {
+  morrer(
+    `seção sem nenhuma tabela de item (cabeçalho \`| Elemento | …\`): ` +
+      `${semTabela.map((t) => t.nome).join(", ")}. ` +
+      `Ou o cabeçalho mudou, ou a seção não é tela — em nenhum dos dois casos eu devo contar 0.`,
+  );
+}
 
 /* ── 2. Monta o bloco ────────────────────────────────────────────────────── */
 const hoje = new Date().toISOString().slice(0, 10).split("-").reverse().join("/");

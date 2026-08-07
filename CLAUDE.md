@@ -1630,6 +1630,56 @@ MANIFESTAÇÃO e preservam a ORIGEM — e as duas compilam, passam no lint e fic
 parecendo cuidado com o detalhe. A diferença entre as duas famílias é só onde
 dói: o `?? 0` mente sobre um número, o empurrãozinho mente sobre um alinhamento.
 
+# 🌗 SEED QUE PRODUZ ESTADO **INCOMPLETO** — o ramo que nunca foi percorrido
+
+> **A agravante sobre a família do gerador: aqui o seed não produzia estado
+> ERRADO. Produzia estado INCOMPLETO.** O código funcionava, os testes passavam,
+> e metade do caminho nunca tinha sido exercida. 07/08/2026.
+
+O caso, achado ao dar estado às campanhas do dev:
+
+`splitPipe` (`lib/utm/parse.ts:72`) **descarta id não numérico** — a Meta usa
+inteiros longos, e um `camp-dev-A` é indistinguível de placeholder não
+substituído (`{{campaign.id}}`). O `seed-dev.mjs` gravava exatamente
+`fbCampaignId = 'camp-dev-A'`.
+
+Consequência: `camp.id` saía `null` e **toda** atribuição venda→campanha do dev
+caía no ramo do **NOME** (`resultsByName`, `overview.ts`). O ramo do **ID** — que
+é o que roda em produção, e que o **Bloco 11 inteiro existe para tornar
+confiável** — nunca foi percorrido nem uma vez.
+
+### Por que isto engana diferente do estado errado
+
+| | O que se vê | Como se descobre |
+|---|---|---|
+| estado **errado** | número implausível, tela esquisita | alguém olha e desconfia |
+| estado **incompleto** | **tudo certo** — o ramo exercido funciona | 🔴 **só por acidente** |
+
+Este foi descoberto porque renomear as campanhas zerou o faturamento das duas
+originais. Se eu não tivesse renomeado, seguiria escondido — e a dívida técnica
+nº 3 ("atribuição por nome é ambígua") continuaria sendo a única coisa que o dev
+sabia fazer, enquanto a documentação afirmava que o id resolve.
+
+> ### ⛔ A PERGUNTA QUE GENERALIZA
+> Não é *"o seed produz o estado certo?"* — é **"quais RAMOS o seed nunca faz o
+> código percorrer?"**
+>
+> Todo `if/else` sobre a forma de um dado (id × nome, com clique × órfã, com
+> pixel × sem) é um ramo que o dev pode nunca visitar. E um ramo nunca visitado
+> em desenvolvimento é indistinguível de um ramo correto.
+
+⚠️ **Suspeitas levantadas e NÃO investigadas** (07/08/2026, a pedido do dono —
+são hipóteses, não medições):
+
+| Ramo | Por que suspeito |
+|---|---|
+| `matchClick` por **IP** | o seed liga venda→clique por `clickId` direto; `matchMethod: "ip"` provavelmente nunca dispara |
+| Venda **órfã** de clique | há `test:utm-orfa`, mas o seed do dev normal parece sempre ter clique |
+| `Sale.utm*` **próprios** × fallback do clique | as 35 originais têm `Sale.utmSource` NULL — só o ramo do fallback roda |
+| `checkoutSource: "navegador"` | já registrado: **0 `Click` com `checkoutAt`** no dev |
+| `apiCredentialId` | `ApiCredential` tem zero linhas; o passo 4 da precedência de área nunca dispara |
+| Gateway ≠ Kirvano | `Sale.platform` é NULL em todas as 35 |
+
 # 🌱 O GERADOR DE ESTADO TAMBÉM PRECISA SER VERIFICADO
 
 > **Um seed que produz o estado errado faz o teste passar pelo motivo errado — e
