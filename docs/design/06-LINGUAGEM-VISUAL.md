@@ -316,6 +316,26 @@ aparecendo na camada de apresentação.
 | Borda | 1px neutra · fundo `surface` |
 | Chevron | 14px, `text-muted`, à direita |
 
+### ⚖️ Segmented ou Select? Pela LENTE, não pela estética
+
+```
+até 3 opções, FIXAS              →  Segmented, opções visíveis
+4 ou mais, ou lista que CRESCE   →  Select com chevron
+```
+
+🔧 **A referência usa chevron em tudo, e nós divergimos — por INTERAÇÃO, não por
+estética.** Um controle de 2 ou 3 lentes fixas (Diário/Semanal ·
+Receita/Vendas/Lucro) não ganha nada escondido atrás de um clique: custa uma
+interação para mostrar o que caberia na tela. Já uma lista que cresce — conta de
+anúncio, produto — não cabe numa fileira de botões, e aí o chevron é o certo.
+
+A distinção é a mesma que o `Segmented` já documentava: ele troca a **lente**
+sobre o mesmo dado; o `Select` escolhe um **valor** de uma lista.
+
+⚠️ **O que NÃO diverge é a caixa.** Os dois têm a mesma altura
+(`--tk-altura-controle`), o mesmo raio e o mesmo alinhamento no cabeçalho. A
+divergência é de forma do controle, não de métrica.
+
 ⛔ **Faça este primeiro dos cinco.** Ele toca três cartões e some com uma
 inconsistência em vez de acrescentar um enfeite.
 

@@ -85,7 +85,12 @@ export function ContextBar({
         onClick={aoAbrirPaleta}
         aria-label="Buscar (Ctrl+K)"
         className="bg-surface border-border text-text-muted hover:bg-surface-hover hover:text-text-secondary flex cursor-pointer items-center gap-2 rounded-controle border focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
-        style={{ height: 34, padding: "0 10px", width: "min(340px, 32vw)", marginTop: 4, flex: "0 1 auto" }}
+        /* 34px fixos e `marginTop: 4` eram o MESMO defeito do `Segmented`: o
+           botão ficava 2px mais alto que o `Filtros` ao lado (que é `Button`, e
+           sai do token), e o empurrãozinho de margem existia para disfarçar o
+           desencontro. Ajuste manual ao lado de um valor de sistema é sempre o
+           sintoma — o certo é os dois lerem a mesma variável. */
+        style={{ height: "var(--tk-altura-controle)", padding: "0 10px", width: "min(340px, 32vw)", flex: "0 1 auto" }}
       >
         <Icone nome="bussola" tamanho={16} cor="suave" />
         <span className="text-body min-w-0 flex-1 truncate text-left">Buscar…</span>

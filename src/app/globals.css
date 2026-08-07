@@ -444,6 +444,30 @@ a {
 /* Conteúdo da rota: entra suave a cada navegação (a key da rota remonta o nó). */
 .page-enter { animation: fade-rise var(--dur-base) var(--ease-out) both; }
 
+/* ── Entrada escalonada dos blocos (`06` §11) ─────────────────────────────────
+   200ms, 4px para cima, 30ms por bloco. O escalonamento é o que transforma
+   "a tela apareceu" em "a tela se montou": o olho segue a ordem de leitura em
+   vez de receber tudo de uma vez.
+
+   ⛔ O TETO DE 8 NÃO É ARBITRÁRIO. Sem ele, o 20º bloco começaria a aparecer
+   600ms depois do primeiro — e meio segundo esperando um card é lentidão, não
+   elegância. Depois do oitavo todos entram juntos.
+
+   ⚠️ `both` e não `forwards`: sem o estado inicial preenchido, o bloco pisca
+   visível antes de o atraso começar, que é pior que não animar.
+
+   ⚠️ E isto só roda quando o NÓ NASCE. O Dashboard refaz o render a cada
+   polling; se algum dia estes blocos passarem a remontar (key nova a cada
+   carga), a tela inteira vai piscar de 8 em 8 a cada 30 segundos. */
+.tk-bloco-entra {
+  animation: fade-rise-curto 200ms var(--tk-ease-padrao) both;
+  animation-delay: calc(min(var(--tk-i, 0), 8) * 30ms);
+}
+@keyframes fade-rise-curto {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+
 .dialog-backdrop { animation: fade-in var(--dur-fast) var(--ease-out) both; }
 .dialog { animation: dialog-in var(--dur-base) var(--ease-out) both; }
 

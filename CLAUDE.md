@@ -1429,6 +1429,43 @@ repositório** — só o `06` chegou. O documento cita "as quatro referências" 
 "referência 1/2/3/4" o tempo todo; sem os arquivos, quem ler não tem como
 conferir contra o que o texto descreve. **Peça os arquivos antes do acabamento.**
 
+# 🌱 O GERADOR DE ESTADO TAMBÉM PRECISA SER VERIFICADO
+
+> **Um seed que produz o estado errado faz o teste passar pelo motivo errado — e
+> é indistinguível de código correto.** Família nova, registrada em 07/08/2026.
+
+Toda a atenção desta base está no código que CONSOME dado. O `seed-dev.mjs`, o
+`diversificar-dev.mjs` e as fixtures de teste **produzem** dado, e ninguém os
+olha: eles não têm teste, não têm tipo que os cubra, e o build não sabe que eles
+existem.
+
+### O caso que nomeou a família
+
+`diversificar-dev.mjs` espalhava formas de pagamento numa lista de **6** posições
+e decidia a pendência com **`n % 2`**. O BOLETO caía sempre em posição ímpar da
+lista, então `n % 2 = 0` **nunca casava**: a forma saiu com **100% de aprovação**.
+
+O bloco de Taxa de aprovação existe para mostrar taxas que **divergem** entre as
+formas. Ele apareceu com três verdes e nenhuma divergência — ou seja, o gerador
+produziu exatamente o estado que impede de ver o que se ia verificar. E nada
+acusava: o script rodou sem erro, a tela renderizou, os números eram plausíveis.
+
+> ### ⛔ A REGRA QUE FICA
+> **Script de seed IMPRIME o que gerou, e alguém LÊ.**
+>
+> Foi a saída do próprio script — a tabela de `forma / pagas de geradas / tom` —
+> que denunciou. Sem ela, o `100%` teria virado "o medidor está bonito" e a
+> divergência entre tons continuaria sem nunca ter sido vista.
+
+⚠️ **O módulo precisa ser coprimo com o tamanho da lista.** Sempre que uma
+distribuição sintética usar `índice % N` para uma coisa e `índice % M` para
+outra, `N` e `M` que compartilham fator produzem correlação silenciosa — uma
+categoria inteira cai sempre no mesmo lado da segunda decisão.
+
+⚠️ E **gerador de dado de teste é idempotente**, nunca `random()`: com aleatório,
+cada execução muda os números da tela e ninguém sabe se ela mudou por causa do
+código ou do seed. `row_number()` sobre uma ordem estável resolve.
+
 # 📝 DOCUMENTAÇÃO QUE *AFIRMA* UM VALOR ENVELHECE. QUE *LÊ* O VALOR, NÃO.
 
 > **A regra:** onde a documentação e o código convivem, a documentação **deriva**

@@ -1068,12 +1068,19 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
         if (visiveis.length === 0) return null;
         return (
           <div style={GRADE}>
-            {visiveis.map((p) => {
+            {visiveis.map((p, i) => {
               const r = RENDERS[p.id as keyof typeof RENDERS];
               const meta = metaDoBloco(p.id);
               if (!r || !meta) return null;
               return (
-                <div key={p.id} style={celulaDaGrade(p.col, p.linhas, r.temDado(v))}>
+                <div
+                  key={p.id}
+                  /* Entrada escalonada (`06` §11). ⛔ SÓ FORA DO MODO DE EDIÇÃO:
+                     ali os blocos entram e saem a cada arrasto, e reanimar cada
+                     mudança transformaria a edição num piscar constante. */
+                  className="tk-bloco-entra"
+                  style={{ ...celulaDaGrade(p.col, p.linhas, r.temDado(v)), ["--tk-i" as string]: i }}
+                >
                   {/* `preencher` + `distribuir`: os blocos de uma linha esticam
                       até a altura do MAIOR (é o `stretch` do grid), e o menor
                       distribui o conteúdo em vez de deixar o vazio embaixo. */}

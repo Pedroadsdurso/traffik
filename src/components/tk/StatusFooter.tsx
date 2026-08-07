@@ -55,8 +55,14 @@ export function StatusFooter({ blocos }: { blocos: BlocoEstado[] }) {
             {b.icone && (
               <span
                 aria-hidden="true"
-                className="bg-tint-primary text-on-tint-primary"
-                style={{ width: 34, height: 34, flex: "none", borderRadius: 8, display: "grid", placeItems: "center" }}
+                /* §13 — QUADRADO ARREDONDADO E NEUTRO. Era tingido de marca, e a
+                   diferença carrega significado: círculo tingido por categoria
+                   CLASSIFICA uma linha ("isto é um erro"); quadrado neutro
+                   ILUSTRA um bloco. Tingido de azul, o ícone do rodapé parecia
+                   um selo de estado — e o estado do bloco é a linha colorida
+                   logo acima dele, não o ícone. */
+                className="bg-tint-neutral text-on-tint-neutral"
+                style={{ width: 36, height: 36, flex: "none", borderRadius: 10, display: "grid", placeItems: "center" }}
               >
                 {b.icone}
               </span>
@@ -70,6 +76,7 @@ export function StatusFooter({ blocos }: { blocos: BlocoEstado[] }) {
           gap: 12,
           padding: "var(--tk-pad-card)",
           borderRadius: "var(--tk-radius-card)",
+          boxShadow: "var(--tk-shadow-card)",
           textDecoration: "none",
         };
 
