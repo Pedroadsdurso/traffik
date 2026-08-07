@@ -73,10 +73,13 @@ export function CatalogoLateral({
       aria-label="Blocos disponíveis"
       {...(destino ?? {})}
       className="bg-surface border"
+      /* Superfície de conteúdo = sombra de card (`06` §1). Ela ficou de fora
+         quando o modo de edição foi escrito, que foi ANTES do `06` existir. */
       style={{
         borderColor: ehAlvo ? "var(--tk-danger)" : aceitaRemocao ? "var(--tk-primary)" : "var(--tk-border)",
         borderRadius: "var(--tk-radius-card)",
         padding: "var(--tk-pad-card)",
+        boxShadow: "var(--tk-shadow-card)",
         display: "flex",
         flexDirection: "column",
         gap: "var(--tk-gap-grid)",

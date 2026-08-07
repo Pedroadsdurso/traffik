@@ -330,7 +330,7 @@ export function VisaoGeralScreen({ v }: { v: TraffikView }) {
         <Card titulo="Saúde da integração" descricao="Cinco serviços, cinco respostas reais">
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {saude.map((l) => (
-              <div key={l.nome} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: "1px solid var(--tk-border)" }}>
+              <div key={l.nome} className="tk-linha" style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 8px", borderRadius: 8 }}>
                 <span className="text-label text-text-secondary" style={{ flex: 1, minWidth: 0 }}>{l.nome}</span>
                 <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 99, background: COR_SERVICO[l.estado], flex: "none" }} />
                 <span className="text-caption" style={{ color: COR_SERVICO[l.estado], whiteSpace: "nowrap" }}>{l.valor}</span>
@@ -378,8 +378,10 @@ function CardEstado({
       <span
         aria-hidden="true"
         style={{
-          display: "grid", placeItems: "center", width: 40, height: 40, flex: "none",
-          borderRadius: "var(--tk-radius-controle)",
+          // §13 — quadrado arredondado de 36px, raio 10. Era 40 com o raio de
+          // controle, que o fazia parecer um botão em vez de um recipiente.
+          display: "grid", placeItems: "center", width: 36, height: 36, flex: "none",
+          borderRadius: 10,
           background: `color-mix(in oklch, ${cor} 14%, transparent)`,
           color: cor,
         }}
@@ -595,7 +597,7 @@ function AbaLogs({ item }: { item: ItemIntegracao }) {
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
       {logs.map((l, i) => (
-        <div key={l.id} style={{ display: "flex", gap: 9, alignItems: "baseline", padding: "7px 0", borderTop: i ? "1px solid var(--tk-border)" : undefined }}>
+        <div key={l.id} className="tk-linha" style={{ display: "flex", gap: 9, alignItems: "baseline", padding: "7px 8px", borderRadius: 8 }}>
           <span
             aria-hidden="true"
             style={{ width: 7, height: 7, borderRadius: 99, flex: "none", background: PONTO_LOG[l.status] ?? "var(--tk-text-muted)" }}
@@ -779,7 +781,7 @@ function ContasConectadas({ v }: { v: TraffikView }) {
             key={a.id}
             style={{
               display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap",
-              padding: "10px 0", borderTop: i ? "1px solid var(--tk-border)" : undefined,
+              padding: "10px 8px", borderRadius: 8,
             }}
           >
             <span style={{ flex: "1 1 180px", minWidth: 0 }}>
@@ -910,7 +912,7 @@ function AtividadeRecente({ v }: { v: TraffikView }) {
       ) : (
         <div style={{ display: "flex", flexDirection: "column" }}>
           {linhas.map((l, i) => (
-            <div key={l.id} style={{ display: "flex", gap: 9, alignItems: "baseline", padding: "7px 0", borderTop: i ? "1px solid var(--tk-border)" : undefined }}>
+            <div key={l.id} className="tk-linha" style={{ display: "flex", gap: 9, alignItems: "baseline", padding: "7px 8px", borderRadius: 8 }}>
               <span aria-hidden="true" style={{ color: l.cor, display: "flex", flex: "none" }}>
                 <Icone nome={l.icone} tamanho={13} />
               </span>

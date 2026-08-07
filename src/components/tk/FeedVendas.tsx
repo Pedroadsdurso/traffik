@@ -41,7 +41,8 @@ export function FeedVendas({ itens, limite = 12 }: { itens: ItemFeed[]; limite?:
       {itens.slice(0, limite).map((f, i) => (
         <div
           key={f.id}
-          style={{ display: "flex", gap: 9, alignItems: "baseline", padding: "7px 0", borderTop: i ? "1px solid var(--tk-border)" : undefined }}
+          className="tk-linha"
+          style={{ display: "flex", gap: 9, alignItems: "baseline", padding: "7px 8px", borderRadius: 8 }}
         >
           {/* 🔴 A cor do evento vem com PONTO, e o tipo vem por EXTENSO ao lado.
               Nove tipos distinguidos só por cor seriam nove cores que ninguém

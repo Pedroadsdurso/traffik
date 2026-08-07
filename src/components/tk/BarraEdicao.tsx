@@ -63,12 +63,15 @@ export function BarraEdicao({
     <>
       <div
         className="bg-surface border border-border"
+        /* Superfície de conteúdo = sombra de card (`06` §1). Ela ficou de fora
+           quando o modo de edição foi escrito, que foi ANTES do `06` existir. */
         style={{
           position: "sticky",
           top: 0,
           zIndex: 5,
           borderRadius: "var(--tk-radius-card)",
           padding: "var(--tk-pad-card)",
+          boxShadow: "var(--tk-shadow-card)",
           display: "flex",
           alignItems: "center",
           gap: "var(--tk-gap-grid)",

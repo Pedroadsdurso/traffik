@@ -5,11 +5,14 @@ import * as React from "react";
 /**
  * Card — a superfície de conteúdo.
  *
- * ⛔ CARD NÃO TEM SOMBRA. No tema escuro a elevação se faz com COR
- * (`background` → `surface` → `surface-hover`); sombra existe apenas em overlay
- * (popover, dropdown, modal, toast), e é o `--tk-shadow-overlay`. Um card com
- * sombra no escuro não parece elevado, parece sujo — e some de vez no claro,
- * onde o fundo já é quase branco.
+ * ⛔ CARD TEM SOMBRA (`--tk-shadow-card`) — junto com a escada de cor
+ * (`background` → `surface` → `surface-hover`), não no lugar dela.
+ *
+ * ⚠️ Este parágrafo dizia o CONTRÁRIO até 07/08/2026 ("card não tem sombra"), e
+ * seguiu dizendo depois de a regra virar. Comentário dentro do próprio
+ * componente que a implementa é o pior lugar para a documentação envelhecer —
+ * é o primeiro que alguém lê antes de "corrigir" o código de volta.
+ * A reversão e o motivo estão no `globals.css`, no bloco de raio.
  *
  * O padding e o espaçamento vêm da DENSIDADE. O card não conhece densidade: ele
  * lê `--tk-pad-card`, e quem decide o valor é o atributo `[data-density]` da
@@ -210,7 +213,11 @@ export function CardMetrica({
           <div
             aria-hidden="true"
             className={TINTA[icone.tom]}
-            style={{ display: "grid", placeItems: "center", width: 32, height: 32, borderRadius: 8, flex: "none" }}
+            /* §13 — 36px, raio 10. ⚠️ O TOM CONTINUA VINDO DE FORA aqui, e é a
+               exceção justificada: `icone.tom` é escolhido pelo chamador, e há
+               cabeçalho de card que CLASSIFICA (um card de erro). Quem só
+               ilustra passa `neutral` — ver o rodapé de estado. */
+            style={{ display: "grid", placeItems: "center", width: 36, height: 36, borderRadius: 10, flex: "none" }}
           >
             {icone.no}
           </div>

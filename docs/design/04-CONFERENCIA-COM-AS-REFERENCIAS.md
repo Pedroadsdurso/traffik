@@ -79,6 +79,32 @@ em `components/tk/`.
 
 ---
 
+## 🔁 OS TRÊS 🔧 REVISÍVEIS — e os dez que NÃO são
+
+> **Dos 13 🔧 do Dashboard, só três têm gatilho objetivo de volta.** Os outros
+> dez são decisões permanentes.
+>
+> ⛔ **Um 🔧 sem gatilho nesta lista não se reabre porque alguém olhou a
+> referência e achou diferente.** A referência é o padrão; a divergência já foi
+> julgada, e o motivo está escrito. Reabrir exige argumento novo sobre o
+> PRODUTO, não sobre a imagem.
+
+| 🔧 | Gatilho de volta | Onde |
+|---|---|---|
+| **Ícone da plataforma** em Top campanhas | existir a **segunda plataforma** de anúncio | seção abaixo |
+| **Sub-rótulo `Google Ads`** sob o nome da campanha (`06` §14.4) | idem — hoje diria "Meta Ads" em toda linha | seção abaixo |
+| **Medidor de plano e uso** no rodapé do rail | existir **backend de cobrança** (`plan`/`quota` no schema) | SHELL |
+
+**Os dez permanentes**, em uma linha cada: pílula de variação · hachura no Gasto
+· Receita em destaque e não verde · Segmented no cabeçalho · folga e raio no
+heatmap e na rosca · sem `Ver todos` nos Alertas · sem `Gasto` no seletor do
+heatmap · sem régua Alta/Baixa · sem count-up · cor do funil sem laranja.
+
+Cada um tem o motivo no ponto do documento onde aparece, e nenhum depende de
+algo que possa passar a existir.
+
+---
+
 ## 🔌 OS 🔧 QUE TÊM A MESMA CAUSA — a ferramenta é MONO-PLATAFORMA hoje
 
 > Agrupados em 07/08/2026 por decisão do dono. **Eles voltam JUNTOS no dia em que

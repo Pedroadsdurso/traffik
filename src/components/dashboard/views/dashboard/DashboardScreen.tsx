@@ -830,7 +830,7 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
             {v.topCampaigns.map((c) => (
               <div
                 key={c.id}
-                className="tk-linha-campanha"
+                className="tk-linha"
                 style={{
                   display: "grid",
                   gridTemplateColumns: COLUNAS_CAMPANHA,

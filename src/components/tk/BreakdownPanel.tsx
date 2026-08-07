@@ -81,7 +81,7 @@ export function BreakdownPanel({
       {linhas.map((l) => (
         <div
           key={l.name}
-          className="tk-linha-breakdown"
+          className="tk-linha"
           style={{ position: "relative", padding: "0 8px", borderRadius: 8, overflow: "hidden" }}
         >
           <div
