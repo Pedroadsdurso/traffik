@@ -1555,8 +1555,10 @@ a {
   --radius-md: var(--tk-radius-card);
   --radius-lg: var(--tk-radius-painel);
 
-  /* Sombra só em overlay. Em superfície fixa a elevação é a escada de cor, então
-     as duas primeiras viram contorno em vez de sombra. */
+  /* As duas primeiras viram CONTORNO, e não sombra: elas são o `shadow-sm`/`md`
+     do sistema LEGADO, usadas para separar caixinhas dentro de um card. Sombra
+     dentro de sombra empasta. O card em si tem `--tk-shadow-card` — ver o bloco
+     de raio. */
   --shadow-sm: 0 0 0 1px var(--tk-border);
   --shadow-md: 0 0 0 1px var(--tk-border);
   --shadow-lg: var(--tk-shadow-overlay);

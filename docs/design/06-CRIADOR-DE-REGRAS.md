@@ -47,7 +47,7 @@ entregaram:
 | Elemento | Token / primitivo |
 |---|---|
 | Canvas (fundo da área de montagem) | `--tk-background` |
-| Nó (caixa de condição ou de ação) | `Card` da Fase 2 — sem sombra, borda `--tk-border` |
+| Nó (caixa de condição ou de ação) | `Card` da Fase 2 — borda `--tk-border` e `--tk-shadow-card` (a nota "sem sombra" era a regra revertida em 07/08) |
 | Nó selecionado | anel `--tk-glow-live`, **sem pulso** |
 | Nó de CONDIÇÃO ("se o CPA passar de X") | selo `tom="primary"` |
 | Nó de AÇÃO ("pausar") | selo `tom="danger"` — ação que gasta ou é irreversível |

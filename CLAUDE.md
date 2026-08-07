@@ -882,9 +882,9 @@ qualquer resize, leia `innerWidth` e compare. `innerWidth === screen.availWidth`
 
 | Tela | ✅ feito | ❌ falta | 🔧 diverge por decisão |
 |---|---|---|---|
-| SHELL | 18 | 1 | 10 |
-| DASHBOARD | 28 | 1 | 15 |
-| INTEGRAÇÕES | 24 | — | 18 |
+| SHELL | 18 | — | 2 |
+| DASHBOARD | 29 | — | 9 |
+| INTEGRAÇÕES | 24 | — | 17 |
 | REGRAS | 0 | 21 | — |
 | CAMPANHAS / GERENCIADOR | 0 | 18 | 1 |
 | UTM & SNIPPETS | 0 | 23 | 1 |
@@ -1367,83 +1367,66 @@ Depois do mapa, nesta ordem, que é do dono:
 
 ---
 
-# 📌 ESTADO DA SESSÃO — 07/08/2026
+# 📌 ESTADO DA SESSÃO — 07/08/2026 (acabamento)
 
-> Para quem abre contexto limpo. **Se contradisser a seção de 06/08, esta é mais
-> nova.** Tudo é commit LOCAL na branch `redesign/dashboard`; a `main` está
-> intacta e **nada foi para o GitHub**.
+> Substitui a seção anterior de 07/08, que descrevia o estado no COMEÇO do dia.
+> Tudo é commit LOCAL em `redesign/dashboard`. **A `main` está intacta e nada foi
+> para o GitHub** — 47 commits esperando decisão do dono.
 
-## ✅ O que fechou
+## ✅ TRÊS TELAS FECHADAS: Dashboard, Shell, Integrações › Visão geral
+
+Os dez itens do `06` aplicados, mais o funil, mais §13 e §14 (que nasceram no
+caminho). **Zero ❌ nas três** — o que restou está 🔧 com motivo escrito.
 
 | | |
 |---|---|
-| ✅ | **Entrega C — modo de edição** (`bd32262`). Três zonas com a REGRA no rótulo, catálogo lateral, Salvar/Cancelar/Redefinir. Achou e consertou o defeito que anulava o Salvar: `loadDashboardLayouts` passava o v2 por `sanitizeLayout`, que recusa o que não é array — **salvar parecia funcionar e o arranjo sumia no recarregamento** |
-| ✅ | **C2 — grade de 12 + arrasto** (`ac97fb7`, `5ac062d`, `2df2e68`), **aprovado pelo dono**. Todas as colunas inteiras (não presets), altura pelo CONTEÚDO, arrasto substituindo o clique, `N colunas livres` por linha |
-| ✅ | **C3, metade** (`6cbb846`): **fita do funil** com espessura fiel e piso de 3px, e **container queries** com os mínimos descendo para o real |
+| 🐛 Rail recolhido | quatro defeitos que só a tela mostrava. O pior era mudo: a `Tooltip` encolhia o gatilho e a área de clique caía de **43px para 17px** |
+| 🎨 Acabamento | pílula de variação · raio 16 / padding / sombra · curva monotônica com área · hachura · marcador de hover · listas com barra atrás do texto · medidor radial · rosca com pontas · movimento escalonado |
+| 🌊 Funil | fluxo com **perdas explícitas** — a massa se conserva, e quem sai vira faixa rotulada |
+| 🧪 Testes novos | `curva` · `fluxo` · `pontos` · `desenho` — os dois últimos **renderizam o componente** e medem o SVG |
 
-### As três regras que nasceram aqui, e valem fora do Dashboard
+## 🔴 O QUE OS TESTES ACHARAM (e nenhuma ferramenta antiga pegava)
 
-▸ **A altura declarada era a causa do painel esburacado.** Bloco vazio reservava
-as linhas que teria COM dado. Hoje a altura vem do conteúdo, e **o piso de
-altura não vale no estado vazio** — a altura que o usuário escolhe é sobre o
-bloco COM DADO; aplicá-la ao vazio reserva espaço para o que não existe.
-
-▸ **🩹 A cicatriz que virou anatomia** — família nova, com seção própria acima.
-Regra criada para contornar limitação técnica que sobrevive à limitação e passa
-a parecer intenção. **O sintoma é o controle inerte.** A pergunta que desmascara:
-*"esta regra ainda seria escolhida se eu estivesse começando hoje?"*.
-
-▸ **Asserção que congela VALOR cai quando nada está errado.** Duas asserções
-diziam `6` (o `colMin` do C2); no C3 ele desceu para 4 e elas caíram. Hoje
-perguntam `porDia.colMin`. E uma delas leva `Math.max(4, …)` porque só MEDE algo
-enquanto o mínimo for maior que 4 — senão passaria por coincidência.
-
-## 🚧 O QUE FALTA DO C3 — é por aqui que a próxima sessão começa
-
-| | Item |
+| Onde | O bug |
 |---|---|
-| ❌ | **Acabamento visual** — nenhum item. **A referência agora é `docs/design/06-LINGUAGEM-VISUAL.md`**, que traz as medidas em números e uma ORDEM DE APLICAÇÃO por resultado/custo |
-| ❌ | **Cada bloco em todas as larguras que declara, nos dois temas.** As container queries estão escritas e **não foram exercitadas em container estreito** — é o candidato mais provável a "passa no build com a coisa desligada" |
-| ❌ | **Tema claro e teste do cinza** |
-| ❌ | **Limpeza:** tirar o ⛔ do modo de edição deste arquivo e preencher a seção do `04` |
+| `MedidorRadial` | **99,6% pintava 24 de 24** ("fechou") e **2% pintava 0** ("nada") |
+| `calcularFluxo` | o piso quebrava a conservação quando há **uma perda só** — achado por 200 funis aleatórios |
+| `--tk-shadow-card` | o override do tema claro **não pegava**: `:root` e `[data-theme="light"]` têm a mesma especificidade e o `:root` vinha depois |
+| `seed-dev` | `n % 2` numa lista de 6 fazia o BOLETO **nunca** casar — o bloco que existe para mostrar divergência saía com três verdes |
 
-✅ **Itens do catálogo sem destino: NENHUM.** Os nove são de `paineis` e todos
-têm zona; as métricas vão para Principais ou Resumo; os quatro estruturais estão
-fora do catálogo de propósito, em "Sempre visíveis", com o motivo como DADO.
+## ⚠️ A FAMÍLIA QUE MAIS APARECEU: documentação contradizendo o código
 
-## ⚠️ EM ABERTO: o clique duplo
+**Nove ocorrências, todas da mesma reversão** (sombra no card). Três achadas de
+imediato; **seis** só na varredura completa que o dono mandou fazer no fim —
+`design-system` ×2, `globals.css`, `Popover`, `01-PROMPT-MASTER`,
+`06-CRIADOR-DE-REGRAS`.
 
-**Sintoma:** no navegador do MCP, um `left_click` frequentemente não surte
-efeito e o segundo funciona. Visto em **três** controles: `Editar painel`, o
-seletor de período e o ✕ de um item. Uma vez um `scroll` sobre a sidebar
-navegou sozinho para `/dashboard/regras`.
+⛔ **A lição virou regra:** ao reverter qualquer regra, `grep` pelo ⛔ dela no
+repositório inteiro. Ver *"COMENTÁRIO QUE PROÍBE É O MAIS PERIGOSO DE TODOS"*.
 
-⛔ **Não está diagnosticado, e a origem importa:** se for do MCP, é ruído de
-ferramenta; se for do app, é bug na porta de entrada da tela e **entra na fila
-antes do resto do C3**. O dono ia testar na mão — **a resposta não chegou** (a
-mensagem veio com o colchete `[descreva o que aconteceu nos três]` sem
-preencher). **Peça antes de seguir.**
+O `CLAUDE.md` agora tem um bloco de **ESTADO gerado a partir do `04`**
+(`npm run docs:estado`, roda dentro de `npm test`). Ele mata a divergência
+DOCUMENTO × DOCUMENTO. **Não** mata documento × código — isso segue manual, e o
+limite está escrito no script.
 
-⚠️ E enquanto durar: **não meça arrasto.** Gesto sob evento duplicado não mede
-nada. O arrasto do C2 está entregue e **nunca foi exercitado** — é do dono.
+## ➡️ PRÓXIMO: Gerenciador / Campanhas
 
-## 🔜 Depois do C3
+É sobretudo TABELA, e a tabela acabou de ser resolvida: `.tk-linha` (hover, sem
+borda entre linhas), cabeçalho único e barra de proporção atrás do texto. 18
+itens no `04`.
 
-Varredura das três candidatas a cicatriz, **trazendo a lista antes de consertar
-qualquer uma**: decisões tomadas por causa do `react-grid-layout`, do
-`--experimental-strip-types` que não lê `.tsx`, e do cron diário do plano Hobby.
+⛔ **Antes de começar, rode a varredura por ARQUIVO do `06`** — a lista de quais
+seções merecem está lá. Checklist por arquivo encontra o que o checklist por tela
+não vê: foi assim que uma borda no `FeedVendas` (do Dashboard, tela dada como
+fechada) apareceu na auditoria do Shell.
 
-## 🗂️ Dois avisos sobre os arquivos de design
+## 🕳️ O QUE FICA DEVENDO
 
-⚠️ **Há DOIS arquivos `06-`**: `06-CRIADOR-DE-REGRAS.md` (spec de algo que não
-existe, fora de escopo) e `06-LINGUAGEM-VISUAL.md` (o de acabamento). O número
-não identifica mais sozinho — cite o nome.
-
-🔴 **`docs/design/referencias/` NÃO EXISTE.** As três imagens novas
-(12-acru-claro, 13-veselty-claro, 14-insighta-escuro) **não estão no
-repositório** — só o `06` chegou. O documento cita "as quatro referências" e
-"referência 1/2/3/4" o tempo todo; sem os arquivos, quem ler não tem como
-conferir contra o que o texto descreve. **Peça os arquivos antes do acabamento.**
+| | |
+|---|---|
+| **Largura mínima** | nunca verificada. O `resize_window` do MCP mentiu duas vezes e a janela encolheu sozinha outras duas. O dono ia exercitar o hover do gráfico em janela estreita na mão |
+| **Quatro views legadas de Integrações** | `Anuncios` 322 · `Pixel` 1.181 · `UTMs` 397 · `Webhooks` 532. **Não auditadas de propósito** — vão ser reescritas, e auditar o que será deletado é trabalho que não sobrevive |
+| **Varredura de comentários que afirmam efeito** | a família tem 5 casos documentados e ninguém varreu o resto |
 
 # 🩼 AJUSTE MANUAL AO LADO DE UM VALOR DE SISTEMA É SEMPRE SINTOMA
 

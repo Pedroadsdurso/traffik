@@ -70,11 +70,20 @@ for (const l of linhas) {
     continue;
   }
   if (!atual) continue;
-  // Só conta marcador em LINHA DE TABELA: prosa também usa ✅ e ❌.
+  // Só conta em LINHA DE TABELA: a prosa do documento também usa ✅ e ❌.
   if (!l.trimStart().startsWith("|")) continue;
-  atual.ok += (l.match(/✅/g) || []).length;
-  atual.falta += (l.match(/❌/g) || []).length;
-  atual.dec += (l.match(/🔧/g) || []).length;
+
+  /* ⛔ UM MARCADOR POR LINHA — o PRIMEIRO, e não todos.
+     Cada linha da tabela tem UM status; os outros marcadores que aparecem nela
+     estão dentro da justificativa ("esta linha dizia ❌ até 07/08"). Contando
+     todos, um item resolvido com a história escrita ao lado voltava a somar no
+     ❌ — e o número passava a crescer justamente quando a dívida diminuía.
+     Pego na primeira geração depois de resolver os dois ❌ residuais. */
+  const m = l.match(/✅|❌|🔧/u);
+  if (!m) continue;
+  if (m[0] === "✅") atual.ok++;
+  else if (m[0] === "❌") atual.falta++;
+  else atual.dec++;
 }
 
 if (telas.length === 0) morrer(`nenhuma seção de tela encontrada em ${ORIGEM}. O formato mudou?`);

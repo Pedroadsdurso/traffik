@@ -183,7 +183,9 @@ Base 4px. Padding de card: 16px compacto, 20px padrão. Gap de grid: 12px compac
 
 Raio: `6px` controles · `10px` cards · `14px` painéis e modais · `999px` pills.
 
-Elevação em tema escuro se faz com **cor, não com sombra**: `background` → `surface` → `surface-hover`. Sombra existe apenas em overlay (popover, dropdown, modal, toast): `0 8px 24px -4px rgb(0 0 0 / .55)`.
+Elevação se faz com **cor E sombra, juntas**: a escada `background` → `surface` → `surface-hover`, mais `--tk-shadow-card` no cartão. Overlay (popover, dropdown, modal, toast) usa a sombra forte, `--tk-shadow-overlay`.
+
+> ⚠️ **Este parágrafo dizia o contrário** — *"sombra existe apenas em overlay"* — até 07/08/2026. A regra foi revertida pelo `06` §1, que tem precedência sobre este documento em acabamento. Faixa, rail, linha de tabela e header continuam sem sombra.
 
 Movimento padrão `150ms cubic-bezier(.2,0,0,1)`. Só três momentos merecem animação: pulso do `LiveIndicator`, hover de linha de tabela, entrada de painel lateral. Sem número contando, sem gráfico redesenhando a cada render, sem parallax. `prefers-reduced-motion: reduce` desliga tudo.
 

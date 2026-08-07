@@ -199,7 +199,7 @@ export function Popover({
         maxWidth: `calc(100vw - ${MARGEM * 2}px)`,
         maxHeight: pos?.maxHeight,
         overflowY: "auto",
-        // Sombra existe APENAS em overlay — este é o caso previsto pela regra.
+        // Overlay usa a sombra FORTE; card usa a `--tk-shadow-card`, mais fraca.
         boxShadow: "var(--tk-shadow-overlay)",
         padding: 4,
         pointerEvents: inerte ? "none" : undefined,

@@ -67,7 +67,7 @@ em `components/tk/`.
 
 | Elemento | Status |
 |---|---|
-| Cartão `Precisa de ajuda?` no rodapé das telas, com link para guia | ❌ imagem 5 — **não é do shell**, é rodapé de tela. Volta no passo de cada tela |
+| Cartão `Precisa de ajuda?` no rodapé das telas, com link para guia | 🔧 **FORA — não há guia para onde levar.** A Central de ajuda foi reduzida a atalhos de teclado por decisão de 06/08, com o motivo escrito: índice de "o que cada tela faz" é doc que ninguém lê e envelhece sozinha. Um cartão que promete um guia inexistente é affordance mentindo — a mesma regra que matou a interação do globo e a prop `aoVerTodos`. **Volta quando o guia existir**, e aí é rodapé de cada tela, não do shell |
 | Barra flutuante de ícones no canto inferior direito | ✅ **não era nossa.** Varredura de `position:fixed` em `src/` e no `globals.css`: os 4 acertos são backdrop de modal, barra de progresso do topo e dois overlays. Nada ancorado naquele canto — é extensão do navegador do usuário. **Nada a remover** |
 
 ### 🔜 PENDÊNCIAS do shell — trabalho adiado, não decisão de escopo
@@ -166,7 +166,7 @@ Referência: imagem 1. **Decisão: tudo da imagem 1 + tudo que já construímos.
 | …com `Gasto` no seletor | 🔧 **IMPOSSÍVEL, não é escopo.** `DailyAdMetric` é diária e a Meta não reporta gasto por hora — o valor seria o total do dia lançado às 00h. Mesmo motivo do `gastoNaSerie` |
 | …com escala lateral `Alta / Baixa` | 🔧 **substituída por algo mais honesto.** Uma régua de gradiente não distingue **célula vazia de célula zero**, que é a informação principal do bloco. O rodapé diz o denominador (`Média de até 5 semanas`) e a hachura marca o não observado |
 | Link `Ver todos` no painel de Alertas + contador `+2 alertas` | ✅ **já existia** — o `+ N alerta` aparece quando passa de 3 |
-| Sparkline no card de Lucro | ❌ **série `lucroLiquido` não existe no servidor.** Aditivo em `metrics.ts`, mesma forma das outras 4 séries. Fica para quando alguém pedir — o card já diz a composição em texto |
+| Sparkline no card de Lucro | ✅ — ⚠️ esta linha dizia ❌ *"a série `lucroLiquido` não existe no servidor"* até 07/08/2026. **Ela existe** (`metrics.ts:1274`) e o card a desenha desde então; o ❌ era documentação envelhecida. A série sai vazia na granularidade HORÁRIA de propósito: `DailyAdMetric` não tem hora, e o lucro por hora viria com o gasto do dia inteiro no balde das 00h |
 | Ícone em caixa colorida ao lado de cada KPI | 🔧 **fora do Dashboard, de propósito.** Aparece nas imagens 8 e 9 (Snippets e Criativos), **não na imagem 1**. Aplicar onde a referência mostra: consistência com a referência vence consistência interna |
 
 ### Modo de edição — 🔧 inteiramente seu, não está nas referências

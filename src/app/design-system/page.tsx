@@ -1051,7 +1051,7 @@ export default function DesignSystemPage() {
 
         <Secao
           titulo="Fase 2 — Card"
-          resumo="Card não tem sombra: no escuro a elevação é a escada de cor, e sombra existe apenas em overlay. Padding e espaçamento vêm da densidade — troque no alternador do topo."
+          resumo="Padding e espaçamento vêm da densidade — troque no alternador do topo e veja o bloco abaixo responder. (A sombra do card mora na seção Elevação.)"
         >
           <div style={{ display: "grid", gap: "var(--tk-gap-grid)", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))" }}>
             <CardMetrica
@@ -1076,7 +1076,7 @@ export default function DesignSystemPage() {
           <div style={{ display: "grid", gap: "var(--tk-gap-grid)", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", marginTop: "var(--tk-gap-grid)" }}>
             <Card titulo="Card com cabeçalho" descricao="Título, descrição e ação no canto." acao={<Badge tom="neutral">6 contas</Badge>}>
               <p className="text-body text-text-secondary" style={{ margin: 0 }}>
-                O corpo do card. Sem sombra, com a borda do sistema.
+                O corpo do card. Borda do sistema e a sombra de card.
               </p>
             </Card>
             <Card titulo="Card clicável" descricao="Vira <button>, não <div onClick>." aoClicar={() => {}}>
