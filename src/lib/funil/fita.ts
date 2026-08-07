@@ -121,10 +121,29 @@ export interface PerdaFita {
   de: number;
   /** Quantos se perderam entre `de` e `de + 1`. */
   valor: number;
-  /** Deslocamento do topo da faixa até o TOPO da perda (= espessura do fluxo depois). */
+  /**
+   * De que lado da fita esta METADE da perda sai.
+   *
+   * 🔴 Toda perda vira DUAS faixas, uma para cada lado, com metade da espessura
+   * cada. É consequência de o fluxo estar centrado: se ele afina para os dois
+   * lados, o que sai dele sai pelos dois lados.
+   *
+   * ⚠️ `valor` é o total do evento nas DUAS metades, não a metade. Ele é o que
+   * o rótulo mostra, e "1.185 saíram" é um fato do evento, não do lado. Quem
+   * desenha o rótulo uma vez só é a tela, filtrando por `lado === "baixo"`.
+   */
+  lado: "cima" | "baixo";
+  /** Menor y da faixa (borda de cima), a partir do topo da faixa. */
   topo: number;
-  /** Deslocamento até a BASE da perda (= espessura do fluxo antes). */
+  /** Maior y (borda de baixo). `base - topo` é a espessura desta metade. */
   base: number;
+  /**
+   * y onde a faixa NASCE com espessura zero, na guia `x0` — é a borda do fluxo
+   * naquele ponto. Em cima é a borda de cima; embaixo, a de baixo.
+   */
+  ancora: number;
+  /** y da borda RETA, alcançada em `x1` e mantida até o fim do desenho. */
+  borda: number;
   x0: number;
   x1: number;
 }
@@ -172,11 +191,23 @@ export function calcularFluxo(
     const a = etapas[i]!;
     const b = etapas[i + 1]!;
     if (a.valor <= b.valor) continue;
-    const teto = a.espessura - piso;
+    /* 🔴 `2 * piso`, e o 2 é consequência do fluxo CENTRADO: a perda sai por
+       dois lados, então reservar só `piso` dava `piso / 2` de cada lado — 1,5px
+       na prática, abaixo do mínimo que o piso existe para garantir. O piso é
+       sobre a faixa que a pessoa VÊ, e ela vê duas. */
+    const teto = a.espessura - 2 * piso;
     // `b.valor > 0` mantém o piso do próprio fluxo: etapa não-vazia não some.
-    const chao = b.valor > 0 ? Math.min(piso, Math.max(0, teto)) : 0;
+    const chao = b.valor > 0 ? Math.min(2 * piso, Math.max(0, teto)) : 0;
     b.espessura = Math.max(chao, Math.min(b.espessura, teto));
   }
+
+  /* 🔴 O FLUXO É CENTRADO, e isto é o que resolve o vetor de leitura.
+     Ancorado no topo, a fronteira com a perda SÓ PODE SUBIR — o fluxo afina e
+     a borda de baixo sobe atrás dele. Uma linha que sobe lê como crescimento,
+     que é o oposto do que um funil de 97% de queda diz. Centrado, a borda de
+     cima DESCE e a de baixo SOBE: a figura converge, e convergência lê como
+     estreitamento em qualquer direção de leitura. */
+  const cimaDe = (e: EtapaFita) => (faixa - e.espessura) / 2;
 
   const perdas: PerdaFita[] = [];
   for (let i = 0; i < etapas.length - 1; i++) {
@@ -185,7 +216,16 @@ export function calcularFluxo(
     // Etapa que CRESCE não é perda. Pode acontecer: cliques vêm da Meta e
     // checkouts vêm do pixel, e as duas fontes não se conversam.
     if (a.valor <= b.valor) continue;
-    perdas.push({ de: i, valor: a.valor - b.valor, topo: b.espessura, base: a.espessura, x0: a.x, x1: b.x });
+    const valor = a.valor - b.valor;
+    const ca = cimaDe(a);
+    const cb = cimaDe(b);
+    // Metade de CIMA: nasce na borda de cima do fluxo em `a` e abre para cima
+    // até a borda de cima em `b` — que é mais baixa, porque o fluxo afinou.
+    perdas.push({ de: i, valor, lado: "cima", topo: ca, base: cb, ancora: ca, borda: cb, x0: a.x, x1: b.x });
+    // Metade de BAIXO: espelho exato, a partir da borda de baixo.
+    const ba = ca + a.espessura;
+    const bb = cb + b.espessura;
+    perdas.push({ de: i, valor, lado: "baixo", topo: bb, base: ba, ancora: ba, borda: bb, x0: a.x, x1: b.x });
   }
 
   return { etapas, perdas, faixa };
@@ -201,14 +241,18 @@ export function calcularFluxo(
  */
 export function caminhoPerda(p: PerdaFita, yTopo: number, xFim: number): string {
   const meio = (p.x0 + p.x1) / 2;
-  const topoY = yTopo + p.topo;
-  const baseY = yTopo + p.base;
-  // Sobe pela borda de baixo do fluxo (curva), segue reta, e fecha pela base.
+  const ancoraY = yTopo + p.ancora;
+  const bordaY = yTopo + p.borda;
+  /* ⚠️ `ancora`/`borda`, e NÃO `topo`/`base`: com o fluxo centrado a metade de
+     cima é o espelho da de baixo, e numa delas a curva é a borda inferior da
+     faixa, na outra a superior. Escrever em topo/base exigiria dois caminhos —
+     e duas implementações da mesma curva divergem no primeiro ajuste. Em
+     ancora/borda a fórmula é UMA: nasce colada no fluxo, abre até a reta. */
   return (
-    `M${p.x0.toFixed(2)},${baseY.toFixed(2)} ` +
-    `C${meio.toFixed(2)},${baseY.toFixed(2)} ${meio.toFixed(2)},${topoY.toFixed(2)} ${p.x1.toFixed(2)},${topoY.toFixed(2)} ` +
-    `L${xFim.toFixed(2)},${topoY.toFixed(2)} ` +
-    `L${xFim.toFixed(2)},${baseY.toFixed(2)} Z`
+    `M${p.x0.toFixed(2)},${ancoraY.toFixed(2)} ` +
+    `C${meio.toFixed(2)},${ancoraY.toFixed(2)} ${meio.toFixed(2)},${bordaY.toFixed(2)} ${p.x1.toFixed(2)},${bordaY.toFixed(2)} ` +
+    `L${xFim.toFixed(2)},${bordaY.toFixed(2)} ` +
+    `L${xFim.toFixed(2)},${ancoraY.toFixed(2)} Z`
   );
 }
 
@@ -216,27 +260,33 @@ export function caminhoPerda(p: PerdaFita, yTopo: number, xFim: number): string 
  * O fluxo que CONTINUA: borda de cima reta no topo da faixa, borda de baixo
  * acompanhando a espessura de cada etapa.
  */
-export function caminhoFluxo(etapas: EtapaFita[], yTopo: number): string {
+export function caminhoFluxo(etapas: EtapaFita[], yTopo: number, faixa: number): string {
   if (etapas.length === 0) return "";
-  const ultimo = etapas[etapas.length - 1]!;
-  const partes = [`M${etapas[0]!.x.toFixed(2)},${yTopo.toFixed(2)}`];
-  partes.push(`L${ultimo.x.toFixed(2)},${yTopo.toFixed(2)}`);
-  // Volta pela borda de baixo, da direita para a esquerda.
+  /* 🔴 AS DUAS BORDAS SÃO CURVAS AGORA. Antes a de cima era uma reta em
+     `yTopo` (fluxo ancorado no topo) e só a de baixo acompanhava a espessura.
+     Centrado, cada borda carrega metade do afinamento: a de cima desce, a de
+     baixo sobe, e a figura converge em vez de escorregar para um lado. */
+  const cima = (e: EtapaFita) => yTopo + (faixa - e.espessura) / 2;
+  const baixo = (e: EtapaFita) => cima(e) + e.espessura;
+
+  const traco = (lista: EtapaFita[], y: (e: EtapaFita) => number, primeiroComando: "M" | "L") => {
+    const partes: string[] = [];
+    lista.forEach((e, i) => {
+      if (i === 0) {
+        partes.push(`${primeiroComando}${e.x.toFixed(2)},${y(e).toFixed(2)}`);
+        return;
+      }
+      const ant = lista[i - 1]!;
+      const meio = (ant.x + e.x) / 2;
+      partes.push(
+        `C${meio.toFixed(2)},${y(ant).toFixed(2)} ${meio.toFixed(2)},${y(e).toFixed(2)} ${e.x.toFixed(2)},${y(e).toFixed(2)}`,
+      );
+    });
+    return partes;
+  };
+
   const inverso = [...etapas].reverse();
-  inverso.forEach((e, i) => {
-    const y = yTopo + e.espessura;
-    if (i === 0) {
-      partes.push(`L${e.x.toFixed(2)},${y.toFixed(2)}`);
-      return;
-    }
-    const ant = inverso[i - 1]!;
-    const meio = (ant.x + e.x) / 2;
-    partes.push(
-      `C${meio.toFixed(2)},${(yTopo + ant.espessura).toFixed(2)} ${meio.toFixed(2)},${y.toFixed(2)} ${e.x.toFixed(2)},${y.toFixed(2)}`,
-    );
-  });
-  partes.push("Z");
-  return partes.join(" ");
+  return [...traco(etapas, cima, "M"), ...traco(inverso, baixo, "L"), "Z"].join(" ");
 }
 
 /**

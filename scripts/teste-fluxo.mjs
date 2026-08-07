@@ -96,7 +96,9 @@ checar("o piso NÃO estoura a faixa — ele afina o FLUXO, não engrossa a perda
 
 checar("as perdas não se sobrepõem entre si nem invadem o fluxo", () => {
   const f = calcularFluxo([1220, 400, 120, 27], OPC);
-  const faixas = [{ topo: 0, base: fluxoFinal(f) }, ...f.perdas.map((p) => ({ topo: p.topo, base: p.base }))]
+  const espFinal = fluxoFinal(f);
+  const cimaFinal = (OPC.faixa - espFinal) / 2; // o fluxo é CENTRADO
+  const faixas = [{ topo: cimaFinal, base: cimaFinal + espFinal }, ...f.perdas.map((p) => ({ topo: p.topo, base: p.base }))]
     .sort((a, b) => a.topo - b.topo);
   for (let i = 1; i < faixas.length; i++) {
     assert.ok(
@@ -112,7 +114,11 @@ checar("etapa que CRESCE não vira perda negativa", () => {
   // Cliques vêm da Meta e checkouts do pixel: as duas fontes não se conversam.
   const f = calcularFluxo([100, 140, 20], OPC);
   assert.ok(f.perdas.every((p) => p.valor > 0), "apareceu perda de valor não-positivo");
-  assert.equal(f.perdas.length, 1, "só o passo 140→20 é perda");
+  /* ⚠️ Conta EVENTOS, não faixas: desde o fluxo centrado cada perda vira duas
+     metades. Comparar `perdas.length` com 1 mediria a geometria, não a regra. */
+  const eventos = new Set(f.perdas.map((p) => p.de));
+  assert.equal(eventos.size, 1, "só o passo 140→20 é perda");
+  assert.deepEqual([...eventos], [1]);
 });
 
 checar("funil sem perda nenhuma (nada cai) não inventa faixa", () => {
@@ -123,7 +129,7 @@ checar("funil sem perda nenhuma (nada cai) não inventa faixa", () => {
 
 checar("tudo zero não produz NaN em coordenada nenhuma", () => {
   const f = calcularFluxo([0, 0], OPC);
-  const d = caminhoFluxo(f.etapas, 10) + f.perdas.map((p) => caminhoPerda(p, 10, 600)).join(" ");
+  const d = caminhoFluxo(f.etapas, 10, OPC.faixa) + f.perdas.map((p) => caminhoPerda(p, 10, 600)).join(" ");
   assert.ok(!/NaN|Infinity/.test(d), d);
 });
 
@@ -132,27 +138,94 @@ checar("tudo zero não produz NaN em coordenada nenhuma", () => {
 checar("a faixa de perda nasce com espessura ZERO na guia de onde sai", () => {
   // Se ela nascesse já cheia, pareceria que a perda aconteceu ANTES da etapa.
   const f = calcularFluxo([1220, 35, 27], OPC);
-  const p = f.perdas[0];
-  const d = caminhoPerda(p, 10, 600);
-  const inicio = d.match(/^M([\d.]+),([\d.]+)/);
-  assert.ok(inicio, d);
-  assert.ok(Math.abs(+inicio[1] - p.x0) < 0.01, "não começa na guia de origem");
-  assert.ok(Math.abs(+inicio[2] - (10 + p.base)) < 0.01, "não começa na borda de baixo do fluxo");
+  for (const p of f.perdas.filter((q) => q.de === 0)) {
+    const d = caminhoPerda(p, 10, 600);
+    const inicio = d.match(/^M([\d.]+),([\d.]+)/);
+    assert.ok(inicio, d);
+    assert.ok(Math.abs(+inicio[1] - p.x0) < 0.01, "não começa na guia de origem");
+    assert.ok(
+      Math.abs(+inicio[2] - (10 + p.ancora)) < 0.01,
+      `a metade de ${p.lado} não nasce colada na borda do fluxo`,
+    );
+  }
 });
 
-/* ⛔ NÃO HÁ ASSERÇÃO DE "LINHA DE COLAPSO" AQUI, e a ausência é o registro.
+/* ── O VETOR DE LEITURA, EM COORDENADA DE TELA ─────────────────────────────────
 
-   Em 07/08/2026 existiu um `caminhoBordaFluxo` que traçava a borda de baixo do
-   fluxo, e com ele um teste chamado "a linha de colapso DESCE — nunca sobe".
-   O teste passava. O nome estava errado: ele afirmava `y` decrescente, que em
-   SVG é a linha SUBINDO na tela. Medido na página, ela ia de y=160 a y=17.
+   🔴 ESTAS ASSERÇÕES SÃO ESCRITAS EM PIXEL DE TELA, NÃO EM `y` DE SVG, e a
+   distinção não é preciosismo — foi exatamente aí que a versão anterior mentiu.
 
-   Ou seja, o teste verde carimbava como "desce" exatamente a marca que subia —
-   no gráfico cuja única reclamação era "lê como crescimento".
+   Existiu aqui um teste chamado "a linha de colapso DESCE — nunca sobe". Ele
+   passava, e afirmava `y` DECRESCENTE. Em SVG o eixo `y` aponta para BAIXO,
+   então `y` decrescente é a linha SUBINDO na tela. Medido na página, ela ia de
+   y=160 a y=17: subia. O teste verde carimbava como "desce" a única marca que
+   subia, no gráfico cuja reclamação era "lê como crescimento".
 
-   ⚠️ A lição não é sobre o funil: **num sistema com y invertido, o nome da
-   asserção tem de dizer TELA ou dizer COORDENADA, nunca um verbo ambíguo.**
-   "desce" leu como tela e mediu coordenada, e as duas são opostas. */
+   ⛔ A REGRA: asserção sobre direção VISUAL vai em coordenada de tela. Se o
+   formato inverte um eixo, a asserção CONVERTE antes de comparar, e o nome do
+   teste diz "na tela". Um verbo ambíguo ("desce") lê como tela e mede
+   coordenada — e as duas são opostas.
+
+   `naTela` é a conversão, e existe para que nenhuma asserção abaixo compare
+   `y` cru: quanto maior o número, mais ALTO na tela. */
+
+const naTela = (ySvg) => OPC.faixa - ySvg;
+const bordaCima = (f, i) => (OPC.faixa - f.etapas[i].espessura) / 2;
+const bordaBaixo = (f, i) => bordaCima(f, i) + f.etapas[i].espessura;
+
+checar("NA TELA: a borda de cima do fluxo DESCE da esquerda para a direita", () => {
+  const f = calcularFluxo([1220, 35, 27], OPC);
+  const alturas = f.etapas.map((_, i) => naTela(bordaCima(f, i)));
+  for (let i = 1; i < alturas.length; i++) {
+    assert.ok(
+      alturas[i] <= alturas[i - 1] + 0.01,
+      `a borda de cima subiu entre a guia ${i - 1} e a ${i}: ${alturas.map((a) => a.toFixed(1))}`,
+    );
+  }
+  assert.ok(alturas[0] - alturas[alturas.length - 1] > 10, "a borda de cima mal se moveu");
+});
+
+checar("NA TELA: a borda de baixo do fluxo SOBE da esquerda para a direita", () => {
+  const f = calcularFluxo([1220, 35, 27], OPC);
+  const alturas = f.etapas.map((_, i) => naTela(bordaBaixo(f, i)));
+  for (let i = 1; i < alturas.length; i++) {
+    assert.ok(
+      alturas[i] >= alturas[i - 1] - 0.01,
+      `a borda de baixo desceu entre a guia ${i - 1} e a ${i}: ${alturas.map((a) => a.toFixed(1))}`,
+    );
+  }
+  assert.ok(alturas[alturas.length - 1] - alturas[0] > 10, "a borda de baixo mal se moveu");
+});
+
+checar("NA TELA: a figura CONVERGE — nenhuma borda escorrega para um lado só", () => {
+  /* A propriedade que o centro compra, e a que o topo NÃO podia cumprir: as
+     duas bordas caminham uma na direção da outra, em módulo igual. Ancorado no
+     topo, a de cima ficava parada e só a de baixo subia — a assinatura de
+     "crescimento" que o dono leu. */
+  const f = calcularFluxo([1220, 35, 27], OPC);
+  for (let i = 1; i < f.etapas.length; i++) {
+    const desceu = naTela(bordaCima(f, i - 1)) - naTela(bordaCima(f, i));
+    const subiu = naTela(bordaBaixo(f, i)) - naTela(bordaBaixo(f, i - 1));
+    assert.ok(desceu >= -0.01 && subiu >= -0.01, `a guia ${i} não convergiu`);
+    assert.ok(
+      Math.abs(desceu - subiu) < 0.01,
+      `convergência assimétrica na guia ${i}: cima ${desceu.toFixed(2)} vs baixo ${subiu.toFixed(2)}`,
+    );
+  }
+});
+
+checar("NA TELA: toda perda sai PELOS DOIS LADOS, com metade da espessura cada", () => {
+  const f = calcularFluxo([1220, 35, 27], OPC);
+  const eventos = [...new Set(f.perdas.map((p) => p.de))];
+  for (const de of eventos) {
+    const metades = f.perdas.filter((p) => p.de === de);
+    assert.equal(metades.length, 2, `o evento ${de} não virou duas metades`);
+    const lados = metades.map((m) => m.lado).sort();
+    assert.deepEqual(lados, ["baixo", "cima"]);
+    const [a, b] = metades.map((m) => m.base - m.topo);
+    assert.ok(Math.abs(a - b) < 0.01, `as metades do evento ${de} têm espessuras diferentes: ${a} e ${b}`);
+  }
+});
 
 console.log(
   falhas.length

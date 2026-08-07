@@ -254,7 +254,7 @@ export function FitaFunil({ etapas }: { etapas: EtapaEntradaFita[] }) {
           {largura > 0 &&
             fluxo.perdas.map((p) => (
               <path
-                key={`perda-${p.de}`}
+                key={`perda-${p.de}-${p.lado}`}
                 d={caminhoPerda(p, TOPO, xFim - MARGEM_X)}
                 fill={p.valor === maiorPerda ? "var(--tk-perda-forte)" : "var(--tk-perda-fraca)"}
                 stroke="var(--tk-surface)"
@@ -265,7 +265,7 @@ export function FitaFunil({ etapas }: { etapas: EtapaEntradaFita[] }) {
 
           {/* Preenchimento CHAPADO. `--tk-fluxo` diverge de `--tk-primary` no
               escuro justamente para vencer 3:1 contra a perda — ver o token. */}
-          {largura > 0 && <path d={caminhoFluxo(fluxo.etapas, TOPO)} fill="var(--tk-fluxo)" />}
+          {largura > 0 && <path d={caminhoFluxo(fluxo.etapas, TOPO, faixaAlt)} fill="var(--tk-fluxo)" />}
 
           {/* ⛔ NÃO VOLTE A DESENHAR UMA LINHA SOBRE A BORDA DO FLUXO.
 
@@ -305,7 +305,13 @@ export function FitaFunil({ etapas }: { etapas: EtapaEntradaFita[] }) {
             ⚠️ `x0` sozinho não serve: lá a faixa tem espessura ZERO e o rótulo
             cairia em cima do fluxo. `x1` sozinho também não: na última perda ele
             é a guia final, e o texto sairia do bloco. */}
-        {fluxo.perdas.map((p) => {
+        {/* ⚠️ UM rótulo por EVENTO, não por faixa. Cada perda virou duas metades
+            (cima e baixo) desde que o fluxo passou a ser centrado, e as duas
+            têm o mesmo `valor` — desenhar as duas escreveria "1.185 saíram sem
+            iniciar checkout" duas vezes na mesma figura, sugerindo dois
+            eventos. A metade de BAIXO é a escolhida porque é onde o rótulo não
+            disputa espaço com os três números do cabeçalho. */}
+        {fluxo.perdas.filter((p) => p.lado === "baixo").map((p) => {
           const meioY = TOPO + (p.topo + p.base) / 2;
           const cabeDentro = p.base - p.topo >= 26;
           const ancora = (p.x0 + p.x1) / 2;
