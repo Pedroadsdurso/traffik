@@ -30,9 +30,28 @@ commit de redesign muda número em produção **sem ninguém ter decidido isso**
 some no meio de um diff que o revisor está lendo como mudança visual. O dono
 descobre pelo suporte.
 
-⚠️ **Isto NÃO impede corrigir defeito do próprio trabalho novo.** Componente que
-você acabou de escrever e está errado se conserta na hora — ele não tem
-comportamento anterior a preservar. A regra protege o que já estava lá.
+## ⛔ A FRONTEIRA — escrita, senão a ressalva vira brecha
+
+**A regra congela o que existia ANTES da branch `redesign/dashboard`.**
+
+| | |
+|---|---|
+| 🔒 **congelado** | cálculo, rota ou comportamento que já estava na `main`. Não muda sem aval do dono |
+| ✅ **livre** | código escrito NESTA reescrita — ele não tem comportamento anterior a preservar |
+
+Consertar defeito do trabalho novo na hora (como foi o `inicioDaFita`) **não é
+exceção à regra — é o escopo dela.**
+
+> ### 🔎 NA DÚVIDA DE QUE LADO UMA COISA CAI, `git log` NA LINHA
+> ```bash
+> git log -1 --format='%h %ad %s' --date=short -L <linha>,<linha>:<arquivo>
+> # o ponto de corte:
+> git merge-base main redesign/dashboard   # 4e6aa9e, 05/08/2026
+> ```
+> **Commit anterior a `4e6aa9e` → congelado.** Não é questão de julgamento sobre
+> "isto parece novo": é uma consulta com resposta binária, e ela existe
+> justamente para que a dúvida não seja resolvida pela conveniência de quem está
+> com o arquivo aberto.
 
 # Trackhub — guia do projeto
 
@@ -1450,11 +1469,87 @@ Depois do mapa, nesta ordem, que é do dono:
 
 ---
 
+# 📌 ESTADO DA SESSÃO — 07/08/2026 (funil, ROAS e a regra do congelamento)
+
+> **Mais nova que tudo acima.** Se contradisser, ela vence.
+>
+> ⛔ **NADA FOI PARA O GITHUB.** `main` intacta, **60 commits locais** em
+> `redesign/dashboard` esperando decisão do dono. Ponto de corte da branch:
+> `4e6aa9e`, 05/08/2026.
+
+## 🥇 A REGRA QUE GOVERNA O RESTO DO REDESIGN
+
+**O redesign não muda funcionalidade, contas nem lógica.** Está no TOPO deste
+arquivo, com a fronteira escrita (`git log` na linha; commit anterior a
+`4e6aa9e` é congelado). Ao achar defeito: **MEDE · REGISTRA · AVISA. NÃO
+CONSERTA.**
+
+Primeira aplicação dela foi o ROAS, na mesma sessão.
+
+## ✅ O FUNIL FECHOU — 9ª versão, e ela veio de TIRAR coisas
+
+| | |
+|---|---|
+| **8ª** (`4174413`) | `Cliques` sai da GEOMETRIA. Dois sistemas de medição (Meta × nosso `Click`) na mesma escala faziam a instalação quebrada engolir a figura do comportamento. Amplitude das 4 etapas finais: **0,8px → 105,6px** a 2,9% de cobertura |
+| **9ª** (`2f76759`) | **uma fita só, contínua.** A hachura do "não medido" saiu — ela partia a figura em três objetos. A informação virou **guia tracejada + `* não medido` no rótulo**, com a palavra visível (não só no `title`) |
+
+**A cobertura mora no vão antes da fita**, com número grande e cor de atenção
+abaixo de **25%** — limiar calibrado para o denominador que TEMOS (`clicks` da
+Meta, que conta todo clique no anúncio). ⚠️ **Ele precisa SUBIR para ~75% no dia
+em que virar `link_clicks`**, e isso está escrito na constante.
+
+## 🐛 O ROAS — medido, declarado, NÃO corrigido
+
+Dashboard: **3,54x**. Real da Meta: **0,71x**. Numerador de todos os canais,
+denominador só da Meta. Detalhe completo na seção própria.
+
+✅ **Decisão do dono: a conta não muda.** A tela ganhou a linha
+`receita de todos os canais ÷ gasto da Meta` (`DadosKpi.base`, genérico — o CPA
+tem a mesma forma quando alguém medir).
+
+⛔ **O ROAS por campanha (`overview.ts:393`) NÃO tem o defeito** e alimenta o
+Insights do Gerenciador. Eu travei o Gerenciador citando o defeito errado; o
+dono corrigiu. **Não unifique os dois.**
+
+## 📋 Regras novas registradas
+
+| Seção | O que |
+|---|---|
+| 📐 **Dois instrumentos não se comparam** | a razão entre medições de sistemas diferentes mede CONCORDÂNCIA, não fenômeno. Tabela de onde reaparece |
+| 🔤 **Bug por ambiguidade de NOME** | `inicioDaFita` = centro da etapa **ou** borda da área. O 1º desta base que não é de lógica |
+| 🟩💀 **Teste verde sobre caminho morto** | a varredura de órfãos inclui os TESTES deles |
+| 🔬 **Direção na asserção diferencial** | "não acrescenta" (`<=`) ≠ "é igual" (`===`) |
+| 🌱 **O que falta no seed do funil** | não é reetiquetar fonte, é criar jornada com checkout |
+
+## ➡️ PRÓXIMO, na ordem do dono
+
+1. **Varredura por arquivo do `06`** — não começou.
+2. **Gerenciador / Campanhas** — não começou. As três perguntas de sempre antes
+   de codificar.
+
+**Levantamento já feito:** 2.751 linhas (`overview.ts` 492 · `AdsManagerView`
+490 · `AdsTable` 447 · `AdsActionBar` 298 · `veiculacao.ts` 239 · `creatives.ts`
+204 · `NovaCampanhaModal` 125 · `metrics.ts` 98). O `04` tem **18 itens, todos
+❌** + 1 🔧.
+
+**Onde eu suspeito que estoura** — as três, e nenhuma é o ROAS:
+
+- **`AdsTable` com ~20 colunas.** Colunas congeladas + conjuntos nomeados é a
+  única parte do plano **sem modelo na referência**.
+- **`Distribuição por plataforma`** está 🔧 fora por a ferramenta ser
+  mono-plataforma — mas as vendas têm **4 `utmSource`**. Suspeito que o item
+  seja sobre ORIGEM DE TRÁFEGO e tenha sido descartado pelo motivo errado. É
+  medição, não opinião.
+- **`Linhas de rascunho com — nas métricas`** é "não medido ≠ zero" na tabela.
+  Conferir se `veiculacao.ts` já separa rascunho de pausado.
+
+---
+
 # 📌 ESTADO DA SESSÃO — 07/08/2026 (acabamento)
 
 > Substitui a seção anterior de 07/08, que descrevia o estado no COMEÇO do dia.
 > Tudo é commit LOCAL em `redesign/dashboard`. **A `main` está intacta e nada foi
-> para o GitHub** — 47 commits esperando decisão do dono.
+> para o GitHub.**
 
 ## ✅ TRÊS TELAS FECHADAS: Dashboard, Shell, Integrações › Visão geral
 
