@@ -795,29 +795,61 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
           com a janela certa em vez de precisar de aviso. */}
       {v.topCampaigns.length > 0 && (
         <Card titulo="Top campanhas" descricao="As que mais faturaram no período">
+          {/* 🎨 O CABECALHO APARECE UMA VEZ, e antes ele se repetia em TODA
+              linha — "Receita / Gasto / Vendas / ROAS" quatro vezes por
+              campanha, cinco campanhas, vinte rotulos para quatro colunas.
+
+              Era o que mais fazia o bloco parecer prototipo ao lado da imagem 1,
+              onde a tabela tem cabecalho unico. E nao era so estetica: rotulo
+              repetido em toda linha faz o olho reler a estrutura a cada item em
+              vez de varrer a coluna.
+
+              ⛔ O cabecalho e o corpo compartilham a MESMA `gridTemplateColumns`,
+              pela constante abaixo. Duas listas de coluna escritas a mao
+              divergem no primeiro ajuste, e a divergencia aparece como coluna
+              desalinhada — que se atribui a arredondamento por semanas. */}
           <div style={{ display: "flex", flexDirection: "column" }}>
-            {v.topCampaigns.map((c, i) => (
+            <div
+              className="text-caption text-text-muted"
+              style={{
+                display: "grid",
+                gridTemplateColumns: COLUNAS_CAMPANHA,
+                gap: 10,
+                padding: "0 8px 6px",
+                borderBottom: "1px solid var(--tk-border)",
+                marginBottom: 2,
+              }}
+            >
+              <span style={{ minWidth: 0 }}>Campanha</span>
+              <span style={{ textAlign: "right" }}>Receita</span>
+              <span style={{ textAlign: "right" }}>Gasto</span>
+              <span style={{ textAlign: "right" }}>Vendas</span>
+              <span style={{ textAlign: "right" }}>ROAS</span>
+            </div>
+
+            {v.topCampaigns.map((c) => (
               <div
                 key={c.id}
+                className="tk-linha-campanha"
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "minmax(0,2fr) repeat(4, minmax(0,86px))",
+                  gridTemplateColumns: COLUNAS_CAMPANHA,
                   gap: 10,
-                  alignItems: "baseline",
-                  padding: "9px 0",
-                  borderTop: i ? "1px solid var(--tk-border)" : undefined,
+                  alignItems: "center",
+                  minHeight: 40,
+                  padding: "0 8px",
+                  borderRadius: 8,
                 }}
               >
                 <span className="text-label text-text" style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {c.nome}
                 </span>
-                <ColunaCamp rotulo="Receita" valor={brl0(c.receita)} />
-                <ColunaCamp rotulo="Gasto" valor={brl0(c.gasto)} />
-                <ColunaCamp rotulo="Vendas" valor={String(c.vendas)} />
+                <CelulaCamp valor={brl0(c.receita)} />
+                <CelulaCamp valor={brl0(c.gasto)} />
+                <CelulaCamp valor={String(c.vendas)} />
                 {/* 🔴 "—" quando nao houve gasto. `0,00x` diria "gastou e nao
                     voltou nada", que e uma acusacao diferente de "nao gastou". */}
-                <ColunaCamp
-                  rotulo="ROAS"
+                <CelulaCamp
                   valor={c.roas == null ? "—" : `${c.roas.toFixed(2).replace(".", ",")}x`}
                   cor={c.roas == null ? undefined : corFinanceira(c.roas, "roas")}
                 />
@@ -1120,14 +1152,20 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
   );
 }
 
-/** Uma coluna do Top campanhas: rótulo miúdo em cima, número embaixo. */
-function ColunaCamp({ rotulo, valor, cor }: { rotulo: string; valor: string; cor?: string }) {
+/**
+ * ⛔ UMA constante para as colunas do Top campanhas — o cabeçalho e o corpo
+ * leem daqui. Duas listas escritas à mão divergem no primeiro ajuste.
+ */
+const COLUNAS_CAMPANHA = "minmax(0,2fr) repeat(4, minmax(0,86px))";
+
+/** Uma célula numérica do Top campanhas. O rótulo agora vive no cabeçalho. */
+function CelulaCamp({ valor, cor }: { valor: string; cor?: string }) {
   return (
-    <span style={{ textAlign: "right", minWidth: 0 }}>
-      <span className="text-caption text-text-muted" style={{ display: "block" }}>{rotulo}</span>
-      <span className="text-label" style={{ display: "block", color: cor ?? "var(--tk-text)", fontVariantNumeric: "tabular-nums" }}>
-        {valor}
-      </span>
+    <span
+      className="text-label"
+      style={{ textAlign: "right", minWidth: 0, color: cor ?? "var(--tk-text)", fontVariantNumeric: "tabular-nums" }}
+    >
+      {valor}
     </span>
   );
 }

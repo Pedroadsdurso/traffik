@@ -1562,6 +1562,24 @@ a {
   box-shadow: var(--tk-shadow-card);
 }
 
+/* Hover das linhas de lista (`06` §8): fundo neutro a 4%, raio 8, cobrindo a
+   linha INTEIRA. É o que substitui a borda entre linhas — sem hover, uma lista
+   sem borda perde o limite entre um item e o seguinte.
+
+   ⛔ Regra de CLASSE, não de elemento: seletor de elemento com `color` fora de
+   `@layer` sequestra a cor de todo componente novo, que é o bug que pintou o
+   rail de azul. Classe não tem esse alcance, e aqui não se declara `color`. */
+@layer base {
+  .tk-linha-breakdown,
+  .tk-linha-campanha {
+    transition: background-color var(--tk-dur-rapida) var(--tk-ease-padrao);
+  }
+  .tk-linha-breakdown:hover,
+  .tk-linha-campanha:hover {
+    background: color-mix(in oklch, var(--tk-text-secondary) 8%, transparent);
+  }
+}
+
 /* `.card-kicker` era o rótulo em ROXO no topo de cada bloco — o tell visual mais
    forte do design antigo. Vira o `text-micro` do sistema, em texto de apoio. */
 .tk-tema .card-kicker {

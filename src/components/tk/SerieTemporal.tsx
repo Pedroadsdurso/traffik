@@ -62,7 +62,12 @@ export function SerieTemporal({
 
   return (
     <div className="tk-serie" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <div style={{ position: "relative", height: 120, display: "flex", alignItems: "flex-end", gap: 2 }}>
+      {/* ⛔ `gap: 0` AQUI DE PROPÓSITO. A folga entre barras é 40% do PASSO
+          (`06` §4), e ela é feita por dentro do slot — `left/right: 20%` na
+          barra. Com `gap` no contêiner a folga seria fixa em pixels: com 7 dias
+          as barras ficariam gordas e a folga sumiria, com 90 dias o contrário.
+          A proporção só se mantém se a folga escalar junto com o passo. */}
+      <div style={{ position: "relative", height: 120, display: "flex", alignItems: "flex-end", gap: 0 }}>
         {permitirNegativo && (
           /* A linha de zero. Sem ela, uma barra para baixo não tem referência e
              o desenho não diz onde o lucro deixou de existir. */
@@ -105,10 +110,19 @@ export function SerieTemporal({
                       ? { top: `${zeroPct}%` }
                       : { bottom: `${100 - zeroPct}%` }
                     : null),
-                  left: 0,
-                  right: 0,
+                  // 60% de barra, 40% de folga — 20% de cada lado do passo.
+                  left: "20%",
+                  right: "20%",
                   height: `${Math.max(alturaPct, p.valor === 0 ? 0 : 1.5)}%`,
-                  borderRadius: 2,
+                  /* Raio no TOPO, e na base quando a barra desce do zero (`06`
+                     §4). O canto que encosta na linha de base fica vivo: barra
+                     arredondada nos quatro cantos flutua, e uma série temporal
+                     precisa parecer apoiada no eixo.
+                     `borderRadius` com 6px maior que metade da altura degenera
+                     sozinho no navegador, então a barra baixinha vira cápsula
+                     sem precisar de conta — que é o "raio total se a barra for
+                     fina" do mesmo parágrafo. */
+                  borderRadius: negativo ? "0 0 6px 6px" : "6px 6px 0 0",
                   /* 🔴 Prejuízo em vermelho, e não é enfeite: numa série de
                      lucro a cor é o que faz o dia ruim saltar antes de a pessoa
                      ler o eixo. É a mesma regra do `corFinanceira` — só o

@@ -72,7 +72,12 @@ export function Heatmap({
 
   return (
     <div style={{ overflowX: "auto" }}>
-      <table style={{ borderCollapse: "separate", borderSpacing: 2, minWidth: 560 }}>
+      {/* 3px de folga (`06` §7). ⚠️ CONFERIDO CONTRA AS REFERÊNCIAS, e elas
+          DISCORDAM entre si: na imagem 1 as células são coladas, num bloco
+          contínuo; na referência 4 (Insighta) elas têm folga e raio. O `06`
+          codifica a referência 4, e a precedência do acabamento é dele. Grade
+          colada é o que mais faz o nosso parecer cru. */}
+      <table style={{ borderCollapse: "separate", borderSpacing: 3, minWidth: 560 }}>
         <thead>
           <tr>
             <th />
@@ -132,7 +137,7 @@ function Celula({
       style={{
         width: 18,
         height: 18,
-        borderRadius: 3,
+        borderRadius: 4,
         /* ⛔ Vazia recebe HACHURA, não um tom fraco. Ver a nota do componente. */
         background: vazia
           ? HACHURA

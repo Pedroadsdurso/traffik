@@ -200,6 +200,35 @@ Não é o escuro invertido:
 
 ---
 
+## 13. ÍCONE EM RECIPIENTE TINGIDO
+
+> Acrescentado em 07/08/2026, por decisão do dono. Estava na **imagem 1** e não
+> em nenhuma das doze seções — era detalhe solto de uma referência, que é
+> exatamente como um item de acabamento se perde.
+
+Ícone nunca aparece solto sobre o fundo do cartão: ele mora num recipiente
+tingido. **São duas formas, e a diferença carrega significado.**
+
+| Forma | Onde | Tingimento | Tamanho |
+|---|---|---|---|
+| **Círculo** | linha de lista com severidade (Alertas) | pela **severidade** — âmbar, vermelho, azul | 28px, ícone 15px |
+| **Quadrado arredondado** (raio 10px) | bloco de estado, cabeçalho de seção | **neutro** | 36px, ícone 18px |
+
+**A regra por trás:** círculo é para o que **classifica uma linha** — ele responde
+"que tipo de coisa é esta?", e por isso é tingido pela categoria. Quadrado é para
+o que **ilustra um bloco** — decoração honesta, sem afirmar nada, e por isso é
+neutro.
+
+⛔ **Quadrado tingido por categoria é o erro a evitar**: parece um selo de estado
+e não é. Se o ícone precisa dizer "está com erro", ele é círculo e está numa
+linha, não num bloco.
+
+⚠️ O tingimento usa `--tk-tint-*` com o texto em `--tk-on-tint-*`, sempre o par
+do mesmo tom. Cor pura sobre tingimento é o par de 3,55:1 que esses tokens
+existem para não deixar acontecer.
+
+---
+
 ## ORDEM DE APLICAÇÃO
 
 O que dá mais resultado por linha escrita:

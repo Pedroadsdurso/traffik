@@ -56,7 +56,7 @@ export function BreakdownPanel({
     <div className="tk-breakdown" style={{ display: "flex", flexDirection: "column" }}>
       <div
         className="text-caption text-text-muted"
-        style={{ display: "flex", gap: 10, paddingBottom: 6, borderBottom: "1px solid var(--tk-border)" }}
+        style={{ display: "flex", gap: 10, padding: "0 8px 6px", borderBottom: "1px solid var(--tk-border)", marginBottom: 2 }}
       >
         <span style={{ flex: 1, minWidth: 0 }}>{rotuloDimensao}</span>
         {mostrarVendas && <span style={{ width: 54, textAlign: "right" }}>Vendas</span>}
@@ -64,9 +64,38 @@ export function BreakdownPanel({
         <span className="tk-col-pct" style={{ width: 44, textAlign: "right" }}>%</span>
       </div>
 
+      {/* 🎨 A BARRA DE PROPORÇÃO FICA ATRÁS DO TEXTO (`06` §8), e não numa linha
+          própria embaixo. Três ganhos, e o terceiro é o que importa:
+
+          1. some uma linha por item — a lista encolhe quase à metade;
+          2. a comparação entre linhas passa a ser lida no MESMO gesto em que se
+             lê o nome, em vez de exigir um segundo passe pelos tracinhos;
+          3. a borda entre linhas some. Com a barra embaixo, ela era necessária
+             para dizer onde um item termina; com o preenchimento, cada linha já
+             é um bloco. Separação por ESPAÇO e por hover, que é o §8 inteiro.
+
+          ⚠️ A barra é RELATIVA AO MAIOR da lista, não ao total. Ela existe para
+          comparar as linhas entre si; a participação no total é a coluna de %.
+          `barWidth` já vem calculada do hook — aqui não se divide nada, que é
+          como nasceram os dois `div` de contratos opostos. */}
       {linhas.map((l) => (
-        <div key={l.name} style={{ padding: "8px 0", borderBottom: "1px solid var(--tk-border)" }}>
-          <div style={{ display: "flex", gap: 10, alignItems: "baseline" }}>
+        <div
+          key={l.name}
+          className="tk-linha-breakdown"
+          style={{ position: "relative", padding: "0 8px", borderRadius: 8, overflow: "hidden" }}
+        >
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              inset: 0,
+              width: l.barWidth,
+              /* 10% (`06` §8). Mais que isso e o preenchimento compete com o
+                 texto por cima dele; menos e some no tema claro. */
+              background: "color-mix(in oklch, var(--tk-primary) 10%, transparent)",
+            }}
+          />
+          <div style={{ position: "relative", display: "flex", gap: 10, alignItems: "center", minHeight: 40 }}>
             <span
               className="text-label text-text"
               style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
@@ -87,12 +116,6 @@ export function BreakdownPanel({
             <span className="text-caption text-text-muted tk-col-pct" style={{ width: 44, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
               {l.pctLabel ?? "—"}
             </span>
-          </div>
-          {/* A barra é RELATIVA AO MAIOR da lista, não ao total — quem já vem
-              calculada é a `barWidth` do hook. Ela existe para comparar as
-              linhas entre si; a participação no total é a coluna de %. */}
-          <div style={{ marginTop: 5, height: 4, borderRadius: 2, background: "var(--tk-surface-hover)", overflow: "hidden" }}>
-            <div style={{ width: l.barWidth, height: "100%", background: "var(--tk-primary)", borderRadius: 2 }} />
           </div>
         </div>
       ))}
