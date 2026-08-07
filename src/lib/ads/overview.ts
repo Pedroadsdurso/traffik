@@ -43,6 +43,13 @@ export interface CampaignRow {
    * traduz para linguagem de tela é `lib/ads/veiculacao.ts`.
    */
   effectiveStatus: string | null;
+  /**
+   * `objective` da Meta, cru (`OUTCOME_SALES`, `OUTCOME_LEADS`…).
+   *
+   * ⚠️ NULO = a campanha nunca foi sincronizada, **não** "sem objetivo" — toda
+   * campanha da Meta tem um. Quem traduz para a tela é a tabela.
+   */
+  objective: string | null;
   accountId: string;
   /// Orçamento na campanha ⇒ CBO. Nulo ⇒ ABO (orçamento nos conjuntos).
   dailyBudget: number | null;
@@ -150,7 +157,12 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
     }),
     prisma.campaign.findMany({
       where: { adAccount: { userId, ...accountWhere } },
-      select: { id: true, fbCampaignId: true, name: true, status: true, effectiveStatus: true, dailyBudget: true, lifetimeBudget: true, bidStrategy: true, adAccountId: true },
+      /* `objective` entrou em 07/08/2026 para o subtítulo `Objetivo | Plataforma`
+         da tabela (`04`, CAMPANHAS). A coluna existe no schema desde sempre e o
+         `sync.ts` a escreve — ela só não era PEDIDA aqui, então chegava
+         `undefined` na tela sem nada acusar. É a armadilha do `pedidoId`, de
+         novo: coluna fora do `select` não quebra `tsc`, `lint` nem `build`. */
+      select: { id: true, fbCampaignId: true, name: true, status: true, effectiveStatus: true, objective: true, dailyBudget: true, lifetimeBudget: true, bidStrategy: true, adAccountId: true },
     }),
     prisma.adSet.findMany({
       where: { adAccount: { userId, ...accountWhere } },
@@ -335,6 +347,7 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
       // Orçamento/lance não existem no nível de anúncio na Meta.
       lifetimeBudget: null,
       bidStrategy: null,
+      objective: campaignObjectiveById.get(a.campaignId) ?? null,
       id: a.id,
       fbId: a.fbAdId,
       name: a.name,
@@ -382,6 +395,10 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
     );
 
   const campaignNameById = new Map(campaigns.map((c) => [c.id, c.name]));
+  /* O objetivo do anuncio e do conjunto e o da CAMPANHA deles — a Meta so o
+     define nesse nivel. Herdar aqui e o que permite a tabela mostrar o mesmo
+     subtitulo nos tres niveis sem cada um consultar o banco de novo. */
+  const campaignObjectiveById = new Map(campaigns.map((c) => [c.id, c.objective]));
 
   const campaignRows: CampaignRow[] = campaigns.map((c) => {
     const agg = sumAds(adsByCampaign.get(c.id));
@@ -398,6 +415,7 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
       fbId: c.fbCampaignId,
       name: c.name,
       status: c.status,
+      objective: c.objective,
       effectiveStatus: c.effectiveStatus,
       accountId: c.adAccountId,
       dailyBudget: c.dailyBudget != null ? num(c.dailyBudget) : null,
@@ -428,6 +446,7 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
       name: a.name,
       status: a.status,
       effectiveStatus: a.effectiveStatus,
+      objective: campaignObjectiveById.get(a.campaignId) ?? null,
       accountId: a.adAccountId,
       campaignId: a.campaignId,
       campaignName: campaignNameById.get(a.campaignId) ?? "",

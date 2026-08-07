@@ -93,7 +93,8 @@
     "test:migrar-layout": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-migrar-layout.mjs",
     "test:blocos-vazios": "tsx scripts/teste-blocos-vazios.mjs",
     "test:banco": "npm run test:auditoria-metricas && npm run test:checkout-jornada && npm run test:cron-reserva && npm run test:efeitos && npm run test:match && npm run test:metricas-lote && npm run test:pedidos && npm run test:previa-regra && npm run test:receptor && npm run test:taxa-fixa && npm run test:utm-orfa && npm run test:utm-venda && npm run test:veiculacao:e2e",
-    "test:altura-controle": "node scripts/teste-altura-controle.mjs"
+    "test:altura-controle": "node scripts/teste-altura-controle.mjs",
+    "dev:campanhas": "node scripts/campanhas-dev.mjs"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
