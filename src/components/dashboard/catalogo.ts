@@ -35,16 +35,18 @@
 export type Zona = "hero" | "faixa" | "paineis";
 
 /**
- * ⛔ AS LARGURAS DECLARADAS (`um-terco | metade | cheia`) SAÍRAM em 07/08/2026,
- * por decisão do dono. No lugar entrou uma grade de 12 colunas com
- * REDIMENSIONAMENTO POR ENCAIXE.
+ * ⛔ NÃO EXISTE LISTA DE PASSOS DE LARGURA. Um bloco aceita **qualquer inteiro**
+ * do mínimo dele até 12.
  *
- * A diferença não é de granularidade, é de gesto: escolher entre três rótulos é
- * um formulário; arrastar o canto e ver o bloco encaixar é manipulação direta.
- * O encaixe é o que dá liberdade sem quebrar — pixel livre produziria linhas de
- * 11,3 colunas e um layout que nunca fecha.
+ * Havia `[3, 4, 6, 8, 12]` aqui, e o dono recusou com a razão certa: cinco
+ * presets são uma lista curada, e lista curada não dá sensação de liberdade —
+ * dá sensação de formulário com cinco opções. O que impede o layout de quebrar é
+ * o ENCAIXE em coluna inteira e o mínimo por bloco, não a escassez de opções.
+ *
+ * ⚠️ E a regra do desempate morreu junto: entre inteiros consecutivos não há
+ * empate. Ela era consequência da lista, não uma decisão de produto — e enquanto
+ * existiu produziu um controle inerte (as setas da alça).
  */
-export const PASSOS_COL = [3, 4, 6, 8, 12] as const;
 
 /** Colunas da grade. Doze porque é o único número que divide por 2, 3, 4 e 6. */
 export const COLUNAS_GRADE = 12;
@@ -78,8 +80,23 @@ export interface MetaBloco {
    */
   colMin: number;
   colPadrao: number;
-  linhasMin: number;
-  linhasPadrao: number;
+  /**
+   * 🔴 A ALTURA VEM DO CONTEÚDO. Só os blocos marcados aqui ganham alça de
+   * altura, e mesmo eles têm o conteúdo como piso.
+   *
+   * Altura declarada por bloco foi a causa do painel esburacado: um bloco vazio
+   * reservava as 6 linhas que teria COM dado só para escrever "Sem dado neste
+   * período", ao lado de outro de 3 — e os testadores veem estado vazio o tempo
+   * todo. Reservar espaço para um dado que não existe é a versão de layout de
+   * afirmar o que não se mediu.
+   *
+   * ⚠️ É `true` só onde a altura MUDA a leitura: série temporal ganha resolução
+   * vertical, lista rolável mostra mais linhas. Tabela de três linhas não ganha
+   * nada — ali a altura extra é ar.
+   */
+  alturaAjustavel?: boolean;
+  /** Piso em linhas, só para os ajustáveis. O conteúdo ainda pode passar dele. */
+  linhasMin?: number;
 }
 
 /* ⚠️ Hero e faixa NÃO estão aqui: são listas de MÉTRICA, não de bloco, e o
@@ -92,9 +109,7 @@ export const CATALOGO_META = [
     descricao: "Cliques → checkouts → vendas, com a taxa de cada passo",
     zona: "paineis",
     colMin: 4,
-    colPadrao: 4,
-    linhasMin: 4,
-    linhasPadrao: 5,
+    colPadrao: 4,
   },
   {
     id: "fontes",
@@ -102,9 +117,7 @@ export const CATALOGO_META = [
     descricao: "De qual canal veio o faturamento",
     zona: "paineis",
     colMin: 4,
-    colPadrao: 4,
-    linhasMin: 4,
-    linhasPadrao: 6,
+    colPadrao: 4,
   },
   {
     id: "produtos",
@@ -112,9 +125,7 @@ export const CATALOGO_META = [
     descricao: "Quais produtos faturaram mais",
     zona: "paineis",
     colMin: 4,
-    colPadrao: 4,
-    linhasMin: 4,
-    linhasPadrao: 6,
+    colPadrao: 4,
   },
   {
     id: "pagamentos",
@@ -122,39 +133,37 @@ export const CATALOGO_META = [
     descricao: "Como os compradores pagaram",
     zona: "paineis",
     colMin: 4,
-    colPadrao: 4,
-    linhasMin: 4,
-    linhasPadrao: 6,
+    colPadrao: 4,
   },
   {
     id: "vendas-por-dia",
+    alturaAjustavel: true,
+    linhasMin: 4,
     titulo: "Vendas por dia",
     descricao: "Quantas vendas e quanto faturou em cada dia",
     zona: "paineis",
     colMin: 6,
-    colPadrao: 6,
-    linhasMin: 4,
-    linhasPadrao: 6,
+    colPadrao: 6,
   },
   {
     id: "vendas-por-hora",
+    alturaAjustavel: true,
+    linhasMin: 4,
     titulo: "Vendas por horário",
     descricao: "As 24 horas do período filtrado",
     zona: "paineis",
     colMin: 6,
-    colPadrao: 6,
-    linhasMin: 4,
-    linhasPadrao: 6,
+    colPadrao: 6,
   },
   {
     id: "lucro-por-hora",
+    alturaAjustavel: true,
+    linhasMin: 4,
     titulo: "Lucro por horário",
     descricao: "Receita menos a fatia de custo daquela hora",
     zona: "paineis",
     colMin: 6,
-    colPadrao: 6,
-    linhasMin: 4,
-    linhasPadrao: 6,
+    colPadrao: 6,
   },
   {
     id: "aprovacao",
@@ -162,19 +171,17 @@ export const CATALOGO_META = [
     descricao: "Quanto de cada forma de pagamento é aprovado",
     zona: "paineis",
     colMin: 4,
-    colPadrao: 4,
-    linhasMin: 3,
-    linhasPadrao: 5,
+    colPadrao: 4,
   },
   {
     id: "atividade",
+    alturaAjustavel: true,
+    linhasMin: 4,
     titulo: "Atividade recente",
     descricao: "Os últimos eventos de venda e rastreamento",
     zona: "paineis",
     colMin: 4,
-    colPadrao: 4,
-    linhasMin: 4,
-    linhasPadrao: 7,
+    colPadrao: 4,
   },
 ] as const satisfies readonly MetaBloco[];
 
@@ -185,61 +192,57 @@ export function metaDoBloco(id: string): MetaBloco | undefined {
   return CATALOGO_META.find((b) => b.id === id);
 }
 
-/**
- * Os passos de coluna que ESTE bloco aceita — os da grade que não violam o
- * mínimo dele, mais o próprio mínimo quando ele não é um passo.
- *
- * ⚠️ O mínimo entra na lista mesmo fora de `PASSOS_COL`. Um bloco de `colMin: 5`
- * teria como menor passo o 6, e o 5 que ele declarou aceitar seria inalcançável
- * — um limite que o produto anuncia e não entrega.
- */
+/** Toda largura inteira do mínimo do bloco até a grade cheia. */
 export function passosDoBloco(meta: MetaBloco): number[] {
-  const passos = PASSOS_COL.filter((c) => c >= meta.colMin);
-  const lista = passos.includes(meta.colMin as (typeof PASSOS_COL)[number])
-    ? [...passos]
-    : [meta.colMin, ...passos];
-  return lista.filter((c) => c <= COLUNAS_GRADE).sort((a, b) => a - b);
+  const larguras: number[] = [];
+  for (let c = meta.colMin; c <= COLUNAS_GRADE; c++) larguras.push(c);
+  return larguras;
 }
 
 /**
- * Encaixa uma largura CRUA (a que o arrasto produziu) no passo mais próximo.
+ * Encaixa uma largura CRUA (a que o arrasto produziu) na coluna inteira mais
+ * próxima, entre o mínimo do bloco e a grade cheia.
  *
- * ⛔ Mais próximo, e não "o maior que cabe": arredondar sempre para baixo faria o
- * bloco só encolher enquanto o ponteiro sobe, e o gesto pareceria travado. O
- * encaixe tem de poder ir nos dois sentidos.
+ * ⛔ Arredondar, e não truncar: truncar faria o bloco só encolher enquanto o
+ * ponteiro sobe, e a metade de cada coluna ficaria inalcançável — o gesto
+ * pareceria travar antes de chegar no tamanho pedido.
  */
 export function encaixarColunas(bruto: number, meta: MetaBloco): number {
-  const opcoes = passosDoBloco(meta);
-  let melhor = opcoes[0]!;
-  for (const c of opcoes) if (Math.abs(c - bruto) < Math.abs(melhor - bruto)) melhor = c;
-  return melhor;
+  if (!Number.isFinite(bruto)) return meta.colPadrao;
+  return Math.max(meta.colMin, Math.min(COLUNAS_GRADE, Math.round(bruto)));
 }
 
 /**
- * O passo SEGUINTE (ou anterior) na lista do bloco.
+ * Uma coluna para a direita ou para a esquerda, com o mínimo e o teto aplicados.
  *
- * 🔴 ELE EXISTE PORQUE AS SETAS DA ALÇA NÃO FAZIAM NADA — visto na tela em
+ * 🔴 ELE EXISTIU PORQUE AS SETAS DA ALÇA NÃO FAZIAM NADA — visto na tela em
  * 07/08/2026, com o Funil em 4 colunas e `ArrowRight` duas vezes sem mover um
- * pixel. A causa era a composição de duas regras corretas: o teclado somava
- * `+1` coluna, e o encaixe devolvia o passo mais próximo de 5 — que, pelo
- * desempate para baixo, é o próprio 4. **De qualquer passo, uma seta voltava
- * para ele.**
+ * pixel. A causa era a lista curada de larguras: o teclado somava `+1` e o
+ * encaixe devolvia o preset mais próximo de 5, que pelo desempate era o próprio
+ * 4. De qualquer preset, uma seta voltava para ele.
  *
- * ⛔ Não conserte isto afrouxando o desempate: ele é o que impede o bloco de
- * crescer sozinho no arrasto. O teclado é discreto por natureza e tem de andar
- * por ÍNDICE na lista de passos, não por unidade de coluna. As duas entradas
- * falam línguas diferentes, e essa é a tradução.
+ * ⚠️ Com **todas as colunas inteiras** a função virou quase trivial — e FICA
+ * assim mesmo. Ela é o ponto único onde "andar um passo" é definido, e é o que
+ * garante o clamp do mínimo também para o teclado. Sem ela, o `+1` voltaria a
+ * ser escrito na tela e o mínimo do bloco ficaria a cargo de quem lembrasse.
  */
 export function proximoPasso(meta: MetaBloco, col: number, direcao: number): number {
-  const opcoes = passosDoBloco(meta);
-  const atual = opcoes.indexOf(encaixarColunas(col, meta));
-  const i = Math.max(0, Math.min(opcoes.length - 1, atual + Math.sign(direcao)));
-  return opcoes[i]!;
+  return encaixarColunas(encaixarColunas(col, meta) + Math.sign(direcao), meta);
 }
 
-/** Altura em linhas: passo de 1, piso no mínimo do bloco, teto para não fugir. */
-export function encaixarLinhas(bruto: number, meta: MetaBloco): number {
-  return Math.max(meta.linhasMin, Math.min(24, Math.round(bruto)));
+
+/**
+ * Altura em linhas, para os blocos que declaram alça de altura.
+ *
+ * ⛔ Bloco sem `alturaAjustavel` devolve `undefined`: ele NÃO tem altura no
+ * layout, e gravar uma seria dado morto que o próximo leitor aplicaria por
+ * engano. `undefined` é o que faz a grade usar a altura do conteúdo.
+ */
+export function encaixarLinhas(bruto: number | undefined, meta: MetaBloco): number | undefined {
+  if (!meta.alturaAjustavel) return undefined;
+  const piso = meta.linhasMin ?? 3;
+  if (bruto === undefined || !Number.isFinite(bruto)) return piso;
+  return Math.max(piso, Math.min(24, Math.round(bruto)));
 }
 
 /**

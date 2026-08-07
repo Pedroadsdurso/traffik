@@ -116,7 +116,7 @@ function sanearEnvelope(raw: LayoutV2 | LayoutV3, versao: 2 | 3): LayoutZonas {
         : typeof p.col === "number"
           ? p.col
           : meta.colPadrao;
-    const linhasBrutas = versao === 2 || typeof p.linhas !== "number" ? meta.linhasPadrao : p.linhas;
+    const linhasBrutas = versao === 2 || typeof p.linhas !== "number" ? undefined : p.linhas;
     paineis.push({
       id: meta.id,
       col: encaixarColunas(colBruta, meta),
@@ -140,8 +140,15 @@ export interface PainelGrade {
   id: string;
   /** Largura em colunas de 12. Nunca abaixo do `colMin` do bloco. */
   col: number;
-  /** Altura em linhas da grade. Nunca abaixo do `linhasMin` do bloco. */
-  linhas: number;
+  /**
+   * Altura em linhas — **só nos blocos `alturaAjustavel`**.
+   *
+   * ⛔ `undefined` não é "não sei": é "a altura é a do CONTEÚDO", que é o padrão
+   * do produto. Gravar um número aqui para um bloco sem alça de altura seria dado
+   * morto, e o próximo leitor o aplicaria como se fosse escolha do usuário —
+   * reservando espaço para dado que não existe.
+   */
+  linhas?: number;
 }
 
 /** O layout novo: três zonas, cada uma com suas regras. */
@@ -167,7 +174,10 @@ export function layoutPadrao(): LayoutZonas {
     paineis: CATALOGO_META.filter((b) => b.zona === "paineis").map((b) => ({
       id: b.id,
       col: b.colPadrao,
-      linhas: b.linhasPadrao,
+      /* ⛔ Sem altura: quem não é `alturaAjustavel` não tem `linhas` no layout.
+         `encaixarLinhas` devolve `undefined` para eles, e é esse `undefined` que
+         faz a grade usar a altura do CONTEÚDO — a correção do esburacado. */
+      linhas: encaixarLinhas(undefined, b),
     })),
   };
 }
@@ -224,8 +234,12 @@ const COLUNAS_ANTIGAS = 12;
  * mais margem; a de hoje vale `ALTURA_LINHA` (44px). O fator de 0,75 é o que faz
  * um gráfico de `h: 8` chegar com 6 linhas — a mesma altura na tela, que é o que
  * o usuário reconhece. Converter 1:1 dobraria todo bloco de gráfico.
+ *
+ * ⚠️ E ela devolve `undefined` para bloco sem `alturaAjustavel`: a altura
+ * gravada no grid antigo era do GRID, não uma escolha sobre aquele bloco.
+ * Preservá-la reintroduziria o esburacado que a altura por conteúdo resolve.
  */
-export function linhasDoGridAntigo(h: number, meta: MetaBloco): number {
+export function linhasDoGridAntigo(h: number, meta: MetaBloco): number | undefined {
   return encaixarLinhas(h * 0.75, meta);
 }
 

@@ -75,8 +75,54 @@ import type { TraffikView } from "../../useTraffikState";
 /* A grade da zona 3 tem SEIS colunas, não doze: com seis, 1/3 são 2 e 1/2 são 3
    — inteiros exatos. Com doze, um terço daria 4 e a conta ainda fecharia, mas a
    grade aceitaria larguras que o catálogo não oferece, e alguém acabaria usando. */
-/* ⛔ O `COLUNAS: Record<Largura, number>` SAIU. A grade agora tem doze colunas e
-   a largura de cada painel é um número nelas — não um rótulo traduzido aqui. */
+/**
+ * 🔴 A GRADE — doze colunas, e a ALTURA VEM DO CONTEÚDO.
+ *
+ * `gridAutoRows: "auto"` é a correção do painel esburacado dos prints de
+ * 07/08/2026. Com linha de altura fixa e `grid-row: span N`, um bloco VAZIO
+ * reservava as 6 linhas que teria com dado só para escrever "Sem dado neste
+ * período" — ao lado de outro de 3. E estado vazio é o que os testadores mais
+ * veem.
+ *
+ * ⚠️ `alignItems` fica no PADRÃO (`stretch`), de propósito: é ele que faz os
+ * blocos de uma mesma linha terminarem na mesma altura, alinhados pelo maior. O
+ * menor recebe `distribuir` e centra o conteúdo na sobra, em vez de deixá-la
+ * embaixo.
+ *
+ * ⛔ E sem `grid-auto-flow: dense`. Ele preenche buracos com blocos de MAIS
+ * ADIANTE na lista, e a ordem que o usuário arrastou deixaria de ser a ordem que
+ * ele vê. Se sobrar buraco depois da altura por conteúdo, a conversa é outra —
+ * mas o buraco de agora não era ele.
+ */
+const GRADE: React.CSSProperties = {
+  display: "grid",
+  gap: "var(--tk-gap-grid)",
+  gridTemplateColumns: `repeat(${COLUNAS_GRADE}, minmax(0, 1fr))`,
+  gridAutoRows: "auto",
+};
+
+/**
+ * A célula de um painel na grade.
+ *
+ * ⚠️ `linhas` vira `minHeight`, NÃO `grid-row: span`. A diferença é a que
+ * importa: `span` é uma altura FIXA e o conteúdo maior vaza ou é cortado;
+ * `minHeight` é um PISO, e o bloco cresce quando precisa. É o que permite ter
+ * alça de altura sem voltar a reservar espaço para dado que não existe.
+ *
+ * ⚠️ E ele só vale com DADO — ver o comentário dentro da função.
+ */
+function celulaDaGrade(col: number, linhas: number | undefined, temDado: boolean): React.CSSProperties {
+  return {
+    gridColumn: `span ${col}`,
+    minWidth: 0,
+    /* ⛔ O PISO DE ALTURA NÃO VALE NO ESTADO VAZIO. Um bloco que diz "Sem dado
+       neste período" ocupando as 4 linhas que teria COM dado é exatamente o
+       esburacado que a altura por conteúdo veio resolver — e estado vazio é o que
+       os testadores mais veem. A altura escolhida pelo usuário é sobre o BLOCO
+       COM DADO; aplicá-la ao vazio reserva espaço para o que não existe. */
+    ...(linhas && temDado ? { minHeight: linhas * ALTURA_LINHA } : null),
+  };
+}
 
 type MetricaHeat = "revenue" | "sales" | "profit";
 const ROTULO_HEAT: Record<MetricaHeat, string> = { revenue: "Receita", sales: "Vendas", profit: "Lucro" };
@@ -858,15 +904,7 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
                ⛔ NÃO use `grid-auto-flow: dense`. Ele preenche buracos com
                blocos de MAIS ADIANTE na lista, e aí a ordem que o usuário
                arrastou deixa de ser a ordem que ele vê. */
-            <div
-              ref={gradeRef}
-              style={{
-                display: "grid",
-                gap: "var(--tk-gap-grid)",
-                gridTemplateColumns: `repeat(${COLUNAS_GRADE}, minmax(0, 1fr))`,
-                gridAutoRows: `${ALTURA_LINHA}px`,
-              }}
-            >
+            <div ref={gradeRef} style={GRADE}>
               {layout.paineis.map((p, i) => {
                 const r = RENDERS[p.id as keyof typeof RENDERS];
                 const meta = metaDoBloco(p.id);
@@ -874,7 +912,7 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
                 return (
                   <div
                     key={p.id}
-                    style={{ gridColumn: `span ${p.col}`, gridRow: `span ${p.linhas}`, minWidth: 0, minHeight: 0 }}
+                    style={celulaDaGrade(p.col, p.linhas, r.temDado(v))}
                   >
                     <ItemEdicao
                       titulo={meta.titulo}
@@ -910,7 +948,11 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
                           ed.redimensionar(
                             p.id,
                             dCol ? proximoPasso(meta, p.col, dCol) : p.col,
-                            p.linhas + dLinhas,
+                            /* ⚠️ Bloco sem `alturaAjustavel` ignora `dLinhas` —
+                               `encaixarLinhas` devolve `undefined` para ele. A
+                               seta não faz nada ali, e é honesto: aquele bloco
+                               tem a altura do conteúdo, por decisão. */
+                            dLinhas ? (p.linhas ?? 0) + dLinhas : p.linhas,
                           ),
                       }}
                     >
@@ -956,24 +998,17 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
         const visiveis = layout.paineis.filter((p) => RENDERS[p.id as keyof typeof RENDERS]?.temDado(v));
         if (visiveis.length === 0) return null;
         return (
-          <div
-            style={{
-              display: "grid",
-              gap: "var(--tk-gap-grid)",
-              gridTemplateColumns: `repeat(${COLUNAS_GRADE}, minmax(0, 1fr))`,
-              gridAutoRows: `${ALTURA_LINHA}px`,
-            }}
-          >
+          <div style={GRADE}>
             {visiveis.map((p) => {
               const r = RENDERS[p.id as keyof typeof RENDERS];
               const meta = metaDoBloco(p.id);
               if (!r || !meta) return null;
               return (
-                <div
-                  key={p.id}
-                  style={{ gridColumn: `span ${p.col}`, gridRow: `span ${p.linhas}`, minWidth: 0, minHeight: 0 }}
-                >
-                  <Card preencher titulo={meta.titulo} descricao={meta.descricao} style={{ overflow: "hidden" }}>
+                <div key={p.id} style={celulaDaGrade(p.col, p.linhas, r.temDado(v))}>
+                  {/* `preencher` + `distribuir`: os blocos de uma linha esticam
+                      até a altura do MAIOR (é o `stretch` do grid), e o menor
+                      distribui o conteúdo em vez de deixar o vazio embaixo. */}
+                  <Card preencher distribuir titulo={meta.titulo} descricao={meta.descricao}>
                     {r.render(v)}
                   </Card>
                 </div>

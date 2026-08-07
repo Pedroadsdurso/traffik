@@ -1588,3 +1588,25 @@ a {
   font-size: 11px; line-height: 14px; font-weight: 500;
   letter-spacing: 0.04em; text-transform: uppercase;
 }
+
+/* ── Vendas por país: o globo sai quando o bloco fica estreito ───────────────
+   ⛔ CONTAINER QUERY, e não breakpoint de janela. O que decide se o globo cabe é
+   a largura DO BLOCO — ele pode estar num painel de 4 colunas numa tela de
+   1920px, e um `@media` acertaria a janela e erraria o bloco.
+
+   ⚠️ 640px é ≈ 7 colunas na largura útil de hoje. Abaixo disso o globo e o
+   ranking dividiriam ~300px cada, e nenhum dos dois se lê — melhor entregar um
+   inteiro do que dois espremidos. O ranking fica porque é ele que responde
+   "qual país e quanto"; o globo mostra distribuição, que é o que se pode perder.
+
+   ⚠️ Vai em `@layer components` de propósito: CSS sem camada vence utilitário do
+   Tailwind, e uma regra nua aqui sequestraria a cor ou o display de qualquer
+   componente novo que usasse a mesma classe. É a regra que custou os 6 de 10
+   links azuis do rail. */
+@layer components {
+  .tk-paises { container-type: inline-size; }
+
+  @container (max-width: 640px) {
+    .tk-paises-globo { display: none; }
+  }
+}

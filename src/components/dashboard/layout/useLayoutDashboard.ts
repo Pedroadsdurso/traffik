@@ -193,7 +193,7 @@ export function useLayoutDashboard(workspaceId?: string | null) {
     setLayout((l) => {
       const meta = CATALOGO_META.find((b) => b.id === id);
       if (!meta || l.paineis.some((p) => p.id === id)) return l;
-      const novo = { id, col: meta.colPadrao, linhas: meta.linhasPadrao };
+      const novo = { id, col: meta.colPadrao, linhas: encaixarLinhas(undefined, meta) };
       const lista = [...l.paineis];
       lista.splice(indice ?? lista.length, 0, novo);
       return { ...l, paineis: lista };
@@ -215,7 +215,7 @@ export function useLayoutDashboard(workspaceId?: string | null) {
    * do ponteiro. Encaixar só ao soltar faria o usuário arrastar às cegas e
    * descobrir o resultado depois — o mesmo defeito da rejeição pós-soltura.
    */
-  const redimensionar = useCallback((id: string, colBruta: number, linhasBrutas: number) => {
+  const redimensionar = useCallback((id: string, colBruta: number, linhasBrutas: number | undefined) => {
     setLayout((l) => {
       const meta = metaDoBloco(id);
       if (!meta) return l;

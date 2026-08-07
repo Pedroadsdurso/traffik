@@ -92,7 +92,7 @@ export async function loadLayoutZonas(workspaceId?: string | null): Promise<unkn
 }
 
 export async function saveLayoutZonas(
-  layout: { hero: string[]; faixa: string[]; paineis: { id: string; col: number; linhas: number }[] },
+  layout: { hero: string[]; faixa: string[]; paineis: { id: string; col: number; linhas?: number }[] },
   workspaceId?: string | null,
 ): Promise<{ ok: true }> {
   const userId = await requireUserId();

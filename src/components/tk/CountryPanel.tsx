@@ -102,34 +102,53 @@ export function CountryPanel({
     [linhas],
   );
 
+  /* ⛔ O ESTADO VAZIO COLAPSA. Ele sai do `flex` com altura reservada e vira só
+     a mensagem — a mesma regra dos painéis do catálogo. Um bloco que ocupa 420px
+     para dizer "não há venda com país" é a versão de layout de afirmar o que não
+     se mediu, e é o que os testadores mais veem. */
+  if (linhas.length === 0) {
+    return (
+      <EmptyState
+        titulo="Nenhuma venda com país no período"
+        causa={
+          <>
+            O país vem do <strong>gateway</strong> ou do <strong>clique rastreado</strong>. Se há
+            vendas mas nenhuma com país, a integração não está devolvendo essa informação.
+          </>
+        }
+        acao={{ texto: "Conferir integrações", href: "/dashboard/integracoes" }}
+      />
+    );
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10, minHeight: 0 }}>
-      {linhas.length === 0 ? (
-        /* 🔴 O estado vazio é o que os testadores mais veem. Ele não diz só "não
-           há" — diz DE ONDE o país viria e o que conferir. O globo antigo
-           mostrava uma esfera morta com "nenhuma venda com país identificado",
-           que informa exatamente o que já dava para ver. */
-        <EmptyState
-          titulo="Nenhuma venda com país no período"
-          causa={
-            <>
-              O país vem do <strong>gateway</strong> ou do <strong>clique rastreado</strong>. Se há
-              vendas mas nenhuma com país, a integração não está devolvendo essa informação.
-            </>
-          }
-          acao={{ texto: "Conferir integrações", href: "/dashboard/integracoes" }}
-        />
-      ) : efetiva === "globo" ? (
+      {efetiva === "globo" ? (
         /* 🔴 GLOBO + RANKING LADO A LADO. O three.js dimensiona a esfera pela
            MENOR dimensão do canvas, então num bloco largo e baixo o globo fica
            pequeno e sobra vazio dos dois lados — foi o "ícone perdido" do print.
            A lista ao lado ocupa essa largura com informação em vez de ar, e
            ainda responde o que o globo não responde: a ordem exata e o valor. */
-        <div style={{ display: "flex", gap: "var(--tk-gap-grid)", alignItems: "stretch", flexWrap: "wrap" }}>
-          <div style={{ flex: "1 1 380px", minWidth: 300 }}>
+        /* 🔴 O GLOBO DIMENSIONA PELA ALTURA, e é por isso que ele tem largura
+           FIXA igual à altura em vez de `flex: 1 1 380px`.
+           
+           O three.js encaixa a esfera na MENOR dimensão do canvas. Com o globo
+           esticando na horizontal, um bloco largo e baixo dava uma esfera do
+           tamanho da altura e duas faixas de vazio nas laterais DENTRO do canvas
+           — o "ícone perdido no meio do nada" do print. Reservando exatamente a
+           largura que a esfera vai usar, o vazio deixa de existir e a lista
+           recebe o resto. */
+        <div
+          className="tk-paises"
+          style={{ display: "flex", gap: "var(--tk-gap-grid)", alignItems: "stretch", minHeight: altura }}
+        >
+          <div className="tk-paises-globo" style={{ flex: `0 0 ${altura}px`, maxWidth: "100%" }}>
             <GloboCarregado pontos={pontos} altura={altura} tema={tema} formatar={formatar} linhas={linhas} />
           </div>
-          <div style={{ flex: "1 1 300px", minWidth: 260, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+          {/* `overflowY: auto` — a lista rola dentro da altura do globo em vez de
+              esticar o bloco. Sem isto, dez países fariam o card crescer e o
+              globo ficaria com uma faixa de vazio embaixo. */}
+          <div style={{ flex: "1 1 0", minWidth: 0, overflowY: "auto", display: "flex", flexDirection: "column", justifyContent: "center" }}>
             <Ranking linhas={linhas} formatar={formatar} />
           </div>
         </div>

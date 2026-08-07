@@ -15,7 +15,7 @@
  * layout corrompido, e o layout que só tem blocos mortos.
  */
 import { migrarLayout, layoutPadrao, colunasDoGridAntigo, linhasDoGridAntigo, MAX_FAIXA } from "@/components/dashboard/layout/migrar";
-import { encaixarColunas, metaDoBloco, proximoPasso } from "@/components/dashboard/catalogo";
+import { encaixarColunas, metaDoBloco, passosDoBloco, proximoPasso } from "@/components/dashboard/catalogo";
 import { readFileSync } from "node:fs";
 
 /**
@@ -153,13 +153,16 @@ console.log("A grade de 12: encaixe, piso e o grid antigo");
   const funil = metaDoBloco("funil");            // colMin 4
   const porDia = metaDoBloco("vendas-por-dia");  // colMin 6
 
-  eq("encaixe vai para o passo MAIS PRÓXIMO, não para baixo", encaixarColunas(5, funil), 4);
-  /* ⚠️ EMPATE VAI PARA BAIXO, e isto é a regra, não um acidente do laço: 7 está
-     a 1 de 6 e a 1 de 8. Encolher no empate é o lado seguro — crescer pode
-     empurrar o vizinho para a linha de baixo enquanto o usuário ainda arrasta,
-     e o layout pularia debaixo do ponteiro. */
-  eq("empate (7 entre 6 e 8) desce para 6", encaixarColunas(7, funil), 6);
-  eq("  …mas 7,6 sobe para 8, porque não é empate", encaixarColunas(7.6, funil), 8);
+  /* 🔴 TODAS AS COLUNAS INTEIRAS EXISTEM. A lista curada `[3,4,6,8,12]` foi
+     recusada pelo dono: cinco presets nao dao liberdade, dao formulario de cinco
+     opcoes. O que segura o layout e o encaixe em coluna inteira e o minimo do
+     bloco -- nao a escassez de opcoes. */
+  eq("5 existe, e nao vira 4", encaixarColunas(5, funil), 5);
+  eq("7 existe", encaixarColunas(7, funil), 7);
+  eq("9, 10 e 11 existem", [9, 10, 11].map((c) => encaixarColunas(c, funil)).join(","), "9,10,11");
+  eq("o bloco oferece do minimo ate 12, sem buraco",
+     passosDoBloco(funil).join(","), "4,5,6,7,8,9,10,11,12");
+  eq("fracao arredonda para a coluna mais proxima", encaixarColunas(6.6, funil), 7);
   eq("nunca abaixo do mínimo do bloco", encaixarColunas(3, porDia), 6);
   eq("  …nem com valor absurdo", encaixarColunas(-99, porDia), 6);
   eq("teto na largura da grade", encaixarColunas(999, funil), 12);
@@ -173,8 +176,8 @@ console.log("A grade de 12: encaixe, piso e o grid antigo");
      encaixe devolvia o mesmo valor — de 4, `4+1=5` desempata para 4. As setas
      existiam e não moviam nada, e `tsc`/`lint`/`build` passaram os três. Estas
      quatro asserções são o caso que faz o defeito voltar a aparecer. */
-  eq("seta para a direita SAI do passo atual", proximoPasso(funil, 4, +1), 6);
-  eq("  …e a da esquerda volta", proximoPasso(funil, 6, -1), 4);
+  eq("seta para a direita anda UMA coluna", proximoPasso(funil, 4, +1), 5);
+  eq("  ...e a da esquerda volta uma", proximoPasso(funil, 6, -1), 5);
   eq("no maior passo, a direita não passa do teto", proximoPasso(funil, 12, +1), 12);
   eq("no mínimo do bloco, a esquerda não desce", proximoPasso(porDia, 6, -1), 6);
 
@@ -186,8 +189,16 @@ console.log("A grade de 12: encaixe, piso e o grid antigo");
      `react-grid-layout` valia ~30px e a de hoje vale 44. Um gráfico de `h: 8`
      tem de chegar com 6 linhas — a mesma altura na tela. 1:1 dobraria todo
      bloco de gráfico, e o usuário veria um layout que não é o dele. */
-  eq("grid antigo h=8 -> 6 linhas (mesma altura na tela)", linhasDoGridAntigo(8, funil), 6);
-  eq("altura nunca abaixo do mínimo do bloco", linhasDoGridAntigo(1, funil), funil.linhasMin);
+  /* 🔴 A ALTURA VEM DO CONTEUDO, e e a correcao do painel esburacado: um bloco
+     VAZIO reservava as linhas que teria COM dado. So quem declara
+     `alturaAjustavel` tem altura no layout; para o resto, `undefined` -- que nao
+     e "nao sei", e "a altura e a do conteudo". */
+  eq("bloco SEM alca de altura nao recebe linhas", linhasDoGridAntigo(8, funil), undefined);
+  eq("  ...nem pelo padrao do produto",
+     layoutPadrao().paineis.find((p) => p.id === "funil").linhas, undefined);
+  const feed = metaDoBloco("atividade"); // alturaAjustavel
+  eq("bloco COM alca: h=8 do grid antigo -> 6 linhas", linhasDoGridAntigo(8, feed), 6);
+  eq("  ...e nunca abaixo do piso dele", linhasDoGridAntigo(1, feed), feed.linhasMin);
 }
 
 
@@ -258,8 +269,8 @@ console.log("\n[1mO envelope v2[0m");
      v2({ paineis: [{ id: "funil", largura: "metade" }] }).paineis[0].col, 6);
   eq("v2 'um-terco' num bloco de mínimo 6 SOBE para 6",
      v2({ paineis: [{ id: "vendas-por-dia", largura: "um-terco" }] }).paineis[0].col, 6);
-  eq("v2 não trazia altura — cai na padrão do bloco",
-     v2({ paineis: [{ id: "funil", largura: "metade" }] }).paineis[0].linhas, metaDoBloco("funil").linhasPadrao);
+  eq("v2 nao trazia altura -- e o bloco sem alca continua sem",
+     v2({ paineis: [{ id: "funil", largura: "metade" }] }).paineis[0].linhas, undefined);
 
   /* GUARDA: faixa acima do teto e duplicata entre hero e faixa. */
   eq("v2 respeita o teto da faixa",

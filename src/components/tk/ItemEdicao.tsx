@@ -32,6 +32,29 @@ import { Tooltip } from "./Tooltip";
  * não reordena. Os dois caminhos chamam a MESMA operação do hook.
  */
 
+/**
+ * O corpo do item, no modo de edicao.
+ *
+ * ⚠️ `justifyContent: center` e o mesmo `distribuir` que o `Card` ganhou para
+ * Canais e Alertas, e pelo mesmo motivo: blocos de uma linha esticam ate a
+ * altura do MAIOR (e o `stretch` da grade), e o menor ficava com o conteudo
+ * colado no topo e um bloco de ar embaixo. Visto na tela em 07/08/2026, com
+ * "Taxa de aprovacao" de uma linha ao lado do Funil de tres.
+ *
+ * ⛔ Nao e para trocar por `space-between`: com UM filho ele nao distribui
+ * nada, e teria a aparencia de conserto sem efeito nenhum.
+ */
+const CORPO: React.CSSProperties = {
+  padding: "var(--tk-pad-card)",
+  minWidth: 0,
+  flex: 1,
+  overflow: "hidden",
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "center",
+};
+
+
 export function ItemEdicao({
   titulo,
   tituloVisivel = true,
@@ -203,7 +226,7 @@ export function ItemEdicao({
       </div>
 
       {children != null && (
-        <div style={{ padding: "var(--tk-pad-card)", minWidth: 0, flex: 1, overflow: "hidden" }}>{children}</div>
+        <div style={CORPO}>{children}</div>
       )}
 
       {redimensionar && (
