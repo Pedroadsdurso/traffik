@@ -150,10 +150,21 @@ const corpo = [
   "| Tela | ✅ feito | ❌ falta | 🔧 diverge por decisão |",
   "|---|---|---|---|",
   ...telas.map((t) => `| ${t.nome} | ${t.ok} | ${t.falta || "—"} | ${t.dec || "—"} |`),
-].join("\n");
+];
 
 /* ── 3. Substitui entre os marcadores, ou morre ──────────────────────────── */
 const destino = fs.readFileSync(DESTINO, "utf8");
+
+/* 🩹 O BLOCO SEGUE O FIM DE LINHA DO ARQUIVO, e isso não é preciosismo.
+   O `corpo` era montado com `\n` e escrito dentro de um `CLAUDE.md` que neste
+   repositório está em CRLF. Resultado: `--conferir` acusava "desatualizado"
+   toda vez, o `npm test` falhava por isso, e regenerar deixava o working tree
+   sujo com um diff que o `git diff` mostra VAZIO — porque a única mudança era o
+   fim de linha. Defeito que consome uma investigação inteira e não aparece em
+   lugar nenhum. */
+const EOL = destino.includes("\r\n") ? "\r\n" : "\n";
+const corpoTexto = corpo.join(EOL);
+
 const i = destino.indexOf(ABRE);
 const f = destino.indexOf(FECHA);
 
@@ -163,7 +174,7 @@ if (f < i) morrer(`os marcadores estão fora de ordem em ${DESTINO} (${FECHA} an
 if (destino.indexOf(ABRE, i + 1) !== -1) morrer(`${ABRE} aparece mais de uma vez em ${DESTINO}.`);
 if (destino.indexOf(FECHA, f + 1) !== -1) morrer(`${FECHA} aparece mais de uma vez em ${DESTINO}.`);
 
-const novo = destino.slice(0, i + ABRE.length) + "\n" + corpo + "\n" + destino.slice(f);
+const novo = destino.slice(0, i + ABRE.length) + EOL + corpoTexto + EOL + destino.slice(f);
 
 if (conferir) {
   if (novo !== destino) {
