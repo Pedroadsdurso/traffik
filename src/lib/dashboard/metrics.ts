@@ -157,7 +157,20 @@ export interface DashboardData {
    */
   byPlacement: { name: string; total: number; sales: number }[];
   payments: { name: string; total: number; count: number }[];
-  funnel: { cliques: number; visitas: number; checkouts: number; iniciadas: number; vendas: number };
+  /**
+   * ⚠️ `checkoutsDoNavegador` é a parcela de `checkouts` que NÃO vem da venda.
+   * Quando é 0, `checkouts` está apenas repetindo `iniciadas` — ver a nota em
+   * `icsNavegador`. A tela precisa dele para dizer "não medido" em vez de
+   * desenhar 100% de conversão.
+   */
+  funnel: {
+    cliques: number;
+    visitas: number;
+    checkouts: number;
+    checkoutsDoNavegador: number;
+    iniciadas: number;
+    vendas: number;
+  };
   /**
    * Cliques classificados como robô no período, por motivo. **Já estão FORA de
    * `funnel.visitas` e de todas as métricas** — vai para a tela só para o
@@ -527,6 +540,24 @@ async function windowAggregate(
    * o outro não.
    */
   const comJornada = clicksEscopo.filter((c) => c.checkoutAt != null).length;
+  /**
+   * 🔴 QUANTOS ICs VIERAM DO NAVEGADOR — a única parcela INDEPENDENTE da venda.
+   *
+   * `Click.checkoutAt` tem dois escritores: o pixel (`api/pixel/event`, fonte
+   * `"navegador"`) e o webhook do gateway (`webhook/checkoutEvent`, fonte
+   * `"gateway"`). O segundo é derivado da venda — **toda venda produz um IC**.
+   *
+   * Numa conta sem o pixel instalado, portanto, `ICs === Vendas Iniciadas` por
+   * construção, e o trecho do meio do funil desenha 100% de conversão. É a
+   * mentira mais lisonjeira que o bloco conseguiria contar: o gestor lê "meu
+   * checkout converte tudo" quando a etapa está apenas repetindo a seguinte.
+   *
+   * Este número é o que deixa a tela distinguir MEDIDO de NÃO MEDIDO — a mesma
+   * regra do denominador zero, aplicada a etapa de funil em vez de razão.
+   */
+  const icsNavegador = clicksEscopo.filter(
+    (c) => c.checkoutAt != null && c.checkoutSource === "navegador",
+  ).length;
   const semJornada = new Set(
     icsEscopo.filter((e) => e.clickId == null).map((e) => e.eventId || `row:${e.id}`),
   ).size;
@@ -535,6 +566,7 @@ async function windowAggregate(
   return {
     sales: salesEscopo, clicks: clicksEscopo, metrics, expenses, pixelEvents: pixelEventsEscopo,
     initiateCheckouts: checkoutsDistintos,
+    icsNavegador,
     // ⚠️ NÃO passa pelo escopo de área: um clique de robô raramente tem
     // `utm_campaign` atribuível, então filtrá-lo por área o esconderia justamente
     // de quem precisa auditá-lo. É diagnóstico da conta, não métrica de operação.
@@ -944,6 +976,8 @@ function summarize(w: Window, impostoAnunciosPct = 0) {
     cliques: adClicks,
     visitas: clicksCount,
     checkouts: w.initiateCheckouts,
+    /** Dos `checkouts`, quantos vieram do PIXEL. O resto é derivado da venda. */
+    checkoutsDoNavegador: w.icsNavegador,
     iniciadas: totalSalesEvents,
     vendas: salesCount,
   };

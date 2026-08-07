@@ -149,30 +149,79 @@ const IR_ANUNCIOS = { texto: "Conferir integrações", href: "/dashboard/integra
 
 
 /**
- * 🔴 QUAL ETAPA DO FUNIL VAI PARA A TELA — e a lista é UMA linha, de propósito.
+ * 🔴 AS CINCO ETAPAS DO FUNIL. Nenhuma é filtrada — e o `.filter()` que existia
+ * aqui saiu em 07/08/2026.
  *
- * `v.funnelStages` tem **cinco**: Cliques · Vis. Página · ICs · Vendas Inic. ·
- * Vendas Apr. Este filtro mostra quatro.
+ * Ele escondia "Visita na página" sob uma premissa minha que estava errada: eu
+ * disse que o dado não existia porque `PixelEventType` não tem `PAGE_VIEW`. O
+ * enum de fato não tem, mas `funnel.visitas` nunca dependeu dele — é
+ * `w.clicks.length`, a tabela `Click`.
  *
- * ### ⚠️ O motivo da exclusão NÃO é falta de dado — eu afirmei que era, e errei
- *
- * Em 07/08/2026 eu disse ao dono que "Visita na página" era impossível porque
- * `PixelEventType` não tem `PAGE_VIEW`. **A conclusão não seguia da premissa.**
- * O enum de fato não tem `PAGE_VIEW`, mas `funnel.visitas` nunca dependeu dele:
- * ele é `w.clicks.length`, a tabela `Click` — as páginas que o NOSSO script
- * carregou. O dado existe e está computado desde o Bloco 5.
- *
- * A decisão de mostrar quatro é do dono, e foi tomada sobre a minha informação
- * errada. Ela fica valendo até ele reabrir com a informação certa.
- *
- * ⛔ Não "conserte" isto religando `visitas` por conta própria: cinco etapas
- * numa largura de 4 colunas apertam as pílulas, e a escolha de qual etapa
- * merece o espaço é de produto, não de código.
- *
- * ✅ Para voltar aos cinco, apague o `.filter(...)`. É só isso.
+ * ⛔ **O rótulo virou "Sessões", e é divergência DELIBERADA da referência.** O
+ * `pixel.js` grava uma linha por SESSÃO (`sessionStorage`), não por página
+ * aberta: quem navega por cinco páginas conta um. A referência conta pageview;
+ * nós contamos sessão, e o nome segue o dado. Registrado no `04`.
  */
-const ETAPAS_DO_FUNIL = (v: TraffikView) =>
-  v.funnelStages.filter((e) => e.chaveInfo !== "visitas");
+const ETAPAS_DO_FUNIL = (v: TraffikView) => v.funnelStages;
+
+/**
+ * 🔴 O TRECHO `ICs → Vendas Inic.` QUANDO NÃO HOUVE PIXEL.
+ *
+ * `Click.checkoutAt` tem dois escritores, e um é o webhook do gateway — então
+ * **toda venda produz um IC**. Numa conta sem o pixel instalado,
+ * `ICs === Vendas Iniciadas` por construção, e a fita desenha 100% de conversão
+ * no trecho do meio.
+ *
+ * Essa é a mentira mais lisonjeira que este bloco conseguiria contar: o gestor
+ * lê "meu checkout converte tudo" quando a etapa está apenas repetindo a
+ * seguinte. É a distinção do denominador zero — `0,00x` × `—` — aplicada a
+ * etapa de funil.
+ *
+ * ⛔ A etapa NÃO some quando isso acontece. Etapa que desaparece muda a forma
+ * do funil em silêncio, e a forma é o que a pessoa compara entre períodos.
+ */
+const AVISO_SEM_PIXEL =
+  "Nenhum Initiate Checkout veio do navegador neste período: todos foram " +
+  "deduzidos das vendas. Sem o pixel na página de checkout esta etapa apenas " +
+  "repete “Vendas iniciadas”, e a conversão entre as duas não foi medida.";
+
+/**
+ * ⚠️ O rótulo da perda `Cliques → Sessões` é PERDA DE RASTREAMENTO, não
+ * abandono. A etapa 1 é `DailyAdMetric.clicks` (a Meta) e a 2 é a nossa tabela
+ * `Click`: quem clicou no anúncio e não virou sessão nossa não "desistiu" —
+ * ele não foi VISTO. Bloqueador, redirect que come UTM, snippet ausente.
+ *
+ * Chamar isso de abandono manda o gestor otimizar a oferta quando o problema é
+ * a instalação.
+ */
+const PERDA_DE_RASTREAMENTO = "sem rastreamento";
+const PERDA_DE_RASTREAMENTO_AJUDA =
+  "Clicaram no anúncio e não chegaram a virar uma sessão rastreada. Não é " +
+  "abandono: é o rastreamento que não os viu — bloqueador de anúncio, redirect " +
+  "que descarta a UTM, ou o snippet ausente na página de destino.";
+
+const ETAPAS_PARA_FITA = (v: TraffikView) => {
+  const etapas = ETAPAS_DO_FUNIL(v);
+  const ics = etapas.find((e) => e.chaveInfo === "checkouts");
+  const semPixel = ics != null && ics.value > 0 && (ics.doNavegador ?? 0) === 0;
+  return etapas.map((e) => ({
+    label: e.curto,
+    valor: e.value,
+    valorFmt: e.value.toLocaleString("pt-BR"),
+    fonte: e.fonte,
+    ajuda: e.ajuda,
+    /* A composição só aparece quando há DUAS origens de verdade. Com tudo do
+       gateway quem fala é a hachura; com tudo do navegador não há o que
+       decompor. */
+    composicao:
+      e.chaveInfo === "checkouts" && (e.doNavegador ?? 0) > 0 && (e.doNavegador ?? 0) < e.value
+        ? `${e.value.toLocaleString("pt-BR")} ICs · ${(e.doNavegador ?? 0).toLocaleString("pt-BR")} do navegador`
+        : undefined,
+    trechoNaoMedido: e.chaveInfo === "checkouts" && semPixel ? AVISO_SEM_PIXEL : undefined,
+    perdaLabel: e.chaveInfo === "cliques" ? PERDA_DE_RASTREAMENTO : undefined,
+    perdaAjuda: e.chaveInfo === "cliques" ? PERDA_DE_RASTREAMENTO_AJUDA : undefined,
+  }));
+};
 
 /**
  * O que foi TIRADO do cálculo, declarado na tela.
@@ -311,12 +360,7 @@ export const RENDERS: Record<IdBloco, RenderBloco> = {
     },
     render: (v) => (
       <FitaFunil
-        etapas={ETAPAS_DO_FUNIL(v).map((e) => ({
-          label: e.curto,
-          valor: e.value,
-          valorFmt: e.value.toLocaleString("pt-BR"),
-          fonte: e.fonte,
-        }))}
+        etapas={ETAPAS_PARA_FITA(v)}
         exclusoes={EXCLUSOES_DO_FUNIL(v)}
       />
     ),

@@ -95,10 +95,54 @@ em `components/tk/`.
 | **Sub-rótulo `Google Ads`** sob o nome da campanha (`06` §14.4) | idem — hoje diria "Meta Ads" em toda linha | seção abaixo |
 | **Medidor de plano e uso** no rodapé do rail | existir **backend de cobrança** (`plan`/`quota` no schema) | SHELL |
 
-**Os dez permanentes**, em uma linha cada: pílula de variação · hachura no Gasto
+**Os doze permanentes**, em uma linha cada: pílula de variação · hachura no Gasto
 · Receita em destaque e não verde · Segmented no cabeçalho · folga e raio no
 heatmap e na rosca · sem `Ver todos` nos Alertas · sem `Gasto` no seletor do
-heatmap · sem régua Alta/Baixa · sem count-up · cor do funil sem laranja.
+heatmap · sem régua Alta/Baixa · sem count-up · cor do funil sem laranja ·
+**"Sessões" no lugar de "Vis. Página"** · **"não medido" no trecho de ICs**.
+
+### 🔧 O FUNIL diverge da referência `16` em DOIS pontos, e os dois por DADO
+
+> Registrados em 07/08/2026. Nenhum é estética: nos dois, seguir a referência
+> faria a tela afirmar algo que a nossa medição não sustenta.
+
+**1. A etapa 2 chama `Sessões`, não `Vis. Página`.**
+
+A referência conta *pageview*. Nós contamos **sessão**: o `pixel.js` guarda com
+`sessionStorage` e grava uma linha de `Click` por sessão, então quem navega por
+cinco páginas conta **um**. O rótulo segue o dado.
+
+⚠️ O nome errado aqui não é cosmético — o gestor **divide por ele**. Número
+certo com nome errado é pior que a ausência. E a `fonte` no hook já dizia a
+verdade (`"1 por sessão"`) enquanto o rótulo ao lado prometia outra coisa:
+**quando os dois discordam, o errado é o que promete mais.**
+
+**2. O trecho `ICs → Vendas Inic.` pode sair hachurado, dizendo `não medido`.**
+
+A referência desenha todo trecho como medição. Aqui `Click.checkoutAt` tem dois
+escritores — o pixel do navegador e **o webhook do gateway** —, e o segundo é
+derivado da venda: toda venda produz um IC. Numa conta sem o pixel instalado,
+`ICs === Vendas Iniciadas` **por construção**, e o trecho desenharia 100% de
+conversão.
+
+É a mentira mais lisonjeira que o bloco conseguiria contar: *"meu checkout
+converte tudo"*, quando a etapa está só repetindo a seguinte. Mesma distinção do
+denominador zero (`0,00x` ≠ `—`) e da célula do heatmap, agora em etapa de funil.
+
+| Estado | O que a tela faz |
+|---|---|
+| ICs do navegador **= 0** | hachura no trecho + pílula `não medido` + tooltip dizendo que a etapa repete Vendas Iniciadas |
+| **misto** | linha sob o número: `35 ICs · 11 do navegador` |
+| tudo do navegador | nada de especial — é medição inteira |
+
+⛔ **A etapa nunca some.** Etapa que desaparece muda a forma do funil em
+silêncio, e a forma é o que a pessoa compara entre períodos.
+
+**3. A perda `Cliques → Sessões` é rotulada `sem rastreamento`**, e não como
+abandono genérico. A etapa 1 é a métrica da Meta e a 2 é a nossa tabela: quem
+clicou e não virou sessão **não desistiu, não foi visto** (bloqueador, redirect
+que come a UTM, snippet ausente). Chamar de abandono manda otimizar a oferta
+quando o problema é a instalação.
 
 Cada um tem o motivo no ponto do documento onde aparece, e nenhum depende de
 algo que possa passar a existir.

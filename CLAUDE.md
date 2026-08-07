@@ -480,6 +480,36 @@ usada em código novo** — ela não porta para o body. Hoje **nenhum `.tsx` a u
 Migrados nesta rodada (eram os 3 últimos com o modelo antigo): "Parâmetros de URL"
 (UTMs), "Adicionar Credencial" (Webhooks) e "Alterar orçamento" (Gerenciador).
 
+## 🔜 PENDÊNCIA: o `test:contraste` confere uma LISTA MANTIDA À MÃO
+
+Registrada em 07/08/2026, **não executada**, e ela junta com a pendência antiga
+de rasterizar num canvas 1×1.
+
+O traço de ligação da pílula do funil nasceu pintado com `--tk-pilula`, que no
+escuro é `#090D14` — **mais escuro que o card**. Contraste de **1,15:1**: o
+elemento existia no DOM e não existia na tela. **O `test:contraste` estava
+verde**, porque ele mede os pares que alguém lembrou de cadastrar, e esse par
+nunca foi cadastrado.
+
+É a terceira vez que algo existe no DOM e não na tela (resumo do gargalo do
+funil · hachura do heatmap a `rgba(0,0,0,0)` · este traço).
+
+> ### ⛔ O DEFEITO É ESTRUTURAL: lista à mão fica atrás do código, sempre.
+> O teste precisa **enumerar o que foi PINTADO**, não conferir pares
+> cadastrados. As duas metades do conserto:
+>
+> 1. rasterizar num canvas 1×1 para ler a cor final (`getComputedStyle` devolve
+>    `lab(...)` neste projeto, e comparar string de cor não mede nada);
+> 2. varrer os elementos desenhados em vez de uma lista de tokens.
+>
+> ⚠️ O custo já foi levantado e é alto: navegador headless + dev server +
+> sessão, e o cookie do NextAuth é `httpOnly`.
+
+⚠️ **Prima disto, em outra camada:** uma asserção do piso da fita usava
+`[100, 0, 5]`, cujo valor já dava 6,5px — acima do piso, que portanto nunca
+entrava. Ela passava sem exercitar o que alegava medir. **As duas passam, as
+duas não olham nada.**
+
 ## Dívidas técnicas conhecidas
 
 Registradas de propósito — **não são bugs esquecidos**, são decisões tomadas.
@@ -1825,6 +1855,67 @@ não roda em máquina limpa, e aí ninguém roda o agregado.
 ⚠️ E ao mudar o contrato de um módulo, o `grep` que importa não é pelos
 consumidores de produção — é pelos **testes** dele, inclusive os que o agregado
 não roda.
+
+# 🪞 ETAPA DERIVADA DA SEGUINTE DESENHA 100% DE CONVERSÃO — e isso é uma MENTIRA LISONJEIRA
+
+> **11º caso da família, e a distinção central do projeto aplicada a uma camada
+> nova: etapa de funil, em vez de razão ou de célula de gráfico.** 07/08/2026.
+
+`Click.checkoutAt` tem **dois escritores**: o pixel do navegador
+(`api/pixel/event`) e o **webhook do gateway** (`webhook/checkoutEvent`). O
+segundo é derivado da venda — então **toda venda produz um Initiate Checkout**.
+
+Consequência: numa conta sem o pixel instalado, `ICs === Vendas Iniciadas` **por
+construção**, e o trecho do meio do funil desenha **100% de conversão**.
+
+> ### 🔴 POR QUE ESTE É PIOR QUE UM NÚMERO ERRADO COMUM
+> Ele erra **para o lado que agrada**. O gestor lê *"meu checkout converte
+> tudo"* e vai embora satisfeito — não há atrito que o faça desconfiar. Um
+> número ruim provoca investigação; um número lisonjeiro compra silêncio.
+>
+> E o dado que denuncia existia: `Click.checkoutSource` guarda `"navegador"` ou
+> `"gateway"` desde sempre, **e ninguém lia**.
+
+| Estado | O que a tela faz |
+|---|---|
+| ICs do navegador **= 0** | hachura no trecho + pílula **`não medido`** + tooltip dizendo que a etapa repete a seguinte |
+| **misto** | declara a composição: `35 ICs · 11 do navegador` |
+| tudo do navegador | nada — é medição inteira |
+
+⛔ **A etapa NUNCA some.** Etapa que desaparece muda a forma do funil em
+silêncio, e a forma é o que a pessoa compara entre períodos.
+
+> ### ⛔ A PERGUNTA QUE GENERALIZA
+> **"Esta etapa/coluna/série tem uma fonte INDEPENDENTE da vizinha, ou uma
+> deriva da outra?"** Se deriva, a razão entre as duas não é medição — é
+> tautologia com aparência de resultado. Vale para funil, para taxa de
+> aprovação, para qualquer par onde um lado é escrito a partir do outro.
+
+⚠️ O efeito colateral é bom e vale registrar: quem vê `não medido` no próprio
+funil ganha motivo para instalar o pixel. **A etapa passa a vender a instalação
+em vez de esconder que ela falta.**
+
+# 🏷️ O RÓTULO SEGUE A CONTAGEM, NUNCA A REFERÊNCIA
+
+> **Número certo com nome errado é pior que a ausência, porque o gestor DIVIDE
+> por ele.** 07/08/2026.
+
+A etapa 2 do funil se chamava **"Vis. Página"**, copiado da referência. O
+`pixel.js` guarda com `sessionStorage` e grava **uma linha de `Click` por
+SESSÃO** — quem navega por cinco páginas conta um. O rótulo prometia pageview e
+entregava sessão. Hoje chama **Sessões**.
+
+> ### 🔴 O SINAL QUE ESTAVA À VISTA
+> O mesmo objeto já trazia `fonte: "Nosso script — 1 por sessão"`. **O rótulo e
+> a fonte discordavam, lado a lado, no mesmo literal**, e ninguém tinha olhado.
+>
+> ⛔ **Quando dois campos vizinhos descrevem o mesmo dado e discordam, o errado
+> é o que PROMETE MAIS.** A descrição técnica raramente mente — ela é escrita
+> por quem acabou de ver a consulta. O rótulo curto é escrito por quem está
+> pensando no layout.
+
+⚠️ E ao copiar uma referência visual, **o nome vem da nossa medição, não do
+print**. A referência conta o que a ferramenta dela mede.
 
 # 🎨 GRADIENTE DE OPACIDADE MENTE SOBRE QUANTIDADE. DE MATIZ, NÃO.
 

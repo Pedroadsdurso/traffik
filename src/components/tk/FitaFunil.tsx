@@ -50,8 +50,8 @@ import { calcularFluxo, caminhoDaFita } from "@/lib/funil/fita";
 const MARGEM_X = 12;
 /** Espaço acima da fita: os nomes das etapas E a pílula que não coube. */
 const TOPO = 26 + 22 + 10;
-/** Espaço abaixo da fita, para a pílula de perda e o número absoluto. */
-const RODAPE = 58;
+/** Espaço abaixo da fita: pílula de perda, número absoluto e a composição. */
+const RODAPE = 58 + 20;
 /** Piso da altura da FAIXA (a fita em si), sem o topo e o rodapé. */
 const FAIXA_MIN = 150;
 /** Altura aproximada da cápsula: 2 × padding + a linha do `text-caption`. */
@@ -67,6 +67,41 @@ export interface EtapaEntradaFita {
   valorFmt: string;
   /** De onde o número vem ("Meta Ads", "Gateway — status APROVADA"). */
   fonte?: string;
+  /** Texto do `title` — o que a etapa conta, e por que difere de fontes vizinhas. */
+  ajuda?: string;
+  /** Linha sob o número absoluto: "11 do navegador". */
+  composicao?: string;
+  /**
+   * Como se chama a perda que SAI desta etapa, quando ela não é abandono.
+   *
+   * 🔴 O caso que criou o campo: `Cliques → Sessões`. A etapa 1 é a métrica da
+   * Meta e a 2 é a nossa tabela `Click` — quem clicou no anúncio e não virou
+   * sessão nossa **não desistiu, não foi VISTO**. Bloqueador, redirect que come
+   * a UTM, snippet ausente na página.
+   *
+   * Chamar isso de abandono manda o gestor otimizar a oferta quando o problema
+   * é a instalação. Sem `perdaLabel` a pílula mostra só o número, que é o
+   * comportamento certo para as perdas que SÃO abandono.
+   */
+  perdaLabel?: string;
+  /** Texto do `title` da pílula de perda, quando ela precisa de explicação. */
+  perdaAjuda?: string;
+  /**
+   * 🔴 O TRECHO QUE SAI DESTA ETAPA NÃO FOI MEDIDO.
+   *
+   * Preenchido quando o valor desta etapa é DERIVADO da seguinte, e não de uma
+   * fonte independente. O caso real: `ICs` cujo `Click.checkoutAt` foi todo
+   * escrito pelo webhook do gateway — toda venda produz um IC, então a etapa
+   * repete "Vendas iniciadas" e a conversão entre as duas seria 100% por
+   * construção.
+   *
+   * ⛔ **A etapa NUNCA some por causa disto.** Etapa que desaparece muda a
+   * forma do funil em silêncio, e a forma é o que a pessoa compara entre
+   * períodos. Ela fica, hachurada, dizendo que não foi medida — que é a mesma
+   * distinção do heatmap (célula não observada ≠ célula com zero) e do
+   * denominador zero (`—` ≠ `0,00x`).
+   */
+  trechoNaoMedido?: string;
 }
 
 const pct1 = (t: number) => `${(t * 100).toFixed(1).replace(".", ",")}%`;
@@ -138,6 +173,19 @@ export function FitaFunil({
   }
 
   const xFim = Math.max(1, largura);
+
+  /* Os trechos cuja conversão não foi MEDIDA: a etapa `i` declarou que o valor
+     dela é derivado da seguinte. O trecho vai do centro dela ao centro da
+     próxima — é exatamente o pedaço da fita cuja inclinação seria lida como
+     conversão. */
+  /* ⚠️ SEM filtro de largura aqui. Houve uma versão com `.filter(t => t.x1 >
+     t.x0)`, e ela matava a PÍLULA junto com o retângulo: no servidor `largura`
+     é 0, todos os x são 0, e o rótulo "não medido" sumia do markup. São duas
+     coisas diferentes — a geometria precisa de largura, o rótulo não. O guarda
+     ficou só no `<rect>`, que é quem degenera. */
+  const trechosNaoMedidos = fluxo.etapas
+    .map((e, i) => ({ i, x0: e.x, x1: fluxo.etapas[i + 1]?.x ?? e.x }))
+    .filter((t) => !!etapas[t.i]?.trechoNaoMedido);
 
   /* A pílula é HTML, não `<text>` do SVG: cápsula com raio, padding e peso de
      fonte são três coisas que o SVG faria à mão. Como o `viewBox` é 1:1 com a
@@ -240,6 +288,26 @@ export function FitaFunil({
               <stop offset="0%" stopColor="var(--tk-fluxo)" />
               <stop offset="100%" stopColor="var(--tk-fluxo-fim)" />
             </linearGradient>
+            {/* A hachura do NÃO MEDIDO. Mesma linguagem do heatmap e do Gasto no
+                `LineChart`: textura não é intensidade, é OUTRA CATEGORIA. Uma
+                cor mais fraca aqui leria como "converteu menos"; a diagonal lê
+                como "isto não é uma medição".
+
+                ⚠️ `patternUnits="userSpaceOnUse"` é obrigatório: em
+                `objectBoundingBox` o passo escala com o tamanho da área, e a
+                mesma listra passaria a significar coisas diferentes conforme a
+                espessura da fita. */}
+            <pattern id="tk-fita-naomedido" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <rect width="7" height="7" fill="var(--tk-surface)" />
+              <line x1="0" y1="0" x2="0" y2="7" stroke="var(--tk-text-muted)" strokeWidth="2" opacity="0.5" />
+            </pattern>
+            {/* O recorte é a PRÓPRIA FITA: a hachura preenche um retângulo do
+                trecho e só aparece dentro da forma. Desenhar um segundo `path`
+                com a geometria do trecho seria uma segunda implementação da
+                mesma curva — e as duas divergem no primeiro ajuste. */}
+            <clipPath id="tk-fita-recorte">
+              <path d={caminhoDaFita(fluxo.etapas, centroY, { x0: 0, x1: xFim })} />
+            </clipPath>
           </defs>
 
           {/* As guias primeiro: a fita passa POR CIMA delas. */}
@@ -263,18 +331,60 @@ export function FitaFunil({
               fill="url(#tk-fita-rampa)"
             />
           )}
+
+          {/* O trecho NÃO MEDIDO, por cima da rampa e recortado pela fita. */}
+          {largura > 0 &&
+            trechosNaoMedidos.map(({ i, x0, x1 }) => (
+              x1 <= x0 ? null : (
+              <rect
+                key={`nm-${i}`}
+                x={x0}
+                y={TOPO}
+                width={Math.max(0, x1 - x0)}
+                height={faixaAlt}
+                fill="url(#tk-fita-naomedido)"
+                clipPath="url(#tk-fita-recorte)"
+              />
+            )))}
         </svg>
 
+        {/* ── A CAMADA DOS RÓTULOS ─────────────────────────────────────────────
+            🔴 Ela renderiza SEMPRE e fica OCULTA até a primeira medida, em vez
+            de não existir enquanto `largura === 0`.
+
+            Duas razões, e as duas são melhorias de verdade:
+
+            1. O `ResizeObserver` só corre no cliente, depois da pintura. Com
+               `largura > 0 &&`, o primeiro quadro não tinha rótulo nenhum e
+               eles apareciam de repente. Com `visibility`, o espaço já está
+               reservado e nada salta.
+            2. O markup do SERVIDOR passa a conter os textos. Sem isso não há
+               como assertar "a pílula diz não medido" sem um DOM completo — e
+               esta base não tem jsdom. A alternativa seria uma prop só de
+               teste, que é pior: código de produção que existe para o teste.
+
+            ⚠️ `visibility: hidden` e não `display: none`: o primeiro mantém a
+            caixa, o segundo faria o layout pular quando os rótulos entrassem. */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            visibility: largura > 0 ? "visible" : "hidden",
+            pointerEvents: "none",
+          }}
+        >
+
         {/* ── Nome da etapa, ACIMA ─────────────────────────────────────────── */}
-        {largura > 0 &&
-          fluxo.etapas.map((e, i) => (
+        {fluxo.etapas.map((e, i) => (
             <div
               key={`nome-${etapas[i]!.label}`}
               className="text-caption text-text-secondary"
+              title={etapas[i]!.ajuda ?? etapas[i]!.fonte}
               style={{
                 position: "absolute",
                 left: e.x,
                 top: 4,
+                cursor: etapas[i]!.ajuda ? "help" : undefined,
                 transform: "translateX(-50%)",
                 whiteSpace: "nowrap",
                 pointerEvents: "none",
@@ -299,8 +409,7 @@ export function FitaFunil({
 
             ⛔ Se um dia a pílula voltar a ficar apertada, a saída é mexer NELA
             (fonte, padding, sair para o outro lado) — nunca no piso da fita. */}
-        {largura > 0 &&
-          fluxo.etapas.map((e, i) => {
+        {fluxo.etapas.map((e, i) => {
             if (e.fracao == null) return null;
             const cabe = e.espessura >= ALTURA_PILULA + 4;
             /* Fora, ela sobe: abaixo ficaria em cima da pílula de perda, que
@@ -346,15 +455,41 @@ export function FitaFunil({
             );
           })}
 
+        {/* ── Pílula do NÃO MEDIDO, na guia do trecho ─────────────────────────
+            🔴 Ela ocupa o lugar onde a leitura ingênua veria "100%". Sem ela, um
+            trecho reto entre duas etapas de mesmo valor afirma conversão total —
+            "meu checkout converte tudo" — quando o que houve foi ausência de
+            fonte independente. `100%` e `não medido` não são a mesma frase, do
+            mesmo jeito que `0,00x` e `—` não são.
+
+            ⚠️ Fica ACIMA da fita, não abaixo: a pílula de perda mora embaixo, e
+            duas cápsulas na mesma guia se encostariam. */}
+        {trechosNaoMedidos.map((t) => (
+            <div
+              key={`nm-rot-${t.i}`}
+              className="text-caption"
+              title={etapas[t.i]!.trechoNaoMedido}
+              style={{
+                ...pilula("var(--tk-surface-hover)", "var(--tk-text-secondary)"),
+                left: (t.x0 + t.x1) / 2,
+                top: TOPO + faixaAlt - ALTURA_PILULA,
+                border: "1px dashed var(--tk-border)",
+                pointerEvents: "auto",
+              }}
+            >
+              não medido
+            </div>
+          ))}
+
         {/* ── Pílula da PERDA, ABAIXO da fita, na GUIA ─────────────────────────
             🔴 É AQUI que a perda existe: em número, não em área. Ancorada na
             guia porque perda acontece ENTRE duas etapas — ancorá-la num centro
             de etapa a atribuiria a uma delas. */}
-        {largura > 0 &&
-          fluxo.perdas.map((p) => (
+        {fluxo.perdas.map((p) => (
             <div
               key={`perda-${p.de}`}
               className="text-caption"
+              title={etapas[p.de]?.perdaAjuda}
               style={{
                 ...pilula("var(--tk-pilula)", "var(--tk-on-pilula)"),
                 left: p.x,
@@ -363,12 +498,14 @@ export function FitaFunil({
             >
               −{p.valor.toLocaleString("pt-BR")}
               {p.pct != null && <span style={{ opacity: 0.72 }}> · {pct1(p.pct)}</span>}
+              {etapas[p.de]?.perdaLabel && (
+                <span style={{ opacity: 0.72 }}> {etapas[p.de]!.perdaLabel}</span>
+              )}
             </div>
           ))}
 
         {/* ── Número absoluto, EMBAIXO, grande e em negrito ────────────────── */}
-        {largura > 0 &&
-          fluxo.etapas.map((e, i) => (
+        {fluxo.etapas.map((e, i) => (
             <div
               key={`abs-${etapas[i]!.label}`}
               className="text-metric-md"
@@ -388,6 +525,31 @@ export function FitaFunil({
               {etapas[i]!.valorFmt}
             </div>
           ))}
+
+        {/* ── A COMPOSIÇÃO, sob o número ───────────────────────────────────────
+            "35 ICs · 11 do navegador". Só aparece quando a etapa tem parcelas de
+            origens diferentes e o usuário precisa saber a proporção — é o que
+            transforma "confie no número" em "veja de onde ele vem". */}
+        {fluxo.etapas.map((e, i) =>
+            !etapas[i]!.composicao ? null : (
+              <div
+                key={`comp-${etapas[i]!.label}`}
+                className="text-caption text-text-muted"
+                style={{
+                  position: "absolute",
+                  left: e.x,
+                  top: TOPO + faixaAlt + 34 + 26,
+                  transform: "translateX(-50%)",
+                  whiteSpace: "nowrap",
+                  pointerEvents: "none",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+              >
+                {etapas[i]!.composicao}
+              </div>
+            ),
+          )}
+        </div>
       </div>
     </div>
   );

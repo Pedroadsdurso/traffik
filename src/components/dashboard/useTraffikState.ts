@@ -1435,10 +1435,44 @@ export function useTraffikState(
     })(),
     /** Ticket médio cru — o funil usa para estimar o faturamento perdido. */
     ticketMedio: k?.ticket,
+    /**
+     * 🔴 O RÓTULO SEGUE A CONTAGEM, NÃO A REFERÊNCIA.
+     *
+     * A etapa 2 chama **Sessões**, não "Vis. Página". O runtime grava uma linha
+     * de `Click` por SESSÃO (`sessionStorage` no `pixel.js`), então quem abre
+     * cinco páginas conta um. "Vis. Página" prometia pageview e entregava
+     * sessão — número certo com nome errado, que é pior que a ausência porque o
+     * gestor divide por ele.
+     *
+     * ⚠️ A `fonte` já dizia a verdade ("1 por sessão") enquanto o rótulo ao lado
+     * dizia outra coisa. Quando os dois discordam, o errado é o que promete
+     * mais. Divergência da referência registrada no `04`.
+     */
     funnelStages: [
       { chaveInfo: "cliques", label: "Cliques no anúncio", curto: "Cliques", value: d?.funnel.cliques ?? 0, fonte: "Meta Ads (métrica diária)" },
-      { chaveInfo: "visitas", label: "Visita na página", curto: "Vis. Página", value: d?.funnel.visitas ?? 0, fonte: "Nosso script — 1 por sessão" },
-      { chaveInfo: "checkouts", label: "Initiate Checkout", curto: "ICs", value: d?.funnel.checkouts ?? 0, fonte: "Pixel + webhook — visitantes distintos" },
+      {
+        chaveInfo: "visitas",
+        label: "Sessões rastreadas",
+        curto: "Sessões",
+        value: d?.funnel.visitas ?? 0,
+        fonte: "Nosso script — 1 por sessão",
+        ajuda:
+          "Sessões rastreadas pelo nosso script na sua página — uma por sessão, " +
+          "não uma por página aberta. Por isso o número difere de “Cliques no link” " +
+          "da Meta, que conta cliques.",
+      },
+      {
+        chaveInfo: "checkouts",
+        label: "Initiate Checkout",
+        curto: "ICs",
+        value: d?.funnel.checkouts ?? 0,
+        fonte: "Pixel + webhook — visitantes distintos",
+        /**
+         * 🔴 A parcela que NÃO vem da venda. Quando é 0, esta etapa está
+         * repetindo "Vendas iniciadas" e o trecho entre as duas não foi medido.
+         */
+        doNavegador: d?.funnel.checkoutsDoNavegador ?? 0,
+      },
       { chaveInfo: "iniciadas", label: "Vendas iniciadas", curto: "Vendas Inic.", value: d?.funnel.iniciadas ?? 0, fonte: "Gateway — todos os status" },
       { chaveInfo: "aprovadas", label: "Vendas aprovadas", curto: "Vendas Apr.", value: d?.funnel.vendas ?? 0, fonte: "Gateway — status APROVADA" },
     ],

@@ -262,6 +262,105 @@ checar("a fita renderiza as pílulas de etapa e a de perda", () => {
   assert.ok(!/NaN|Infinity/.test(html), "coordenada inválida no markup");
 });
 
+/* ── MEDIDO × NÃO MEDIDO na etapa de ICs ───────────────────────────────────────
+
+   🔴 `Click.checkoutAt` tem dois escritores, e um é o webhook do gateway: TODA
+   VENDA PRODUZ UM IC. Numa conta sem o pixel instalado, `ICs === Vendas
+   Iniciadas` por construção, e o trecho do meio da fita desenha 100% de
+   conversão — "meu checkout converte tudo" — quando o que houve foi ausência de
+   fonte independente.
+
+   É o denominador zero outra vez, em outra camada: `100%` e `não medido` não
+   são a mesma afirmação, do mesmo jeito que `0,00x` e `—` não são.
+
+   ⚠️ As duas asserções abaixo têm o par POSITIVO e o NEGATIVO. Só a positiva
+   passaria com o componente escrevendo "não medido" em toda etapa, sempre. */
+
+const FUNIL_SEM_PIXEL = [
+  { label: "Cliques", valor: 1220, valorFmt: "1.220" },
+  { label: "ICs", valor: 35, valorFmt: "35", trechoNaoMedido: "sem pixel no período" },
+  { label: "Vendas Inic.", valor: 35, valorFmt: "35" },
+];
+
+checar("sem IC de navegador: a pílula do trecho diz NÃO MEDIDO e nunca 100%", () => {
+  const html = renderToStaticMarkup(React.createElement(FitaFunil, { etapas: FUNIL_SEM_PIXEL }));
+  assert.ok(html.includes("não medido"), "a pílula de não medido não saiu");
+  assert.ok(html.includes("sem pixel no período"), "o tooltip do motivo não foi para o markup");
+  /* 🔴 A ASSERÇÃO É COMPARATIVA, e as duas versões anteriores dela estavam
+     erradas — vale registrar porque as duas falhavam pelo motivo errado:
+
+     | tentativa | por que não servia |
+     |---|---|
+     | `!html.includes("100%")` | pegava o `100,0%` da etapa de TOPO, que é a fração do máximo e está correta |
+     | `count("100,0%") === 1`  | são 3 ocorrências legítimas do MESMO valor: a pílula, o `aria-label` e a versão compacta |
+
+     O que se quer dizer é **"o estado não medido não ACRESCENTA nenhuma
+     afirmação de conversão"**. Isso se mede contra a linha de base: o mesmo
+     funil renderizado sem a marca. Se um dia alguém puser uma pílula de
+     conversão no trecho, a contagem sobe e isto cai — sem ninguém ter previsto
+     o número novo. */
+  const medido = FUNIL_SEM_PIXEL.map((e) => ({ ...e, trechoNaoMedido: undefined }));
+  const htmlMedido = renderToStaticMarkup(React.createElement(FitaFunil, { etapas: medido }));
+  const cem = (h) => (h.match(/100,0%/g) ?? []).length;
+  assert.equal(
+    cem(html),
+    cem(htmlMedido),
+    "o estado NÃO MEDIDO acrescentou uma afirmação de conversão que a linha de base não tem",
+  );
+  /* E não existe pílula de perda no trecho: ICs e Vendas Inic. têm o mesmo
+     valor, então não houve queda. Uma "−0" ali seria perda fabricada. */
+  assert.ok(!/−0[^\d]/.test(html), "apareceu uma perda de zero no trecho não medido");
+});
+
+checar("a etapa NÃO SOME quando o trecho é não medido", () => {
+  /* ⛔ Etapa que desaparece muda a forma do funil em silêncio, e a forma é o
+     que a pessoa compara entre períodos. */
+  const html = renderToStaticMarkup(React.createElement(FitaFunil, { etapas: FUNIL_SEM_PIXEL }));
+  for (const e of FUNIL_SEM_PIXEL) {
+    assert.ok(html.includes(e.label), `a etapa ${e.label} sumiu do funil`);
+  }
+});
+
+checar("COM IC de navegador, o 'não medido' NÃO aparece", () => {
+  /* O lado negativo. Sem ele, um componente que escrevesse "não medido" sempre
+     passaria na asserção de cima. */
+  const medido = FUNIL_SEM_PIXEL.map((e) => ({ ...e, trechoNaoMedido: undefined }));
+  const html = renderToStaticMarkup(React.createElement(FitaFunil, { etapas: medido }));
+  assert.ok(!html.includes("não medido"), "declarou não medido onde havia medição");
+});
+
+checar("origem MISTA: a composição aparece com os dois números", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(FitaFunil, {
+      etapas: [
+        { label: "Cliques", valor: 1220, valorFmt: "1.220" },
+        { label: "ICs", valor: 35, valorFmt: "35", composicao: "35 ICs · 11 do navegador" },
+        { label: "Vendas Inic.", valor: 20, valorFmt: "20" },
+      ],
+    }),
+  );
+  assert.ok(html.includes("35 ICs"), "o total não saiu na composição");
+  assert.ok(html.includes("11 do navegador"), "a parcela do navegador não saiu");
+});
+
+checar("a perda de RASTREAMENTO é rotulada, e a de abandono não", () => {
+  /* Cliques → Sessões não é abandono: é o rastreamento que não viu. Rotular
+     igual manda o gestor otimizar a oferta quando o problema é a instalação. */
+  const html = renderToStaticMarkup(
+    React.createElement(FitaFunil, {
+      etapas: [
+        { label: "Cliques", valor: 1220, valorFmt: "1.220", perdaLabel: "sem rastreamento" },
+        { label: "Sessões", valor: 400, valorFmt: "400" },
+        { label: "Vendas", valor: 25, valorFmt: "25" },
+      ],
+    }),
+  );
+  assert.ok(html.includes("sem rastreamento"), "a perda de rastreamento saiu sem rótulo");
+  /* E só UMA vez: a segunda perda (Sessões → Vendas) É abandono e não leva
+     rótulo. Sem esta metade, um componente que carimbasse todas passaria. */
+  assert.equal((html.match(/sem rastreamento/g) ?? []).length, 1, "o rótulo vazou para a perda de abandono");
+});
+
 console.log(
   falhas.length
     ? `\n\x1b[31m${falhas.length} falha(s)\x1b[0m de ${ok + falhas.length}\n`
