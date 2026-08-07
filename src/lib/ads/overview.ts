@@ -340,6 +340,25 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
     else if (cont.name) inc(cliquesByContentName, cont.name.toLowerCase());
   }
 
+  /* O objetivo do anúncio e do conjunto é o da CAMPANHA deles — a Meta só o
+     define nesse nível. Herdar aqui é o que permite os três níveis mostrarem o
+     mesmo subtítulo sem cada um consultar o banco de novo.
+
+     🔴 A DECLARAÇÃO FICA AQUI, ANTES DE `adRows`, e isso não é estilo. Eu a
+     escrevi junto do `campaignNameById`, 50 linhas ABAIXO — `const` em zona
+     morta temporal, e `adRows.map` estourava `Cannot access
+     'campaignObjectiveById' before initialization` em toda carga do
+     Gerenciador.
+
+     ⚠️ `tsc`, `lint` e `build` passaram os três: TDZ é erro de execução, não de
+     tipo. Só a tela mostrou — a tabela ficou em "Carregando…" e a `/api/ads`
+     devolvia 500 com corpo vazio.
+
+     ⚠️ E a saída já estava escrita ao lado: `campaignName` resolve o MESMO
+     problema com um pós-passe (`for (const a of adRows)`, no fim da função),
+     justamente porque o mapa não existe no momento do `.map()`. */
+  const campaignObjectiveById = new Map(campaigns.map((c) => [c.id, c.objective]));
+
   // Anúncios
   const adRows: AdRow[] = ads.map((a) => {
     const met = metByAd.get(a.id) ?? { spend: 0, impressions: 0, clicks: 0 };
@@ -395,10 +414,6 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
     );
 
   const campaignNameById = new Map(campaigns.map((c) => [c.id, c.name]));
-  /* O objetivo do anuncio e do conjunto e o da CAMPANHA deles — a Meta so o
-     define nesse nivel. Herdar aqui e o que permite a tabela mostrar o mesmo
-     subtitulo nos tres niveis sem cada um consultar o banco de novo. */
-  const campaignObjectiveById = new Map(campaigns.map((c) => [c.id, c.objective]));
 
   const campaignRows: CampaignRow[] = campaigns.map((c) => {
     const agg = sumAds(adsByCampaign.get(c.id));

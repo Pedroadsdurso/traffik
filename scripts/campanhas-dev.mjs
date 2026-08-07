@@ -138,6 +138,34 @@ async function main() {
     [userId],
   );
 
+  /* A chave dos ids sintéticos. Uma função, e não a string espalhada: a
+     primeira versão deste script usou `camp-dev-gerenciador-N` e a troca para
+     numérico teve de acontecer em DOIS lugares que já haviam divergido. */
+  const chaveFb = (i) => `12000000000${String(i).padStart(4, "0")}`;
+
+  /* Migração da chave antiga → numérica. Sem isto a execução seguinte não
+     encontraria as linhas pela chave nova e criaria uma segunda cópia de cada
+     campanha. Escopado por `userId`, e por id coletado — nunca por LIKE. */
+  for (let i = 0; i < CAMPANHAS.length; i++) {
+    const antiga = `camp-dev-gerenciador-${i}`;
+    await cliente.query(
+      `UPDATE "Campaign" SET "fbCampaignId" = $3
+       WHERE "fbCampaignId" = $2
+         AND "adAccountId" IN (SELECT id FROM "AdAccount" WHERE "userId" = $1)`,
+      [userId, antiga, chaveFb(i)],
+    );
+    /* O `xcod` dos cliques carrega a chave ANTIGA no sufixo. Trocar só a
+       campanha orfanaria a receita que este script semeou — o defeito que a
+       troca de chave existe para evitar, cometido pela própria troca. */
+    for (const tabela of ["Click", "Sale"]) {
+      await cliente.query(
+        `UPDATE "${tabela}" SET "utmCampaign" = replace("utmCampaign", '|' || $2, '|' || $3)
+         WHERE "userId" = $1 AND "utmCampaign" LIKE '%|' || $2`,
+        [userId, antiga, chaveFb(i)],
+      );
+    }
+  }
+
   const resultado = [];
 
   for (let i = 0; i < CAMPANHAS.length; i++) {
@@ -156,9 +184,18 @@ async function main() {
         [campanhaId, nome, status, efetivo, objetivo, diaria, vitalicia, userId],
       );
     } else {
-      /* `fbCampaignId` DERIVADO do índice, não sorteado: é ele que faz a segunda
-         execução encontrar a linha em vez de criar outra. */
-      const fb = `camp-dev-gerenciador-${i}`;
+      /* 🔴 `fbCampaignId` NUMÉRICO, e isso não é cosmética.
+       *
+       * `splitPipe` (`lib/utm/parse.ts:72`) descarta id NÃO NUMÉRICO — a Meta
+       * usa inteiros longos, e um `camp-dev-A` é indistinguível de placeholder
+       * não substituído. Consequência: com id de mentira, o dev inteiro
+       * atribuía venda→campanha **por NOME**, que é a dívida técnica nº 3 (a
+       * ambígua). O caminho por ID — o que roda em produção e o que o Bloco 11
+       * existe para tornar confiável — nunca era exercido aqui.
+       *
+       * Derivado do índice, então a segunda execução encontra a linha em vez de
+       * criar outra. */
+      const fb = chaveFb(i);
       const { rows: ja } = await cliente.query(
         `SELECT c.id FROM "Campaign" c JOIN "AdAccount" a ON a.id = c."adAccountId"
          WHERE a."userId" = $1 AND c."fbCampaignId" = $2`,
@@ -264,7 +301,7 @@ async function main() {
   ];
 
   for (const [indice, quantas, ticket] of RECEITA) {
-    const fb = `camp-dev-gerenciador-${indice}`;
+    const fb = chaveFb(indice);
     const { rows: cs } = await cliente.query(
       `SELECT c.id, c.name FROM "Campaign" c JOIN "AdAccount" a ON a.id = c."adAccountId"
        WHERE a."userId" = $1 AND c."fbCampaignId" = $2`, [userId, fb],
@@ -299,6 +336,41 @@ async function main() {
          VALUES ($1,$2,$3,$4,$5,$6,$7,'APROVADA','PIX',$8,'BR',$9,$10,now() - ($11 || ' hours')::interval,now())`,
         [id(), userId, clique, hooks[0]?.id ?? null, externo, `${MARCA} Produto ${indice}`, ticket,
          `comprador${indice}${n}@exemplo.dev`, "facebook", `${cs[0].name}|${fb}`, String(n + 1)],
+      );
+    }
+  }
+
+  /* ── AS DUAS ORIGINAIS: O `utmCampaign` DOS CLIQUES SEGUE O NOME NOVO ─────
+   *
+   * 🔴 Renomear campanha ZEROU a receita das duas que já existiam, e o motivo
+   * merece ficar escrito porque não é óbvio:
+   *
+   * `splitPipe` descarta id não numérico, e o `seed-dev` grava
+   * `fbCampaignId = 'camp-dev-A'`. Logo `camp.id` sai `null` e a atribuição cai
+   * no ramo do NOME (`resultsByName`, `overview.ts:422`) — que passou a não
+   * casar mais com o nome novo. As duas campanhas apareceram com
+   * `R$ 0,00` de faturamento e ROAS `0,00x`, ao lado de um gasto real.
+   *
+   * ⚠️ Isso NÃO é bug do produto: com id numérico de verdade — que é o que a
+   * Meta manda — a atribuição vai por id e sobrevive a renomear. É o seed que
+   * era irreal, e é por isso que as campanhas novas acima nascem com id
+   * numérico.
+   *
+   * Aqui só realinhamos o nome dentro do `xcod` dos cliques que já existem.
+   * ⛔ Escopado por `userId`: um `WHERE` por `utmCampaign` atravessaria
+   * usuários, que é exatamente o incidente de 29/07. */
+  const { rows: todas } = await cliente.query(
+    `SELECT c.name, c."fbCampaignId" FROM "Campaign" c JOIN "AdAccount" a ON a.id = c."adAccountId"
+     WHERE a."userId" = $1`,
+    [userId],
+  );
+  for (const { name, fbCampaignId } of todas) {
+    for (const tabela of ["Click", "Sale"]) {
+      await cliente.query(
+        `UPDATE "${tabela}" SET "utmCampaign" = $2
+         WHERE "userId" = $1 AND "utmCampaign" LIKE '%|' || $3
+           AND "utmCampaign" IS DISTINCT FROM $2`,
+        [userId, `${name}|${fbCampaignId}`, fbCampaignId],
       );
     }
   }
