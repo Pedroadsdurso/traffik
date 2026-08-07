@@ -140,6 +140,20 @@ checar("a faixa de perda nasce com espessura ZERO na guia de onde sai", () => {
   assert.ok(Math.abs(+inicio[2] - (10 + p.base)) < 0.01, "não começa na borda de baixo do fluxo");
 });
 
+/* ⛔ NÃO HÁ ASSERÇÃO DE "LINHA DE COLAPSO" AQUI, e a ausência é o registro.
+
+   Em 07/08/2026 existiu um `caminhoBordaFluxo` que traçava a borda de baixo do
+   fluxo, e com ele um teste chamado "a linha de colapso DESCE — nunca sobe".
+   O teste passava. O nome estava errado: ele afirmava `y` decrescente, que em
+   SVG é a linha SUBINDO na tela. Medido na página, ela ia de y=160 a y=17.
+
+   Ou seja, o teste verde carimbava como "desce" exatamente a marca que subia —
+   no gráfico cuja única reclamação era "lê como crescimento".
+
+   ⚠️ A lição não é sobre o funil: **num sistema com y invertido, o nome da
+   asserção tem de dizer TELA ou dizer COORDENADA, nunca um verbo ambíguo.**
+   "desce" leu como tela e mediu coordenada, e as duas são opostas. */
+
 console.log(
   falhas.length
     ? `\n\x1b[31m${falhas.length} falha(s)\x1b[0m de ${ok + falhas.length}\n`

@@ -402,6 +402,50 @@ for (const [nomeTema, tokens] of Object.entries(temas)) {
     false,
     "--tk-accent",
   );
+
+  /* 🔴 FITA DO FUNIL — o único par ADJACENTE do sistema, e o único objeto
+     gráfico que REPROVA (`obrigatorio: true`).
+
+     Todos os outros pares deste arquivo medem cor-sobre-FUNDO: se um deles cai,
+     o elemento fica difícil de ver. Aqui as duas cores se encostam por uma
+     borda comum, e o que se perde quando o par cai não é visibilidade — é a
+     FRONTEIRA. Sem ela o fluxo e a perda viram uma mancha só, e a figura passa
+     a afirmar o contrário do dado (foi exatamente o que a rampa de opacidade
+     fazia, a 1,24:1, até 07/08/2026).
+
+     Por isso ele não é "aviso de design": é a correção da 4ª tentativa do
+     funil, e uma regressão aqui reintroduz um gráfico que se lê ao contrário.
+     Se um dia precisar ser afrouxado, o caminho é ACEITOS com piso e motivo —
+     não trocar para `false`. */
+  console.log(`\n\x1b[1mTema ${nomeTema} — fita do funil (faixas ADJACENTES; 3:1 reprova)\x1b[0m`);
+  medir(
+    "fluxo | perda forte  " + cinza("a fronteira que diz o que sobrevive"),
+    rgb(tokens, "--tk-fluxo"),
+    rgb(tokens, "--tk-perda-forte"),
+    3,
+    true,
+    "--tk-fluxo",
+  );
+  medir(
+    "perda forte sobre surface  " + cinza("a perda precisa existir contra o card"),
+    rgb(tokens, "--tk-perda-forte"),
+    superficie,
+    1.5,
+    true,
+    "--tk-perda-forte",
+  );
+  /* ⚠️ NÃO obrigatório, e a frouxidão é a decisão: as duas perdas ficam a
+     ~1,4:1, e quem as separa é o contorno de 1px na cor da superfície, não o
+     tom. Medido aqui para que o número fique à vista de quem pensar em remover
+     aquele `stroke` — ver a nota no FitaFunil. */
+  medir(
+    "perda forte | perda fraca  " + cinza("tom é REFORÇO; quem separa é o contorno de 1px"),
+    rgb(tokens, "--tk-perda-forte"),
+    rgb(tokens, "--tk-perda-fraca"),
+    3,
+    false,
+    "--tk-perda-fraca",
+  );
 }
 
 /* ── 4. Veredito ──────────────────────────────────────────────────────────── */
@@ -464,7 +508,10 @@ if (fantasmas.length) {
   for (const f of fantasmas) console.log(cinza(`  · ${f}`));
 }
 if (reprovados) {
-  console.log(vermelho(`\n${reprovados} par(es) de TEXTO abaixo de 4.5:1, em ${porToken.size} token(s):\n`));
+  /* "abaixo do LIMIAR", não "abaixo de 4.5:1": desde 07/08/2026 a fita do funil
+     entra aqui com limiar 3:1 (par adjacente). Citar um número só faria a
+     mensagem mentir sobre metade das reprovações possíveis. */
+  console.log(vermelho(`\n${reprovados} par(es) abaixo do limiar, em ${porToken.size} token(s):\n`));
   const ordenado = [...porToken.entries()].sort((a, b) => a[1].pior - b[1].pior);
   for (const [chave, { pior, n }] of ordenado) {
     console.log(`  ${vermelho(pior.toFixed(2).padStart(5) + ":1")}  ${chave}${n > 1 ? cinza(`  (pior de ${n} fundos)`) : ""}`);
