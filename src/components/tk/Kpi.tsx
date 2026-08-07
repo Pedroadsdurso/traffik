@@ -83,9 +83,17 @@ const COR_SOBRE_TINTA = {
  * Um CPA que cai tem seta para BAIXO e cor VERDE — as duas certas ao mesmo
  * tempo. Amarrar a seta à cor faria "o CPA caiu" aparecer com seta para cima.
  */
-function PilulaDelta({ delta, invertido }: { delta: number; invertido?: boolean }) {
-  const tom = tomDoDelta(delta, invertido);
-  const sobe = delta > 0;
+export function PilulaVariacao({
+  texto,
+  tom,
+  seta,
+}: {
+  /** Já formatado — "18,6%". O componente não calcula nada. */
+  texto: string;
+  tom: "success" | "danger" | "muted";
+  /** `null` some com a seta — para variação que não tem direção. */
+  seta?: "cima" | "baixo" | null;
+}) {
   return (
     <span
       className="text-caption"
@@ -106,11 +114,32 @@ function PilulaDelta({ delta, invertido }: { delta: number; invertido?: boolean 
         lineHeight: 1,
       }}
     >
-      <span aria-hidden="true" style={{ fontSize: 12 }}>
-        {delta === 0 ? "—" : sobe ? "↑" : "↓"}
-      </span>
-      {Math.abs(delta).toFixed(1).replace(".", ",")}%
+      {seta !== null && (
+        <span aria-hidden="true" style={{ fontSize: 12 }}>
+          {seta === "cima" ? "↑" : seta === "baixo" ? "↓" : "—"}
+        </span>
+      )}
+      {texto}
     </span>
+  );
+}
+
+/**
+ * A pílula a partir de um DELTA numérico. Ela decide tom e seta; quem só tem o
+ * texto pronto usa a `PilulaVariacao` direto.
+ *
+ * ⛔ UMA implementação de pílula, e não duas. O `CardMetrica` tinha a variação
+ * como texto colorido solto e ia ganhar a sua — duas pílulas com o mesmo papel
+ * divergem no primeiro ajuste de padding, e o usuário vê as duas lado a lado
+ * sem saber qual está certa.
+ */
+function PilulaDelta({ delta, invertido }: { delta: number; invertido?: boolean }) {
+  return (
+    <PilulaVariacao
+      tom={tomDoDelta(delta, invertido)}
+      seta={delta === 0 ? undefined : delta > 0 ? "cima" : "baixo"}
+      texto={`${Math.abs(delta).toFixed(1).replace(".", ",")}%`}
+    />
   );
 }
 

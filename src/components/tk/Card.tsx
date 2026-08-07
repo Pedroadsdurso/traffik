@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { PilulaVariacao } from "./Kpi";
+
 /**
  * Card — a superfície de conteúdo.
  *
@@ -200,12 +202,18 @@ export function CardMetrica({
           <div className="text-metric-xl text-text" style={{ marginTop: 4 }}>
             {valor}
           </div>
+          {/* §2 — PÍLULA, não texto colorido solto, e a MESMA do `KpiHero`.
+              Era `text-success`/`text-danger` numa linha abaixo do número: a
+              variação lida como legenda em vez de dado. Importar a pílula em
+              vez de repeti-la é o que impede as duas de divergirem no primeiro
+              ajuste de padding. */}
           {variacao && (
-            <div
-              className={`text-caption ${variacao.positiva ? "text-success" : "text-danger"}`}
-              style={{ marginTop: 4 }}
-            >
-              {variacao.texto}
+            <div style={{ marginTop: 6 }}>
+              <PilulaVariacao
+                tom={variacao.positiva ? "success" : "danger"}
+                seta={variacao.positiva ? "cima" : "baixo"}
+                texto={variacao.texto}
+              />
             </div>
           )}
         </div>

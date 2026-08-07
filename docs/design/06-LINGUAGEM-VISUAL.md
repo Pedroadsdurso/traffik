@@ -418,6 +418,42 @@ O que dá mais resultado por linha escrita:
 
 ---
 
+## 🗂️ RODE O CHECKLIST POR ARQUIVO, NÃO SÓ POR TELA
+
+> **Checklist rodado por arquivo encontra o que o checklist rodado por tela não
+> vê.** Registrado em 07/08/2026: a auditoria do Shell achou uma borda entre
+> linhas no `FeedVendas` — que é do **Dashboard**, uma tela dada como fechada
+> dois dias antes.
+
+O motivo é estrutural: os componentes são **compartilhados**. Conferir "a tela X
+está pronta" percorre o que aquela tela mostra, e um componente que ela usa em
+estado vazio, ou numa aba que não estava aberta, passa batido. A varredura por
+padrão (`grep` pelo defeito, em toda a pasta) não depende de o caso estar visível.
+
+### As seções que MERECEM varredura por arquivo
+
+Todas as que vivem em componente compartilhado:
+
+| § | O que procurar |
+|---|---|
+| **1** | `bg-surface border` sem `boxShadow` e sem `<Card>` · `borderRadius` numérico ≥ 8 |
+| **2** | `text-success`/`text-danger` perto de `delta`/`variacao` — variação como texto solto |
+| **4** | preenchimento proporcional sem `borderRadius` |
+| **8** | `borderBottom`/`borderTop` entre linhas de lista |
+| **13** | `placeItems: center` com `width` de 28–40 — recipiente de ícone fora da medida |
+| **14.1** | `height:` numérico em elemento interativo |
+| **14.3** | tempo relativo sem `<Desde>` |
+
+⚠️ **§3, §5, §6, §7 e §9 não precisam**: cada um vive num componente único
+(`LineChart`, `DonutChart`, `MedidorRadial`, `Heatmap`, `FitaFunil`). Auditar o
+componente É auditar todas as telas que o usam.
+
+⛔ **Rode antes de começar uma tela nova, não depois.** É mais barato uma vez
+agora que uma vez por tela — e evita "consertar" na tela nova o que já estava
+consertado no componente.
+
+---
+
 ## CRITÉRIO DE ACEITE
 
 O teste do cinza continua provando estrutura. Este documento pede outro teste:

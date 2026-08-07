@@ -872,7 +872,27 @@ qualquer resize, leia `innerWidth` e compare. `innerWidth === screen.availWidth`
 
 ---
 
-## 🚦 ESTADO ATUAL E FILA — 05/08/2026
+## 📊 ESTADO DAS TELAS DO REDESIGN
+
+<!-- ESTADO:INICIO -->
+> ⛔ **GERADO A PARTIR DO `04` — NÃO EDITE À MÃO.** Rode `npm run docs:estado`.
+> Ele garante que este arquivo e o `04` não discordem. **Não** garante que o
+> `04` concorde com o código — isso continua sendo conferência manual.
+> Última geração: 07/08/2026.
+
+| Tela | ✅ feito | ❌ falta | 🔧 diverge por decisão |
+|---|---|---|---|
+| SHELL | 18 | 1 | 10 |
+| DASHBOARD | 28 | 1 | 15 |
+| INTEGRAÇÕES | 24 | — | 18 |
+| REGRAS | 0 | 21 | — |
+| CAMPANHAS / GERENCIADOR | 0 | 18 | 1 |
+| UTM & SNIPPETS | 0 | 23 | 1 |
+| CRIATIVOS | 0 | 13 | — |
+| LOGIN | 0 | 19 | — |
+<!-- ESTADO:FIM -->
+
+# 🚦 ESTADO ATUAL E FILA — 05/08/2026
 
 Tudo até `12c25ac` está no `origin/main`.
 
@@ -1485,6 +1505,43 @@ categoria inteira cai sempre no mesmo lado da segunda decisão.
 ⚠️ E **gerador de dado de teste é idempotente**, nunca `random()`: com aleatório,
 cada execução muda os números da tela e ninguém sabe se ela mudou por causa do
 código ou do seed. `row_number()` sobre uma ordem estável resolve.
+
+# 🚫 COMENTÁRIO QUE *PROÍBE* É O MAIS PERIGOSO DE TODOS
+
+> **Porque ele AUTORIZA alguém a desfazer.** Um comentário que explica envelhece
+> e vira ruído; um que proíbe envelhece e vira uma ordem para reverter o
+> conserto.
+
+O caso (07/08/2026, o **quinto** da família, e o pior deles): o cabeçalho do
+`Card.tsx` dizia
+
+> *"⛔ CARD NÃO TEM SOMBRA. […] Um card com sombra no escuro não parece elevado,
+> parece sujo."*
+
+enquanto a **linha 98 do mesmo arquivo** aplicava `--tk-shadow-card`.
+
+### A agravante, e é o que separa este dos outros quatro
+
+Os outros eram documentação envelhecida **longe** do código: um comentário 219
+linhas acima da conta, uma página de design-system, uma linha do CLAUDE.md. Este
+é **o cabeçalho do arquivo contradizendo o corpo do arquivo**.
+
+Quem abre o `Card.tsx` para mexer lê a proibição **antes** de ver a aplicação. E
+uma proibição em maiúscula, com o motivo bem escrito ("parece sujo"), é
+convincente: a leitura natural é *"então a linha 98 está errada"* — e o conserto
+vira o desfazer.
+
+> ### ⛔ A REGRA
+> **Proibição que muda não é ATUALIZADA — é APAGADA, e no lugar dela entra o
+> motivo da mudança.**
+>
+> Não escreva *"antes não podia, agora pode"*: isso deixa a proibição legível, e
+> quem varre o arquivo em diagonal continua vendo o ⛔. Escreva o que vale hoje,
+> e a reversão como nota, subordinada.
+
+⚠️ **Ao reverter qualquer regra, `grep` pelo ⛔ dela em todo o repositório.** Foi
+o que faltou: a sombra foi revertida no `globals.css` e o ⛔ ficou em pé no
+componente, na `/design-system` e no CLAUDE.md.
 
 # 📝 DOCUMENTAÇÃO QUE *AFIRMA* UM VALOR ENVELHECE. QUE *LÊ* O VALOR, NÃO.
 
