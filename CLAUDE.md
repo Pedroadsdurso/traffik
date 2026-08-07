@@ -1908,6 +1908,89 @@ não roda em máquina limpa, e aí ninguém roda o agregado.
 consumidores de produção — é pelos **testes** dele, inclusive os que o agregado
 não roda.
 
+# 📐 DOIS INSTRUMENTOS NÃO SE COMPARAM — a razão entre eles não é conversão
+
+> **A regra:** antes de pôr dois números na mesma geometria — mesma escala,
+> mesma linha, mesma razão, mesma barra —, pergunte **se eles vêm do mesmo
+> instrumento**. Se não vierem, a razão entre eles não mede um fenômeno do
+> negócio: mede a **CONCORDÂNCIA ENTRE DOIS SISTEMAS DE MEDIÇÃO**.
+>
+> Formulação do dono, 07/08/2026. Nasceu no funil e **não é regra do funil**.
+
+O caso que a produziu: `Cliques` vem do `DailyAdMetric` (a **Meta**) e `Sessões`
+vem da nossa tabela `Click` (**nosso script**). Postos na mesma fita, a queda de
+97,1% entre os dois lia como abandono de comprador. Não era: era instalação.
+
+⚠️ **E o denominador ainda é pior do que parecia.** O campo sincronizado é o
+`clicks` da Meta — TODOS os cliques no anúncio, não só os de link: reação,
+comentário, compartilhamento, toque no nome da página, "ver mais". Ou seja, os
+dois instrumentos nem contam o mesmo TIPO de evento.
+
+| Pergunta | |
+|---|---|
+| ✅ mede um fenômeno | as duas pontas saem da MESMA fonte |
+| 🔴 mede concordância | cada ponta sai de um sistema diferente |
+
+### Onde ela reaparece nesta base — e a próxima é o GERENCIADOR
+
+| Par | Instrumento A | Instrumento B |
+|---|---|---|
+| **ROAS / CPA / ROI** | `spend` da **Meta** | receita do **gateway** |
+| Funil `Cliques → Sessões` | `clicks` da Meta | nossa tabela `Click` |
+| Taxa de aprovação | gateway | gateway ✅ mesmo instrumento |
+| Funil `ICs → Vendas Inic.` | derivado da venda | a venda ⚠️ pior: tautologia |
+
+🔴 **O ROAS é o número mais usado da ferramenta e é um par de instrumentos
+diferentes.** Ele não é "errado" por isso — é o padrão do mercado —, mas toda
+afirmação construída em cima dele herda a discordância, e o painel de Insights
+do Gerenciador vai construir afirmações em cima dele.
+
+> ### ⛔ O QUE FAZER, JÁ QUE NÃO DÁ PARA NÃO COMPARAR
+> Não é proibir a razão — é **declarar a base**. Onde a discordância for grande
+> e mensurável, o produto mostra a cobertura ao lado do número, como o funil
+> passou a fazer. O erro não é dividir; é dividir **em silêncio**.
+
+⚠️ **O sintoma é sempre o mesmo:** a razão fica extrema (perto de 0 ou de ∞) e
+ninguém consegue explicar por quê olhando o negócio. Quando isso acontecer, a
+primeira pergunta não é "o cálculo está certo?" — é **"esses dois números vêm do
+mesmo lugar?"**.
+
+# 🔤 O BUG QUE NASCEU DE UMA AMBIGUIDADE DE NOME, não de lógica
+
+> **O primeiro desta base.** 07/08/2026. Registrado porque o modo de falha não
+> se parece com nenhum dos outros: o código estava logicamente correto em cada
+> linha, e mesmo assim desenhava errado.
+
+`FitaFunil` tinha `inicioDaFita`. Em português isso é **"onde a fita começa"** —
+e essa frase tem duas leituras que em pixels são lugares diferentes:
+
+| leitura | valor |
+|---|---|
+| o **centro** da primeira etapa desenhada | `x` de `Sessões` |
+| a **borda** da área onde a fita é plotada | limite entre as colunas |
+
+Enquanto só existia uma delas, o nome servia. No instante em que a fita passou a
+nascer na BORDA, o identificador antigo continuou existindo com a outra
+semântica — e a largura da faixa de cobertura, que ainda o usava, passou a
+correr **por baixo da fita**.
+
+⚠️ **Nenhuma ferramenta podia pegar:** os dois são `number`, os dois são
+coordenadas x válidas, e a conta `inicioDaFita - MARGEM_X * 2` continuou
+compilando e produzindo um número plausível. Só a tela mostrou.
+
+> ### ⛔ A REGRA
+> **Quando um conceito ganhar uma segunda encarnação, RENOMEIE a primeira no
+> mesmo commit.** Não basta criar o nome novo ao lado: o nome antigo, que antes
+> era exato, vira ambíguo no instante em que o segundo existe — e todo chamador
+> dele passa a estar apostando numa das duas leituras sem dizer qual.
+>
+> Hoje são `inicioDaFita` (centro da etapa) e `inicioDaPlotagem` (borda da
+> área), com a distinção escrita na linha que usa cada um.
+
+⚠️ É primo do `?? 0` e do empurrãozinho de 2px: os três compilam, os três
+parecem cuidado, e os três só aparecem na tela. A diferença é que este não tem
+nem uma linha suspeita para procurar — **a linha errada é idêntica à certa.**
+
 # 🟩💀 TESTE VERDE SOBRE CAMINHO MORTO — a garantia FALSA
 
 > **Primo direto do `teste-fita` fora do agregado, e pior que ele.** Um teste
