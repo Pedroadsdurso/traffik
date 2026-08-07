@@ -52,6 +52,17 @@ export function BreakdownPanel({
     );
   }
 
+  /* 🔴 COLUNA SEM DADO NÃO É COLUNA DE "—". `v.placements` não traz `pctLabel`:
+     o denominador dele seria o faturamento com posicionamento conhecido, que
+     NÃO é o faturamento total — parte das vendas não tem `{{placement}}`. Uma
+     coluna inteira de traços gasta 44px para afirmar que não sabemos, e o
+     cabeçalho `%` promete um número que nunca vem.
+
+     ⚠️ A checagem é `!== undefined`, não truthy: `pctLabel` legítimo pode ser
+     a string `"—"` de UMA linha (denominador zero naquela linha), e isso é
+     diferente da dimensão inteira não ter participação. */
+  const temPct = linhas.some((l) => l.pctLabel !== undefined);
+
   return (
     <div className="tk-breakdown" style={{ display: "flex", flexDirection: "column" }}>
       <div
@@ -61,7 +72,7 @@ export function BreakdownPanel({
         <span style={{ flex: 1, minWidth: 0 }}>{rotuloDimensao}</span>
         {mostrarVendas && <span style={{ width: 54, textAlign: "right" }}>Vendas</span>}
         <span style={{ width: 78, textAlign: "right" }}>Receita</span>
-        <span className="tk-col-pct" style={{ width: 44, textAlign: "right" }}>%</span>
+        {temPct && <span className="tk-col-pct" style={{ width: 44, textAlign: "right" }}>%</span>}
       </div>
 
       {/* 🎨 A BARRA DE PROPORÇÃO FICA ATRÁS DO TEXTO (`06` §8), e não numa linha
@@ -113,9 +124,11 @@ export function BreakdownPanel({
             {/* `pctLabel` já vem "—" quando não há denominador — ver `pct1` no
                 hook. Aqui não se recalcula nada: dois lugares fazendo a mesma
                 divisão é como nasceram os dois `div` de contratos opostos. */}
-            <span className="text-caption text-text-muted tk-col-pct" style={{ width: 44, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
-              {l.pctLabel ?? "—"}
-            </span>
+            {temPct && (
+              <span className="text-caption text-text-muted tk-col-pct" style={{ width: 44, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+                {l.pctLabel ?? "—"}
+              </span>
+            )}
           </div>
         </div>
       ))}

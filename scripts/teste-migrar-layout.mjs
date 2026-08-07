@@ -15,7 +15,7 @@
  * layout corrompido, e o layout que só tem blocos mortos.
  */
 import { migrarLayout, layoutPadrao, colunasDoGridAntigo, linhasDoGridAntigo, MAX_FAIXA } from "@/components/dashboard/layout/migrar";
-import { encaixarColunas, metaDoBloco, passosDoBloco, proximoPasso } from "@/components/dashboard/catalogo";
+import { ESTRUTURAIS, encaixarColunas, metaDoBloco, passosDoBloco, proximoPasso, reporEstruturais } from "@/components/dashboard/catalogo";
 import { avisoDeSobra, linhasDaGrade } from "@/components/dashboard/layout/grade";
 import { readFileSync } from "node:fs";
 
@@ -43,7 +43,19 @@ const DESTINOS = {
   "chart:pagamentos": "pagamentos", "chart:vendasDia": "vendas-por-dia",
   "chart:vendasHora": "vendas-por-hora", "chart:lucroHora": "lucro-por-hora",
   "chart:aprovacao": "aprovacao", "chart:feed": "atividade",
+  /* 🔴 OS TRÊS QUE VOLTARAM em 07/08/2026. `chart:receita` e `chart:paises`
+     eram descartados porque os blocos estavam fora do catálogo (JSX fixo na
+     tela); `chart:posicionamento` porque o bloco não existia. As três premissas
+     caíram — ver o `DE_PARA` da migração. */
+  "chart:receita": "receita-gasto", "chart:paises": "paises",
+  "chart:posicionamento": "posicionamento",
 };
+
+const IDS_ESTRUTURAIS = ESTRUTURAIS.map((b) => b.id);
+/** Os ids do resultado que NÃO são estruturais, na ordem. */
+const opcionais = (r) => r.paineis.map((p) => p.id).filter((id) => !IDS_ESTRUTURAIS.includes(id));
+/** Todo estrutural está presente? É a garantia de "não pode ser ocultado". */
+const temTodosEstruturais = (r) => IDS_ESTRUTURAIS.every((id) => r.paineis.some((p) => p.id === id));
 
 let ok = 0;
 let falhas = 0;
@@ -82,7 +94,11 @@ console.log("\n[1m2. Layout antigo VÁLIDO[0m");
 
   eq("os 4 primeiros KPIs viram o hero, na ordem do usuário", r.hero, ["faturamento", "vendas", "roas", "cpa"]);
   eq("o resto vai para a faixa, na ordem", r.faixa, ["ticket", "margem"]);
-  eq("os 3 painéis sobrevivem, na ordem de leitura", r.paineis.map((p) => p.id), ["funil", "fontes", "vendas-por-dia"]);
+  eq("os 3 painéis sobrevivem, na ordem de leitura", opcionais(r), ["funil", "fontes", "vendas-por-dia"]);
+  /* ⚠️ A asserção olha só os OPCIONAIS porque os quatro estruturais entram
+     sempre, no fim — se ela comparasse a lista inteira, mediria a reposição
+     junto com a ordem de leitura e não se saberia qual das duas quebrou. */
+  eq("  …e os estruturais foram repostos", temTodosEstruturais(r), true);
 
   /* A LARGURA cai na permitida mais próxima ENTRE AS DO BLOCO. `vendasDia`
      ocupava 12 colunas e aceita metade/cheia → cheia. `funil` ocupava 4 e
@@ -98,24 +114,76 @@ console.log("\n[1m2. Layout antigo VÁLIDO[0m");
 
 console.log("\n[1m3. Bloco que NÃO EXISTE mais[0m");
 {
-  /* `chart:posicionamento` sumiu do produto; `chart:receita` e `chart:paises`
-     viraram blocos ESTRUTURAIS, fixos no Dashboard e fora do catálogo. Os três
-     têm de sumir sem levar os vizinhos junto. */
+  /* ⚠️ ESTE CASO MUDOU DE PROTAGONISTA em 07/08/2026, e a mudança é
+     instrutiva. Ele testava `chart:posicionamento`, `chart:receita` e
+     `chart:paises` — os três "que não existem mais". Os três voltaram a existir,
+     então testá-los aqui provaria o contrário do que o nome diz.
+
+     ⛔ Um bloco INVENTADO (`chart:bloco-que-morreu`) é a entrada certa para esta
+     guarda, e agora é permanente: ele nunca vai voltar ao catálogo, então a
+     asserção não pode envelhecer de novo. Usar um id real fazia o teste depender
+     de uma decisão de produto que muda. */
   const antigo = [
     kpi("faturamento", 0, 0), kpi("gasto", 3, 0), kpi("roas", 6, 0), kpi("lucroLiquido", 9, 0),
-    chart("posicionamento", 0, 8, 6),
+    chart("bloco-que-morreu", 0, 8, 6),
     chart("funil", 6, 8, 6),
-    chart("receita", 0, 16, 12),
-    chart("paises", 0, 24, 12),
   ];
   const r = migrarLayout(antigo);
 
-  eq("o bloco inexistente foi descartado", r.paineis.some((p) => p.id === "posicionamento"), false);
-  eq("os estruturais também (não estão no catálogo)", r.paineis.map((p) => p.id), ["funil"]);
+  eq("o bloco inexistente foi descartado", r.paineis.some((p) => p.id === "bloco-que-morreu"), false);
+  eq("e não levou o vizinho junto", opcionais(r), ["funil"]);
   // Prova que havia o que descartar — senão "não contém" passa com lista vazia.
-  eq("  …e havia 3 para descartar de 4 (senão isto é vácuo)", antigo.filter((i) => i.i.startsWith("chart:")).length, 4);
-  eq("o vizinho sobreviveu", r.paineis[0].id, "funil");
+  eq("  …e havia 1 para descartar de 2 (senão isto é vácuo)", antigo.filter((i) => i.i.startsWith("chart:")).length, 2);
   eq("e o hero ficou intacto", r.hero, ["faturamento", "gasto", "roas", "lucroLiquido"]);
+
+  /* 🔴 OS TRÊS QUE VOLTARAM, com asserção própria. Sem ela, apagar uma entrada
+     do `DE_PARA` por engano voltaria a descartar o arranjo do usuário em
+     silêncio — que é o modo de falha desta função. */
+  const rv = migrarLayout([
+    kpi("faturamento", 0, 0),
+    chart("receita", 0, 8, 12),
+    chart("paises", 0, 16, 8),
+    chart("posicionamento", 8, 16, 4),
+  ]);
+  eq("`chart:receita` volta como painel (era descartado)", rv.paineis.some((p) => p.id === "receita-gasto"), true);
+  eq("`chart:paises` volta como painel (era descartado)", rv.paineis.some((p) => p.id === "paises"), true);
+  eq("`chart:posicionamento` volta como painel (o bloco existe de novo)",
+     rv.paineis.some((p) => p.id === "posicionamento"), true);
+  /* 🔴 E A LARGURA DELE É A DO USUÁRIO, não a do padrão. Mapear o id sem
+     preservar a largura entregaria o bloco de volta no lugar errado — que para
+     quem customizou é indistinguível de ter perdido o arranjo. */
+  eq("  …e o `w: 8` gravado vira 8 colunas", rv.paineis.find((p) => p.id === "paises").col, 8);
+  eq("  …e o `w: 12` também", rv.paineis.find((p) => p.id === "receita-gasto").col, 12);
+}
+
+console.log("\n[1m3b. ESTRUTURAL NÃO PODE SUMIR DO LAYOUT[0m");
+{
+  /* 🔴 A REPOSIÇÃO É O QUE FAZ "NÃO PODE SER OCULTADO" SER UMA GARANTIA, e não
+     uma promessa da interface. A ausência do ✕ cobre o usuário de hoje; ela não
+     cobre um layout gravado por uma versão anterior — que é justamente o estado
+     de todo mundo que salvou antes de 07/08/2026, porque naquele formato os
+     estruturais NÃO estavam na zona. */
+  eq("layout v3 sem nenhum estrutural recebe os quatro de volta",
+     temTodosEstruturais(migrarLayout({ v: 3, hero: [], faixa: [], paineis: [{ id: "funil", col: 6 }] })), true);
+  // Prova que havia o que repor — senão a asserção passaria com o padrão.
+  eq("  …e o opcional gravado continua lá, na frente",
+     opcionais(migrarLayout({ v: 3, hero: [], faixa: [], paineis: [{ id: "funil", col: 6 }] })), ["funil"]);
+
+  /* ⛔ REPOR NÃO PODE MEXER EM QUEM JÁ ESTÁ. Se o usuário arrastou `Alertas`
+     para a primeira posição com 8 colunas, é assim que ele volta. */
+  const custom = migrarLayout({
+    v: 3, hero: [], faixa: [],
+    paineis: [{ id: "alertas", col: 8 }, { id: "funil", col: 4 }],
+  });
+  eq("estrutural JÁ PRESENTE mantém posição", custom.paineis[0].id, "alertas");
+  eq("  …e mantém a largura escolhida", custom.paineis[0].col, 8);
+
+  /* A função pura, isolada — o `reporEstruturais` é quem carrega a regra. */
+  eq("`reporEstruturais([])` devolve exatamente os estruturais",
+     reporEstruturais([]).map((p) => p.id), IDS_ESTRUTURAIS);
+  eq("  …e é idempotente", reporEstruturais(reporEstruturais([])).length, IDS_ESTRUTURAIS.length);
+  // Prova que a lista não está vazia — senão as duas acima são vácuo.
+  eq("  …e há estruturais para repor", IDS_ESTRUTURAIS.length > 0, true);
 }
 
 console.log("\n[1mAs guardas que a leitura do código exigiu[0m");
@@ -140,7 +208,7 @@ console.log("\n[1mAs guardas que a leitura do código exigiu[0m");
 
   /* SÓ BLOCOS MORTOS — a zona 3 não pode ficar vazia: zona vazia parece tela
      quebrada, e o usuário não tem como saber que foi o layout dele. */
-  const r3 = migrarLayout([kpi("roas", 0, 0), chart("posicionamento", 0, 8, 6)]);
+  const r3 = migrarLayout([kpi("roas", 0, 0), chart("bloco-que-morreu", 0, 8, 6)]);
   eq("layout só com blocos mortos cai no padrão de painéis", r3.paineis.length, layoutPadrao().paineis.length);
 
   /* DUPLICATA no salvo — o grid antigo permitia. */
@@ -177,7 +245,14 @@ console.log("Empacotamento da linha e o aviso de sobra");
 console.log("A grade de 12: encaixe, piso e o grid antigo");
 {
   const funil = metaDoBloco("funil");            // colMin 4
-  const porDia = metaDoBloco("vendas-por-dia");  // colMin 6
+  const porDia = metaDoBloco("vendas-por-dia");  // colMin 4
+  /* 🔴 ESCOLHIDO POR PROPRIEDADE, NÃO POR NOME. Um id cravado aqui (`"funil"`,
+     que era o que estava) quebra no dia em que aquele bloco ganhar alça de
+     altura — foi exatamente o que aconteceu em 07/08/2026. Perguntando ao
+     catálogo qual bloco NÃO tem alça, a asserção continua medindo o que promete
+     medir depois de qualquer mudança de produto. */
+  const semAlca = metaDoBloco("fontes");
+  eq("o bloco de referência realmente não tem alça de altura", !!semAlca.alturaAjustavel, false);
 
   /* 🔴 TODAS AS COLUNAS INTEIRAS EXISTEM. A lista curada `[3,4,6,8,12]` foi
      recusada pelo dono: cinco presets nao dao liberdade, dao formulario de cinco
@@ -227,9 +302,13 @@ console.log("A grade de 12: encaixe, piso e o grid antigo");
      VAZIO reservava as linhas que teria COM dado. So quem declara
      `alturaAjustavel` tem altura no layout; para o resto, `undefined` -- que nao
      e "nao sei", e "a altura e a do conteudo". */
-  eq("bloco SEM alca de altura nao recebe linhas", linhasDoGridAntigo(8, funil), undefined);
+  /* ⚠️ O BLOCO DE REFERÊNCIA MUDOU: o `funil` GANHOU alça de altura em
+     07/08/2026 (a fita cresce e ganha resolução vertical), então ele deixou de
+     poder exercer esta guarda. `fontes` é tabela curta — altura extra ali é ar,
+     e é por isso que ele não tem alça. */
+  eq("bloco SEM alca de altura nao recebe linhas", linhasDoGridAntigo(8, semAlca), undefined);
   eq("  ...nem pelo padrao do produto",
-     layoutPadrao().paineis.find((p) => p.id === "funil").linhas, undefined);
+     layoutPadrao().paineis.find((p) => p.id === semAlca.id).linhas, undefined);
   const feed = metaDoBloco("atividade"); // alturaAjustavel
   eq("bloco COM alca: h=8 do grid antigo -> 6 linhas", linhasDoGridAntigo(8, feed), 6);
   eq("  ...e nunca abaixo do piso dele", linhasDoGridAntigo(1, feed), feed.linhasMin);
@@ -262,9 +341,20 @@ console.log("\n[1mO layout REAL do produto (defaultLayout de blocks.ts)[0m");
     // Prova que havia o que migrar — senão o `every` passa com lista vazia.
     eq(`${vp}:   …e havia migráveis (senão o every é vácuo)`, migraveis.length > 0, true);
 
-    /* E os que NÃO têm destino somem: dois viraram estruturais e um morreu. */
-    const semDestino = antigo.filter((i) => i.i.startsWith("chart:") && !DESTINOS[i.i]);
-    eq(`${vp}: os ${semDestino.length} sem destino foram descartados`, r.paineis.length, migraveis.length);
+    /* 🔴 NADA A MAIS E NADA A MENOS. A asserção antiga era
+       `paineis.length === migraveis.length`, e ela deixou de valer quando os
+       estruturais passaram a ser REPOSTOS: o layout real de 30/07 não tem
+       `Alertas` nem o rodapé, então dois entram por reposição e a contagem sobe.
+
+       ⛔ Não foi afrouxada para "≥": o conjunto esperado é exatamente
+       migráveis ∪ estruturais, e comparar o TAMANHO desse conjunto com o
+       resultado continua caindo se um bloco se perder, se um duplicar, ou se a
+       reposição parar de rodar. Trocar por `≥` teria deixado de medir a perda,
+       que é o defeito que este arquivo existe para pegar. */
+    const esperado = new Set([...migraveis, ...IDS_ESTRUTURAIS]);
+    eq(`${vp}: nem sobrou nem faltou painel`, r.paineis.length, esperado.size);
+    eq(`${vp}:   …e os estruturais que o layout real não tinha entraram`,
+       IDS_ESTRUTURAIS.filter((id) => !migraveis.includes(id)).length > 0, true);
   }
 }
 
@@ -288,7 +378,7 @@ console.log("\n[1mO envelope v2[0m");
 
   /* GUARDA: bloco que saiu do catálogo DEPOIS de gravado. */
   const r = v2({ paineis: [{ id: "funil", largura: "metade" }, { id: "bloco-que-morreu", largura: "cheia" }] });
-  eq("v2 descarta bloco fora do catálogo", r.paineis.map((p) => p.id), ["funil"]);
+  eq("v2 descarta bloco fora do catálogo", opcionais(r), ["funil"]);
 
   /* 🔴 GUARDA: o v2 falava por RÓTULO e continua sendo lido — ele foi o formato
      gravado entre 06 e 07/08/2026, e tratá-lo como desconhecido faria quem
@@ -309,7 +399,7 @@ console.log("\n[1mO envelope v2[0m");
      v2({ paineis: [{ id: "vendas-por-dia", largura: "um-terco" }] }).paineis[0].col,
      Math.max(4, metaDoBloco("vendas-por-dia").colMin));
   eq("v2 nao trazia altura -- e o bloco sem alca continua sem",
-     v2({ paineis: [{ id: "funil", largura: "metade" }] }).paineis[0].linhas, undefined);
+     v2({ paineis: [{ id: "fontes", largura: "metade" }] }).paineis[0].linhas, undefined);
 
   /* GUARDA: faixa acima do teto e duplicata entre hero e faixa. */
   eq("v2 respeita o teto da faixa",
@@ -324,8 +414,14 @@ console.log("\n[1mO envelope v2[0m");
      silencio no recarregamento. */
   eq("v2 com `paineis` NÃO-array cai no padrão (corrupção)",
      migrarLayout({ v: 2, hero: "x", faixa: null, paineis: "y" }).paineis.length, layoutPadrao().paineis.length);
-  eq("v2 com `paineis: []` RESPEITA a escolha (o usuário removeu todos)",
-     v2({ paineis: [] }).paineis.length, 0);
+  /* ⚠️ "TODOS" QUER DIZER TODOS OS OPCIONAIS. Os quatro estruturais voltam —
+     remover um opcional é uma escolha que o produto oferece; ocultar um
+     estrutural não é. A asserção mede os opcionais para continuar podendo
+     falhar pelo motivo que alega medir: comparar `paineis.length` com 4 passaria
+     igual se a lista caísse no padrão e por acaso tivesse 4 itens. */
+  eq("v2 com `paineis: []` RESPEITA a escolha (o usuário removeu todos os opcionais)",
+     opcionais(v2({ paineis: [] })), []);
+  eq("  …e os estruturais continuam lá", temTodosEstruturais(v2({ paineis: [] })), true);
   eq("  …e ainda entrega 4 heros", migrarLayout({ v: 2, hero: "x", faixa: null, paineis: "y" }).hero.length, 4);
 
   /* O CONTROLE: sem a marca, é grid antigo. Se `ehLayoutV2` ficasse frouxo e

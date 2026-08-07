@@ -2,24 +2,15 @@
 
 import * as React from "react";
 
-import { bandeiraDe, centroide, nomePais } from "@/lib/countries";
 import { nomeDaFonte } from "@/lib/fontes";
-import { brl, brl0 } from "@/lib/format";
-import { corFinanceira } from "@/lib/financeiro";
-import { useTheme } from "@/components/theme/ThemeProvider";
-// A conta do token é UMA só nesta base — a mesma que Integrações usa.
-import { detalheDoToken, estadoDoToken, rotuloDoToken, tokenPedeAtencao } from "@/lib/integracoes/token";
 
-import { AlertList, type Alerta } from "@/components/tk/AlertList";
 import { useRegistrarFaixaDeFiltros } from "@/components/tk/AppShell";
 import { Card } from "@/components/tk/Card";
-import { AlternadorPais, CountryPanel, useVisaoPais, type LinhaPais } from "@/components/tk/CountryPanel";
-import { DonutChart, type FatiaDonut } from "@/components/tk/DonutChart";
 import { EmptyState } from "@/components/tk/EmptyState";
 import { KpiHero, MetricStrip, type DadosKpi } from "@/components/tk/Kpi";
-import { LineChart, type PontoSerie } from "@/components/tk/LineChart";
-import { RENDERS } from "../../catalogoRender";
-import { ALTURA_LINHA, CATALOGO_META, COLUNAS_GRADE, ESTRUTURAIS_META, metaDoBloco, proximoPasso } from "../../catalogo";
+import { RENDERS, vazioDoBloco } from "../../catalogoRender";
+import { useDadosDosBlocos } from "../../dadosDosBlocos";
+import { ALTURA_LINHA, CATALOGO_META, COLUNAS_GRADE, metaDoBloco, proximoPasso } from "../../catalogo";
 import { useLayoutDashboard } from "../../layout/useLayoutDashboard";
 import { useArrasto, type Carga } from "../../layout/useArrasto";
 import { avisoDeSobra, linhasDaGrade } from "../../layout/grade";
@@ -28,9 +19,6 @@ import { BarraEdicao } from "@/components/tk/BarraEdicao";
 import { CatalogoLateral } from "@/components/tk/CatalogoLateral";
 import { ItemEdicao } from "@/components/tk/ItemEdicao";
 import { ZonaEdicao } from "@/components/tk/ZonaEdicao";
-import { Heatmap } from "@/components/tk/Heatmap";
-import { Segmented } from "@/components/tk/Segmented";
-import { StatusFooter, type BlocoEstado } from "@/components/tk/StatusFooter";
 import { Button } from "@/components/tk/Button";
 import { Badge } from "@/components/tk/Badge";
 
@@ -53,14 +41,26 @@ import type { TraffikView } from "../../useTraffikState";
  *
  *   4 KPIs HERO      Faturamento · Gasto · ROAS · Lucro, com sparkline e delta
  *   FAIXA COMPACTA   os outros sete, uma linha, sem card e sem sparkline
- *   RECEITA × GASTO  linha com pontos e break-even
- *   CANAIS           donut com legenda em coluna
- *   ALERTAS          a ÚNICA coisa da tela que exige ação
- *   PAÍSES           ranking ou globo, na metade inferior
- *   RODAPÉ           estado do sistema, não dinheiro
+ *   PAINÉIS          TUDO o mais, na grade de 12 colunas, pelo layout do usuário
  *
  * ⛔ Cinco cards iguais aqui e a tela volta a ser a grade de doze. A quantidade
  * de heros é fixa de propósito.
+ *
+ * ### 🔴 A TERCEIRA ZONA ABSORVEU O JSX FIXO — 07/08/2026
+ *
+ * `Receita × gasto`, `Canais`, `Alertas`, `Top campanhas`, `Quando compram`,
+ * `Vendas por país` e o rodapé eram markup cravado aqui, fora da grade, com
+ * largura decidida no código. A tela tinha **dois sistemas de layout** — um que
+ * o usuário controlava e outro que ele não via.
+ *
+ * O sintoma foi `Vendas por país` ocupando a tela de ponta a ponta sem alça:
+ * "estrutural" tinha virado "imexível", quando a decisão sempre foi só "não
+ * pode ser ocultado". Hoje os sete estão no catálogo, e o que os quatro fixos
+ * têm de diferente é uma coisa: **não têm ✕**.
+ *
+ * ⚠️ Sobrou pouca coisa fixa nesta tela, e é de propósito: filtros, os dois
+ * blocos de métrica e a moldura de edição. Se um bloco novo aparecer aqui em
+ * JSX solto, é regressão — o lugar dele é o catálogo.
  *
  * ⚠️ ESTA TELA NÃO USA `.tk-tema`. Ela consome `--tk-*` e os primitivos de
  * `components/tk/` direto — a ponte existe só para as telas ainda não refeitas.
@@ -113,6 +113,10 @@ const GRADE: React.CSSProperties = {
  * ⚠️ E ele só vale com DADO — ver o comentário dentro da função.
  */
 function celulaDaGrade(col: number, linhas: number | undefined, temDado: boolean): React.CSSProperties {
+  /* ⚠️ `temDado` continua entrando aqui, e agora é a ÚNICA coisa que o estado
+     vazio muda no layout: a posição e a largura são as que o usuário escolheu.
+     Ver a nota de `BlocoVazio` — colapsar a altura é o comportamento; sumir da
+     grade era o bug. */
   return {
     gridColumn: `span ${col}`,
     minWidth: 0,
@@ -130,41 +134,20 @@ function celulaDaGrade(col: number, linhas: number | undefined, temDado: boolean
   };
 }
 
-type MetricaHeat = "revenue" | "sales" | "profit";
-const ROTULO_HEAT: Record<MetricaHeat, string> = { revenue: "Receita", sales: "Vendas", profit: "Lucro" };
-
-/** Cor de canal — permitida DENTRO da plotagem e da legenda dela, nunca em selo. */
-function corDoCanal(nome: string): string {
-  const n = nome.toLowerCase();
-  if (n.includes("meta") || n.includes("face") || n.includes("insta")) return "var(--tk-channel-meta)";
-  if (n.includes("google") || n.includes("youtube")) return "var(--tk-channel-google)";
-  if (n.includes("tiktok")) return "var(--tk-channel-tiktok)";
-  return "var(--tk-channel-outros)";
-}
-
 export function DashboardScreen({ v }: { v: TraffikView }) {
-  const { theme } = useTheme();
-  const [granularidade, setGranularidade] = React.useState<"diario" | "semanal">("diario");
-  const [metricaHeat, setMetricaHeat] = React.useState<MetricaHeat>("revenue");
+  /* ── O CONTEXTO DOS BLOCOS ────────────────────────────────────────────────
+     Estado de lente e derivações caras, num objeto só. Ele existe porque um
+     render dentro de um `Record` não pode chamar hook — o porquê inteiro está
+     no cabeçalho de `dadosDosBlocos.tsx`. */
+  /* ⚠️ `ctx`, e não `c`: `c` é o nome da CARGA nos callbacks de soltura logo
+     abaixo, e o sombreamento passaria despercebido — `soltarNosPaineis(c, i)`
+     compilaria com o contexto no lugar da carga se os tipos coincidissem. */
+  const ctx = useDadosDosBlocos(v);
+  const { inicioAparado } = ctx;
 
   /* ── KPIs ─────────────────────────────────────────────────────────────────
      `metricCards` e `sparklines` continuam vindo do hook — a camada de dados
      não foi tocada. O que mudou é só quais aparecem grandes. */
-  /* ── O APARO É UM SÓ, E OS DOIS DESENHOS OBEDECEM A ELE ───────────────────
-     🔴 Estavam divergindo na tela: o gráfico grande mostrava 04/08–06/08 e
-     avisava "27 dias sem movimento omitidos", enquanto os sparklines dos heros
-     mostravam os 30 dias inteiros. Dois componentes lado a lado exibindo
-     PERÍODOS diferentes, sem nada avisando — quem olhasse os dois via duas
-     histórias do mesmo dado.
-
-     O índice é calculado UMA vez, aqui, e vale para os dois. Duas decisões de
-     recorte separadas divergiriam de novo no primeiro que alguém mexesse. */
-  const inicioAparado = React.useMemo(() => {
-    const { revenue, spend } = v.chartSerie;
-    const i = v.chartSerie.labels.findIndex((_, n) => (revenue[n] ?? 0) > 0 || (spend[n] ?? 0) > 0);
-    return i > 0 ? i : 0;
-  }, [v.chartSerie]);
-
   const kpi = React.useCallback(
     (chave: string): DadosKpi | null => {
       const k = v.metricCards[chave as keyof typeof v.metricCards];
@@ -301,224 +284,6 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
     descricao: b.descricao,
   }));
 
-  /* ── Receita × gasto ─────────────────────────────────────────────────────── */
-  const pontos: PontoSerie[] = React.useMemo(() => {
-    const { labels, revenue, spend } = v.chartSerie;
-    const base = labels.map((rotulo, i) => ({ rotulo, a: revenue[i] ?? 0, b: spend[i] ?? 0 }));
-    /* 🔴 26 dias de linha zerada desperdiçavam 85% da largura. O eixo começa no
-       PRIMEIRO dia com movimento — e quantos dias ficaram de fora é dito abaixo
-       do gráfico, porque cortar em silêncio faria a janela parecer menor do que
-       o filtro diz. Só apara o começo: buraco no MEIO da série é informação.
-
-       O índice vem de `inicioAparado`, compartilhado com os sparklines. */
-    const aparada = base.slice(inicioAparado);
-    if (granularidade === "diario") return aparada;
-    // Semanal: agrupa de 7 em 7 e rotula pelo primeiro dia do bloco.
-    const semanas: PontoSerie[] = [];
-    for (let i = 0; i < aparada.length; i += 7) {
-      const bloco = aparada.slice(i, i + 7);
-      semanas.push({
-        rotulo: bloco[0]!.rotulo,
-        a: bloco.reduce((s, p) => s + p.a, 0),
-        b: bloco.reduce((s, p) => s + p.b, 0),
-      });
-    }
-    return semanas;
-  }, [v.chartSerie, granularidade, inicioAparado]);
-
-  const temSerie = pontos.some((p) => p.a > 0 || p.b > 0);
-  const diasAparados = Math.max(0, v.chartSerie.labels.length - (granularidade === "diario" ? pontos.length : 0));
-
-  /* ── Canais ──────────────────────────────────────────────────────────────── */
-  const fatias: FatiaDonut[] = v.sources.map((s) => ({
-    nome: nomeDaFonte(s.name),
-    valor: s.total,
-    cor: corDoCanal(s.name),
-  }));
-  const totalCanais = fatias.reduce((s, f) => s + f.valor, 0);
-
-  /* ── Países ──────────────────────────────────────────────────────────────── */
-  const paises: LinhaPais[] = React.useMemo(
-    () =>
-      v.byCountry
-        .filter((c) => c.code)
-        .map((c) => {
-          const pos = centroide(c.code);
-          return {
-            code: c.code,
-            nome: nomePais(c.code) ?? c.code,
-            bandeira: bandeiraDe(c.code) ?? "🏳️",
-            vendas: c.sales,
-            receita: c.revenue,
-            lat: pos?.lat ?? null,
-            lng: pos?.lng ?? null,
-          };
-        }),
-    [v.byCountry],
-  );
-  // `estimadas` marca a venda cujo país veio de estimativa, não do gateway.
-  const semPais = v.byCountry.reduce((s, c) => s + (c.code ? 0 : c.sales), 0);
-  const { visao: visaoPais, setVisao: setVisaoPais } = useVisaoPais(paises.length);
-
-  /* `Date.now()` no corpo do componente é impuro: o lint recusa, e com razão —
-     o número mudaria entre dois renders sem o estado ter mudado. Fica num
-     inicializador PREGUIÇOSO, que roda uma vez só. Consequência aceita: o "em
-     execução" e o "expira em N dias" são do momento em que a tela montou, e se
-     atualizam no próximo carregamento — não é um relógio ao vivo.
-
-     ⚠️ DECLARADO AQUI, e não junto de `regrasRodando` lá embaixo: o bloco de
-     alertas usa este valor, e `const` num corpo de componente tem zona morta —
-     usá-lo antes da linha de declaração é `ReferenceError` em tempo de
-     execução, não erro de compilação. O `tsc` não pega. */
-  const [agora] = React.useState(() => Date.now());
-
-  /* ── Alertas — DERIVADOS do que já existe, sem dado novo ─────────────────── */
-  const alertas: Alerta[] = React.useMemo(() => {
-    const lista: Alerta[] = [];
-
-    if (!v.fbConnected) {
-      lista.push({
-        id: "sem-conta",
-        severidade: "warning",
-        titulo: "Nenhuma conta de anúncio conectada",
-        detalhe: "Sem ela não há gasto, ROAS nem ROI.",
-        href: "/dashboard/integracoes/anuncios",
-      });
-    }
-
-    /* ── TOKEN DA META EXPIRANDO ───────────────────────────────────────────
-       🔴 É a falha mais cara que esta ferramenta tem, e ela é MUDA: o token
-       vence, a sincronização para, o gasto congela — e o ROAS passa a mentir
-       por omissão enquanto o motor de regras decide com dado velho. Nada no
-       Dashboard avisava.
-
-       ⛔ A conta NÃO é feita aqui. `lib/integracoes/token.ts` é a fonte única,
-       e a tela de Integrações usa exatamente as mesmas funções. Reimplementar
-       "faltam N dias" numa segunda tela é como nasceram os dois `div` de
-       contratos opostos.
-
-       ⚠️ `desconhecido` ENTRA na lista, e é o caso mais perigoso: são os perfis
-       conectados antes de a coluna existir — os mais antigos, logo os mais
-       prováveis de já estarem vencidos. Um alerta que só aparece quando a data
-       é conhecida cala justamente onde deveria falar. */
-    for (const p of v.perfisCrus) {
-      const t = estadoDoToken(p.tokenExpiresAt, new Date(agora));
-      if (!tokenPedeAtencao(t)) continue;
-      lista.push({
-        id: `token-${p.id}`,
-        severidade: t.tipo === "expira" ? "warning" : "danger",
-        titulo: `${p.name}: ${rotuloDoToken(t)}`,
-        detalhe: detalheDoToken(t) ?? undefined,
-        href: "/dashboard/integracoes",
-      });
-    }
-
-    /* `erroSync` já vem TRADUZIDO pelo `erroMeta.ts` — mensagem em linguagem de
-       consequência, ação sugerida e um `tom` que diz se é erro ou aviso. Usar o
-       tom dele em vez de marcar tudo como crítico é o que impede o painel de
-       encher de vermelho por rate limit, que passa sozinho. */
-    for (const p of v.adProfiles ?? []) {
-      for (const c of p.accounts ?? []) {
-        if (!c.erroSync) continue;
-        lista.push({
-          id: `conta-${c.id}`,
-          severidade: c.erroSync.tom === "erro" ? "danger" : "warning",
-          titulo: `${c.name}: ${c.erroSync.mensagem}`,
-          detalhe: c.erroSync.acao ?? undefined,
-          href: "/dashboard/integracoes/anuncios",
-        });
-      }
-    }
-
-    const roi = v.metricCards.roi;
-    if (roi?.delta != null && roi.delta < -20) {
-      lista.push({
-        id: "roi-caiu",
-        severidade: "warning",
-        titulo: "ROI caiu mais de 20% no período",
-        detalhe: `Agora em ${roi.value}.`,
-      });
-    }
-
-    /* Gasto sem conversão: há gasto na série e nenhuma venda. É o alerta que
-       mais custa dinheiro, e ele só é possível porque as duas séries vivem no
-       mesmo objeto. */
-    const gastoTotal = v.chartSerie.spend.reduce((s, n) => s + n, 0);
-    const receitaTotal = v.chartSerie.revenue.reduce((s, n) => s + n, 0);
-    if (gastoTotal > 0 && receitaTotal === 0) {
-      lista.push({
-        id: "gasto-sem-conversao",
-        severidade: "danger",
-        titulo: "Gasto sem nenhuma conversão",
-        detalhe: `${brl(gastoTotal)} investidos e nenhuma venda atribuída no período.`,
-      });
-    }
-
-    return lista;
-  }, [v.fbConnected, v.adProfiles, v.perfisCrus, v.metricCards.roi, v.chartSerie, agora]);
-
-  /* ── Rodapé de estado ────────────────────────────────────────────────────── */
-  const contasComErro = (v.adProfiles ?? []).flatMap((p) => p.accounts ?? []).filter((c) => c.erroSync).length;
-  const regras = v.rules ?? [];
-  const regrasAtivas = regras.filter((r) => r.active).length;
-  const regrasRodando = regras.filter(
-    (r) => r.active && r.lastRunAt && agora - new Date(r.lastRunAt).getTime() < 15 * 60 * 1000,
-  ).length;
-
-  /* Despesas RECORRENTES do mês. Taxa percentual (gateway, imposto, coprodução)
-     não entra: ela não tem valor em reais fora de uma venda, e somá-la produziria
-     um número que não existe. Elas aparecem como contagem na segunda linha. */
-  const despesaMensal = (v.despesaRows ?? []).reduce((soma, d) => soma + d.value, 0);
-  const taxasPercentuais = (v.taxExpenses?.length ?? 0) + (v.gatewayExpenses?.length ?? 0);
-
-  const rodape: BlocoEstado[] = [
-    {
-      chave: "integracoes",
-      rotulo: "Integrações",
-      valor: `${v.activeAccountCount ?? 0} conectadas`,
-      alerta: contasComErro > 0 ? { texto: `${contasComErro} com erro`, tom: "danger" } : null,
-      icone: <Icone nome="integracoes" tamanho={17} />,
-      href: "/dashboard/integracoes/anuncios",
-    },
-    {
-      chave: "regras",
-      rotulo: "Regras ativas",
-      valor: String(regrasAtivas),
-      /* "Em execução" = rodou nos últimos 15 minutos, que é o intervalo do
-         agendador. O motor é serverless: não existe processo rodando para
-         perguntar, então o sinal honesto é o `lastRunAt` recente. */
-      alerta:
-        regrasRodando > 0
-          ? { texto: `${regrasRodando} em execução`, tom: "success" }
-          : regrasAtivas === 0
-            ? { texto: "nenhuma automação ligada", tom: "warning" }
-            : null,
-      icone: <Icone nome="regras" tamanho={17} />,
-      href: "/dashboard/regras",
-    },
-    {
-      chave: "taxas",
-      rotulo: "Taxas e Despesas (mês)",
-      /* Soma das despesas RECORRENTES mensais com valor FIXO — é o que "do mês"
-         significa. Taxa percentual (gateway, imposto, coprodução) não tem valor
-         em reais fora de uma venda, então não entra nesta soma: somá-la daria um
-         número que não existe. */
-      valor: brl(despesaMensal),
-      alerta:
-        taxasPercentuais > 0
-          ? { texto: `+ ${taxasPercentuais} ${taxasPercentuais === 1 ? "taxa percentual" : "taxas percentuais"}`, tom: "success" }
-          : null,
-      icone: <Icone nome="taxas" tamanho={17} />,
-      href: "/dashboard/taxas",
-    },
-    {
-      chave: "sync",
-      rotulo: "Última atualização",
-      valor: v.syncLabel ?? "—",
-      alerta: v.syncManualBusy || v.dashLoading ? { texto: "sincronizando…", tom: "success" } : null,
-      icone: <Icone nome="atualizar" tamanho={17} />,
-    },
-  ];
 
   const carregando = v.dashLoading;
   const filtrosVisiveis = useRegistrarFaixaDeFiltros();
@@ -707,213 +472,24 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
         <MetricStrip itens={faixa} carregando={carregando} />
       )}
 
-      {/* ── Receita × gasto · Canais · Alertas ──────────────────────────────── */}
-      <div style={{ display: "grid", gap: "var(--tk-gap-grid)", gridTemplateColumns: "minmax(0,2fr) minmax(0,1.1fr) minmax(0,1fr)" }}>
-        <Card
-          preencher
-          titulo="Receita vs. gasto"
-          descricao={v.chartPeriodLabel}
-          acao={
-            <Segmented
-              rotuloAcessivel="Granularidade do gráfico"
-              valor={granularidade}
-              aoTrocar={setGranularidade}
-              opcoes={[
-                { valor: "diario", rotulo: "Diário" },
-                { valor: "semanal", rotulo: "Semanal" },
-              ]}
-            />
-          }
-        >
-          {temSerie ? (
-            <LineChart
-              pontos={pontos}
-              rotuloA="Receita"
-              rotuloB="Gasto"
-              /* ✅ O break-even agora EXISTE e é NÚMERO. Ele nasce colado ao
-                 `lucro` em `financeiro.ts`, consumindo os MESMOS custos fixos
-                 que o card de Lucro subtrai — senão a linha marcaria equilíbrio
-                 num ponto em que o card ao lado diz prejuízo. */
-              breakEven={v.finance.breakEven}
-              semBreakEven={
-                v.finance.breakEven == null && (v.metricCards.faturamento?.value ?? "") !== ""
-                  ? "Break-even indisponível: sem faturamento no período não dá para medir a taxa efetiva."
-                  : null
-              }
-              unicasFora={v.finance.unicasForaDoCalculo}
-              formatar={brl0}
-            />
-          ) : null}
-          {temSerie && diasAparados > 0 ? (
-            <p className="text-caption text-text-muted" style={{ margin: "6px 0 0" }}>
-              {diasAparados} {diasAparados === 1 ? "dia sem movimento omitido" : "dias sem movimento omitidos"} no
-              início do período.
-            </p>
-          ) : null}
-          {!temSerie && (
-            <EmptyState
-              titulo="Sem receita nem gasto no período"
-              causa="A linha aparece quando entra uma venda rastreada ou quando a conta de anúncio sincroniza o gasto do dia."
-              acao={{ texto: "Conferir integrações", href: "/dashboard/integracoes/anuncios" }}
-            />
-          )}
-        </Card>
-
-        <Card preencher distribuir titulo="Canais" descricao="Distribuição por receita">
-          {totalCanais > 0 ? (
-            <DonutChart fatias={fatias} totalLabel={brl0(totalCanais)} formatar={brl0} />
-          ) : (
-            <EmptyState
-              titulo="Nenhuma venda por canal"
-              causa={
-                <>
-                  O canal vem do <strong>utm_source</strong> do clique. Sem os códigos instalados, a
-                  venda entra sem origem.
-                </>
-              }
-              acao={{ texto: "Ver códigos de UTM", href: "/dashboard/integracoes/utms" }}
-            />
-          )}
-        </Card>
-
-        <Card
-          preencher
-          distribuir
-          titulo="Alertas"
-          descricao="O que exige ação"
-          acao={alertas.length > 0 ? <Badge tom={alertas.some((a) => a.severidade === "danger") ? "danger" : "warning"}>{alertas.length}</Badge> : undefined}
-        >
-          <AlertList alertas={alertas} />
-        </Card>
-      </div>
-
-      {/* ── Top campanhas ───────────────────────────────────────────────────
-          ⛔ ELE OBEDECE O FILTRO DE PERIODO DE CIMA. O dado vem de
-          `computeDashboard`, nao de `adsData` — que roda numa janela fixa de 7
-          dias. Dois blocos na mesma tela mostrando periodos diferentes sem
-          avisar foi o defeito que o aparo do sparkline consertou; este nasce
-          com a janela certa em vez de precisar de aviso. */}
-      {v.topCampaigns.length > 0 && (
-        <Card titulo="Top campanhas" descricao="As que mais faturaram no período">
-          {/* 🎨 O CABECALHO APARECE UMA VEZ, e antes ele se repetia em TODA
-              linha — "Receita / Gasto / Vendas / ROAS" quatro vezes por
-              campanha, cinco campanhas, vinte rotulos para quatro colunas.
-
-              Era o que mais fazia o bloco parecer prototipo ao lado da imagem 1,
-              onde a tabela tem cabecalho unico. E nao era so estetica: rotulo
-              repetido em toda linha faz o olho reler a estrutura a cada item em
-              vez de varrer a coluna.
-
-              ⛔ O cabecalho e o corpo compartilham a MESMA `gridTemplateColumns`,
-              pela constante abaixo. Duas listas de coluna escritas a mao
-              divergem no primeiro ajuste, e a divergencia aparece como coluna
-              desalinhada — que se atribui a arredondamento por semanas. */}
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            <div
-              className="text-caption text-text-muted"
-              style={{
-                display: "grid",
-                gridTemplateColumns: COLUNAS_CAMPANHA,
-                gap: 10,
-                padding: "0 8px 6px",
-                borderBottom: "1px solid var(--tk-border)",
-                marginBottom: 2,
-              }}
-            >
-              <span style={{ minWidth: 0 }}>Campanha</span>
-              <span style={{ textAlign: "right" }}>Receita</span>
-              <span style={{ textAlign: "right" }}>Gasto</span>
-              <span style={{ textAlign: "right" }}>Vendas</span>
-              <span style={{ textAlign: "right" }}>ROAS</span>
-            </div>
-
-            {v.topCampaigns.map((c) => (
-              <div
-                key={c.id}
-                className="tk-linha"
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: COLUNAS_CAMPANHA,
-                  gap: 10,
-                  alignItems: "center",
-                  minHeight: 40,
-                  padding: "0 8px",
-                  borderRadius: 8,
-                }}
-              >
-                <span className="text-label text-text" style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {c.nome}
-                </span>
-                <CelulaCamp valor={brl0(c.receita)} />
-                <CelulaCamp valor={brl0(c.gasto)} />
-                <CelulaCamp valor={String(c.vendas)} />
-                {/* 🔴 "—" quando nao houve gasto. `0,00x` diria "gastou e nao
-                    voltou nada", que e uma acusacao diferente de "nao gastou". */}
-                <CelulaCamp
-                  valor={c.roas == null ? "—" : `${c.roas.toFixed(2).replace(".", ",")}x`}
-                  cor={c.roas == null ? undefined : corFinanceira(c.roas, "roas")}
-                />
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {/* ── Quando compram ──────────────────────────────────────────────────
-          ⛔ SEM "GASTO" NO SELETOR, e é impossível — não é escolha de escopo.
-          `DailyAdMetric` é diária e a Meta não reporta gasto por hora; um valor
-          por hora seria o total do dia lançado às 00h, um pico de madrugada que
-          nunca houve. É o mesmo motivo pelo qual a linha de gasto desaparece na
-          granularidade horária (`gastoNaSerie`). */}
-      {v.heatmap.celulas.length > 0 && (
-        <Card
-          titulo="Quando compram"
-          descricao="Média por hora, por dia da semana"
-          acao={
-            <Segmented
-              rotuloAcessivel="Métrica do mapa de horários"
-              valor={metricaHeat}
-              aoTrocar={setMetricaHeat}
-              opcoes={[
-                { valor: "revenue", rotulo: "Receita" },
-                { valor: "sales", rotulo: "Vendas" },
-                { valor: "profit", rotulo: "Lucro" },
-              ]}
-            />
-          }
-        >
-          <Heatmap
-            celulas={v.heatmap.celulas.map((linha) =>
-              linha.map((c) => ({ valor: c[metricaHeat], observacoes: c.observacoes })),
-            )}
-            formatar={metricaHeat === "sales" ? (n) => String(Math.round(n * 10) / 10) : brl0}
-            rotuloMetrica={ROTULO_HEAT[metricaHeat]}
-          />
-          {/* 🔴 RETRATO × PADRÃO. As duas palavras carregam a diferença melhor
-              que qualquer número: com uma observação por célula o mapa é
-              honesto e não é tendência. Sem dizer isso, o usuário lê ruído de
-              uma semana como comportamento do público — e decide mídia com
-              base nisso. */}
-          <p className="text-caption text-text-muted" style={{ margin: "10px 0 0", lineHeight: 1.45 }}>
-            {/* ⚠️ A frase da hachura só aparece se HOUVER hachura. Numa janela
-                de 30 dias todos os sete dias da semana foram observados, e
-                explicar uma convenção que não está na tela ensina o leitor a
-                não confiar no que o rodapé diz. */}
-            {v.heatmap.maxObservacoes <= 1
-              ? "Janela curta: cada célula é uma observação. É um retrato, não um padrão."
-              : `Média de até ${v.heatmap.maxObservacoes} semanas.${
-                  v.heatmap.celulas.some((l) => l.some((c) => c.observacoes === 0))
-                    ? " Células hachuradas não foram observadas nesta janela."
-                    : ""
-                }`}
-          </p>
-        </Card>
-      )}
 
       {/* ── ZONA 3 — os painéis do layout ───────────────────────────────────
-          ⛔ SÓ os que TÊM DADO no período aparecem. Um painel corretamente vazio
-          na tela do usuário parece defeito; o catálogo continua listando todos,
-          com o aviso, para ele não procurar um bloco que sumiu.
+          🔴🔴 TODOS OS PAINÉIS DO LAYOUT APARECEM, COM DADO OU SEM.
+
+          Este comentário dizia o contrário — *"SÓ os que TÊM DADO no período
+          aparecem"* — e era o bug mais caro desta tela. O bloco sem dado saía da
+          grade, os vizinhos subiam, a linha se refazia, e o arranjo que o
+          usuário montou virava outro. Ele não via "um bloco vazio": via a tela
+          embaralhada, sem nada dizendo por quê.
+
+          E o argumento que sustentava a filtragem ("um painel corretamente vazio
+          parece defeito") tinha o sinal trocado: quem parece defeito é a grade
+          que se reorganiza sozinha. Sem dado é o estado NORMAL desta ferramenta
+          — os testadores rodam assim a maior parte do tempo.
+
+          ⚠️ O que colapsa é a ALTURA, e só ela: `celulaDaGrade` não aplica o
+          piso escolhido pelo usuário no estado vazio. Posição e largura são
+          dele.
 
           ⚠️ A largura vem do LAYOUT, e o layout só carrega larguras que o bloco
           declarou — a migração garante isso. A tela não valida de novo: duas
@@ -953,14 +529,21 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
                 const r = RENDERS[p.id as keyof typeof RENDERS];
                 const meta = metaDoBloco(p.id);
                 if (!r || !meta) return null;
+                const vazio = vazioDoBloco(r, v, ctx);
                 return (
                   <div
                     key={p.id}
-                    style={celulaDaGrade(p.col, p.linhas, r.temDado(v))}
+                    style={celulaDaGrade(p.col, p.linhas, vazio === null)}
                   >
                     <ItemEdicao
                       titulo={meta.titulo}
-                      aoRemover={() => ed.removerPainel(p.id)}
+                      /* 🔴 SEM ✕ NO ESTRUTURAL, com o selo `Fixo` e o motivo do
+                         CATÁLOGO. Um ✕ apagado é um controle que existe e não
+                         funciona; a ausência dele é uma afirmação sobre o
+                         produto. ⚠️ A guarda de verdade está no hook — a
+                         ausência do botão não fecha o caminho do arrasto. */
+                      fixo={meta.estrutural}
+                      aoRemover={meta.estrutural ? undefined : () => ed.removerPainel(p.id)}
                       aoMover={(dir) => ed.moverPainel(i, i + dir)}
                       podeAntes={i > 0}
                       podeDepois={i < layout.paineis.length - 1}
@@ -1000,17 +583,15 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
                           ),
                       }}
                     >
-                      {/* 🔴 NO MODO DE EDIÇÃO O PAINEL SEM DADO CONTINUA NA TELA,
-                          com a frase. Fora dele ele some — mas sumir enquanto se
-                          edita faria o usuário achar que o removeu, e ele
-                          tentaria adicionar de novo um bloco que já está lá. */}
-                      {r.temDado(v) ? (
-                        r.render(v)
-                      ) : (
-                        <p className="text-caption text-text-muted" style={{ margin: 0 }}>
-                          Sem dado neste período. Ele aparece no painel quando houver.
-                        </p>
-                      )}
+                      {/* ⚠️ O MESMO ESTADO VAZIO DE FORA DA EDIÇÃO. Antes eram
+                          dois textos diferentes — aqui uma frase curta, lá o
+                          bloco sumindo — e a divergência era o bug: o usuário
+                          via o painel na edição e não via depois de salvar.
+
+                          ⛔ Sem `compacto`: o `EmptyState` completo é o mesmo
+                          que ele vai ver na tela de verdade, e a edição existe
+                          para mostrar o resultado, não uma aproximação. */}
+                      {vazio ? <EmptyState {...vazio} /> : r.render(v, ctx)}
                     </ItemEdicao>
                   </div>
                 );
@@ -1045,75 +626,70 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
         </ZonaEdicao>
       ) : null}
 
-      {/* ── Sempre visíveis ─────────────────────────────────────────────────
-          ⛔ Eles NÃO estão numa zona: não se movem, não se redimensionam e não
-          saem. Aparecem aqui, no modo de edição, porque a alternativa é o
-          usuário procurar por que "Alertas" não está em lista nenhuma — e
-          concluir que a ferramenta perdeu o bloco dele.
+      {/* ⛔ A ZONA "SEMPRE VISÍVEIS" FOI REMOVIDA — 07/08/2026.
 
-          O motivo de cada um vem do CATÁLOGO, não escrito nesta tela. */}
-      {editando && (
-        <ZonaEdicao titulo="Sempre visíveis" regra="não podem ser ocultados">
-          <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}>
-            {ESTRUTURAIS_META.map((b) => (
-              <ItemEdicao key={b.id} titulo={b.titulo} fixo={b.motivo} />
-            ))}
-          </div>
-        </ZonaEdicao>
-      )}
+          Ela listava os quatro estruturais em molduras VAZIAS, fora de qualquer
+          grade, porque o conteúdo deles estava em JSX fixo noutro ponto da tela.
+          Era a materialização do erro de definição: "não removível" tinha virado
+          "fora do layout".
 
-      {(() => {
-        if (editando) return null;
-        const visiveis = layout.paineis.filter((p) => RENDERS[p.id as keyof typeof RENDERS]?.temDado(v));
-        if (visiveis.length === 0) return null;
-        return (
-          <div style={GRADE}>
-            {visiveis.map((p, i) => {
-              const r = RENDERS[p.id as keyof typeof RENDERS];
-              const meta = metaDoBloco(p.id);
-              if (!r || !meta) return null;
-              return (
-                <div
-                  key={p.id}
-                  /* Entrada escalonada (`06` §11). ⛔ SÓ FORA DO MODO DE EDIÇÃO:
-                     ali os blocos entram e saem a cada arrasto, e reanimar cada
-                     mudança transformaria a edição num piscar constante. */
-                  className="tk-bloco-entra"
-                  style={{ ...celulaDaGrade(p.col, p.linhas, r.temDado(v)), ["--tk-i" as string]: i }}
+          Hoje eles estão na zona Painéis, com conteúdo, alça e selo `Fixo`. Não
+          existe mais um lugar onde procurá-los — eles estão onde sempre
+          estiveram na tela. */}
+
+      {/* 🔴🔴 O SÍTIO DO BUG DO ITEM 9 — a linha que filtrava era esta.
+
+          Era `layout.paineis.filter(… temDado(v))`. Um bloco sem dado no período
+          não entrava na lista, e a grade se refazia sem ele: os vizinhos subiam
+          de linha, a largura relativa mudava, e o arranjo salvo virava outro
+          arranjo. Sem nada na tela dizendo por quê.
+
+          ⛔ NÃO REINTRODUZA UM FILTRO AQUI. A lista desenhada é `layout.paineis`
+          inteira; quem responde "tem dado?" é o `vazioDoBloco`, e a resposta
+          muda o CONTEÚDO da célula, nunca a existência dela.
+
+          ⚠️ `layout.paineis.length === 0` continua devolvendo `null`, e é outra
+          coisa: é o usuário ter removido todos os opcionais. Com os estruturais
+          repostos pela migração isso só acontece num layout corrompido — mas
+          `null` para lista vazia é honesto de qualquer jeito. */}
+      {!editando && layout.paineis.length > 0 && (
+        <div style={GRADE}>
+          {layout.paineis.map((p, i) => {
+            const r = RENDERS[p.id as keyof typeof RENDERS];
+            const meta = metaDoBloco(p.id);
+            if (!r || !meta) return null;
+            const vazio = vazioDoBloco(r, v, ctx);
+            return (
+              <div
+                key={p.id}
+                /* Entrada escalonada (`06` §11). ⛔ SÓ FORA DO MODO DE EDIÇÃO:
+                   ali os blocos entram e saem a cada arrasto, e reanimar cada
+                   mudança transformaria a edição num piscar constante. */
+                className="tk-bloco-entra"
+                style={{ ...celulaDaGrade(p.col, p.linhas, vazio === null), ["--tk-i" as string]: i }}
+              >
+                {/* `preencher` + `distribuir`: os blocos de uma linha esticam
+                    até a altura do MAIOR (é o `stretch` do grid), e o menor
+                    distribui o conteúdo em vez de deixar o vazio embaixo. */}
+                <Card
+                  preencher
+                  distribuir
+                  titulo={meta.titulo}
+                  descricao={meta.descricao}
+                  /* ⚠️ O CONTROLE SOME NO ESTADO VAZIO, e o título fica. Um
+                     `Diário|Semanal` sobre uma caixa sem série é um controle que
+                     não controla nada — a família que este projeto persegue.
+                     O título continua porque é ele que diz QUAL bloco está
+                     vazio; sem ele o usuário vê uma caixa anônima. */
+                  acao={vazio === null ? r.acao?.(v, ctx) : undefined}
                 >
-                  {/* `preencher` + `distribuir`: os blocos de uma linha esticam
-                      até a altura do MAIOR (é o `stretch` do grid), e o menor
-                      distribui o conteúdo em vez de deixar o vazio embaixo. */}
-                  <Card preencher distribuir titulo={meta.titulo} descricao={meta.descricao}>
-                    {r.render(v)}
-                  </Card>
-                </div>
-              );
-            })}
-          </div>
-        );
-      })()}
-
-      {/* ── Países ──────────────────────────────────────────────────────────── */}
-      <div style={{ display: "grid", gap: "var(--tk-gap-grid)", gridTemplateColumns: "minmax(0,1fr)" }}>
-        <Card
-          titulo="Vendas por país"
-          descricao="De onde vem o faturamento"
-          acao={paises.length > 0 ? <AlternadorPais visao={visaoPais} aoTrocar={setVisaoPais} /> : undefined}
-        >
-          <CountryPanel
-            linhas={paises}
-            semPais={semPais}
-            formatar={brl0}
-            tema={theme === "light" ? "light" : "dark"}
-            visao={visaoPais}
-            altura={420}
-          />
-        </Card>
-      </div>
-
-      {/* ── Rodapé de estado ────────────────────────────────────────────────── */}
-      <StatusFooter blocos={rodape} />
+                  {vazio ? <EmptyState {...vazio} /> : r.render(v, ctx)}
+                </Card>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </>
   );
 
@@ -1159,20 +735,10 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
   );
 }
 
-/**
- * ⛔ UMA constante para as colunas do Top campanhas — o cabeçalho e o corpo
- * leem daqui. Duas listas escritas à mão divergem no primeiro ajuste.
- */
-const COLUNAS_CAMPANHA = "minmax(0,2fr) repeat(4, minmax(0,86px))";
+/* ⛔ `COLUNAS_CAMPANHA` e `CelulaCamp` saíram daqui — a tabela virou
+   `components/tk/TabelaCampanhas.tsx`, e a grade das colunas virou `.tk-camp-linha`
+   no `globals.css`.
 
-/** Uma célula numérica do Top campanhas. O rótulo agora vive no cabeçalho. */
-function CelulaCamp({ valor, cor }: { valor: string; cor?: string }) {
-  return (
-    <span
-      className="text-label"
-      style={{ textAlign: "right", minWidth: 0, color: cor ?? "var(--tk-text)", fontVariantNumeric: "tabular-nums" }}
-    >
-      {valor}
-    </span>
-  );
-}
+   O motivo é a container query: as colunas de apoio precisam sumir quando o
+   bloco encolhe, e uma constante em JS não sabe a largura do bloco. A ORDEM em
+   que elas somem está documentada no cabeçalho do componente. */

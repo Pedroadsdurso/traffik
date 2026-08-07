@@ -29,7 +29,7 @@
  * ele possa fazer. Barulho sem ação é ruído.
  */
 
-import { CATALOGO_META, encaixarColunas, encaixarLinhas, type MetaBloco } from "../catalogo";
+import { CATALOGO_META, encaixarColunas, encaixarLinhas, reporEstruturais, type MetaBloco } from "../catalogo";
 
 /** O envelope gravado hoje. `v` é o que separa dele do grid antigo. */
 export interface LayoutV3 extends LayoutZonas {
@@ -93,13 +93,17 @@ function sanearEnvelope(raw: LayoutV2 | LayoutV3, versao: 2 | 3): LayoutZonas {
     : padrao.faixa;
 
   /* 🔴 LISTA VAZIA VÁLIDA ≠ CAMPO CORROMPIDO, e a diferença é uma escolha do
-     usuário. No modo de edição ele PODE remover todos os painéis; se um
-     `paineis: []` legítimo caísse no padrão, a escolha dele seria desfeita em
+     usuário. No modo de edição ele PODE remover todos os painéis OPCIONAIS; se
+     um `paineis: []` legítimo caísse no padrão, a escolha dele seria desfeita em
      silêncio no recarregamento — e ele não teria como saber por quê.
 
      Só o campo que NÃO É ARRAY cai no padrão: aí não houve escolha, houve
      corrupção. É a mesma distinção de "célula vazia ≠ célula zero", aplicada a
-     um array. */
+     um array.
+
+     ⚠️ "Vazio" aqui quer dizer sem OPCIONAIS: `reporEstruturais` devolve os
+     quatro fixos mesmo para `[]`. Remover todos os opcionais é uma escolha;
+     ocultar um estrutural não é uma escolha que o produto ofereça. */
   if (!Array.isArray(raw.paineis)) return { hero, faixa, paineis: padrao.paineis };
 
   const paineis: LayoutZonas["paineis"] = [];
@@ -123,7 +127,7 @@ function sanearEnvelope(raw: LayoutV2 | LayoutV3, versao: 2 | 3): LayoutZonas {
       linhas: encaixarLinhas(linhasBrutas, meta),
     });
   }
-  return { hero, faixa, paineis };
+  return { hero, faixa, paineis: reporEstruturais(paineis) };
 }
 
 /** O item do grid antigo, como está gravado no `DashboardLayout.layout`. */
@@ -185,18 +189,25 @@ export function layoutPadrao(): LayoutZonas {
 /**
  * De `chart:*` antigo para o id do catálogo novo.
  *
- * ⚠️ **Ausente = o bloco não existe mais**, e some. Os quatro que somem, e por
- * quê:
+ * ⚠️ **Ausente = o bloco não existe mais**, e some — em silêncio, porque avisar
+ * "um bloco que você tinha não existe mais" não dá ao usuário nada que ele possa
+ * fazer.
  *
- * | Antigo | Destino |
- * |---|---|
- * | `chart:receita` | virou o Receita × Gasto FIXO do Dashboard — bloco estrutural |
- * | `chart:paises` | virou o Vendas por país FIXO |
- * | `chart:posicionamento` | **não existe mais no produto** |
+ * ### 🔴 TRÊS ENTRADAS VOLTARAM em 07/08/2026, e o comentário daqui PROIBIA isso
  *
- * ⛔ Não "conserte" acrescentando entradas para os dois primeiros: eles são
- * estruturais, não estão no catálogo, e mapeá-los faria a migração produzir um
- * painel que ninguém sabe desenhar.
+ * Ele dizia, em ⛔: *"não 'conserte' acrescentando entradas para os dois
+ * primeiros: eles são estruturais, não estão no catálogo, e mapeá-los faria a
+ * migração produzir um painel que ninguém sabe desenhar"*.
+ *
+ * A premissa caiu inteira. `receita-gasto`, `paises` e `posicionamento` **estão
+ * no catálogo** e têm render — os dois primeiros porque estrutural passou a
+ * significar só "sem ✕", o terceiro porque o bloco foi reconstruído. Com eles
+ * mapeados, quem tinha o gráfico de receita na terceira posição volta a vê-lo na
+ * terceira posição.
+ *
+ * ⚠️ É a família do ⛔ que envelhece e vira ordem de reverter: a proibição
+ * continuava bem escrita e convincente depois de ter deixado de ser verdade.
+ * Ela foi APAGADA, não anotada — o motivo de hoje é o texto acima.
  */
 const DE_PARA: Record<string, string> = {
   "chart:funil": "funil",
@@ -208,6 +219,9 @@ const DE_PARA: Record<string, string> = {
   "chart:lucroHora": "lucro-por-hora",
   "chart:aprovacao": "aprovacao",
   "chart:feed": "atividade",
+  "chart:receita": "receita-gasto",
+  "chart:paises": "paises",
+  "chart:posicionamento": "posicionamento",
 };
 
 /**
@@ -321,7 +335,7 @@ export function migrarLayout(bruto: unknown): LayoutZonas {
     return {
       hero,
       faixa: faixa.length > 0 ? faixa : padrao.faixa,
-      paineis: paineis.length > 0 ? paineis : padrao.paineis,
+      paineis: paineis.length > 0 ? reporEstruturais(paineis) : padrao.paineis,
     };
   } catch {
     return padrao;

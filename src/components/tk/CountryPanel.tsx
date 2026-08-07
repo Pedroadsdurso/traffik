@@ -138,11 +138,16 @@ export function CountryPanel({
            — o "ícone perdido no meio do nada" do print. Reservando exatamente a
            largura que a esfera vai usar, o vazio deixa de existir e a lista
            recebe o resto. */
-        <div
-          className="tk-paises"
-          style={{ display: "flex", gap: "var(--tk-gap-grid)", alignItems: "stretch", minHeight: altura }}
-        >
-          <div className="tk-paises-globo" style={{ flex: `0 0 ${altura}px`, maxWidth: "100%" }}>
+        /* 🔴 A ALTURA MORA NO GLOBO, NÃO NA FAIXA — e a diferença só aparece
+           quando o bloco encolhe. Com `minHeight: altura` aqui, a container
+           query escondia o globo e deixava **420px de caixa vazia** com o
+           ranking flutuando no meio: o bloco reservava a altura de um desenho
+           que não estava sendo desenhado.
+
+           É a mesma família do piso de altura que não vale no estado vazio
+           (`celulaDaGrade`): reservar espaço para o que não existe. */
+        <div className="tk-paises" style={{ display: "flex", gap: "var(--tk-gap-grid)", alignItems: "stretch" }}>
+          <div className="tk-paises-globo" style={{ flex: `0 0 ${altura}px`, minHeight: altura, maxWidth: "100%" }}>
             <GloboCarregado pontos={pontos} altura={altura} tema={tema} formatar={formatar} linhas={linhas} />
           </div>
           {/* `overflowY: auto` — a lista rola dentro da altura do globo em vez de

@@ -190,17 +190,36 @@ nasceria e teria de ser revisitado para acrescentá-los.
 | Arrasto entre posições | ✅ — substituiu o clique |
 | Alça de altura | ✅ — `minHeight`, nunca `grid-row: span`: piso, não teto |
 | Aviso `N colunas livres` por linha | ✅ 🔧 não está em referência nenhuma |
-| Catálogo completo de blocos | ✅ — **nenhum item sem destino.** Os nove são de `paineis` e todos têm zona; as métricas vão para Principais ou Resumo |
-| `BreakdownPanel` único parametrizado por dimensão | ✅ — absorveu Fontes, Produtos e Pagamentos |
+| Catálogo completo de blocos | ✅ — **nenhum item sem destino.** Os dezesseis são de `paineis` e todos têm zona; as métricas vão para Principais ou Resumo |
+| `BreakdownPanel` único parametrizado por dimensão | ✅ — absorveu Fontes, Produtos, Pagamentos e Posicionamento |
 
-> ### 🔧 Os quatro estruturais ficam FORA do catálogo, com o motivo como DADO
+> ### 🔴 ESTRUTURAL = NÃO PODE SER **OCULTADO**. Nada além disso.
 >
-> Hero, faixa, Receita×Gasto e rodapé de estado aparecem no modo de edição numa
-> zona **"Sempre visíveis"**, cada um com o motivo de não poder ser ocultado — e
-> o motivo vem do catálogo, não escrito na tela.
+> **Correção do dono, 07/08/2026.** Esta seção dizia o contrário — que os quatro
+> ficavam FORA do catálogo, numa zona "Sempre visíveis" — e a definição errada
+> tinha consequência de layout: *"não removível"* virou *"não redimensionável"*.
 >
-> A alternativa seria omiti-los, e aí o usuário procura por que "Alertas" não
-> está em lista nenhuma e conclui que a ferramenta perdeu o bloco dele.
+> O sintoma foi `Vendas por país` ocupando a tela de ponta a ponta, sem alça,
+> sem como mexer. Um bloco que o usuário não pode esconder continua sendo um
+> bloco que ele arruma.
+>
+> | Estrutural garante | Estrutural NÃO garante |
+> |---|---|
+> | estar sempre na lista de painéis | posição |
+> | não ter ✕ | largura |
+> | | altura |
+>
+> Os quatro (`receita-gasto`, `alertas`, `paises`, `rodape`) estão no catálogo,
+> na zona Painéis, com `colMin` e `colPadrao` próprios. O que os marca é uma
+> string: `estrutural`, a frase que vai para a tooltip do selo `Fixo`.
+>
+> ⚠️ **A garantia é a REPOSIÇÃO, não a ausência do botão.** `reporEstruturais`
+> devolve os quatro em todo layout lido — a ausência do ✕ cobre o usuário de
+> hoje, não um salvo gravado por versão anterior nem o arrasto de volta para o
+> catálogo. A guarda de verdade está no hook e na migração.
+>
+> ⛔ A zona **"Sempre visíveis" foi REMOVIDA**. Ela mostrava quatro molduras
+> vazias, porque o conteúdo estava em JSX fixo noutro ponto da tela.
 
 > ### ⚠️ O que o modo de edição NÃO faz, de propósito
 >

@@ -1674,6 +1674,90 @@ compilador cobrar isto?*
 > (Top Campanhas já entrou; falta heatmap hora × dia por métrica nova) e a
 > varredura de comentários que afirmam efeito.
 
+# 🧱 BLOCO ESTRUTURAL É O QUE NÃO PODE SER *OCULTADO*. Nada além disso.
+
+> **Correção do dono, 07/08/2026.** A definição anterior dizia que os quatro
+> ficavam FORA do catálogo — e "não removível" tinha virado "não
+> redimensionável", que são coisas diferentes.
+
+| Estrutural garante | Estrutural NÃO garante |
+|---|---|
+| estar sempre na lista de painéis | posição |
+| não ter ✕ | largura |
+| | altura |
+
+Os quatro (`receita-gasto`, `alertas`, `paises`, `rodape`) estão em
+`CATALOGO_META`, na zona Painéis, com `colMin` e `colPadrao` próprios. O que os
+marca é **uma string**: `estrutural`, a frase que vai para a tooltip do selo
+`Fixo`. Não existe lista de ids em lugar nenhum.
+
+### O que a definição errada custou
+
+Os quatro viviam em **JSX fixo** no `DashboardScreen`, fora da grade, com a
+largura decidida no código. A tela tinha dois sistemas de layout: um que o
+usuário controlava e outro que ele não via. O sintoma foi `Vendas por país` de
+ponta a ponta, sem alça.
+
+E o motivo registrado no catálogo era **circular**: *"o globo não cabe em
+nenhuma das larguras de painel"*. Quem decide se o globo cabe é uma container
+query que já existia — o bloco tinha sido dado como grande porque estava grande.
+
+> ### ⛔ A PERGUNTA, ANTES DE TIRAR QUALQUER COISA DA GRADE
+> **"Isto não pode ser ESCONDIDO, ou não pode ser MEXIDO?"**
+>
+> Quase sempre é o primeiro, e o primeiro se resolve tirando um botão — não
+> tirando o bloco do layout.
+
+⚠️ **A garantia é a REPOSIÇÃO, não a ausência do botão.** `reporEstruturais()`
+devolve os quatro em todo layout lido, e `removerPainel` recusa estrutural. A
+ausência do ✕ cobre o usuário de hoje; ela não cobre um salvo gravado por versão
+anterior, nem o **arrasto de volta para o catálogo** — que é outro caminho para
+a mesma remoção. É o "endurecer uma porta com a outra aberta", na camada de
+layout.
+
+# 🕳️🕳️ BLOCO SEM DADO **COLAPSA** — ELE NÃO SOME DA GRADE
+
+> **07/08/2026.** O `DashboardScreen` filtrava `layout.paineis` por `temDado(v)`
+> antes de desenhar. É a distinção central deste projeto aplicada a LAYOUT.
+
+| | O que acontece |
+|---|---|
+| ❌ sumir | o bloco sai da grade · os vizinhos sobem de linha · o arranjo salvo vira outro arranjo · nada explica |
+| ✅ colapsar | o bloco fica na posição e na largura escolhidas · **só a altura encolhe** · o estado vazio diz a causa e o próximo passo |
+
+O argumento que sustentava o filtro estava no código, e tinha o sinal trocado:
+*"um painel corretamente vazio na tela do usuário parece defeito"*. Quem parece
+defeito é a grade que se reorganiza sozinha.
+
+⚠️ **E sem dado é o estado NORMAL desta ferramenta** — os testadores rodam assim
+a maior parte do tempo. Layout que depende de a janela de tempo ter movimento é
+layout que quase nunca é o que o usuário montou.
+
+### O tipo cobra o estado vazio
+
+`RenderBloco` é uma união: ou o bloco declara `temDado` **e** `vazio`, ou declara
+`sempreCheio: true` **e** `porQue` — uma frase dizendo por que o vazio não é
+alcançável. `Alertas` e `Estado do sistema` são os dois casos: lista vazia ali é
+a resposta boa, e os componentes já a desenham.
+
+⛔ A alternativa era `temDado: () => true` com um `vazio` decorativo ao lado —
+**proteção morta**: estado vazio escrito, revisado e inalcançável, que faz quem
+lê o catálogo acreditar que o caso está coberto.
+
+> ### 🔴 O TESTE PRECISOU SER ESTÁTICO, E VALE REGISTRAR POR QUÊ
+> A versão óbvia era simular a tela e comparar `N com dado` × `N sem dado`.
+> **Ela nunca poderia falhar**: a simulação seria uma reescrita do código já
+> consertado, sem o `.filter()`, e os dois lados dariam o mesmo número por
+> construção.
+>
+> `npm run test:blocos-vazios` lê o `DashboardScreen.tsx` e reprova se
+> `layout.paineis` for filtrada antes do `.map()`, ou se `temDado` for chamado
+> direto na tela (o consumidor é `vazioDoBloco`, e são DOIS caminhos de desenho
+> — foi ter dois que deixou "colapsar" virar "sumir" em um deles).
+>
+> ⚠️ **O limite está escrito na guarda:** ela pega o filtro na mesma expressão,
+> não alguém que filtre numa variável três linhas antes.
+
 # 🩹 A CICATRIZ QUE VIROU ANATOMIA
 
 **Uma decisão tomada para contornar uma limitação técnica sobrevive à limitação

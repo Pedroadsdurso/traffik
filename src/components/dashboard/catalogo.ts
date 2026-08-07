@@ -67,22 +67,64 @@ export interface MetaBloco {
   descricao: string;
   zona: Zona;
   /**
+   * 🔴 BLOCO ESTRUTURAL É O QUE NÃO PODE SER **OCULTADO**. Nada além disso.
+   *
+   * Preenchido = o bloco aparece no modo de edição **sem o ✕**, com o selo
+   * `Fixo` e esta frase na tooltip. Ele continua na zona Painéis como qualquer
+   * outro: tem alça, muda de largura, muda de posição, é arrastável.
+   *
+   * ### ⛔ A DEFINIÇÃO ANTERIOR ESTAVA ERRADA, e o dono a corrigiu em 07/08/2026
+   *
+   * Havia uma lista `ESTRUTURAIS_META` **fora** do catálogo, e os quatro blocos
+   * dela viviam em JSX fixo no `DashboardScreen`, numa zona própria chamada
+   * "Sempre visíveis". Na prática *"não removível"* tinha virado *"não
+   * redimensionável"* — e são coisas diferentes. O sintoma: `Vendas por país`
+   * ocupava a largura inteira da tela e não havia como mexer.
+   *
+   * ⚠️ O que "estrutural" garante hoje, e o que ele NÃO garante:
+   *
+   * | Garante | Não garante |
+   * |---|---|
+   * | está sempre na lista de painéis (a migração o repõe se sumir do salvo) | posição |
+   * | não tem ✕ | largura |
+   * | | altura |
+   *
+   * A reposição é o que faz a garantia valer: sem ela, "não pode ser ocultado"
+   * dependeria de nenhum layout salvo ter perdido o bloco — que é a mesma
+   * classe de promessa que o `?? 0` faz sobre um número.
+   */
+  estrutural?: string;
+  /**
    * 🔴 O MÍNIMO DE COLUNAS É UMA AFIRMAÇÃO SOBRE O BLOCO, não um palpite: abaixo
    * dele o conteúdo **deixa de ser legível**, e travar ali é honesto. Um heatmap
    * de 24×7 não cabe em 3 colunas, e deixar o usuário chegar lá produziria um
    * bloco quebrado que ele mesmo escolheu.
    *
-   * ✅ ELES DESCERAM PARA O REAL no C3 (07/08/2026), junto com as container
-   * queries que os sustentam. Eram conservadores no C2 de propósito: cada bloco
-   * declarava só as larguras em que já funcionava **sem** consulta de container,
-   * e a regra "bloco que quebra numa largura que ele declara é bug" ficou
-   * cumprida nas duas entregas — porque a primeira não oferecia a estreita.
+   * ### ⛔ MÍNIMO É "ABAIXO DISSO O BLOCO MENTE OU FICA ILEGÍVEL"
    *
-   * ⚠️ O `funil` fica em 4, e é o único que não desceu: abaixo disso as duas
-   * pílulas da fita encostam uma na outra e nas guias. Ele TEM container query,
-   * mas ela faz outra coisa — abaixo de 360px a fita some e sobra o cabeçalho,
-   * que é a versão compacta legível. Mínimo e consulta respondem perguntas
-   * diferentes: um é "até onde encolhe", a outra é "o que muda ao encolher".
+   * Não é "abaixo disso fica apertado" — apertado é PREFERÊNCIA, e a preferência
+   * é do usuário. Regra do dono, 07/08/2026, depois de a auditoria achar que
+   * vários números aqui eram conforto disfarçado de limite.
+   *
+   * **Cada número abaixo tem a conta que o produziu escrita na linha do bloco**,
+   * em largura ÚTIL (dentro do card, já descontado `--tk-pad-card` dos dois
+   * lados). A referência é uma janela de 1440px com o rail aberto: coluna ≈ 82px,
+   * e `N` colunas dão `N × 82 + (N−1) × 16 − 40` de largura útil.
+   *
+   * | col | útil |
+   * |---|---|
+   * | 3 | ~237px |
+   * | 4 | ~318px |
+   * | 5 | ~400px |
+   * | 6 | ~482px |
+   *
+   * ⚠️ **A conta é uma ESTIMATIVA de referência, não uma medição por bloco.** A
+   * largura real muda com a janela, com o rail recolhido e com a densidade. É
+   * por isso que abaixo do mínimo o bloco não pode simplesmente "ficar feio": ou
+   * há container query que o simplifica, ou o mínimo está alto demais.
+   *
+   * ⛔ Mínimo sem container query que o sustente é promessa vazia — "bloco que
+   * quebra numa largura que ele DECLARA é bug".
    */
   colMin: number;
   colPadrao: number;
@@ -109,37 +151,130 @@ export interface MetaBloco {
    catálogo delas é o `metricCards` do hook. Misturar os dois faria o painel de
    escolha oferecer "Faturamento" e "Vendas por país" na mesma lista. */
 export const CATALOGO_META = [
+  /* ── OS QUATRO ESTRUTURAIS ────────────────────────────────────────────────
+     Eles vêm PRIMEIRO na lista porque a ordem daqui é a do layout padrão de
+     conta nova, e a leitura da tela começa por eles. ⚠️ Não é uma segunda
+     categoria: o que os separa é uma string a mais (`estrutural`). */
+  {
+    id: "receita-gasto",
+    alturaAjustavel: true,
+    linhasMin: 5,
+    titulo: "Receita vs. gasto",
+    descricao: "As duas séries no tempo, com a linha de break-even",
+    zona: "paineis",
+    /* 4 → ~318px. Cabe o cabeçalho (título ~120px + `Diário|Semanal` ~130px) e
+       uma linha com ~5 rótulos de eixo. Abaixo disso o eixo vira uma régua de
+       datas cortadas, e a série deixa de dizer QUANDO. */
+    colMin: 4,
+    colPadrao: 8,
+    estrutural: "É a leitura central do painel — sem ela a tela não responde nada.",
+  },
+  {
+    id: "alertas",
+    alturaAjustavel: true,
+    linhasMin: 4,
+    titulo: "Alertas",
+    descricao: "O que exige ação agora",
+    zona: "paineis",
+    /* 3 → ~237px. A linha é círculo de 28px (§13) + texto: sobram ~200px para o
+       título do alerta, que quebra em duas linhas sem perder nada. Lista de
+       texto é o formato que menos sofre com largura. */
+    colMin: 3,
+    colPadrao: 4,
+    estrutural: "Alerta que dá para esconder é alerta que ninguém vê.",
+  },
+  {
+    id: "paises",
+    alturaAjustavel: true,
+    linhasMin: 5,
+    titulo: "Vendas por país",
+    descricao: "De onde vem o faturamento",
+    zona: "paineis",
+    /* 🔴 4, E ANTES ERA A TELA INTEIRA — este é o bloco que motivou a correção
+       da definição de "estrutural".
+
+       O mínimo é o do RANKING, não o do globo: abaixo de 640px úteis (~8 col) a
+       container query já tira o globo e sobra a lista, que é quem responde "qual
+       país e quanto". A lista precisa de bandeira 20 + nome ~100 + vendas 30 +
+       receita 88 + folgas 30 ≈ 270px, e 4 colunas dão 318. */
+    colMin: 4,
+    colPadrao: 6,
+    estrutural: "De onde vem o dinheiro é leitura de operação, não enfeite.",
+  },
+  {
+    id: "rodape",
+    titulo: "Estado do sistema",
+    descricao: "Integrações, regras, taxas e última atualização",
+    zona: "paineis",
+    /* 3 → ~237px. O `StatusFooter` já é `auto-fit minmax(200px, 1fr)`: ele
+       reflui para uma coluna sozinho. 200px é o piso do próprio componente. */
+    colMin: 3,
+    colPadrao: 12,
+    estrutural: "Diz se a ferramenta está funcionando. Não é sobre dinheiro.",
+  },
+
+  /* ── OS OPCIONAIS ─────────────────────────────────────────────────────── */
   {
     id: "funil",
+    alturaAjustavel: true,
+    linhasMin: 4,
     titulo: "Funil",
-    descricao: "Cliques → checkouts → vendas, com a taxa de cada passo",
+    descricao: "Cliques → checkouts → vendas, com a perda de cada passo",
     zona: "paineis",
+    /* 🔴 4 é o mínimo do CABEÇALHO, não o da fita — e a distinção custou caro.
+       A container query esconde `.tk-fita-desenho` abaixo de 360px úteis, e 4
+       colunas dão ~318px numa janela de 1440. **No padrão antigo (`colPadrao:
+       4`) a fita nunca aparecia nessa janela** — o bloco era três números e um
+       vazio, que é a razão de ele "continuar ruim" há três tentativas.
+       O padrão subiu para 6 (~482px), que é onde a fita existe. */
     colMin: 4,
-    colPadrao: 4,
+    colPadrao: 6,
   },
   {
     id: "fontes",
-    titulo: "Fontes de tráfego",
+    titulo: "Origem do faturamento",
+    /* 🔴 ABSORVEU O BLOCO "CANAIS" (07/08/2026). Os dois liam `v.sources` — o
+       MESMO array, a mesma dimensão (`utm_source` do clique) — e desenhavam
+       rosca e lista da mesma coisa. Não é uma junção de coisas parecidas: era
+       um dado só, exibido duas vezes na mesma tela. */
     descricao: "De qual canal veio o faturamento",
     zona: "paineis",
+    /* 3 → ~237px. Sem coluna de contagem: nome ~90 + receita 78 + % 44 + folgas
+       ~25 = 237. E o `%` sai por container query abaixo de 320px úteis, o que dá
+       folga real. A rosca é quadrada e cabe em qualquer largura. */
     colMin: 3,
-    colPadrao: 4,
+    colPadrao: 4,
   },
   {
     id: "produtos",
     titulo: "Produtos",
     descricao: "Quais produtos faturaram mais",
     zona: "paineis",
+    /* 3 → ~237px, com o `%` já fora pela container query: nome ~90 + vendas 54
+       + receita 78 + folgas 20 = 242. É o limite exato, e é por isso que o `%`
+       precisa sair antes — coluna de APOIO sai, a que responde fica. */
     colMin: 3,
-    colPadrao: 4,
+    colPadrao: 4,
   },
   {
     id: "pagamentos",
     titulo: "Formas de pagamento",
     descricao: "Como os compradores pagaram",
     zona: "paineis",
-    colMin: 3,
-    colPadrao: 4,
+    colMin: 3, // mesma conta de `produtos` — mesmo componente, mesmas colunas
+    colPadrao: 4,
+  },
+  {
+    id: "posicionamento",
+    titulo: "Vendas por posicionamento",
+    /* 🔴 ELE EXISTIA NO `blocks.ts` ANTIGO e não entrou no catálogo novo. O dado
+       nunca sumiu: `computeDashboard` devolve `byPlacement` e o hook o expõe
+       como `v.placements` desde sempre — eram **6 leitores e nenhuma tela**, que
+       é o mesmo padrão do `Sale.apiCredentialId`. */
+    descricao: "Feed, Stories, Reels — onde o anúncio converteu",
+    zona: "paineis",
+    colMin: 3, // mesma conta de `produtos`
+    colPadrao: 4,
   },
   {
     id: "vendas-por-dia",
@@ -148,8 +283,11 @@ export const CATALOGO_META = [
     titulo: "Vendas por dia",
     descricao: "Quantas vendas e quanto faturou em cada dia",
     zona: "paineis",
+    /* 4 → ~318px. Com 30 dias dá ~10px por passo, que ainda desenha barra com
+       folga. Abaixo disso as barras ficam mais finas que o raio de 6px do §4 e
+       o gráfico vira uma serrilha. */
     colMin: 4,
-    colPadrao: 6,
+    colPadrao: 6,
   },
   {
     id: "vendas-por-hora",
@@ -158,8 +296,8 @@ export const CATALOGO_META = [
     titulo: "Vendas por horário",
     descricao: "As 24 horas do período filtrado",
     zona: "paineis",
-    colMin: 4,
-    colPadrao: 6,
+    colMin: 4, // 24 barras em ~318px = 13px de passo
+    colPadrao: 6,
   },
   {
     id: "lucro-por-hora",
@@ -168,16 +306,19 @@ export const CATALOGO_META = [
     titulo: "Lucro por horário",
     descricao: "Receita menos a fatia de custo daquela hora",
     zona: "paineis",
-    colMin: 4,
-    colPadrao: 6,
+    colMin: 4, // idem `vendas-por-hora`
+    colPadrao: 6,
   },
   {
     id: "aprovacao",
     titulo: "Taxa de aprovação",
     descricao: "Quanto de cada forma de pagamento é aprovado",
     zona: "paineis",
+    /* 3 → ~237px. São medidores radiais lado a lado; o componente já é
+       `auto-fit`, então com três formas ele quebra em duas linhas em vez de
+       espremer. Medidor não tem texto longo — encolhe bem. */
     colMin: 3,
-    colPadrao: 4,
+    colPadrao: 4,
   },
   {
     id: "atividade",
@@ -186,8 +327,45 @@ export const CATALOGO_META = [
     titulo: "Atividade recente",
     descricao: "Os últimos eventos de venda e rastreamento",
     zona: "paineis",
+    /* 3 → ~237px, com a origem já fora pela container query abaixo de 320px. */
     colMin: 3,
-    colPadrao: 4,
+    colPadrao: 4,
+  },
+  {
+    id: "top-campanhas",
+    alturaAjustavel: true,
+    linhasMin: 4,
+    titulo: "Top campanhas",
+    descricao: "As que mais faturaram no período",
+    zona: "paineis",
+    /* 🔴 ERA LARGURA CHEIA E NÃO PRECISAVA — quatro colunas de número e duas
+       linhas ocupando 12 colunas.
+
+       4 → ~318px, e o que sustenta é a ordem de sacrifício das colunas: nome
+       (~120) + Receita (78) + ROAS (78) + folgas (20) = 296. `Vendas` e `Gasto`
+       saem por container query, nessa ordem — são apoio; Receita é a resposta e
+       ROAS é o julgamento. */
+    colMin: 4,
+    colPadrao: 6,
+  },
+  {
+    id: "heatmap",
+    alturaAjustavel: true,
+    linhasMin: 4,
+    titulo: "Quando compram",
+    descricao: "Média por hora, por dia da semana",
+    zona: "paineis",
+    /* 🔴 5 → ~400px, e o número desceu de "largura cheia" porque **a célula
+       deixou de ser 18px fixos**. Ela agora é fluida entre 11 e 30px, derivada
+       da largura do bloco — a régua é 24 células + 24 folgas de 3px + o rótulo
+       do dia (~36px).
+
+       Com célula de 11px: 24×11 + 24×3 + 36 = 372px. Com 12px: 396px. O piso de
+       11px é onde a folga de 3px passa a ser um quarto do passo e a grade lê
+       como listra em vez de mapa. 5 colunas dão 400 — o primeiro degrau que
+       cabe com folga. */
+    colMin: 5,
+    colPadrao: 8,
   },
 ] as const satisfies readonly MetaBloco[];
 
@@ -252,52 +430,42 @@ export function encaixarLinhas(bruto: number | undefined, meta: MetaBloco): numb
 }
 
 /**
- * ⛔ BLOCOS ESTRUTURAIS — a categoria que NÃO entra no catálogo, por decisão de
- * produto. Não é omissão, e a lista existe para não rediscutirmos caso a caso.
+ * Os quatro que não podem ser ocultados, DERIVADOS do catálogo.
  *
- * ⚠️ A regra: **bloco cuja ausência faz o usuário tomar decisão errada, ou
- * deixar de saber que o sistema falhou, é estrutural.** Não é sobre importância
- * — é sobre o que a ausência CAUSA.
+ * ⛔ Era uma lista `ESTRUTURAIS_META` escrita à mão, paralela ao catálogo, com
+ * `id`, `titulo` e `motivo` repetidos. Segunda fonte para a mesma pergunta:
+ * mudar o título de um bloco em um lugar e não no outro dava dois nomes para o
+ * mesmo painel — um na tela, outro no modo de edição.
  *
- * ### 🔴 O `motivo` é DADO, e não prosa neste comentário
- *
- * Ele era uma tabela em Markdown aqui em cima, legível só por quem abrisse o
- * arquivo. **O modo de edição precisa dizer ao usuário por que aquele bloco não
- * tem ✕**, e a alternativa era escrever a frase de novo na tela — segunda cópia
- * da mesma decisão, que diverge no primeiro dia em que alguém mudar uma delas.
- *
- * ⛔ O bloco estrutural aparece no modo de edição **sem o ✕**, não desabilitado.
- * Um ✕ apagado é um controle que existe e não funciona; a ausência dele, com o
- * motivo ao alcance, é uma afirmação sobre o produto.
+ * ⚠️ **Só o `estrutural` decide.** Não existe lista de ids em lugar nenhum;
+ * marcar um bloco é acrescentar a frase, e desmarcar é apagá-la.
  */
-export interface MetaEstrutural {
-  id: string;
-  titulo: string;
-  /** Uma frase curta, na voz do usuário. Vai para a tooltip do selo "Fixo". */
-  motivo: string;
+/* ⚠️ O `as readonly MetaBloco[]` não é preguiça: o `as const` faz de
+   `CATALOGO_META` uma tupla de tipos LITERAIS, e `estrutural` só existe em
+   quatro deles. Sem o alargamento, ler a propriedade num membro que não a tem é
+   erro de tipo — mesmo sendo `?` na interface. */
+export const ESTRUTURAIS = (CATALOGO_META as readonly MetaBloco[]).filter((b) => b.estrutural);
+
+/**
+ * Garante que os estruturais estejam presentes numa lista de painéis, **sem
+ * mexer na ordem, na largura nem na altura dos que já estão**.
+ *
+ * 🔴 É AQUI QUE "NÃO PODE SER OCULTADO" DEIXA DE SER UMA PROMESSA. A ausência do
+ * ✕ na tela cobre o usuário de hoje; ela não cobre um layout gravado por uma
+ * versão anterior (que não tinha estes blocos na zona), editado à mão, ou de uma
+ * conta cujo `paineis` foi truncado. Sem a reposição, "estrutural" valeria
+ * enquanto ninguém tivesse um salvo antigo — que é exatamente o tipo de garantia
+ * que este projeto já pagou para não fazer de novo.
+ *
+ * ⚠️ Os que faltam entram **no fim**, com o `colPadrao` deles. Inseri-los na
+ * posição "certa" exigiria adivinhar uma intenção que o salvo não tem, e mudaria
+ * de lugar os blocos que o usuário arrastou.
+ */
+export function reporEstruturais(paineis: readonly { id: string; col: number; linhas?: number }[]) {
+  const lista = [...paineis];
+  for (const b of ESTRUTURAIS) {
+    if (lista.some((p) => p.id === b.id)) continue;
+    lista.push({ id: b.id, col: b.colPadrao, linhas: encaixarLinhas(undefined, b) });
+  }
+  return lista;
 }
-
-export const ESTRUTURAIS_META = [
-  {
-    id: "alertas",
-    titulo: "Alertas",
-    motivo: "Alerta que dá para esconder é alerta que ninguém vê.",
-  },
-  {
-    id: "receita-gasto",
-    titulo: "Receita vs. gasto",
-    motivo: "É a leitura central do painel — sem ela a tela não responde nada.",
-  },
-  {
-    id: "paises",
-    titulo: "Vendas por país",
-    motivo: "O globo não cabe em nenhuma das larguras de painel.",
-  },
-  {
-    id: "rodape",
-    titulo: "Estado do sistema",
-    motivo: "Diz se a ferramenta está funcionando. Não é sobre dinheiro.",
-  },
-] as const satisfies readonly MetaEstrutural[];
-
-export const IDS_ESTRUTURAIS = ESTRUTURAIS_META.map((b) => b.id);

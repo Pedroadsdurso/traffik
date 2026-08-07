@@ -200,7 +200,21 @@ export function useLayoutDashboard(workspaceId?: string | null) {
     });
   }, []);
 
+  /**
+   * Tira um painel da zona. **Estrutural não sai** — e a guarda mora aqui.
+   *
+   * 🔴 A AUSÊNCIA DO ✕ NÃO É A REGRA, É A APRESENTAÇÃO DELA. O outro caminho de
+   * remoção é arrastar o bloco de volta para o catálogo, e ele não passa por
+   * botão nenhum: sem esta linha, o `Alertas` sairia do painel por arrasto
+   * enquanto a tela afirma que ele não pode sair. É o "endurecer uma porta com a
+   * outra aberta" do CLAUDE.md, na camada de layout.
+   *
+   * ⚠️ Recusa em silêncio de propósito: quem chega aqui já não tem ✕ e já viu o
+   * cursor de proibido no gesto. Um aviso depois da recusa explicaria uma coisa
+   * que a interface diz antes.
+   */
   const removerPainel = useCallback((id: string) => {
+    if (metaDoBloco(id)?.estrutural) return;
     setLayout((l) => ({ ...l, paineis: l.paineis.filter((p) => p.id !== id) }));
   }, []);
 

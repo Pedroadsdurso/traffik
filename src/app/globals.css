@@ -1724,8 +1724,35 @@ a {
   .tk-breakdown,
   .tk-serie,
   .tk-feed,
-  .tk-aprov {
+  .tk-aprov,
+  .tk-camp {
     container-type: inline-size;
+  }
+
+  /* ── TOP CAMPANHAS — a grade é UMA, cabeçalho e corpo a compartilham ───────
+     ⛔ Era `gridTemplateColumns` inline repetida em dois lugares, ligados por
+     uma constante em JS. Passou para CSS porque as container queries abaixo
+     precisam MUDAR a grade, e uma constante em JS não sabe a largura do bloco.
+
+     As colunas de número encolheram de 86 para 78px: é o que faz a tabela caber
+     em 4 colunas da grade sem que o nome da campanha fique com três letras. */
+  .tk-camp-linha {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) repeat(4, minmax(0, 78px));
+    gap: 10px;
+    align-items: center;
+  }
+
+  /* Abaixo de 440px úteis sai VENDAS; abaixo de 380px sai também GASTO. A ordem
+     e o motivo estão no cabeçalho do `TabelaCampanhas.tsx`. */
+  @container (max-width: 440px) {
+    .tk-camp-vendas { display: none; }
+    .tk-camp-linha { grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 78px)); }
+  }
+
+  @container (max-width: 380px) {
+    .tk-camp-gasto { display: none; }
+    .tk-camp-linha { grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 78px)); }
   }
 
   /* 🔴 A FITA SOME, o cabeçalho fica. Abaixo de 360px as duas pílulas encostam

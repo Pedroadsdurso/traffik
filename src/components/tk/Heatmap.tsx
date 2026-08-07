@@ -77,7 +77,40 @@ export function Heatmap({
           contínuo; na referência 4 (Insighta) elas têm folga e raio. O `06`
           codifica a referência 4, e a precedência do acabamento é dele. Grade
           colada é o que mais faz o nosso parecer cru. */}
-      <table style={{ borderCollapse: "separate", borderSpacing: 3, minWidth: 560 }}>
+      {/* 🔴 A CÉLULA DEIXOU DE SER 18px FIXOS (07/08/2026) — e é isso que faz o
+          mínimo do bloco cair de "largura cheia" para 5 colunas.
+
+          Com `18px` cravados, a tabela tinha uma largura só: 560px. Num bloco
+          mais estreito ela estourava e virava barra de rolagem horizontal; num
+          bloco de 12 colunas ficava encolhida num canto, com 600px de vazio ao
+          lado — o "conteúdo perdido no meio do quadro" que o dono descreveu.
+
+          Hoje é `width: 100%` + `tableLayout: fixed`: a coluna se divide pelo
+          espaço, e a célula é um quadrado por `aspectRatio`. É a regra do `06`
+          sobre medida que precisa PARECER a mesma em tamanhos diferentes — ela
+          sai de uma fração do contêiner, nunca de um px.
+
+          ⚠️ Os dois limites são px de propósito, porque são limites de LEITURA e
+          não de proporção:
+
+          | Limite | Valor | Por quê |
+          |---|---|---|
+          | piso | `minWidth: 372` (célula ~11px) | abaixo disso a folga de 3px é um quarto do passo e a grade lê como listra, não como mapa. Estourou → rolagem horizontal, que é honesto |
+          | teto | `maxWidth: 828` (célula ~30px) | acima disso a célula vira azulejo e o mapa perde a leitura de bloco. O que sobra de largura fica como respiro, não como célula gigante | */}
+      <table
+        style={{
+          borderCollapse: "separate",
+          borderSpacing: 3,
+          tableLayout: "fixed",
+          width: "100%",
+          minWidth: 372,
+          maxWidth: 828,
+        }}
+      >
+        {/* O rótulo do dia é a única coluna de largura fixa: "Sex" não encolhe. */}
+        <colgroup>
+          <col style={{ width: 36 }} />
+        </colgroup>
         <thead>
           <tr>
             <th />
@@ -85,7 +118,7 @@ export function Heatmap({
               /* Rótulo a cada 3 horas: 24 números de 11px lado a lado viram uma
                  régua ilegível, e a leitura do mapa não precisa da hora exata —
                  quem precisa do número tem o tooltip. */
-              <th key={h} className="text-caption text-text-muted" style={{ fontWeight: 400, padding: 0, width: 18 }}>
+              <th key={h} className="text-caption text-text-muted" style={{ fontWeight: 400, padding: 0 }}>
                 {h % 3 === 0 ? h : ""}
               </th>
             ))}
@@ -131,23 +164,27 @@ function Celula({
     : `${dia}, ${hora}h\n${rotulo}: ${formatar(c.valor)} em ${c.observacoes} ${c.observacoes === 1 ? "ocorrência" : "ocorrências"}\nMédia: ${formatar(media)}`;
 
   return (
-    <td
-      title={titulo}
-      aria-label={titulo}
-      style={{
-        width: 18,
-        height: 18,
-        borderRadius: 4,
-        /* ⛔ Vazia recebe HACHURA, não um tom fraco. Ver a nota do componente. */
-        background: vazia
-          ? HACHURA
-          : `color-mix(in oklch, var(--tk-primary) ${Math.round(intensidade * 100)}%, var(--tk-surface-hover))`,
-        /* A moldura fica em TODAS, inclusive na vazia: sem ela a célula sem
-           pintura desaparece no tema claro e vira buraco na grade em vez de
-           categoria. Foi conferido nos dois temas. */
-        outline: "1px solid var(--tk-border)",
-        outlineOffset: -1,
-      }}
-    />
+    /* ⚠️ O QUADRADO É O `div`, NÃO O `td`. `aspect-ratio` numa célula de tabela
+       não é honrado de forma confiável — o algoritmo de tabela decide a altura
+       da LINHA, e o `td` obedece a ela. Com o filho carregando a proporção, a
+       linha passa a ter a altura dele, e a célula fica quadrada em qualquer
+       largura de bloco. */
+    <td title={titulo} aria-label={titulo} style={{ padding: 0 }}>
+      <div
+        style={{
+          aspectRatio: "1",
+          borderRadius: 4,
+          /* ⛔ Vazia recebe HACHURA, não um tom fraco. Ver a nota do componente. */
+          background: vazia
+            ? HACHURA
+            : `color-mix(in oklch, var(--tk-primary) ${Math.round(intensidade * 100)}%, var(--tk-surface-hover))`,
+          /* A moldura fica em TODAS, inclusive na vazia: sem ela a célula sem
+             pintura desaparece no tema claro e vira buraco na grade em vez de
+             categoria. Foi conferido nos dois temas. */
+          outline: "1px solid var(--tk-border)",
+          outlineOffset: -1,
+        }}
+      />
+    </td>
   );
 }

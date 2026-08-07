@@ -112,9 +112,14 @@ export function ItemEdicao({
     aoTeclado: (dCol: number, dLinhas: number) => void;
   };
   /**
-   * O bloco de verdade. **Ausente só nos fixos**, que já estão desenhados em
-   * outro lugar da tela — repetir o conteúdo deles aqui mostraria o mesmo dado
-   * duas vezes na mesma página.
+   * O bloco de verdade.
+   *
+   * ⚠️ Isto dizia *"ausente só nos fixos, que já estão desenhados em outro lugar
+   * da tela"*, e a premissa morreu em 07/08/2026: os fixos deixaram de ter
+   * "outro lugar" — eles vivem na zona Painéis como todo mundo, e o que os
+   * separa é só não terem ✕. **Fixo desenha o conteúdo dele aqui, como os
+   * outros.** Havia uma zona "Sempre visíveis" com quatro molduras vazias; ela
+   * não existe mais.
    */
   children?: React.ReactNode;
 }) {

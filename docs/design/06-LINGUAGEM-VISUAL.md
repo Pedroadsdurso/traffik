@@ -261,6 +261,46 @@ Não é o escuro invertido:
 
 ---
 
+## 🧱 BLOCO ESTRUTURAL É O QUE NÃO PODE SER **OCULTADO**. Nada além disso.
+
+> Decisão do dono, 07/08/2026, corrigindo uma definição que este documento e o
+> `04` carregavam errada — e que tinha consequência de acabamento, não só de
+> arquitetura.
+
+"Estrutural" significa **uma** coisa: o bloco não tem ✕. Ele continua na zona
+Painéis como qualquer outro — tem alça, muda de largura, muda de posição.
+
+| Estrutural garante | Estrutural NÃO garante |
+|---|---|
+| estar sempre na lista de painéis | posição |
+| não ter ✕ | largura |
+| | altura |
+
+### O que a definição errada custou
+
+Quatro blocos (`Receita × gasto`, `Alertas`, `Vendas por país`, `Estado do
+sistema`) viviam em **JSX fixo**, fora da grade, com a largura decidida no
+código. A tela tinha dois sistemas de layout: um que o usuário controlava e
+outro que ele não via.
+
+O sintoma foi `Vendas por país` de ponta a ponta, imexível. E o motivo escrito
+no catálogo era circular: *"o globo não cabe em nenhuma das larguras de
+painel"* — só que quem decide se o globo cabe é uma container query, e ela já
+existia. O bloco tinha sido dado como grande porque estava grande.
+
+> ### ⛔ A PERGUNTA, ANTES DE TIRAR QUALQUER COISA DA GRADE
+> **"Isto não pode ser ESCONDIDO, ou não pode ser MEXIDO?"**
+>
+> Quase sempre é o primeiro, e o primeiro se resolve tirando um botão — não
+> tirando o bloco do layout.
+
+⚠️ E a garantia é a **reposição** (`reporEstruturais`), não a ausência do botão:
+a ausência cobre o usuário de hoje, não um layout salvo por versão anterior nem
+o arrasto de volta para o catálogo. Regra que depende de a interface lembrar não
+é regra.
+
+---
+
 ## 📏 MEDIDA QUE PRECISA MANTER PROPORÇÃO NÃO NASCE EM PIXEL
 
 > Regra transversal, e não uma seção de bloco. Ela já apareceu **três vezes** em
