@@ -83,6 +83,7 @@
     "marca:gerar": "node scripts/gen-marca.mjs",
     "test:contraste": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-contraste.mjs",
     "test:heatmap": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-heatmap.mjs",
+    "test:fita": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-fita.mjs",
     "test:migrar-layout": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-migrar-layout.mjs"
   },
   "dependencies": {

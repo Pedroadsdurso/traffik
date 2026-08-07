@@ -72,11 +72,17 @@ export interface MetaBloco {
    * de 24×7 não cabe em 3 colunas, e deixar o usuário chegar lá produziria um
    * bloco quebrado que ele mesmo escolheu.
    *
-   * ⚠️ ELES ESTÃO CONSERVADORES DE PROPÓSITO (C2, 07/08/2026): cada bloco declara
-   * só as larguras em que ele **já funciona hoje**, sem container query. O C3
-   * acrescenta as consultas de container e **aí** os mínimos descem para o real.
-   * A regra "bloco que quebra numa largura que ele declara é bug" fica cumprida
-   * nas duas entregas — porque esta simplesmente não oferece a largura estreita.
+   * ✅ ELES DESCERAM PARA O REAL no C3 (07/08/2026), junto com as container
+   * queries que os sustentam. Eram conservadores no C2 de propósito: cada bloco
+   * declarava só as larguras em que já funcionava **sem** consulta de container,
+   * e a regra "bloco que quebra numa largura que ele declara é bug" ficou
+   * cumprida nas duas entregas — porque a primeira não oferecia a estreita.
+   *
+   * ⚠️ O `funil` fica em 4, e é o único que não desceu: abaixo disso as duas
+   * pílulas da fita encostam uma na outra e nas guias. Ele TEM container query,
+   * mas ela faz outra coisa — abaixo de 360px a fita some e sobra o cabeçalho,
+   * que é a versão compacta legível. Mínimo e consulta respondem perguntas
+   * diferentes: um é "até onde encolhe", a outra é "o que muda ao encolher".
    */
   colMin: number;
   colPadrao: number;
@@ -116,7 +122,7 @@ export const CATALOGO_META = [
     titulo: "Fontes de tráfego",
     descricao: "De qual canal veio o faturamento",
     zona: "paineis",
-    colMin: 4,
+    colMin: 3,
     colPadrao: 4,
   },
   {
@@ -124,7 +130,7 @@ export const CATALOGO_META = [
     titulo: "Produtos",
     descricao: "Quais produtos faturaram mais",
     zona: "paineis",
-    colMin: 4,
+    colMin: 3,
     colPadrao: 4,
   },
   {
@@ -132,7 +138,7 @@ export const CATALOGO_META = [
     titulo: "Formas de pagamento",
     descricao: "Como os compradores pagaram",
     zona: "paineis",
-    colMin: 4,
+    colMin: 3,
     colPadrao: 4,
   },
   {
@@ -142,7 +148,7 @@ export const CATALOGO_META = [
     titulo: "Vendas por dia",
     descricao: "Quantas vendas e quanto faturou em cada dia",
     zona: "paineis",
-    colMin: 6,
+    colMin: 4,
     colPadrao: 6,
   },
   {
@@ -152,7 +158,7 @@ export const CATALOGO_META = [
     titulo: "Vendas por horário",
     descricao: "As 24 horas do período filtrado",
     zona: "paineis",
-    colMin: 6,
+    colMin: 4,
     colPadrao: 6,
   },
   {
@@ -162,7 +168,7 @@ export const CATALOGO_META = [
     titulo: "Lucro por horário",
     descricao: "Receita menos a fatia de custo daquela hora",
     zona: "paineis",
-    colMin: 6,
+    colMin: 4,
     colPadrao: 6,
   },
   {
@@ -170,7 +176,7 @@ export const CATALOGO_META = [
     titulo: "Taxa de aprovação",
     descricao: "Quanto de cada forma de pagamento é aprovado",
     zona: "paineis",
-    colMin: 4,
+    colMin: 3,
     colPadrao: 4,
   },
   {
@@ -180,7 +186,7 @@ export const CATALOGO_META = [
     titulo: "Atividade recente",
     descricao: "Os últimos eventos de venda e rastreamento",
     zona: "paineis",
-    colMin: 4,
+    colMin: 3,
     colPadrao: 4,
   },
 ] as const satisfies readonly MetaBloco[];

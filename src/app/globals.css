@@ -1610,3 +1610,36 @@ a {
     .tk-paises-globo { display: none; }
   }
 }
+
+/* ══ CONTAINER QUERIES DOS BLOCOS — C3, 07/08/2026 ══════════════════════════
+   ⛔ CONTAINER, e não `@media`. O mesmo bloco pode ter 3 colunas numa tela de
+   1920px e 12 numa de 1280 — a janela não diz nada sobre a largura DELE. É esta
+   camada que permite os mínimos do catálogo descerem: sem ela, um `colMin: 3`
+   seria a promessa de uma largura em que o bloco não se lê.
+
+   ⚠️ O que sai primeiro é sempre a coluna de APOIO, nunca a que responde a
+   pergunta do bloco. Some o `%` de participação, não a receita; some a campanha
+   do evento, não o que aconteceu. Um bloco estreito que perde a resposta é pior
+   que um bloco largo. */
+@layer components {
+  .tk-fita,
+  .tk-breakdown,
+  .tk-serie,
+  .tk-feed,
+  .tk-aprov {
+    container-type: inline-size;
+  }
+
+  /* 🔴 A FITA SOME, o cabeçalho fica. Abaixo de 360px as duas pílulas encostam
+     uma na outra e nas guias, e uma fita ilegível ainda ocupa 190px de altura.
+     O cabeçalho tem a MESMA informação sem a forma — é a "versão compacta
+     legível" em vez da fita espremida. */
+  @container (max-width: 360px) {
+    .tk-fita-desenho { display: none; }
+  }
+
+  @container (max-width: 320px) {
+    .tk-col-pct { display: none; }
+    .tk-feed-origem { display: none; }
+  }
+}

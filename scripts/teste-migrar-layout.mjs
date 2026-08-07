@@ -189,8 +189,14 @@ console.log("A grade de 12: encaixe, piso e o grid antigo");
   eq("o bloco oferece do minimo ate 12, sem buraco",
      passosDoBloco(funil).join(","), "4,5,6,7,8,9,10,11,12");
   eq("fracao arredonda para a coluna mais proxima", encaixarColunas(6.6, funil), 7);
-  eq("nunca abaixo do mínimo do bloco", encaixarColunas(3, porDia), 6);
-  eq("  …nem com valor absurdo", encaixarColunas(-99, porDia), 6);
+  /* ⛔ CONGELA A RELACAO, NAO O NUMERO. Estas duas diziam `6` — o `colMin`
+     que `vendas-por-dia` tinha no C2. No C3 ele desceu para 4 junto com as
+     container queries, e elas cairam sem que nada estivesse errado. Teste que
+     congela VALOR defende o bug; o que congela RELACAO defende o conserto: o
+     que tem de valer e "nunca abaixo do minimo DELE". */
+  eq("nunca abaixo do minimo do bloco",
+     encaixarColunas(porDia.colMin - 2, porDia), porDia.colMin);
+  eq("  ...nem com valor absurdo", encaixarColunas(-99, porDia), porDia.colMin);
   eq("teto na largura da grade", encaixarColunas(999, funil), 12);
 
   /* 🔴 O grid ANTIGO já era de 12 colunas, então esta migração é quase uma
@@ -205,11 +211,13 @@ console.log("A grade de 12: encaixe, piso e o grid antigo");
   eq("seta para a direita anda UMA coluna", proximoPasso(funil, 4, +1), 5);
   eq("  ...e a da esquerda volta uma", proximoPasso(funil, 6, -1), 5);
   eq("no maior passo, a direita não passa do teto", proximoPasso(funil, 12, +1), 12);
-  eq("no mínimo do bloco, a esquerda não desce", proximoPasso(porDia, 6, -1), 6);
+  eq("no minimo do bloco, a esquerda nao desce",
+     proximoPasso(porDia, porDia.colMin, -1), porDia.colMin);
 
   eq("grid antigo w=4 -> 4 colunas", colunasDoGridAntigo(4, funil), 4);
   eq("grid antigo w=12 -> 12 colunas", colunasDoGridAntigo(12, funil), 12);
-  eq("grid antigo w=3 num bloco de mínimo 6 SOBE para 6", colunasDoGridAntigo(3, porDia), 6);
+  eq("grid antigo abaixo do minimo SOBE para ele",
+     colunasDoGridAntigo(porDia.colMin - 1, porDia), porDia.colMin);
 
   /* ⚠️ A unidade de ALTURA mudou entre os dois grids: a linha do
      `react-grid-layout` valia ~30px e a de hoje vale 44. Um gráfico de `h: 8`
@@ -293,8 +301,13 @@ console.log("\n[1mO envelope v2[0m");
      v2({ paineis: [{ id: "funil", largura: "cheia" }] }).paineis[0].col, 12);
   eq("v2 'metade' vira 6 colunas",
      v2({ paineis: [{ id: "funil", largura: "metade" }] }).paineis[0].col, 6);
-  eq("v2 'um-terco' num bloco de mínimo 6 SOBE para 6",
-     v2({ paineis: [{ id: "vendas-por-dia", largura: "um-terco" }] }).paineis[0].col, 6);
+  /* ⚠️ `um-terco` valia 4 colunas. A assercao so mede subida enquanto o
+     minimo do bloco for MAIOR que 4 — senao ela passaria por coincidencia, sem
+     poder falhar pelo motivo que alega medir. Por isso ela pergunta o maximo
+     entre os dois, e continua verdadeira dos dois lados da mudanca de minimo. */
+  eq("v2 'um-terco' nunca entra abaixo do minimo do bloco",
+     v2({ paineis: [{ id: "vendas-por-dia", largura: "um-terco" }] }).paineis[0].col,
+     Math.max(4, metaDoBloco("vendas-por-dia").colMin));
   eq("v2 nao trazia altura -- e o bloco sem alca continua sem",
      v2({ paineis: [{ id: "funil", largura: "metade" }] }).paineis[0].linhas, undefined);
 

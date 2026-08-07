@@ -41,7 +41,7 @@ export function Aprovacao({ linhas }: { linhas: LinhaAprovacao[] }) {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column" }}>
+    <div className="tk-aprov" style={{ display: "flex", flexDirection: "column" }}>
       {linhas.map((l, i) => {
         const cor = tom(l.rate, l.geradas);
         return (

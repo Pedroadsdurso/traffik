@@ -53,7 +53,7 @@ export function BreakdownPanel({
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column" }}>
+    <div className="tk-breakdown" style={{ display: "flex", flexDirection: "column" }}>
       <div
         className="text-caption text-text-muted"
         style={{ display: "flex", gap: 10, paddingBottom: 6, borderBottom: "1px solid var(--tk-border)" }}
@@ -61,7 +61,7 @@ export function BreakdownPanel({
         <span style={{ flex: 1, minWidth: 0 }}>{rotuloDimensao}</span>
         {mostrarVendas && <span style={{ width: 54, textAlign: "right" }}>Vendas</span>}
         <span style={{ width: 78, textAlign: "right" }}>Receita</span>
-        <span style={{ width: 44, textAlign: "right" }}>%</span>
+        <span className="tk-col-pct" style={{ width: 44, textAlign: "right" }}>%</span>
       </div>
 
       {linhas.map((l) => (
@@ -84,7 +84,7 @@ export function BreakdownPanel({
             {/* `pctLabel` já vem "—" quando não há denominador — ver `pct1` no
                 hook. Aqui não se recalcula nada: dois lugares fazendo a mesma
                 divisão é como nasceram os dois `div` de contratos opostos. */}
-            <span className="text-caption text-text-muted" style={{ width: 44, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+            <span className="text-caption text-text-muted tk-col-pct" style={{ width: 44, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
               {l.pctLabel ?? "—"}
             </span>
           </div>

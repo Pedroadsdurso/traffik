@@ -5,7 +5,7 @@ import * as React from "react";
 import { Aprovacao } from "@/components/tk/Aprovacao";
 import { BreakdownPanel } from "@/components/tk/BreakdownPanel";
 import { FeedVendas } from "@/components/tk/FeedVendas";
-import { Funil } from "@/components/tk/Funil";
+import { FitaFunil } from "@/components/tk/FitaFunil";
 import { SerieTemporal } from "@/components/tk/SerieTemporal";
 import type { IdBloco } from "./catalogo";
 import type { TraffikView } from "./useTraffikState";
@@ -34,8 +34,12 @@ export interface RenderBloco {
 
 export const RENDERS: Record<IdBloco, RenderBloco> = {
   funil: {
-    temDado: (v) => v.funnel.some((e) => e.count !== "0"),
-    render: (v) => <Funil etapas={v.funnel} />,
+    temDado: (v) => v.funnel.some((e) => e.valor > 0),
+    render: (v) => (
+      <FitaFunil
+        etapas={v.funnel.map((e) => ({ label: e.label, valor: e.valor, valorFmt: e.count, acao: e.acao }))}
+      />
+    ),
   },
   fontes: {
     temDado: (v) => v.sources.length > 0,

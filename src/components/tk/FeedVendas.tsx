@@ -37,7 +37,7 @@ export function FeedVendas({ itens, limite = 12 }: { itens: ItemFeed[]; limite?:
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column" }}>
+    <div className="tk-feed" style={{ display: "flex", flexDirection: "column" }}>
       {itens.slice(0, limite).map((f, i) => (
         <div
           key={f.id}
@@ -50,7 +50,7 @@ export function FeedVendas({ itens, limite = 12 }: { itens: ItemFeed[]; limite?:
           <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 99, background: f.cor, flex: "none" }} />
           <span className="text-caption text-text" style={{ flex: "none" }}>{f.typeLabel}</span>
           <span
-            className="text-caption text-text-muted"
+            className="text-caption text-text-muted tk-feed-origem"
             style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
           >
             {f.campaign || f.source || ""}

@@ -841,18 +841,24 @@ export function useTraffikState(
   }));
 
   const fn = d?.funnel ?? { cliques: 0, checkouts: 0, vendas: 0 };
-  const maxF = Math.max(1, fn.cliques, fn.checkouts, fn.vendas);
-  const funH = (n: number) => Math.max(24, Math.round((n / maxF) * 120)) + "px";
   /* Sem etapa anterior nao existe taxa de conversao — devolvia "0%", que afirma
      que TODO mundo caiu fora, quando na verdade nao houve de onde cair. */
   const rate = (a: number, b: number) => {
     const r = div(a, b);
     return r === null ? TRACO : (r * 100).toFixed(1).replace(".", ",") + "%";
   };
+  /* ⛔ `height` e `color` SAÍRAM daqui em 07/08/2026. Eles eram medida de
+     DESENHO calculada no hook — e o desenho virou a fita, que mede a espessura
+     sozinha a partir da largura real do bloco. Metade da geometria aqui e
+     metade lá foi o que produziu o `calc(120px / 120 * 100%)` das barras.
+
+     ⚠️ `valor` cru vai junto do formatado, e não em vez dele: quem desenha
+     precisa somar e comparar; quem escreve precisa do separador de milhar. É o
+     mesmo padrão do `despesaRows`. */
   const funnel = [
-    { label: "Cliques", count: fn.cliques.toLocaleString("pt-BR"), height: funH(fn.cliques), color: "var(--color-accent-800)", hasRate: false, rate: "" },
-    { label: "Checkouts iniciados", count: fn.checkouts.toLocaleString("pt-BR"), height: funH(fn.checkouts), color: "var(--color-accent-600)", hasRate: true, rate: rate(fn.checkouts, fn.cliques) },
-    { label: "Vendas", count: fn.vendas.toLocaleString("pt-BR"), height: funH(fn.vendas), color: "var(--color-accent)", hasRate: true, rate: rate(fn.vendas, fn.checkouts) },
+    { label: "Cliques", acao: "clicaram no anúncio", valor: fn.cliques, count: fn.cliques.toLocaleString("pt-BR"), hasRate: false, rate: "" },
+    { label: "Checkouts iniciados", acao: "chegam ao checkout", valor: fn.checkouts, count: fn.checkouts.toLocaleString("pt-BR"), hasRate: true, rate: rate(fn.checkouts, fn.cliques) },
+    { label: "Vendas", acao: "compram", valor: fn.vendas, count: fn.vendas.toLocaleString("pt-BR"), hasRate: true, rate: rate(fn.vendas, fn.checkouts) },
   ];
 
   // Feed unificado: cada tipo de evento tem rótulo e cor próprios.

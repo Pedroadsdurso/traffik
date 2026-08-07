@@ -61,7 +61,7 @@ export function SerieTemporal({
   const zeroPct = permitirNegativo ? ((max - 0) / amplitude) * 100 : 100;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+    <div className="tk-serie" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <div style={{ position: "relative", height: 120, display: "flex", alignItems: "flex-end", gap: 2 }}>
         {permitirNegativo && (
           /* A linha de zero. Sem ela, uma barra para baixo não tem referência e

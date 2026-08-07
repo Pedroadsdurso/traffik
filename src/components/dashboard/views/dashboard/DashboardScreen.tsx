@@ -116,6 +116,11 @@ function celulaDaGrade(col: number, linhas: number | undefined, temDado: boolean
   return {
     gridColumn: `span ${col}`,
     minWidth: 0,
+    /* ⚠️ A CÉLULA É O CONTAINER das consultas dos blocos. Sem isto, o
+       `@container` de dentro deles procuraria um ancestral com
+       `container-type` e cairia na raiz — respondendo sobre a JANELA, que é
+       exatamente o que a container query existe para não fazer. */
+    containerType: "inline-size",
     /* ⛔ O PISO DE ALTURA NÃO VALE NO ESTADO VAZIO. Um bloco que diz "Sem dado
        neste período" ocupando as 4 linhas que teria COM dado é exatamente o
        esburacado que a altura por conteúdo veio resolver — e estado vazio é o que
