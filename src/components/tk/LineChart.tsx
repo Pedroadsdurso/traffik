@@ -48,8 +48,31 @@ export function LineChart({
   formatar: (n: number) => string;
   altura?: number;
 }) {
-  const [alvo, setAlvo] = React.useState<number | null>(null);
+  /**
+   * 🐛 `px` É MEDIDO, NÃO CALCULADO — e a primeira versão estava errada.
+   *
+   * A pílula é HTML sobre um SVG com `viewBox`, e a tentação é posicioná-la em
+   * porcentagem (`x(i) / L`). Não funciona: com o `preserveAspectRatio` padrão
+   * (`meet`) o desenho é escalado E CENTRADO dentro do viewport, então sobra
+   * uma tarja em uma das direções e a coordenada do viewBox não corresponde à
+   * porcentagem do elemento. A pílula ficaria deslocada, e o deslocamento
+   * MUDARIA com a largura do card — que é justamente o que o modo de edição
+   * deixa o usuário alterar.
+   *
+   * O pixel real do cursor não tem esse problema e não precisa saber a escala.
+   */
+  const [alvo, setAlvo] = React.useState<{ i: number; px: number } | null>(null);
+  const plotRef = React.useRef<HTMLDivElement>(null);
   const id = React.useId();
+
+  const mirar = React.useCallback((i: number, clientX: number) => {
+    const r = plotRef.current?.getBoundingClientRect();
+    if (!r) return;
+    // Grampeada para a pílula não vazar pela borda do card. Nos extremos ela
+    // desencosta do ponto, e não há ambiguidade: quem marca a posição é a alça.
+    const meia = 78;
+    setAlvo({ i, px: Math.min(r.width - meia, Math.max(meia, clientX - r.left)) });
+  }, []);
 
   const L = 760;
   const A = 260;
@@ -68,17 +91,26 @@ export function LineChart({
   const caminho = (chave: "a" | "b") =>
     caminhoSuave(pontos.map((p, i) => [x(i), y(p[chave])] as const));
 
-  /* ⛔ SÓ A SÉRIE PRINCIPAL GANHA ÁREA. Duas áreas sobrepostas viram lama: a de
-     baixo fica visível através da de cima e o olho lê uma terceira cor que não
-     significa nada. O `06` §3 dá a outra metade da resposta — a série secundária
-     se distingue por TEXTURA (hachura), não por preenchimento. Isso é o item 5
-     da ordem de aplicação e ainda não foi feito; até lá o Gasto é linha nua. */
-  const area = fecharArea(caminho("a"), x(0), x(pontos.length - 1), PAD.t + alt);
+  /* As DUAS séries têm área, e elas não viram lama porque não competem no mesmo
+     canal: a Receita preenche com COR (gradiente que morre para baixo), o Gasto
+     com TEXTURA (listra neutra, transparente por baixo). É a resposta do `06` §3
+     para "duas séries, um matiz só". */
+  const base = PAD.t + alt;
+  const area = fecharArea(caminho("a"), x(0), x(pontos.length - 1), base);
+  const areaGasto = fecharArea(caminho("b"), x(0), x(pontos.length - 1), base);
 
   const linhas = [0, 0.25, 0.5, 0.75, 1].map((f) => max * f);
 
+  const p0 = alvo ? pontos[alvo.i] : undefined;
+  /* "O ponto está no terço de cima?" — decide o lado da pílula. Ver o comentário
+     dela: é booleano de propósito, para não depender da escala do SVG. */
+  const pontoNoAlto = !!p0 && Math.min(y(p0.a), y(p0.b)) / A < 0.3;
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minHeight: 0 }}>
+    /* `relative` é o que ancora a pílula flutuante. Sem ele ela se posicionaria
+       contra o primeiro ancestral posicionado — que é o shell — e apareceria no
+       canto da janela em vez de sobre o ponto. */
+    <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 8, flex: 1, minHeight: 0 }}>
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
         {/* 🔄 A RECEITA ERA VERDE, E MUDOU EM 07/08/2026. Aqui dizia que `primary`
             é "cor de interface" e que a receita devia usar a cor de valor
@@ -95,7 +127,7 @@ export function LineChart({
             iguais" — não se aplica: o gasto é neutro, não um segundo azul, e a
             partir do item 5 ele também é hachurado. */}
         <Legenda cor="var(--tk-primary)" texto={rotuloA} />
-        <Legenda cor="var(--tk-text-muted)" texto={rotuloB} />
+        <Legenda cor="var(--tk-text-muted)" texto={rotuloB} hachurada />
         {breakEven != null ? (
           /* ⚠️ "(estimado pelo período)" NÃO é modéstia: a taxa efetiva é medida
              sobre as vendas DESTE período, então a linha se move com o mix de
@@ -131,6 +163,14 @@ export function LineChart({
         )}
       </div>
 
+      {/* A área de plotagem é o bloco de referência da pílula — e é ela, não o
+          componente inteiro, senão a medida incluiria a faixa de legendas acima
+          e a pílula subiria proporcionalmente ao número de legendas. */}
+      <div
+        ref={plotRef}
+        style={{ position: "relative", flex: 1, minHeight: 0, display: "flex" }}
+        onMouseLeave={() => setAlvo(null)}
+      >
       <svg
         viewBox={`0 0 ${L} ${A}`}
         width="100%"
@@ -138,7 +178,6 @@ export function LineChart({
         role="img"
         aria-label={`${rotuloA} contra ${rotuloB} ao longo do período`}
         style={{ display: "block", flex: 1, minHeight: 0 }}
-        onMouseLeave={() => setAlvo(null)}
       >
         <defs>
           {/* 18% no topo → 0 na base (`06` §3). O gradiente é o que faz a área
@@ -148,6 +187,30 @@ export function LineChart({
             <stop offset="0%" stopColor="var(--tk-primary)" stopOpacity="0.18" />
             <stop offset="100%" stopColor="var(--tk-primary)" stopOpacity="0" />
           </linearGradient>
+
+          {/* ♿ A HACHURA NÃO É ENFEITE — ela é o que separa as duas séries SEM COR.
+              Medido no teste do cinza de 07/08/2026: dessaturadas, Receita e Gasto
+              só se distinguiam pelo preenchimento de área, e "por pouco". Isso é
+              WCAG 1.4.1, não estética: quem não distingue azul de cinza ficava com
+              duas linhas escuras quase iguais num gráfico de duas séries.
+
+              Com a listra, o Gasto tem TEXTURA: sobrevive ao cinza, à impressão em
+              preto e branco e a qualquer daltonismo. E resolve Receita × Gasto sem
+              inventar um segundo matiz, que é a regra de cor do `06` §10.
+
+              ⚠️ `patternUnits="userSpaceOnUse"` é obrigatório: em `objectBounding`
+              o passo da listra ESCALA com o tamanho da área, então a textura muda
+              de densidade conforme o dado — e a mesma listra significaria coisas
+              diferentes em dois dias. */}
+          <pattern
+            id={`hachuraB${id}`}
+            width="7"
+            height="7"
+            patternUnits="userSpaceOnUse"
+            patternTransform="rotate(45)"
+          >
+            <line x1="0" y1="0" x2="0" y2="7" stroke="var(--tk-text-muted)" strokeWidth="1.6" opacity="0.34" />
+          </pattern>
         </defs>
 
         {linhas.map((v, i) => (
@@ -166,25 +229,37 @@ export function LineChart({
           />
         )}
 
-        {/* A área vai ANTES das duas linhas: desenhada depois, o preenchimento
-            lavaria o traço do Gasto que passa por dentro dela. */}
+        {/* ⛔ A ORDEM DAS QUATRO CAMADAS NÃO É ARBITRÁRIA:
+              1. hachura do Gasto — embaixo, é a mais fraca das duas texturas;
+              2. gradiente da Receita — semitransparente, deixa a listra aparecer
+                 na sobreposição em vez de apagá-la;
+              3. linha do Gasto;
+              4. linha da Receita — por último, é a série que se lê primeiro.
+            Trocar 1 e 2 faz o gradiente sumir sob a listra; trocar 3 e 4 faz o
+            traço do Gasto cortar a Receita nos cruzamentos. */}
+        <path d={areaGasto} fill={`url(#hachuraB${id})`} />
         <path d={area} fill={`url(#areaA${id})`} />
         <path d={caminho("b")} fill="none" stroke="var(--tk-text-muted)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
         <path d={caminho("a")} fill="none" stroke="var(--tk-primary)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
 
         {pontos.map((p, i) => (
           <g key={i}>
-            <circle cx={x(i)} cy={y(p.b)} r={alvo === i ? 4.5 : 3} fill="var(--tk-text-muted)" />
-            <circle cx={x(i)} cy={y(p.a)} r={alvo === i ? 4.5 : 3} fill="var(--tk-primary)" />
+            <circle cx={x(i)} cy={y(p.b)} r={3} fill="var(--tk-text-muted)" />
+            <circle cx={x(i)} cy={y(p.a)} r={3} fill="var(--tk-primary)" />
             {/* Faixa invisível de captura: mirar num ponto de 3px é o que faz
-                gráfico custom parecer quebrado no mouse. */}
+                gráfico custom parecer quebrado no mouse.
+
+                `onMouseMove` além do `enter`: dentro de uma faixa larga o cursor
+                anda bastante, e sem o `move` a pílula ficava parada na borda em
+                que se entrou — o oposto do "segue o cursor" do `06` §3. */}
             <rect
               x={x(i) - larg / Math.max(pontos.length, 1) / 2}
               y={PAD.t}
               width={larg / Math.max(pontos.length, 1)}
               height={alt}
               fill="transparent"
-              onMouseEnter={() => setAlvo(i)}
+              onMouseEnter={(e) => mirar(i, e.clientX)}
+              onMouseMove={(e) => mirar(i, e.clientX)}
             />
             {(i === 0 || i === pontos.length - 1 || i % Math.ceil(pontos.length / 7) === 0) && (
               <text x={x(i)} y={A - 8} textAnchor="middle" fill="var(--tk-text-muted)" style={{ fontSize: 11 }}>
@@ -194,33 +269,145 @@ export function LineChart({
           </g>
         ))}
 
-        {alvo != null && pontos[alvo] && (
-          <line x1={x(alvo)} x2={x(alvo)} y1={PAD.t} y2={PAD.t + alt} stroke="var(--tk-text-muted)" strokeWidth="1" strokeDasharray="3 3" />
+        {/* ── O marcador de hover (`06` §3) ────────────────────────────────
+            Três peças, e cada uma faz uma coisa que as outras não fazem:
+
+            • a ALÇA — cápsula de 8px em `primary` tingido — é a que se vê de
+              relance e a que dá a sensação de peça física sob o cursor;
+            • a LINHA fina é a que permite MIRAR: a alça é larga demais para
+              dizer exatamente qual dia está sob o cursor;
+            • os anéis nos dois pontos amarram o marcador aos VALORES, senão a
+              faixa parece flutuar sobre o gráfico sem tocar o dado.
+
+            A alça é `rx` total e não um retângulo: canto vivo aqui é o mesmo
+            "aspecto cru" que o `06` §3 mira ao pedir raio em tudo. */}
+        {p0 && (
+          <g pointerEvents="none">
+            <rect
+              x={x(alvo!.i) - 4}
+              y={PAD.t}
+              width={8}
+              height={alt}
+              rx={4}
+              fill="var(--tk-tint-primary)"
+            />
+            <line
+              x1={x(alvo!.i)} x2={x(alvo!.i)} y1={PAD.t} y2={base}
+              stroke="var(--tk-primary)" strokeWidth="1" opacity="0.55"
+            />
+            {/* Anel de fundo na cor da SUPERFÍCIE: sem ele o ponto destacado se
+                perde quando cai em cima da própria área preenchida. */}
+            <circle cx={x(alvo!.i)} cy={y(p0.b)} r={5} fill="var(--tk-surface)" stroke="var(--tk-text-muted)" strokeWidth="2" />
+            <circle cx={x(alvo!.i)} cy={y(p0.a)} r={5} fill="var(--tk-surface)" stroke="var(--tk-primary)" strokeWidth="2" />
+          </g>
         )}
       </svg>
 
-      {alvo != null && pontos[alvo] && (
-        <div className="text-caption" style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-          <span className="text-text-secondary">{pontos[alvo]!.rotulo}</span>
-          <span style={{ color: "var(--tk-primary)" }}>{rotuloA} {formatar(pontos[alvo]!.a)}</span>
-          <span style={{ color: "var(--tk-text-muted)" }}>{rotuloB} {formatar(pontos[alvo]!.b)}</span>
+      {/* ── A pílula flutuante ────────────────────────────────────────────────
+          ⛔ ELA É HTML, NÃO `<text>` DE SVG, e a diferença é de manutenção: o
+          valor já vem formatado por `formatar()` em português (R$, milhar com
+          ponto), e reproduzir fundo sólido, raio, sombra e quebra de linha em
+          SVG seria reimplementar o que o CSS faz numa linha.
+
+          ⚠️ ELA VIRA PARA BAIXO quando o pico está no alto. Presa em cima, a
+          pílula tapava exatamente o ponto que se foi consultar — e o melhor dia
+          do período é justamente o que fica lá. A decisão usa o DADO
+          (`y(a) / A < 0.3`), não pixel medido: é um booleano, então não depende
+          da escala do SVG e não erra quando o card muda de largura. */}
+      {p0 && (
+        <div
+          role="status"
+          className="text-caption bg-surface border border-border"
+          style={{
+            position: "absolute",
+            left: alvo!.px,
+            // Virada para baixo, a folga é maior: abaixo da base do desenho ainda
+            // existe a faixa de rótulos do eixo, e a pílula tapava a data.
+            [pontoNoAlto ? "bottom" : "top"]: pontoNoAlto ? 34 : 14,
+            transform: "translateX(-50%)",
+            // 120ms é o `06` §3: rápido o bastante para colar no cursor, lento o
+            // bastante para o olho ver que é o MESMO objeto se movendo.
+            transition: "left 120ms var(--tk-ease-padrao)",
+            padding: "7px 10px",
+            borderRadius: 8,
+            boxShadow: "var(--tk-shadow-overlay)",
+            display: "grid",
+            gap: 3,
+            whiteSpace: "nowrap",
+            pointerEvents: "none",
+            zIndex: 1,
+          }}
+        >
+          <span className="text-text-secondary">{p0.rotulo}</span>
+          <ValorNaPilula cor="var(--tk-primary)" rotulo={rotuloA} valor={formatar(p0.a)} />
+          <ValorNaPilula cor="var(--tk-text-muted)" rotulo={rotuloB} valor={formatar(p0.b)} hachurado />
         </div>
       )}
+      </div>
     </div>
   );
 }
 
-function Legenda({ cor, texto, tracejada }: { cor: string; texto: string; tracejada?: boolean }) {
+/** Linha da pílula. O selo repete o mesmo sinal da legenda — cor E textura. */
+function ValorNaPilula({
+  cor,
+  rotulo,
+  valor,
+  hachurado,
+}: {
+  cor: string;
+  rotulo: string;
+  valor: string;
+  hachurado?: boolean;
+}) {
+  return (
+    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+      <SeloSerie cor={cor} hachurado={hachurado} />
+      <span className="text-text-secondary">{rotulo}</span>
+      <span className="text-text" style={{ marginLeft: "auto", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+        {valor}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * Selo da série. **O selo do Gasto é listrado, e isso não é decoração.**
+ *
+ * ♿ Se a legenda distinguisse as séries só por cor enquanto o gráfico as
+ * distingue por cor E textura, a legenda seria o elo fraco: quem depende da
+ * textura no desenho não teria como saber QUAL das duas é a listrada. O sinal
+ * tem de ser o mesmo nos dois lugares.
+ */
+function SeloSerie({ cor, hachurado }: { cor: string; hachurado?: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        width: 9,
+        height: 9,
+        flex: "none",
+        borderRadius: 2,
+        background: hachurado
+          ? `repeating-linear-gradient(45deg, ${cor} 0 1.5px, transparent 1.5px 4px)`
+          : cor,
+        // Sem o contorno a listra vira três riscos soltos: o selo perde a forma
+        // e deixa de parecer o par do selo sólido ao lado.
+        outline: hachurado ? `1px solid color-mix(in oklch, ${cor} 55%, transparent)` : undefined,
+        outlineOffset: -1,
+      }}
+    />
+  );
+}
+
+function Legenda({ cor, texto, tracejada, hachurada }: { cor: string; texto: string; tracejada?: boolean; hachurada?: boolean }) {
   return (
     <span className="text-caption text-text-secondary" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-      <span
-        aria-hidden="true"
-        style={
-          tracejada
-            ? { width: 14, height: 0, borderTop: `2px dashed ${cor}` }
-            : { width: 8, height: 8, borderRadius: "var(--tk-radius-pill)", background: cor }
-        }
-      />
+      {tracejada ? (
+        <span aria-hidden="true" style={{ width: 14, height: 0, borderTop: `2px dashed ${cor}` }} />
+      ) : (
+        <SeloSerie cor={cor} hachurado={hachurada} />
+      )}
       {texto}
     </span>
   );

@@ -1429,6 +1429,47 @@ repositório** — só o `06` chegou. O documento cita "as quatro referências" 
 "referência 1/2/3/4" o tempo todo; sem os arquivos, quem ler não tem como
 conferir contra o que o texto descreve. **Peça os arquivos antes do acabamento.**
 
+# 🟩 COR SEMÂNTICA É PARA A GRANDEZA SEMÂNTICA — volume não é resultado
+
+> **Decisão do dono, 07/08/2026.** Vale para toda tela, todo gráfico, todo
+> número. Nasceu no Dashboard, mas não é regra do Dashboard.
+
+**Verde e vermelho significam LUCRO e PREJUÍZO nesta ferramenta.** Então só
+recebe cor semântica o que **é** essa grandeza:
+
+| | |
+|---|---|
+| ✅ **Pode** | valor de lucro · pílula de variação · alerta |
+| ⛔ **Não pode** | receita, gasto, cliques, vendas, impressões, conversões — **volume, não resultado** |
+
+Tudo que é volume usa o **destaque** (azul de marca) quando é série principal, ou
+**neutro** quando é secundária.
+
+### O caso que produziu a regra
+
+A linha de Receita do `LineChart` era `--tk-success`, e o comentário defendia a
+escolha por escrito. Com o ROAS em 0,4 a linha continuava **verde**, subindo
+alegremente ao lado de um card de Lucro em **vermelho**: a cor afirmando saúde
+exatamente onde havia prejuízo.
+
+Faturar não é lucrar. Uma linha de faturamento verde diz que sim.
+
+Pelo mesmo motivo o sparkline do KPI **parou de seguir o tom do delta** — a
+pílula ao lado já diz o tom, e a linha repetindo pintava de "lucro" uma série de
+faturamento. A exceção é `dados.cor`, e ela é a regra e não um furo: quando vem
+preenchida é porque o **valor** é negativo, que é literalmente o "valor de lucro"
+que a tabela acima permite colorir.
+
+> ### ⛔ A PERGUNTA, ANTES DE PINTAR QUALQUER COISA DE VERDE OU VERMELHO
+> **"Este número É lucro/prejuízo, ou é só um número que subiu?"**
+>
+> Se subiu mas não é resultado, a cor certa é o destaque — e quem diz que subiu é
+> a pílula de variação, não a cor do próprio número.
+
+⚠️ E ao mudar isto em algum lugar, **procure o comentário que defendia o
+contrário**. O do `LineChart` estava bem escrito e continuava soando correto: é a
+família da cicatriz que virou anatomia.
+
 # 🕳️ A DISTINÇÃO CENTRAL DESTE PROJETO — ausência de observação ≠ observação de zero
 
 > **Não é um detalhe de cada lugar. É a mesma distinção, e ela já apareceu em

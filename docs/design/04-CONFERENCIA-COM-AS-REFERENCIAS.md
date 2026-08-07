@@ -94,6 +94,9 @@ Referência: imagem 1. **Decisão: tudo da imagem 1 + tudo que já construímos.
 | Elemento | |
 |---|---|
 | 4 KPIs hero com sparkline e variação | ✅ feito |
+| …com a variação em **pílula** ao lado do número | 🔧 **diverge da imagem 1, e de propósito.** Na referência a variação é texto colorido solto (`↑ 18,6% vs período anterior`). O `06` §2 pede cápsula, e é o item 1 da ordem de aplicação dele. Feito em 07/08 |
+| **Hachura na série de Gasto** (Receita × Gasto) | 🔧 **NÃO EXISTE na imagem 1** — lá as duas séries são linhas lisas, roxa e cinza. Entrou em 07/08 por **acessibilidade, não estética**: no teste do cinza as duas se distinguiam só pelo preenchimento de área, e "por pouco" (WCAG 1.4.1). Com a listra o Gasto tem textura, que sobrevive ao cinza, ao P&B e ao daltonismo. Decisão do dono, com o motivo medido |
+| **Receita na cor de destaque, não em verde** | 🔧 **a imagem 1 concorda** — lá a Receita é ROXA (o matiz de destaque daquele produto) e o Gasto é cinza. O nosso é que estava fora: usava `success`. Corrigido em 07/08; a regra virou seção do CLAUDE.md |
 | Faixa compacta com os KPIs secundários | ✅ feito — 🔧 não está na referência, fica |
 | Receita vs Gasto com seletor Diário/Semanal | ✅ feito |
 | Canais (donut, com fallback de canal único) | ✅ feito |

@@ -1218,14 +1218,15 @@ a {
 
   --tk-shadow-overlay: 0 8px 24px -4px rgb(0 0 0 / .55);
 
-  /* ⚠️ AQUI DIZIA "sombra existe APENAS em overlay; em superfície fixa a elevação
-     é a escada de cor". **A regra mudou em 07/08/2026** — o `06` §1 pede sombra
-     no card, e ela é metade do que separa as referências do que tínhamos.
-     Registrado como reversão explícita, e não apagado, porque a regra antiga
-     ainda vale para tudo que NÃO é card: faixa, rail, linha de tabela e header
-     continuam sem sombra.
+  /* SOMBRA EXISTE EM CARD E EM OVERLAY — e em mais nada. Faixa, rail, linha de
+     tabela e header continuam sem: neles a elevação é a escada de cor
+     (background → surface → surface-hover), que não foi substituída. No card as
+     duas atuam juntas.
 
-     A escada de cor não foi substituída — as duas atuam juntas.
+     ⚠️ Até 07/08/2026 esta frase dizia "APENAS em overlay". O `06` §1 reverteu, e
+     a reversão fica registrada em vez de apagada — mas a FRASE ACIMA é a regra
+     vigente. Comentário que descreve a regra antiga é documentação mentindo, que
+     é pior que comentário nenhum.
 
      ⛔ `--tk-shadow-card` NÃO MORA AQUI, e a tentativa custou uma medição: este
      bloco é `:root` puro e vem DEPOIS do `[data-theme="light"]` no arquivo. As
@@ -1313,7 +1314,7 @@ a {
 [data-density="compact"] {
   --tk-pad-card:        20px;
   --tk-pad-hero:        24px;
-  --tk-gap-grid:        12px;
+  --tk-gap-grid:        16px;
   --tk-altura-linha:    36px;  /* linha de tabela */
   --tk-altura-controle: 32px;  /* botão, input, select */
   --tk-escala-dado:     0.95;  /* multiplica SÓ a fonte de número */
@@ -1323,7 +1324,7 @@ a {
 [data-density="default"] {
   --tk-pad-card:        24px;
   --tk-pad-hero:        28px;
-  --tk-gap-grid:        16px;
+  --tk-gap-grid:        20px;
   --tk-altura-linha:    44px;
   --tk-altura-controle: 36px;
   --tk-escala-dado:     1;
@@ -1333,7 +1334,7 @@ a {
 [data-density="comfortable"] {
   --tk-pad-card:        28px;
   --tk-pad-hero:        32px;
-  --tk-gap-grid:        20px;
+  --tk-gap-grid:        24px;
   --tk-altura-linha:    52px;
   --tk-altura-controle: 40px;
   --tk-escala-dado:     1.06;
