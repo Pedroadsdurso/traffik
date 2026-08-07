@@ -8,7 +8,12 @@ import { BreakdownPanel } from "@/components/tk/BreakdownPanel";
 import { AlternadorPais, CountryPanel } from "@/components/tk/CountryPanel";
 import { DonutChart } from "@/components/tk/DonutChart";
 import { FeedVendas } from "@/components/tk/FeedVendas";
-import { FitaFunil, type EtapaEntradaFita, type ExclusaoFita } from "@/components/tk/FitaFunil";
+import {
+  FitaFunil,
+  type CoberturaFita,
+  type EtapaEntradaFita,
+  type ExclusaoFita,
+} from "@/components/tk/FitaFunil";
 import { Heatmap, type CelulaHeat } from "@/components/tk/Heatmap";
 import { LineChart } from "@/components/tk/LineChart";
 import { Segmented } from "@/components/tk/Segmented";
@@ -210,15 +215,15 @@ const AVISO_SEM_PIXEL =
   "repete “Vendas iniciadas”, e a conversão entre as duas não foi medida.";
 
 /**
- * ⚠️ O rótulo da perda `Cliques → Sessões` é PERDA DE RASTREAMENTO, não
- * abandono. A etapa 1 é `DailyAdMetric.clicks` (a Meta) e a 2 é a nossa tabela
- * `Click`: quem clicou no anúncio e não virou sessão nossa não "desistiu" —
- * ele não foi VISTO. Bloqueador, redirect que come UTM, snippet ausente.
+ * ⚠️ A perda `Cliques → Sessões` é PERDA DE RASTREAMENTO, não abandono. A etapa
+ * 1 é `DailyAdMetric.clicks` (a Meta) e a 2 é a nossa tabela `Click`: quem
+ * clicou no anúncio e não virou sessão nossa não "desistiu" — ele não foi
+ * VISTO. Bloqueador, redirect que come UTM, snippet ausente.
  *
  * Chamar isso de abandono manda o gestor otimizar a oferta quando o problema é
- * a instalação.
+ * a instalação. Por isso ela saiu da fita: quem a mostra é a faixa de
+ * cobertura, com peso próprio. Ver `COBERTURA_DO_FUNIL`.
  */
-const PERDA_DE_RASTREAMENTO = "sem rastreamento";
 const PERDA_DE_RASTREAMENTO_AJUDA =
   "Clicaram no anúncio e não chegaram a virar uma sessão rastreada. Não é " +
   "abandono: é o rastreamento que não os viu — bloqueador de anúncio, redirect " +
@@ -242,8 +247,14 @@ const ETAPAS_PARA_FITA = (v: TraffikView): EtapaEntradaFita[] => {
         ? `${e.value.toLocaleString("pt-BR")} ICs · ${(e.doNavegador ?? 0).toLocaleString("pt-BR")} do navegador`
         : undefined,
     trechoNaoMedido: e.chaveInfo === "checkouts" && semPixel ? AVISO_SEM_PIXEL : undefined,
-    perdaLabel: e.chaveInfo === "cliques" ? PERDA_DE_RASTREAMENTO : undefined,
-    perdaAjuda: e.chaveInfo === "cliques" ? PERDA_DE_RASTREAMENTO_AJUDA : undefined,
+    /* 🔴 `Cliques` sai da GEOMETRIA da fita, mas continua sendo etapa: nome em
+       cima, número embaixo. A perda dele para `Sessões` é instrumentação, não
+       comportamento — quem a mostra é a faixa de cobertura. Ver `CoberturaFita`.
+
+       ⚠️ Por isso `perdaLabel` também saiu: a pílula de perda daquele trecho
+       deixou de existir, e um rótulo para uma pílula que não é mais desenhada
+       seria texto órfão descrevendo comportamento que mudou. */
+    foraDaFita: e.chaveInfo === "cliques",
   }));
 };
 
@@ -255,6 +266,33 @@ const ETAPAS_PARA_FITA = (v: TraffikView): EtapaEntradaFita[] => {
  * coisa desligada". O dado sempre esteve certo: os robôs já saíam das métricas.
  * O que faltava era o produto DIZER isso.
  */
+/**
+ * A cobertura de rastreamento: que fração dos cliques do anúncio virou sessão
+ * nossa. É a pergunta de INSTRUMENTAÇÃO, e ela saiu da fita em 07/08/2026.
+ *
+ * ⚠️ `null` quando não houve clique nenhum — não se divide por ausência, e
+ * "0% rastreado" afirmaria falha onde não houve tráfego.
+ */
+const COBERTURA_DO_FUNIL = (v: TraffikView): CoberturaFita | undefined => {
+  const etapas = ETAPAS_DO_FUNIL(v);
+  const cliques = etapas.find((e) => e.chaveInfo === "cliques")?.value ?? 0;
+  const sessoes = etapas.find((e) => e.chaveInfo === "visitas")?.value ?? 0;
+  if (cliques <= 0) return undefined;
+  const fracao = sessoes / cliques;
+  const perdidos = Math.max(0, cliques - sessoes);
+  return {
+    fracao,
+    pct: `${(fracao * 100).toFixed(1).replace(".", ",")}%`,
+    /* Ausente, não `"0 perdidos"`: cobertura cheia é o estado bom, e anunciar
+       uma perda de zero transforma a boa notícia em linha de relatório. */
+    perdidos:
+      perdidos > 0
+        ? `${perdidos.toLocaleString("pt-BR")} ${perdidos === 1 ? "clique perdido" : "cliques perdidos"}`
+        : undefined,
+    ajuda: PERDA_DE_RASTREAMENTO_AJUDA,
+  };
+};
+
 const EXCLUSOES_DO_FUNIL = (v: TraffikView): ExclusaoFita[] => {
   const fora: ExclusaoFita[] = [];
   const robos = v.bots.reduce((s, b) => s + b.total, 0);
@@ -386,6 +424,7 @@ export const RENDERS: Record<IdBloco, RenderBloco> = {
       <FitaFunil
         etapas={ETAPAS_PARA_FITA(v)}
         exclusoes={EXCLUSOES_DO_FUNIL(v)}
+        cobertura={COBERTURA_DO_FUNIL(v)}
       />
     ),
   },

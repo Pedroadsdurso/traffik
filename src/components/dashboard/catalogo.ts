@@ -219,7 +219,11 @@ export const CATALOGO_META = [
     alturaAjustavel: true,
     linhasMin: 4,
     titulo: "Funil",
-    descricao: "Cliques → checkouts → vendas, com a perda de cada passo",
+    /* ⚠️ O subtítulo LISTA as etapas, então ele envelhece junto com elas. Ele
+       omitia `Sessões` desde que a etapa entrou — dois textos vizinhos
+       descrevendo o mesmo dado, e o errado era o que prometia a coisa mais
+       simples do que ela é. */
+    descricao: "Cliques → sessões → checkouts → vendas iniciadas e aprovadas",
     zona: "paineis",
     /* 🔴 4 é o mínimo do CABEÇALHO, não o da fita — e a distinção custou caro.
        A container query esconde `.tk-fita-desenho` abaixo de 360px úteis, e 4

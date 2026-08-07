@@ -72,20 +72,12 @@ export interface EtapaEntradaFita {
   /** Linha sob o número absoluto: "11 do navegador". */
   composicao?: string;
   /**
-   * Como se chama a perda que SAI desta etapa, quando ela não é abandono.
+   * A etapa aparece com NOME e NÚMERO, mas fica fora da geometria da fita.
    *
-   * 🔴 O caso que criou o campo: `Cliques → Sessões`. A etapa 1 é a métrica da
-   * Meta e a 2 é a nossa tabela `Click` — quem clicou no anúncio e não virou
-   * sessão nossa **não desistiu, não foi VISTO**. Bloqueador, redirect que come
-   * a UTM, snippet ausente na página.
-   *
-   * Chamar isso de abandono manda o gestor otimizar a oferta quando o problema
-   * é a instalação. Sem `perdaLabel` a pílula mostra só o número, que é o
-   * comportamento certo para as perdas que SÃO abandono.
+   * 🔴 O caso: `Cliques`. Ver `CoberturaFita` — a perda dele para `Sessões` é
+   * instrumentação, não comportamento, e a escala dele esmagava o resto.
    */
-  perdaLabel?: string;
-  /** Texto do `title` da pílula de perda, quando ela precisa de explicação. */
-  perdaAjuda?: string;
+  foraDaFita?: boolean;
   /**
    * 🔴 O TRECHO QUE SAI DESTA ETAPA NÃO FOI MEDIDO.
    *
@@ -118,6 +110,64 @@ const pct1 = (t: number) => `${(t * 100).toFixed(1).replace(".", ",")}%`;
  * seria ruído em todo período limpo, e o que importa é o caso em que houve
  * remoção.
  */
+/**
+ * A FAIXA DE COBERTURA DE RASTREAMENTO, acima da fita.
+ *
+ * 🔴 Ela existe porque `Cliques → Sessões` NÃO É COMPORTAMENTO DO COMPRADOR —
+ * é falha de instrumentação nossa. Com 97,1% de perda ali, pôr as duas
+ * naturezas na mesma escala fazia a instrumentação quebrada engolir a figura
+ * do comportamento: a fita despencava nos primeiros 15% da largura e virava um
+ * fio reto no resto do bloco.
+ *
+ * Separada, ela ganha nos dois lados — a perda de rastreamento fica MAIS
+ * visível como faixa dedicada do que como pílula sob um blob, e o funil volta
+ * a ser um funil.
+ */
+export interface CoberturaFita {
+  /** A fração rastreada, de 0 a 1. Desenha a barra. `null` = indefinido. */
+  fracao: number | null;
+  /** Só o número, para o display grande: `"2,9%"`. */
+  pct: string;
+  /** `"1.185 cliques perdidos"`. Ausente quando não se perdeu ninguém. */
+  perdidos?: string;
+  /** As causas — bloqueador, redirect que come a UTM, snippet ausente. */
+  ajuda?: string;
+}
+
+/**
+ * Abaixo desta cobertura o número ganha COR DE ATENÇÃO.
+ *
+ * ## Por que 25%, e não 50 ou 70
+ *
+ * O denominador é `DailyAdMetric.clicks`, que é o **`clicks` da Meta** — TODOS
+ * os cliques no anúncio, não só os que abrem a página: reação, comentário,
+ * compartilhamento, toque no nome da página, expandir imagem, "ver mais". Em
+ * campanha de Feed o clique de link costuma ser só **40–70%** do total.
+ *
+ * Sobre os que de fato abrem a página ainda incidem bloqueador, ITP do Safari e
+ * quem sai antes de o script rodar — outros 10–25%.
+ *
+ * Multiplicando os dois piores casos plausíveis de uma conta **saudável**:
+ * `0,40 × 0,75 ≈ 30%`. Um limiar em 50% ou 70% pintaria de vermelho instalação
+ * correta, e alarme que grita sem motivo é alarme que se aprende a ignorar —
+ * a regra do projeto para o motor de regras vale aqui igual.
+ *
+ * **25% fica abaixo do que os dois mecanismos conhecidos explicam juntos.**
+ * Cruzar para baixo dele significa que sobrou algo que eles não explicam, que é
+ * exatamente o que um alerta deve dizer. Os 2,9% do dev passam longe.
+ *
+ * > ### 🔴 O LIMIAR É UM CURATIVO — o defeito está no DENOMINADOR
+ * > `clicks` e a nossa tabela `Click` medem coisas diferentes: a razão entre
+ * > eles não mede uma conversão, mede a **concordância entre dois
+ * > instrumentos**. O conserto real é sincronizar `link_clicks` (ou
+ * > `outbound_clicks`) no `sync.ts` e usar ESSE como denominador.
+ * >
+ * > ⚠️ **No dia em que isso acontecer, este número precisa SUBIR** — some a
+ * > diluição de 40–70% e o piso saudável vai para ~75%. Um limiar de 25% sobre
+ * > `link_clicks` deixaria de alarmar instalação de fato quebrada.
+ */
+export const LIMIAR_ATENCAO_COBERTURA = 0.25;
+
 export interface ExclusaoFita {
   /** Já formatado e por extenso: "119 acessos de robô removidos". */
   texto: string;
@@ -126,9 +176,11 @@ export interface ExclusaoFita {
 export function FitaFunil({
   etapas,
   exclusoes = [],
+  cobertura,
 }: {
   etapas: EtapaEntradaFita[];
   exclusoes?: ExclusaoFita[];
+  cobertura?: CoberturaFita;
 }) {
   const [caixa, setCaixa] = React.useState<HTMLDivElement | null>(null);
   const [desenho, setDesenho] = React.useState<HTMLDivElement | null>(null);
@@ -160,7 +212,13 @@ export function FitaFunil({
   const centroY = TOPO + faixaAlt / 2;
 
   const fluxo = React.useMemo(
-    () => calcularFluxo(etapas.map((e) => e.valor), { largura, faixa: faixaAlt, margem: MARGEM_X }),
+    () =>
+      calcularFluxo(etapas.map((e) => e.valor), {
+        largura,
+        faixa: faixaAlt,
+        margem: MARGEM_X,
+        naFita: etapas.map((e) => !e.foraDaFita),
+      }),
     [etapas, largura, faixaAlt],
   );
 
@@ -183,6 +241,23 @@ export function FitaFunil({
      é 0, todos os x são 0, e o rótulo "não medido" sumia do markup. São duas
      coisas diferentes — a geometria precisa de largura, o rótulo não. O guarda
      ficou só no `<rect>`, que é quem degenera. */
+  /* Só quem participa da geometria. A fita começa na PRIMEIRA delas, não na
+     borda do bloco: à esquerda dela mora a coluna de `Cliques`, que tem nome e
+     número mas não tem fita. */
+  const etapasDaFita = fluxo.etapas.filter((e) => e.naFita);
+  const inicioDaFita = etapasDaFita[0]?.x ?? 0;
+
+  /* ⚠️ `null` NÃO é baixa cobertura — é cobertura indefinida (não houve clique).
+     Tingir de atenção o que não foi medido afirmaria falha onde não houve
+     tráfego, que é a mesma troca de "não sei" por "sei que é ruim". */
+  const baixaCobertura =
+    cobertura?.fracao != null && cobertura.fracao < LIMIAR_ATENCAO_COBERTURA;
+
+  /* A faixa de cobertura só faz sentido quando existe o vão antes da fita — e
+     quem responde isso é o DADO, não a largura medida. Ver o comentário na
+     faixa. */
+  const haEtapaForaDaFita = etapas.some((e) => e.foraDaFita);
+
   const trechosNaoMedidos = fluxo.etapas
     .map((e, i) => ({ i, x0: e.x, x1: fluxo.etapas[i + 1]?.x ?? e.x }))
     .filter((t) => !!etapas[t.i]?.trechoNaoMedido);
@@ -306,7 +381,7 @@ export function FitaFunil({
                 com a geometria do trecho seria uma segunda implementação da
                 mesma curva — e as duas divergem no primeiro ajuste. */}
             <clipPath id="tk-fita-recorte">
-              <path d={caminhoDaFita(fluxo.etapas, centroY, { x0: 0, x1: xFim })} />
+              <path d={caminhoDaFita(etapasDaFita, centroY, { x0: inicioDaFita, x1: xFim })} />
             </clipPath>
           </defs>
 
@@ -327,7 +402,7 @@ export function FitaFunil({
 
           {largura > 0 && (
             <path
-              d={caminhoDaFita(fluxo.etapas, centroY, { x0: 0, x1: xFim })}
+              d={caminhoDaFita(etapasDaFita, centroY, { x0: inicioDaFita, x1: xFim })}
               fill="url(#tk-fita-rampa)"
             />
           )}
@@ -374,6 +449,86 @@ export function FitaFunil({
           }}
         >
 
+        {/* ── A COBERTURA DE RASTREAMENTO, NO VÃO ANTES DA FITA ───────────────
+            🔴 Ela mora ENTRE `Cliques` e o começo da fita, e isso é o desenho,
+            não o aproveitamento de um buraco. Aquele vão é literalmente onde a
+            perda de rastreamento acontece: à esquerda o que a Meta contou, à
+            direita o que o nosso script viu. Pôr o número lá liga a perda à
+            GEOMETRIA em vez de deixá-la solta num rodapé.
+
+            ⛔ Ela tinha nascido como faixa fina de largura total acima da fita,
+            com o número em texto apagado. Era a hierarquia ao contrário: o
+            número mais grave da tela em `caption` secundário, enquanto um
+            `100,0%` que não afirma nada levava pílula preta em negrito. Peso
+            proporcional ao que se diz — e o que se diz aqui é "eu não estou
+            enxergando 97% do meu tráfego".
+
+            ⚠️ A condição é sobre o DADO (existe etapa fora da fita?), nunca
+            sobre a LARGURA MEDIDA. `inicioDaFita > 0` pareceria equivalente e
+            não é: no servidor a largura é 0, todos os x são 0, e a faixa sumiria
+            do markup inicial — o mesmo buraco que o comentário da camada de
+            rótulos descreve. A geometria precisa de medida; o texto, não. */}
+        {cobertura && haEtapaForaDaFita && (
+          <div
+            title={cobertura.ajuda}
+            style={{
+              position: "absolute",
+              left: MARGEM_X,
+              width: Math.max(0, inicioDaFita - MARGEM_X * 2),
+              top: centroY,
+              transform: "translateY(-50%)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 6,
+              pointerEvents: "auto",
+              cursor: cobertura.ajuda ? "help" : undefined,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 26,
+                fontWeight: 700,
+                lineHeight: 1,
+                fontVariantNumeric: "tabular-nums",
+                /* ⛔ A cor de atenção é da COBERTURA, não do valor. Ela não diz
+                   "prejuízo" — diz "esta medição não é confiável". Ver
+                   `LIMIAR_ATENCAO_COBERTURA` para o porquê de 25%. */
+                color: baixaCobertura ? "var(--tk-warning)" : "var(--tk-text)",
+              }}
+            >
+              {cobertura.pct}
+            </div>
+            <div className="text-caption text-text-secondary" style={{ lineHeight: 1.3 }}>
+              dos cliques rastreados
+              {cobertura.perdidos && (
+                <>
+                  <br />
+                  {cobertura.perdidos}
+                </>
+              )}
+            </div>
+            {/* O trilho é o total de cliques; o preenchido é o que virou sessão.
+                ⚠️ SEM PISO. Com 2,9% ele é um talinho — e é essa a informação.
+                Um piso aqui mentiria sobre exatamente o número em causa. */}
+            <div
+              style={{
+                height: 10,
+                borderRadius: 999,
+                background: "var(--tk-surface-hover)",
+                overflow: "hidden",
+              }}
+            >
+              <div
+                style={{
+                  width: `${Math.max(0, Math.min(1, cobertura.fracao ?? 0)) * 100}%`,
+                  height: "100%",
+                  background: baixaCobertura ? "var(--tk-warning)" : "var(--tk-fluxo)",
+                }}
+              />
+            </div>
+          </div>
+        )}
+
         {/* ── Nome da etapa, ACIMA ─────────────────────────────────────────── */}
         {fluxo.etapas.map((e, i) => (
             <div
@@ -395,75 +550,73 @@ export function FitaFunil({
             </div>
           ))}
 
-        {/* ── Pílula da TAXA ───────────────────────────────────────────────────
-            O elemento mais visível da figura, e é assim de propósito: a
-            pergunta do bloco é "que fração sobrevive", e a resposta fica na
-            forma que a representa, não numa legenda ao lado.
+        {/* ── Pílula da TAXA DE PASSO, sobre o TRECHO ─────────────────────────
+            🔴 TAXA DE PASSO, e não fração do máximo. A versão anterior mostrava
+            `100,0% · 2,9% · 2,9% · 2,0%` — três quase iguais, e a única
+            transição interessante do período (Vendas Inic. → Vendas Apr., 71,4%)
+            não aparecia em lugar nenhum.
 
-            🔴 QUANDO NÃO CABE, ELA SAI — A FITA NÃO ENGORDA.
+            O motivo é a regra do CANAL REDUNDANTE: fração do máximo é
+            exatamente o que a ESPESSURA já diz. Um canal que varia junto com
+            uma grandeza que a forma mostra ou concorda ou mente — aqui
+            concordava, e ocupava o lugar da informação que faltava.
 
-            Houve uma versão com piso de 10px justamente para a pílula caber
-            sobre a fita. Isso desenha 2,9% como ~7,6%: a legibilidade da
-            etiqueta paga com a espessura, e o bloco deixa de responder "quanto
-            sobrou", que é a única pergunta que ele existe para responder.
+            A taxa de passo responde a pergunta do gestor — *"de quem chegou
+            aqui, quantos passaram?"* — e é o que a fita não consegue dizer
+            sozinha: ela mostra o tamanho, não a razão entre dois tamanhos.
 
-            ⛔ Se um dia a pílula voltar a ficar apertada, a saída é mexer NELA
-            (fonte, padding, sair para o outro lado) — nunca no piso da fita. */}
+            ⚠️ Ela mora na GUIA, não no centro da etapa, porque é uma
+            propriedade do TRECHO. E acima da fita, para não brigar com a pílula
+            de perda, que mora embaixo da mesma guia. */}
         {fluxo.etapas.map((e, i) => {
-            if (e.fracao == null) return null;
-            const cabe = e.espessura >= ALTURA_PILULA + 4;
-            /* Fora, ela sobe: abaixo ficaria em cima da pílula de perda, que
-               mora logo ali. `topoDaFita` é a borda de cima da etapa. */
-            const topoDaFita = centroY - e.espessura / 2;
-            const y = cabe ? centroY : topoDaFita - FOLGA_PILULA - ALTURA_PILULA / 2;
-            return (
-              <React.Fragment key={`taxa-${etapas[i]!.label}`}>
-                {/* O traço só existe quando a pílula saiu: ele é o que a mantém
-                    LIGADA à etapa. Sem ele, uma etiqueta solta no ar acima de
-                    uma fita fina não diz a qual etapa pertence. */}
-                {!cabe && (
-                  <span
-                    aria-hidden
-                    style={{
-                      position: "absolute",
-                      left: e.x,
-                      top: topoDaFita - FOLGA_PILULA,
-                      width: 1,
-                      height: FOLGA_PILULA,
-                      /* ⚠️ Cor da FITA, não da cápsula. `--tk-pilula` é #090D14
-                         no escuro — mais escuro que o card (1,15:1): o traço
-                         existia no DOM e era invisível na tela. E a cor da fita
-                         é a certa também por significado: o traço liga a
-                         etiqueta à ETAPA, não a si mesma. */
-                      background: "var(--tk-fluxo)",
-                      pointerEvents: "none",
-                    }}
-                  />
-                )}
-                <div
-                  className="text-caption"
-                  style={{
-                    ...pilula("var(--tk-pilula)", "var(--tk-on-pilula)"),
-                    left: e.x,
-                    top: y,
-                    fontWeight: 700,
-                  }}
-                >
-                  {pct1(e.fracao)}
-                </div>
-              </React.Fragment>
-            );
-          })}
+          if (i === 0 || !e.naFita || !fluxo.etapas[i - 1]?.naFita) return null;
+          const guia = fluxo.guias[i - 1];
+          if (guia == null) return null;
+          const naoMedido = !!etapas[i - 1]?.trechoNaoMedido;
+          if (naoMedido) return null; // quem fala nesse trecho é a pílula própria
+          /* `taxa` é `null` quando a etapa anterior é ZERO: não se divide por
+             ausência, e "0%" ali afirmaria que todo mundo caiu fora. */
+          if (e.taxa == null) return null;
+          const cima = centroY - Math.max(e.espessura, fluxo.etapas[i - 1]!.espessura) / 2;
+          return (
+            <React.Fragment key={`passo-${etapas[i]!.label}`}>
+              <span
+                aria-hidden
+                style={{
+                  position: "absolute",
+                  left: guia,
+                  top: cima - FOLGA_PILULA,
+                  width: 1,
+                  height: FOLGA_PILULA,
+                  /* ⚠️ Cor da FITA, não da cápsula: `--tk-pilula` é #090D14 no
+                     escuro, mais escuro que o card (1,15:1) — o traço existia no
+                     DOM e era invisível na tela. */
+                  background: "var(--tk-fluxo)",
+                  pointerEvents: "none",
+                }}
+              />
+              <div
+                className="text-caption"
+                title={`De ${etapas[i - 1]!.label} para ${etapas[i]!.label}`}
+                style={{
+                  ...pilula("var(--tk-pilula)", "var(--tk-on-pilula)"),
+                  left: guia,
+                  top: cima - FOLGA_PILULA - ALTURA_PILULA / 2,
+                  fontWeight: 700,
+                }}
+              >
+                {pct1(e.taxa)}
+              </div>
+            </React.Fragment>
+          );
+        })}
 
         {/* ── Pílula do NÃO MEDIDO, na guia do trecho ─────────────────────────
             🔴 Ela ocupa o lugar onde a leitura ingênua veria "100%". Sem ela, um
             trecho reto entre duas etapas de mesmo valor afirma conversão total —
             "meu checkout converte tudo" — quando o que houve foi ausência de
             fonte independente. `100%` e `não medido` não são a mesma frase, do
-            mesmo jeito que `0,00x` e `—` não são.
-
-            ⚠️ Fica ACIMA da fita, não abaixo: a pílula de perda mora embaixo, e
-            duas cápsulas na mesma guia se encostariam. */}
+            mesmo jeito que `0,00x` e `—` não são. */}
         {trechosNaoMedidos.map((t) => (
             <div
               key={`nm-rot-${t.i}`}
@@ -472,7 +625,7 @@ export function FitaFunil({
               style={{
                 ...pilula("var(--tk-surface-hover)", "var(--tk-text-secondary)"),
                 left: (t.x0 + t.x1) / 2,
-                top: TOPO + faixaAlt - ALTURA_PILULA,
+                top: centroY - Math.max(4, fluxo.etapas[t.i]!.espessura) / 2 - FOLGA_PILULA - ALTURA_PILULA / 2,
                 border: "1px dashed var(--tk-border)",
                 pointerEvents: "auto",
               }}
@@ -489,7 +642,6 @@ export function FitaFunil({
             <div
               key={`perda-${p.de}`}
               className="text-caption"
-              title={etapas[p.de]?.perdaAjuda}
               style={{
                 ...pilula("var(--tk-pilula)", "var(--tk-on-pilula)"),
                 left: p.x,
@@ -498,9 +650,6 @@ export function FitaFunil({
             >
               −{p.valor.toLocaleString("pt-BR")}
               {p.pct != null && <span style={{ opacity: 0.72 }}> · {pct1(p.pct)}</span>}
-              {etapas[p.de]?.perdaLabel && (
-                <span style={{ opacity: 0.72 }}> {etapas[p.de]!.perdaLabel}</span>
-              )}
             </div>
           ))}
 

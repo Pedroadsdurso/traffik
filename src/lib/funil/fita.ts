@@ -65,15 +65,37 @@ export interface EtapaFita {
    */
   taxa: number | null;
   /**
-   * Fração do MAIOR valor do funil, de 0 a 1. É o que a pílula sobre a fita
-   * mostra.
+   * Fração do MAIOR valor do funil, de 0 a 1.
    *
-   * ⚠️ Fração do máximo, **não** conversão da etapa anterior — conferido na
-   * referência: `444/861 = 51,6%`, `165/861 = 19,2%`, `12/861 = 1,4%`. As duas
-   * coincidem quando o funil só cai, e divergem no instante em que uma etapa
-   * cresce (que é o caso da própria referência, 444 → 861).
+   * ⚠️ Fração do máximo, **não** conversão da etapa anterior — são coisas
+   * diferentes: coincidem quando o funil só cai e divergem no instante em que
+   * uma etapa cresce (o caso da própria referência, 444 → 861). Quem responde
+   * pela conversão é `taxa`.
+   *
+   * 🔴 ELA NÃO É MAIS O QUE A PÍLULA MOSTRA — a pílula virou `taxa` de passo em
+   * 07/08/2026, porque fração do máximo é exatamente o que a ESPESSURA já diz e
+   * um canal redundante ocupava o lugar da informação que faltava. Hoje a
+   * `fracao` alimenta a versão COMPACTA e o `aria-label` ("x% do maior"), onde
+   * não há espessura para dizê-la.
    */
   fracao: number | null;
+  /**
+   * Esta etapa participa da GEOMETRIA da fita?
+   *
+   * 🔴 `Cliques` não participa (07/08/2026, 8ª versão). A perda entre ele e
+   * `Sessões` é **falha de instrumentação nossa** — bloqueador, redirect que
+   * come a UTM, snippet ausente —, não comportamento do comprador. Com 97,1%
+   * de perda ali, somar as duas naturezas na mesma escala faz a instrumentação
+   * quebrada **engolir a figura inteira do comportamento**: a fita despencava
+   * nos primeiros 15% da largura e virava um fio reto no resto do bloco.
+   *
+   * Fora da fita, ele continua sendo etapa: tem nome em cima e número embaixo.
+   * O que sai é só a participação na escala — e é isso que devolve espessura
+   * às etapas que restam.
+   *
+   * ⚠️ Quem responde pela cobertura de rastreamento é a FAIXA acima da fita.
+   */
+  naFita: boolean;
 }
 
 /**
@@ -113,14 +135,18 @@ export interface Fluxo {
  */
 export function calcularFita(
   valores: number[],
-  opcoes: { largura: number; faixa: number; margem?: number; piso?: number },
+  opcoes: { largura: number; faixa: number; margem?: number; piso?: number; naFita?: boolean[] },
 ): EtapaFita[] {
   const { largura, faixa } = opcoes;
   const margem = opcoes.margem ?? 0;
   const piso = opcoes.piso ?? PISO_ESPESSURA;
 
   const finitos = valores.map((n) => (Number.isFinite(n) && n > 0 ? n : 0));
-  const maior = Math.max(0, ...finitos);
+  const naFita = (i: number) => opcoes.naFita?.[i] ?? true;
+  /* ⚠️ A escala é sobre o maior de quem ESTÁ NA FITA. Incluir uma etapa que
+     não é desenhada faria todas as outras encolherem por causa de um número
+     que não aparece — foi exatamente o defeito da 7ª versão. */
+  const maior = Math.max(0, ...finitos.filter((_, i) => naFita(i)));
   const util = Math.max(0, largura - margem * 2);
   const n = finitos.length;
 
@@ -132,10 +158,11 @@ export function calcularFita(
     const bruta = maior > 0 ? (valor / maior) * faixa : 0;
     return {
       valor,
-      espessura: valor > 0 ? Math.max(piso, bruta) : 0,
+      espessura: naFita(i) && valor > 0 ? Math.max(piso, bruta) : 0,
       x,
       taxa: null,
-      fracao: maior > 0 ? valor / maior : null,
+      fracao: maior > 0 && naFita(i) ? valor / maior : null,
+      naFita: naFita(i),
     };
   });
 }
@@ -148,7 +175,7 @@ function guiaEntre(largura: number, margem: number, n: number, i: number): numbe
 
 export function calcularFluxo(
   valores: number[],
-  opcoes: { largura: number; faixa: number; margem?: number; piso?: number },
+  opcoes: { largura: number; faixa: number; margem?: number; piso?: number; naFita?: boolean[] },
 ): Fluxo {
   const margem = opcoes.margem ?? 0;
   const etapas = calcularFita(valores, opcoes);
@@ -170,6 +197,9 @@ export function calcularFluxo(
        comportamento certo: entre Cliques (444) e Vis. Página (861) ela não
        desenha pílula nenhuma. */
     if (a.valor <= b.valor) continue;
+    /* Perda entre uma etapa de fora e uma de dentro não é do funil — é a
+       cobertura de rastreamento, e quem a mostra é a faixa acima. */
+    if (!a.naFita || !b.naFita) continue;
     perdas.push({
       de: i,
       valor: a.valor - b.valor,

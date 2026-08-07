@@ -1538,6 +1538,39 @@ categoria inteira cai sempre no mesmo lado da segunda decisão.
 cada execução muda os números da tela e ninguém sabe se ela mudou por causa do
 código ou do seed. `row_number()` sobre uma ordem estável resolve.
 
+## 🔴 O QUE FALTA NO SEED DO FUNIL — e por que "reetiquetar a fonte" erra o alvo
+
+> Medido em 07/08/2026, contra o banco de dev. **Registrado aqui porque a
+> descrição intuitiva do problema leva à correção errada.**
+
+A leitura natural do funil no dev é *"os ICs são todos do gateway"*. **Não é
+isso.** O estado real:
+
+| | dev |
+|---|---|
+| `Click` com `checkoutAt` | **0** |
+| `Click.checkoutSource` | **NULL em todas as 35 linhas** — nem `navegador` nem `gateway` |
+| `PixelEvent` `InitiateCheckout` | 35, **todos com `clickId` NULL** (órfãos, sem jornada) |
+
+Os 35 ICs do funil vêm inteiros do ramo `semJornada` de `metrics.ts`. Não existe
+checkout de gateway no dev — **não existe checkout nenhum na tabela `Click`**.
+
+> ### ⛔ A CORREÇÃO NÃO É REETIQUETAR FONTE. É CRIAR JORNADA COM CHECKOUT.
+> Um `UPDATE "Click" SET "checkoutSource" = 'navegador'` não faz nada: não há
+> linha com `checkoutAt` para carimbar. O seed precisa **gravar `checkoutAt` em
+> parte dos `Click`** e só então distribuir `checkoutSource` entre `navegador` e
+> `gateway`.
+>
+> ⚠️ E `dev:diversificar` **não cobre isto** — ele só espalha canal e forma de
+> pagamento por `UPDATE`. Quem for consertar o funil no dev escreve caminho novo,
+> não estende aquele.
+
+⚠️ **O seed também produz `Sessões = ICs = Vendas Inic. = 35`**, que é
+exatamente o estado em que o meio do funil não pode ser avaliado: três etapas
+iguais desenham uma laje, e a única transição com informação é a última. É o
+mesmo defeito do `n % 2` do BOLETO, em outro bloco — **o gerador produz o estado
+que impede de ver o que se ia verificar.**
+
 # 🚫 COMENTÁRIO QUE *PROÍBE* É O MAIS PERIGOSO DE TODOS
 
 > **Porque ele AUTORIZA alguém a desfazer.** Um comentário que explica envelhece
@@ -1875,6 +1908,38 @@ não roda em máquina limpa, e aí ninguém roda o agregado.
 consumidores de produção — é pelos **testes** dele, inclusive os que o agregado
 não roda.
 
+# 🟩💀 TESTE VERDE SOBRE CAMINHO MORTO — a garantia FALSA
+
+> **Primo direto do `teste-fita` fora do agregado, e pior que ele.** Um teste
+> fora do agregado é silêncio; um teste verde sobre caminho morto é uma
+> **afirmação de que a coisa funciona**. 07/08/2026.
+
+O caso: a 8ª versão do funil tirou `Cliques` da geometria da fita, e com ele
+saíram `perdaLabel`, `perdaAjuda` e a constante `PERDA_DE_RASTREAMENTO` — que
+passaram a ter **zero chamadores de produção**. O teste
+`"a perda de RASTREAMENTO é rotulada, e a de abandono não"` continuou **verde**,
+porque a fixture dele monta o `perdaLabel` à mão.
+
+| | O que o leitor conclui |
+|---|---|
+| órfão SEM teste | nada — ninguém olha |
+| órfão COM teste verde | *"o rótulo de perda de rastreamento está coberto e funcionando"* — e **nenhuma das duas metades é verdade** |
+
+O teste não sabe distinguir *"a produção exerce isto e está certo"* de *"só eu
+exerço isto"*. Uma fixture é um chamador — e para o agregado, um chamador basta.
+
+> ### ⛔ A REGRA QUE FICA
+> **A varredura de órfãos inclui os TESTES do órfão.** Achou símbolo sem
+> consumidor de produção? O `grep` seguinte é em `scripts/`, e o que ele achar
+> sai no MESMO commit.
+>
+> O `grep` que responde não é "alguém importa?" — é **"alguém além do teste
+> importa?"**. Um símbolo cujo único chamador é a fixture que o testa está morto
+> com atestado de saúde.
+
+⚠️ E vale para o inverso, que é como este apareceu: ao **remover** um consumidor
+de produção, o teste dele não fica obsoleto de forma visível. Ele fica verde.
+
 # 🔬 TESTE DIFERENCIAL: compare DOIS ESTADOS do mesmo fixture, não conteúdo literal
 
 > **Padrão de teste, não conserto de um caso.** Decisão do dono, 07/08/2026,
@@ -1893,7 +1958,9 @@ A que vale renderiza o **mesmo fixture nos dois estados** e compara:
 
 ```js
 const medido = FIXTURE.map((e) => ({ ...e, trechoNaoMedido: undefined }));
-assert.equal(cem(htmlNaoMedido), cem(htmlMedido));
+/* A linha de base PRECISA afirmar, senão `0 <= 0` passa sem medir nada. */
+assert.ok(cem(htmlMedido) > 0);
+assert.ok(cem(htmlNaoMedido) <= cem(htmlMedido));
 ```
 
 > ### ⛔ A REGRA
@@ -1901,6 +1968,30 @@ assert.equal(cem(htmlNaoMedido), cem(htmlMedido));
 > PERMISSÃO de acrescentar.** Por isso sobrevive a valores que ninguém previu:
 > se alguém puser uma pílula de conversão no trecho, a contagem sobe de um lado
 > só e o teste cai, sem que nenhum número tenha sido escrito na asserção.
+
+## 🔴 A DIREÇÃO FAZ PARTE DA ASSERÇÃO — "não acrescenta" ≠ "é igual"
+
+A primeira versão desta asserção usava `assert.equal`, e ela **quebrou por fazer
+a coisa certa**. Vale registrar porque o modo de falha é contraintuitivo:
+
+| | |
+|---|---|
+| quando nasceu | a pílula mostrava **fração do máximo**, que **independe** do estado — os dois lados desenhavam o mesmo número, e a igualdade valia sem exercer nada |
+| o que mudou | a pílula virou **taxa de passo**, e o estado não medido a **SUPRIME** |
+| o que aconteceu | o estado não medido passou a REMOVER uma afirmação — comportamento desejado — e foi o `===` que acusou |
+
+A propriedade sempre foi *"o estado não medido não ACRESCENTA"*. Isso é `<=`. O
+`===` era uma codificação apertada demais dela, e só passava por coincidência —
+enquanto o canal medido não dependia do estado.
+
+> ### ⛔ A REGRA
+> **Toda asserção diferencial declara em que DIREÇÃO a mudança de estado tem
+> permissão de mexer.** `<=` para "só pode remover", `>=` para "só pode
+> acrescentar", `===` **apenas** quando o estado não tem direito de mexer em
+> nada — e aí escreva por que não tem.
+>
+> ⚠️ E toda desigualdade leva a guarda da linha de base junto (`> 0`), senão a
+> contagem vazia satisfaz o `<=` e o teste vira mais um que passa sem olhar.
 
 É a mesma família de "congelar RELAÇÃO em vez de VALOR" (o break-even, a curva,
 a conservação do funil), aplicada a **markup**: o par de estados faz o papel que

@@ -286,25 +286,37 @@ checar("sem IC de navegador: a pílula do trecho diz NÃO MEDIDO e nunca 100%", 
   const html = renderToStaticMarkup(React.createElement(FitaFunil, { etapas: FUNIL_SEM_PIXEL }));
   assert.ok(html.includes("não medido"), "a pílula de não medido não saiu");
   assert.ok(html.includes("sem pixel no período"), "o tooltip do motivo não foi para o markup");
-  /* 🔴 A ASSERÇÃO É COMPARATIVA, e as duas versões anteriores dela estavam
-     erradas — vale registrar porque as duas falhavam pelo motivo errado:
+  /* 🔴 A ASSERÇÃO É COMPARATIVA, e três versões dela já falharam pelo motivo
+     errado — vale registrar as três, porque cada uma parecia certa:
 
      | tentativa | por que não servia |
      |---|---|
      | `!html.includes("100%")` | pegava o `100,0%` da etapa de TOPO, que é a fração do máximo e está correta |
      | `count("100,0%") === 1`  | são 3 ocorrências legítimas do MESMO valor: a pílula, o `aria-label` e a versão compacta |
+     | `count(naoMedido) === count(medido)` | ver abaixo — a igualdade só valia enquanto a pílula era INDEPENDENTE do estado |
 
      O que se quer dizer é **"o estado não medido não ACRESCENTA nenhuma
-     afirmação de conversão"**. Isso se mede contra a linha de base: o mesmo
-     funil renderizado sem a marca. Se um dia alguém puser uma pílula de
-     conversão no trecho, a contagem sobe e isto cai — sem ninguém ter previsto
-     o número novo. */
+     afirmação de conversão"**, e a relação que diz isso é `<=`, não `===`.
+
+     A igualdade passava porque a pílula mostrava a FRAÇÃO DO MÁXIMO, que não
+     depende de o trecho ter sido medido: os dois lados desenhavam o mesmo
+     número e a comparação não exercia nada. Desde que a pílula virou TAXA DE
+     PASSO, o estado não medido a SUPRIME — ele remove uma afirmação, que é
+     exatamente o comportamento desejado, e é o `===` que passa a acusar.
+
+     ⚠️ O `>` na linha de baixo é o que impede a contagem-vazia: sem ele, um
+     componente que parasse de escrever `100,0%` nos dois lados passaria com
+     `0 <= 0`. A linha de base PRECISA afirmar a conversão para que suprimi-la
+     signifique alguma coisa. */
   const medido = FUNIL_SEM_PIXEL.map((e) => ({ ...e, trechoNaoMedido: undefined }));
   const htmlMedido = renderToStaticMarkup(React.createElement(FitaFunil, { etapas: medido }));
   const cem = (h) => (h.match(/100,0%/g) ?? []).length;
-  assert.equal(
-    cem(html),
-    cem(htmlMedido),
+  assert.ok(
+    cem(htmlMedido) > 0,
+    "a linha de base não afirma 100% em lugar nenhum — não há supressão a medir",
+  );
+  assert.ok(
+    cem(html) <= cem(htmlMedido),
     "o estado NÃO MEDIDO acrescentou uma afirmação de conversão que a linha de base não tem",
   );
   /* E não existe pílula de perda no trecho: ICs e Vendas Inic. têm o mesmo
@@ -343,22 +355,72 @@ checar("origem MISTA: a composição aparece com os dois números", () => {
   assert.ok(html.includes("11 do navegador"), "a parcela do navegador não saiu");
 });
 
-checar("a perda de RASTREAMENTO é rotulada, e a de abandono não", () => {
-  /* Cliques → Sessões não é abandono: é o rastreamento que não viu. Rotular
-     igual manda o gestor otimizar a oferta quando o problema é a instalação. */
+/* ── A FAIXA DE COBERTURA ──────────────────────────────────────────────────────
+
+   🔴 SUBSTITUI o teste `"a perda de RASTREAMENTO é rotulada"`, que ficou VERDE
+   sobre caminho morto quando `Cliques` saiu da fita: `perdaLabel` perdeu todos
+   os chamadores de produção e só a fixture o exercia. Um símbolo cujo único
+   consumidor é o teste que o testa está morto com atestado de saúde.
+
+   A preocupação não morreu — perda de rastreamento não é abandono, e continua
+   precisando de tratamento próprio. Ela MUDOU DE LUGAR: quem a mostra agora é
+   a faixa de cobertura, e é ela que passa a ter teste. */
+
+const COM_COBERTURA = (fracao, extra = {}) => ({
+  etapas: [
+    { label: "Cliques", valor: 1220, valorFmt: "1.220", foraDaFita: true },
+    { label: "Sessões", valor: 400, valorFmt: "400" },
+    { label: "Vendas", valor: 25, valorFmt: "25" },
+  ],
+  cobertura: { fracao, pct: "32,8%", perdidos: "820 cliques perdidos", ...extra },
+});
+
+checar("a cobertura renderiza o número E o que se perdeu", () => {
+  const html = renderToStaticMarkup(React.createElement(FitaFunil, COM_COBERTURA(0.328)));
+  assert.ok(html.includes("32,8%"), "a porcentagem de cobertura não saiu");
+  assert.ok(html.includes("820 cliques perdidos"), "o número de perdidos não saiu");
+  assert.ok(html.includes("dos cliques rastreados"), "o rótulo do que o número significa não saiu");
+});
+
+checar("abaixo do limiar a cobertura ganha COR DE ATENÇÃO", () => {
+  /* O par positivo/negativo em torno de `LIMIAR_ATENCAO_COBERTURA` (0,25). Sem
+     as duas metades, um componente que tingisse SEMPRE passaria na primeira. */
+  const baixa = renderToStaticMarkup(React.createElement(FitaFunil, COM_COBERTURA(0.029)));
+  const alta = renderToStaticMarkup(React.createElement(FitaFunil, COM_COBERTURA(0.80)));
+  const tons = (h) => (h.match(/--tk-warning/g) ?? []).length;
+  assert.ok(tons(baixa) > 0, "2,9% de cobertura não acendeu a cor de atenção");
+  assert.equal(tons(alta), 0, "80% de cobertura acendeu atenção — o limiar não está sendo lido");
+});
+
+checar("cobertura INDEFINIDA não é cobertura ruim", () => {
+  /* 🔴 A distinção central do projeto, nesta camada: sem clique nenhum não se
+     divide, e `null` não pode virar alarme. Tingir o indefinido afirmaria falha
+     de instalação onde não houve tráfego. */
   const html = renderToStaticMarkup(
-    React.createElement(FitaFunil, {
-      etapas: [
-        { label: "Cliques", valor: 1220, valorFmt: "1.220", perdaLabel: "sem rastreamento" },
-        { label: "Sessões", valor: 400, valorFmt: "400" },
-        { label: "Vendas", valor: 25, valorFmt: "25" },
-      ],
-    }),
+    React.createElement(FitaFunil, COM_COBERTURA(null, { pct: "—", perdidos: undefined })),
   );
-  assert.ok(html.includes("sem rastreamento"), "a perda de rastreamento saiu sem rótulo");
-  /* E só UMA vez: a segunda perda (Sessões → Vendas) É abandono e não leva
-     rótulo. Sem esta metade, um componente que carimbasse todas passaria. */
-  assert.equal((html.match(/sem rastreamento/g) ?? []).length, 1, "o rótulo vazou para a perda de abandono");
+  assert.equal(
+    (html.match(/--tk-warning/g) ?? []).length,
+    0,
+    "cobertura indefinida acendeu a cor de atenção",
+  );
+});
+
+checar("sem a prop de cobertura, nada de cobertura é desenhado", () => {
+  /* O lado negativo da faixa inteira: ela é opcional, e um componente que a
+     desenhasse sempre inventaria uma medição em toda tela que não a passa. */
+  const html = renderToStaticMarkup(
+    React.createElement(FitaFunil, { etapas: ETAPAS_FALSAS }),
+  );
+  assert.ok(!html.includes("dos cliques rastreados"), "a faixa de cobertura saiu sem ninguém pedir");
+});
+
+checar("a pílula de perda mostra só o NÚMERO — não há mais rótulo de perda", () => {
+  /* Guarda contra a volta do órfão: `perdaLabel` foi deletado, e um `<span>` de
+     rótulo reaparecendo ali significa que alguém religou o caminho morto. */
+  const html = renderToStaticMarkup(React.createElement(FitaFunil, COM_COBERTURA(0.328)));
+  assert.ok(html.includes("−375"), "a perda Sessões → Vendas sumiu da pílula");
+  assert.ok(!html.includes("sem rastreamento"), "voltou um rótulo de perda na pílula");
 });
 
 console.log(

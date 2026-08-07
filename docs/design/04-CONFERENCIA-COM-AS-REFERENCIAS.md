@@ -95,15 +95,16 @@ em `components/tk/`.
 | **Sub-rótulo `Google Ads`** sob o nome da campanha (`06` §14.4) | idem — hoje diria "Meta Ads" em toda linha | seção abaixo |
 | **Medidor de plano e uso** no rodapé do rail | existir **backend de cobrança** (`plan`/`quota` no schema) | SHELL |
 
-**Os doze permanentes**, em uma linha cada: pílula de variação · hachura no Gasto
-· Receita em destaque e não verde · Segmented no cabeçalho · folga e raio no
-heatmap e na rosca · sem `Ver todos` nos Alertas · sem `Gasto` no seletor do
+**Os treze permanentes**, em uma linha cada: pílula de variação · hachura no
+Gasto · Receita em destaque e não verde · Segmented no cabeçalho · folga e raio
+no heatmap e na rosca · sem `Ver todos` nos Alertas · sem `Gasto` no seletor do
 heatmap · sem régua Alta/Baixa · sem count-up · cor do funil sem laranja ·
-**"Sessões" no lugar de "Vis. Página"** · **"não medido" no trecho de ICs**.
+**"Sessões" no lugar de "Vis. Página"** · **"não medido" no trecho de ICs** ·
+**`Cliques` fora da geometria da fita** (4 etapas onde a referência tem 5).
 
-### 🔧 O FUNIL diverge da referência `16` em DOIS pontos, e os dois por DADO
+### 🔧 O FUNIL diverge da referência `16` em TRÊS pontos, e os três por DADO
 
-> Registrados em 07/08/2026. Nenhum é estética: nos dois, seguir a referência
+> Registrados em 07/08/2026. Nenhum é estética: nos três, seguir a referência
 > faria a tela afirmar algo que a nossa medição não sustenta.
 
 **1. A etapa 2 chama `Sessões`, não `Vis. Página`.**
@@ -138,11 +139,50 @@ denominador zero (`0,00x` ≠ `—`) e da célula do heatmap, agora em etapa de 
 ⛔ **A etapa nunca some.** Etapa que desaparece muda a forma do funil em
 silêncio, e a forma é o que a pessoa compara entre períodos.
 
-**3. A perda `Cliques → Sessões` é rotulada `sem rastreamento`**, e não como
-abandono genérico. A etapa 1 é a métrica da Meta e a 2 é a nossa tabela: quem
-clicou e não virou sessão **não desistiu, não foi visto** (bloqueador, redirect
-que come a UTM, snippet ausente). Chamar de abandono manda otimizar a oferta
-quando o problema é a instalação.
+**3. `Cliques` fica FORA da geometria da fita — nossa fita tem 4 etapas onde a
+referência tem 5 na mesma geometria.**
+
+Ele continua sendo etapa: nome em cima, número embaixo, na coluna da esquerda.
+O que sai é a participação na ESCALA. No lugar da perda entrou uma **faixa de
+cobertura** acima da fita — *"2,9% dos cliques rastreados · 1.185 perdidos"*.
+
+São duas razões independentes, e a segunda é a mais forte:
+
+**(a) A perda ali não é comportamento — é instrumentação.** Quem clicou no
+anúncio e não virou sessão **não desistiu, não foi visto**: bloqueador, redirect
+que come a UTM, snippet ausente. Chamar de abandono manda otimizar a oferta
+quando o problema é a instalação. Somar as duas naturezas na mesma escala faz a
+instrumentação quebrada **engolir a figura do comportamento**.
+
+**(b) 🔴 São DOIS SISTEMAS DE MEDIÇÃO DIFERENTES na mesma geometria.** `Cliques`
+vem do `DailyAdMetric` **da Meta**; `Sessões` vem da **nossa tabela `Click`**.
+Comparar os dois pela espessura sempre foi comparação torta — a razão entre eles
+não mede uma conversão, mede a concordância entre dois instrumentos. Separar a
+cobertura da fita separa **"nosso funil"** de **"nossa perda de rastreamento"**,
+que são coisas diferentes e não pertencem à mesma figura.
+
+> #### A medição que fechou a decisão
+> Amplitude de espessura das 4 etapas finais, por cobertura de rastreamento,
+> medida com `calcularFluxo` (o código de produção):
+>
+> | cobertura | com `Cliques` na escala | sem |
+> |---|---|---|
+> | 2,9% (dev / instalação quebrada) | **0,8px** | 105,6px |
+> | 20% | 21,3px | 106,6px |
+> | 50% | 53,3px | 106,7px |
+> | 80% | 85,4px | 106,7px |
+> | 95% | 101,4px | 106,7px |
+>
+> ⛔ **Com `Cliques` na escala, a legibilidade da figura vira função da qualidade
+> da INSTALAÇÃO.** O bloco fica legível para quem não tem problema e desmonta
+> para quem tem — exatamente quem mais precisa lê-lo. A coluna da direita é plana
+> porque a forma passou a reportar só comportamento.
+
+⚠️ A pergunta que originou isto era *"em produção, com ICs de navegador reais, a
+queda se distribui o suficiente?"*. **Ela não depende do dado, e por isso não foi
+respondida com seed:** a escala é `Cliques`, e toda etapa depois de `Sessões` é
+limitada por `Sessões`. IC de navegador só mexe na etapa de ICs, que já vive
+dentro da faixa de 2,9% — nenhuma redistribuição rio abaixo levanta a figura.
 
 Cada um tem o motivo no ponto do documento onde aparece, e nenhum depende de
 algo que possa passar a existir.
