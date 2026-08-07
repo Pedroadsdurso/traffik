@@ -988,7 +988,7 @@ qualquer resize, leia `innerWidth` e compare. `innerWidth === screen.availWidth`
 | DASHBOARD | 29 | — | 9 |
 | INTEGRAÇÕES | 24 | — | 17 |
 | REGRAS | 0 | 21 | — |
-| CAMPANHAS / GERENCIADOR | 0 | 18 | 1 |
+| CAMPANHAS / GERENCIADOR | 0 | 15 | 5 |
 | UTM & SNIPPETS | 0 | 23 | 1 |
 | CRIATIVOS | 0 | 13 | — |
 | LOGIN | 0 | 19 | — |

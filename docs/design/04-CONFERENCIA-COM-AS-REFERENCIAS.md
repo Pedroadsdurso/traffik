@@ -93,7 +93,23 @@ em `components/tk/`.
 |---|---|---|
 | **Ícone da plataforma** em Top campanhas | existir a **segunda plataforma** de anúncio | seção abaixo |
 | **Sub-rótulo `Google Ads`** sob o nome da campanha (`06` §14.4) | idem — hoje diria "Meta Ads" em toda linha | seção abaixo |
+| **Ícone da plataforma por linha** no Gerenciador | idem | CAMPANHAS |
+| **Painel `Distribuição por plataforma`** | idem | CAMPANHAS |
+| **`Plataforma`** no subtítulo `Objetivo \| Plataforma` | idem | CAMPANHAS |
 | **Medidor de plano e uso** no rodapé do rail | existir **backend de cobrança** (`plan`/`quota` no schema) | SHELL |
+
+> ### 📐 OS CINCO DE PLATAFORMA SÃO **UM** 🔧, EM CINCO LUGARES
+>
+> Acrescentados em 07/08/2026. Estavam separados porque nasceram em telas
+> diferentes, e separados eles convidam a ser reabertos um a um — cada um
+> parecendo pequeno demais para valer o argumento.
+>
+> **O gatilho é o mesmo e é objetivo: a segunda plataforma de anúncio existir no
+> schema.** Enquanto "gasto" e "Meta" forem sinônimos nesta base, os cinco dizem
+> "Meta Ads" em toda linha, que é uma coluna inteira sem informação.
+>
+> ⛔ E quando o gatilho disparar, **os cinco voltam juntos** — meia coluna de
+> plataforma é pior que nenhuma.
 
 **Os treze permanentes**, em uma linha cada: pílula de variação · hachura no
 Gasto · Receita em destaque e não verde · Segmented no cabeçalho · folga e raio
@@ -478,24 +494,94 @@ Referência: imagem 4.
 | Elemento | Status |
 |---|---|
 | 5 KPIs com sparkline: Gasto, Receita, Lucro, ROI, Conversões | ❌ |
-| Painel `Status das campanhas` — donut com Ativas / Pausadas / Rascunhos e % | ❌ |
-| Abas `Todas / Ativas / Pausadas / Rascunhos / Arquivadas` | ❌ |
+| Painel `Status das campanhas` — donut com Ativas / Pausadas / Rascunhos e % | ❌ · 🔧 **sem a fatia `Rascunhos`** — ver abaixo |
+| Abas `Todas / Ativas / Pausadas / Rascunhos / Arquivadas` | ❌ · 🔧 **sem a aba `Rascunhos`** — ver abaixo |
 | `Agrupar por: Campanha ⌄` | ❌ |
 | `⤓ Exportar` | ❌ |
 | `+ Nova campanha` | ❌ |
 | Busca + `Plataforma` + `Status` + `Objetivo` + `Mais filtros` | ❌ |
 | Tabela com **checkbox de seleção múltipla** | ❌ |
 | Cabeçalhos com ícone `ⓘ` de ajuda nas colunas ambíguas | ❌ |
-| Nome da campanha como link + subtítulo `Objetivo \| Plataforma` | ❌ |
-| Ícone da plataforma por linha | ❌ |
+| Nome da campanha como link + subtítulo `Objetivo \| Plataforma` | ❌ · 🔧 **só `Objetivo`** — `Plataforma` diria "Meta Ads" em toda linha |
+| Ícone da plataforma por linha | 🔧 **FORA** — plataforma única |
 | Badge de status colorido por estado | ❌ |
 | Coluna de Lucro em cor de valor positivo | ❌ |
-| Linhas de rascunho com `—` nas métricas e ação `▷` | ❌ |
+| Linhas de rascunho com `—` nas métricas e ação `▷` | 🔧 **o `—` FICA, o "rascunho" SAI** — ver abaixo |
 | Ações por linha: gráfico + `⋮` | ❌ |
 | **Painel `Insights`** com 4 cartões: melhor campanha, maior volume, menor custo por conversão, atenção necessária | ❌ |
-| Painel `Distribuição por plataforma` com barra e valor | ❌ |
+| Painel `Distribuição por plataforma` com barra e valor | 🔧 **FORA** — ver abaixo |
 | Paginação `‹ 1 2 3 … 6 ›` + `10 por página ⌄` + `Mostrando 1 a 7 de 40` | ❌ |
 | Conjuntos de colunas nomeados + colunas congeladas | 🔧 nosso, não está na referência — resolve as ~20 colunas ilegíveis |
+| **Selo `não sincronizado` na linha** + fatia condicional no donut | 🔧 **nosso** — o que `UNKNOWN` vira, ver abaixo |
+
+### 🔧 `RASCUNHOS` SAI — e `UNKNOWN` **não** vira aba
+
+> Decisão do dono, 07/08/2026, depois da medição.
+
+**Não temos o conceito.** `EntityStatus` tem cinco valores — `ACTIVE`, `PAUSED`,
+`ARCHIVED`, `DELETED`, `UNKNOWN` — e nenhum é rascunho. `veiculacao.ts` mapeia 12
+`effective_status` da Meta e nenhum é rascunho. O filtro do `overview.ts` oferece
+`todos | ativo | pausado`. Três itens da referência caem por isso: a aba, a fatia
+do donut e as linhas com `▷`.
+
+⛔ **E `UNKNOWN` não ocupa o lugar vago.** Em produção o `sync.ts` escreve
+`status` em toda campanha, então `UNKNOWN` é raro — **aba que fica vazia para
+todo mundo é controle inerte com outro nome.** O que ele vira:
+
+| | |
+|---|---|
+| **estado na linha** | selo `não sincronizado`, ao lado do status |
+| **fatia do donut** | **condicional** — aparece só se houver, some se não houver |
+
+É o padrão da linha de bots no funil: o elemento existe quando o caso existe, e
+não deixa `0 não sincronizados` como ruído permanente.
+
+### ✅ O `—` das linhas de rascunho SOBREVIVE, colado num estado que é real
+
+O que a referência resolve com "rascunho" nós temos de resolver com a distinção
+central do projeto: **campanha sem nenhuma `DailyAdMetric` na janela**.
+
+> ⚠️ A tabela abaixo é EXPLICATIVA, não inventário — e por isso não usa os
+> glifos de status. O `docs:estado` conta a primeira marca de **qualquer** linha
+> de tabela desta seção, então um ✅ ilustrativo aqui vira "um item feito" no
+> `CLAUDE.md`. Aconteceu ao escrever isto.
+
+| | hoje | na tela nova |
+|---|---|---|
+| ROAS de campanha sem gasto | `—`, correto (o `div()` de `ads/metrics.ts` já acerta) | `—` |
+| **Gasto** de campanha sem gasto | **`R$ 0,00`** — a afirmação errada | **`—`** |
+
+`R$ 0,00` afirma "sincronizou e não gastou"; a campanha nunca sincronizada não
+sustenta essa afirmação.
+
+⛔ **O CÁLCULO NÃO MUDA.** `sumAds` continua reduzindo a partir de `{spend: 0}`,
+e ele é anterior à branch (`overview.ts`, antes de `4e6aa9e`). Quem distingue é a
+APRESENTAÇÃO — mesma solução da linha de base do ROAS: conta intocada, tela
+honesta.
+
+### 🔧 `Distribuição por plataforma` — o motivo NÃO é "somos mono-plataforma"
+
+Medido na imagem 4: `Google Ads 58% · R$ 29.892,44`, `Meta Ads 32% · R$ 16.505,12`,
+`TikTok Ads 10% · R$ 5.220,58`. **A soma é R$ 51.618,14 — exatamente o KPI
+`Gasto`.** O painel é *gasto por plataforma de anúncio*, e temos uma só.
+
+⚠️ **A coisa parecida que sabemos medir é outra, e já está em outra tela.** As
+quatro `utmSource` do banco (`organico`, `google`, `facebook`, `tiktok`) são
+**origem de tráfego** medida pelo NOSSO rastreamento, e o que elas sustentam é
+*receita por origem* — outro instrumento e outra grandeza (`06`/CLAUDE.md, DOIS
+INSTRUMENTOS). Vesti-la com o nome do item da referência seria a razão entre
+sistemas de medição diferentes passando por conversão.
+
+⛔ **E o painel de origem de tráfego também não entra**, mesmo sendo mensurável:
+`Fontes de tráfego` já o mostra no Dashboard. Terceira forma de dizer a mesma
+coisa é o argumento que matou o globo colorido.
+
+> ### 📌 CORREÇÃO DE REGISTRO — este item estava `❌`, não `🔧`
+> O `CLAUDE.md` de 07/08 afirmava que ele estava *"🔧 fora por a ferramenta ser
+> mono-plataforma"*. **Estava `❌`** — ou seja, era item **nunca julgado**, não
+> item com motivo escrito. A diferença importa: um `❌` é trabalho pendente e
+> cobra explicação no fim da tela; um `🔧` já foi decidido. Passa a `🔧` agora,
+> com o motivo acima.
 
 ---
 
