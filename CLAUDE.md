@@ -41,7 +41,8 @@ As **v1 (13 fases)** estão completas e reais. O **roteiro v2 (13 blocos)** tamb
 > | `docs/design/03-FASE-1-DECISOES.md` | arquitetura de **tokens** (`--tk-*`, `@theme inline`), não de telas. O nome engana | mexer em token ou no `globals.css` |
 > | `docs/design/05-MAPA-DAS-RAZOES.md` | 🚧 **levantamento INCOMPLETO** das razões com denominador zero. **Só o item 4 (regras de automação) está pronto** — e é o urgente | **antes de mexer em qualquer métrica derivada** |
 > | `docs/design/05-MOCKUPS-VS-TOKENS.md` | os 4 conflitos mockup × sistema e **como cada um foi decidido** (canal só dentro do gráfico, roxo como categoria, selo tingido, gradiente não preenche botão) | mexer em cor, selo ou botão |
-> | `docs/design/06-CRIADOR-DE-REGRAS.md` | ⛔ **especificação de algo que NÃO existe** — fora do escopo do redesign, por decisão | só se for decidir construir o motor |
+> | `docs/design/06-LINGUAGEM-VISUAL.md` | 🎨 **as medidas do acabamento em NÚMEROS** — raio, padding, sombra, curva, hachura, pílula de variação, e a ORDEM DE APLICAÇÃO por resultado/custo. ⚠️ cita 4 imagens que **não estão no repo** | antes de qualquer trabalho visual |
+| `docs/design/06-CRIADOR-DE-REGRAS.md` | ⛔ **especificação de algo que NÃO existe** — fora do escopo do redesign, por decisão | só se for decidir construir o motor |
 > | `docs/design/07-DASHBOARD-MIGRADO.md` | a ponte `.tk-tema` e por que o re-skin do Dashboard foi jogado fora | mexer no shell ou numa tela ainda não migrada |
 >
 > ⚠️ **`docs/arquivo-morto.md` não é lixo.** Vários "obsoletos" desta base
@@ -1349,6 +1350,84 @@ Depois do mapa, nesta ordem, que é do dono:
 >   aprovou explicitamente esse comportamento.
 
 ---
+
+# 📌 ESTADO DA SESSÃO — 07/08/2026
+
+> Para quem abre contexto limpo. **Se contradisser a seção de 06/08, esta é mais
+> nova.** Tudo é commit LOCAL na branch `redesign/dashboard`; a `main` está
+> intacta e **nada foi para o GitHub**.
+
+## ✅ O que fechou
+
+| | |
+|---|---|
+| ✅ | **Entrega C — modo de edição** (`bd32262`). Três zonas com a REGRA no rótulo, catálogo lateral, Salvar/Cancelar/Redefinir. Achou e consertou o defeito que anulava o Salvar: `loadDashboardLayouts` passava o v2 por `sanitizeLayout`, que recusa o que não é array — **salvar parecia funcionar e o arranjo sumia no recarregamento** |
+| ✅ | **C2 — grade de 12 + arrasto** (`ac97fb7`, `5ac062d`, `2df2e68`), **aprovado pelo dono**. Todas as colunas inteiras (não presets), altura pelo CONTEÚDO, arrasto substituindo o clique, `N colunas livres` por linha |
+| ✅ | **C3, metade** (`6cbb846`): **fita do funil** com espessura fiel e piso de 3px, e **container queries** com os mínimos descendo para o real |
+
+### As três regras que nasceram aqui, e valem fora do Dashboard
+
+▸ **A altura declarada era a causa do painel esburacado.** Bloco vazio reservava
+as linhas que teria COM dado. Hoje a altura vem do conteúdo, e **o piso de
+altura não vale no estado vazio** — a altura que o usuário escolhe é sobre o
+bloco COM DADO; aplicá-la ao vazio reserva espaço para o que não existe.
+
+▸ **🩹 A cicatriz que virou anatomia** — família nova, com seção própria acima.
+Regra criada para contornar limitação técnica que sobrevive à limitação e passa
+a parecer intenção. **O sintoma é o controle inerte.** A pergunta que desmascara:
+*"esta regra ainda seria escolhida se eu estivesse começando hoje?"*.
+
+▸ **Asserção que congela VALOR cai quando nada está errado.** Duas asserções
+diziam `6` (o `colMin` do C2); no C3 ele desceu para 4 e elas caíram. Hoje
+perguntam `porDia.colMin`. E uma delas leva `Math.max(4, …)` porque só MEDE algo
+enquanto o mínimo for maior que 4 — senão passaria por coincidência.
+
+## 🚧 O QUE FALTA DO C3 — é por aqui que a próxima sessão começa
+
+| | Item |
+|---|---|
+| ❌ | **Acabamento visual** — nenhum item. **A referência agora é `docs/design/06-LINGUAGEM-VISUAL.md`**, que traz as medidas em números e uma ORDEM DE APLICAÇÃO por resultado/custo |
+| ❌ | **Cada bloco em todas as larguras que declara, nos dois temas.** As container queries estão escritas e **não foram exercitadas em container estreito** — é o candidato mais provável a "passa no build com a coisa desligada" |
+| ❌ | **Tema claro e teste do cinza** |
+| ❌ | **Limpeza:** tirar o ⛔ do modo de edição deste arquivo e preencher a seção do `04` |
+
+✅ **Itens do catálogo sem destino: NENHUM.** Os nove são de `paineis` e todos
+têm zona; as métricas vão para Principais ou Resumo; os quatro estruturais estão
+fora do catálogo de propósito, em "Sempre visíveis", com o motivo como DADO.
+
+## ⚠️ EM ABERTO: o clique duplo
+
+**Sintoma:** no navegador do MCP, um `left_click` frequentemente não surte
+efeito e o segundo funciona. Visto em **três** controles: `Editar painel`, o
+seletor de período e o ✕ de um item. Uma vez um `scroll` sobre a sidebar
+navegou sozinho para `/dashboard/regras`.
+
+⛔ **Não está diagnosticado, e a origem importa:** se for do MCP, é ruído de
+ferramenta; se for do app, é bug na porta de entrada da tela e **entra na fila
+antes do resto do C3**. O dono ia testar na mão — **a resposta não chegou** (a
+mensagem veio com o colchete `[descreva o que aconteceu nos três]` sem
+preencher). **Peça antes de seguir.**
+
+⚠️ E enquanto durar: **não meça arrasto.** Gesto sob evento duplicado não mede
+nada. O arrasto do C2 está entregue e **nunca foi exercitado** — é do dono.
+
+## 🔜 Depois do C3
+
+Varredura das três candidatas a cicatriz, **trazendo a lista antes de consertar
+qualquer uma**: decisões tomadas por causa do `react-grid-layout`, do
+`--experimental-strip-types` que não lê `.tsx`, e do cron diário do plano Hobby.
+
+## 🗂️ Dois avisos sobre os arquivos de design
+
+⚠️ **Há DOIS arquivos `06-`**: `06-CRIADOR-DE-REGRAS.md` (spec de algo que não
+existe, fora de escopo) e `06-LINGUAGEM-VISUAL.md` (o de acabamento). O número
+não identifica mais sozinho — cite o nome.
+
+🔴 **`docs/design/referencias/` NÃO EXISTE.** As três imagens novas
+(12-acru-claro, 13-veselty-claro, 14-insighta-escuro) **não estão no
+repositório** — só o `06` chegou. O documento cita "as quatro referências" e
+"referência 1/2/3/4" o tempo todo; sem os arquivos, quem ler não tem como
+conferir contra o que o texto descreve. **Peça os arquivos antes do acabamento.**
 
 # 🕳️ A DISTINÇÃO CENTRAL DESTE PROJETO — ausência de observação ≠ observação de zero
 
