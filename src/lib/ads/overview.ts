@@ -31,6 +31,17 @@ export interface AdsFilters {
   workspaceId?: string | null;
 }
 
+/**
+ * Os três estados de MEDIÇÃO de uma linha do Gerenciador.
+ *
+ * ⛔ São TRÊS, não dois, e a terceira não é redundante: `medida` com `spend: 0`
+ * é uma afirmação legítima ("a Meta reportou zero"), enquanto as outras duas
+ * são ausências de afirmação. Colapsar `medida` nas outras faria a tela esconder
+ * um zero que é verdade; colapsar as duas primeiras entre si daria a mesma
+ * resposta a quem precisa conferir a integração e a quem não tem o que fazer.
+ */
+export type Medicao = "nunca-sincronizada" | "sem-veiculacao" | "medida";
+
 export interface CampaignRow {
   id: string;
   fbId: string;
@@ -50,6 +61,26 @@ export interface CampaignRow {
    * campanha da Meta tem um. Quem traduz para a tela é a tabela.
    */
   objective: string | null;
+  /**
+   * 🕳️ HOUVE MEDIÇÃO? — a distinção central do projeto, aplicada à LINHA.
+   *
+   * `spend: 0` não distingue "a Meta reportou zero" de "não existe linha
+   * nenhuma", e as duas pedem reações diferentes de quem está olhando. Antes
+   * disto a tabela mostrava `R$ 0,00` para campanha que **nunca sincronizou** —
+   * afirmando "gastou zero" sobre algo que ninguém mediu.
+   *
+   * | valor | o que houve | o que o usuário faz |
+   * |---|---|---|
+   * | `nunca-sincronizada` | a conta nunca conversou com a Meta sobre ela | **confere a integração** |
+   * | `sem-veiculacao` | ela sincroniza, e não rodou nesta janela | nada — é normal |
+   * | `medida` | há linha na janela. `spend: 0` aqui é VERDADE | lê o número |
+   *
+   * ⛔ **É FATO SOBRE EXISTÊNCIA DE LINHA, NÃO MÉTRICA DERIVADA** — por isso é
+   * enum e não número, e por isso `sumAds` continua reduzindo a partir de
+   * `{ spend: 0 }`, intocado. Nada aqui muda uma conta: muda o que a tela tem
+   * permissão de afirmar sobre ela. Mesma solução da linha de base do ROAS.
+   */
+  medicao: Medicao;
   accountId: string;
   /// Orçamento na campanha ⇒ CBO. Nulo ⇒ ABO (orçamento nos conjuntos).
   dailyBudget: number | null;
@@ -149,7 +180,7 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
   // uma conta concreta, e as contas da área são um conjunto fechado.
   const accountWhere = { id: { in: contas } };
 
-  const [accounts, campaigns, adSets, ads, metrics, sales, cliquesNossos] = await Promise.all([
+  const [accounts, campaigns, adSets, ads, metrics, metricasDeSempre, sales, cliquesNossos] = await Promise.all([
     prisma.adAccount.findMany({
       where: { userId, ...accountWhere },
       select: { id: true, fbAccountId: true, name: true, currency: true, trackingEnabled: true },
@@ -188,6 +219,21 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
         ad: { adAccount: { userId, ...accountWhere } },
       },
       select: { adId: true, spend: true, impressions: true, clicks: true },
+    }),
+    /* Anúncios que têm métrica em ALGUMA janela — sem filtro de data.
+     *
+     * 🕳️ É o que separa "nunca sincronizou" de "não veiculou NESTE período", e
+     * as duas pedem ação diferente: na primeira o usuário confere a integração,
+     * na segunda não há o que fazer. Sem esta consulta as duas ficariam
+     * indistinguíveis, e a tela daria a mesma resposta para os dois.
+     *
+     * ⚠️ `distinct` no `adId` e só ele no `select`: é uma pergunta de
+     * EXISTÊNCIA, e trazer `spend` faria uma varredura do histórico inteiro
+     * para responder sim/não. */
+    prisma.dailyAdMetric.findMany({
+      where: { ad: { adAccount: { userId, ...accountWhere } } },
+      select: { adId: true },
+      distinct: ["adId"],
     }),
     // TODAS as vendas do período (qualquer status). As aprovadas viram
     // `results`/`revenue`; o total vira `vendasIniciadas`. Uma consulta só —
@@ -359,6 +405,55 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
      justamente porque o mapa não existe no momento do `.map()`. */
   const campaignObjectiveById = new Map(campaigns.map((c) => [c.id, c.objective]));
 
+  /* ── 🕳️ OS TRÊS ESTADOS DE MEDIÇÃO ──────────────────────────────────────────
+   *
+   * Derivado de FATO sobre existência de linha, nunca de um número: `spend > 0`
+   * como discriminador colapsaria "gastou zero" em "não mediu", que é
+   * exatamente o defeito. Os conjuntos abaixo respondem sim/não.
+   *
+   * ⛔ `sumAds` continua reduzindo a partir de `{ spend: 0 }` e NÃO foi
+   * alterado — ele é anterior a `4e6aa9e` e está congelado. O que nasce aqui é
+   * um fato ao LADO do número, para a apresentação decidir o que afirmar. */
+  const adsComMetricaNaJanela = new Set(metrics.map((m) => m.adId));
+  const adsComMetricaAlgumDia = new Set(metricasDeSempre.map((m) => m.adId));
+  const adsDaCampanha = new Map<string, string[]>();
+  for (const a of ads) {
+    const lista = adsDaCampanha.get(a.campaignId);
+    if (lista) lista.push(a.id);
+    else adsDaCampanha.set(a.campaignId, [a.id]);
+  }
+
+  /**
+   * ⛔ CADA NÍVEL RESPONDE SOBRE SI, não sobre a campanha acima.
+   *
+   * A primeira versão passava os anúncios DA CAMPANHA junto do `effectiveStatus`
+   * DO FILHO — e o teste pegou: o conjunto de uma campanha nunca sincronizada
+   * saía `sem-veiculacao`, porque o `effectiveStatus` dele próprio não era nulo.
+   * Misturar o escopo de uma metade com o da outra dá uma resposta que não é
+   * verdadeira sobre nenhum dos dois.
+   *
+   * Então o chamador entrega os anúncios que a linha DELE cobre: a campanha
+   * entrega os seus, o conjunto os dele, o anúncio a si mesmo.
+   */
+  const medicaoDe = (adIds: string[], effectiveStatus: string | null): Medicao => {
+    if (adIds.some((id) => adsComMetricaNaJanela.has(id))) return "medida";
+    /* Sincronizou alguma vez? Duas evidências independentes, e basta uma:
+       a Meta já reportou veiculação (`effectiveStatus`), ou já houve gasto em
+       alguma janela. Uma campanha recém-criada e sincronizada tem a primeira e
+       não a segunda — e ela É "sem veiculação", não "nunca sincronizada":
+       o usuário não tem o que conferir na integração. */
+    const conversouComAMeta =
+      effectiveStatus !== null || adIds.some((id) => adsComMetricaAlgumDia.has(id));
+    return conversouComAMeta ? "sem-veiculacao" : "nunca-sincronizada";
+  };
+
+  const adsDoConjunto = new Map<string, string[]>();
+  for (const a of ads) {
+    const lista = adsDoConjunto.get(a.adSetId);
+    if (lista) lista.push(a.id);
+    else adsDoConjunto.set(a.adSetId, [a.id]);
+  }
+
   // Anúncios
   const adRows: AdRow[] = ads.map((a) => {
     const met = metByAd.get(a.id) ?? { spend: 0, impressions: 0, clicks: 0 };
@@ -367,6 +462,7 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
       lifetimeBudget: null,
       bidStrategy: null,
       objective: campaignObjectiveById.get(a.campaignId) ?? null,
+      medicao: medicaoDe([a.id], a.effectiveStatus),
       id: a.id,
       fbId: a.fbAdId,
       name: a.name,
@@ -431,6 +527,7 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
       name: c.name,
       status: c.status,
       objective: c.objective,
+      medicao: medicaoDe(adsDaCampanha.get(c.id) ?? [], c.effectiveStatus),
       effectiveStatus: c.effectiveStatus,
       accountId: c.adAccountId,
       dailyBudget: c.dailyBudget != null ? num(c.dailyBudget) : null,
@@ -462,6 +559,7 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
       status: a.status,
       effectiveStatus: a.effectiveStatus,
       objective: campaignObjectiveById.get(a.campaignId) ?? null,
+      medicao: medicaoDe(adsDoConjunto.get(a.id) ?? [], a.effectiveStatus),
       accountId: a.adAccountId,
       campaignId: a.campaignId,
       campaignName: campaignNameById.get(a.campaignId) ?? "",
