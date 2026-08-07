@@ -1758,6 +1758,36 @@ lê o catálogo acreditar que o caso está coberto.
 > ⚠️ **O limite está escrito na guarda:** ela pega o filtro na mesma expressão,
 > não alguém que filtre numa variável três linhas antes.
 
+# 📥 NUNCA ALTERAMOS O ARRANJO DE ALGUÉM. AVISAMOS QUE HÁ MAIS.
+
+> **Regra do dono, 07/08/2026.** Vale para todo layout salvo, em qualquer tela —
+> nasceu no Dashboard, não é regra do Dashboard.
+
+Quando um bloco novo entra no catálogo, ele **não é injetado** nos layouts já
+salvos. Ele aparece:
+
+| Onde | |
+|---|---|
+| layout padrão de conta nova | ✅ |
+| catálogo lateral do modo de edição | ✅ **com contador** |
+| arranjo já salvo de alguém | ⛔ **nunca** |
+
+O recurso do meio é o que faz a regra funcionar. Sem ele, "não injetar" vira
+"ninguém nunca fica sabendo" — recurso que existe e não é encontrável, que é a
+mesma classe do controle inerte: o produto tem a coisa e o usuário não.
+
+> ### ⚠️ O CONTADOR DIZ "DISPONÍVEIS", NÃO "NOVOS"
+>
+> O pedido original era "3 novos disponíveis". **O produto não sabe o que é
+> novo.** O que ele consegue calcular é "está no catálogo e não está no layout",
+> e isso inclui o bloco que o usuário removeu de propósito ontem — chamá-lo de
+> novo é afirmar o que não se mediu.
+>
+> ⛔ Saber exigiria persistir os ids já vistos, e para os layouts que já existem
+> não há resposta: foram gravados antes do campo. O default teria de ser uma
+> lista datada no código — cicatriz esperando para virar anatomia. Não vale o
+> preço de uma palavra.
+
 # 🩹 A CICATRIZ QUE VIROU ANATOMIA
 
 **Uma decisão tomada para contornar uma limitação técnica sobrevive à limitação

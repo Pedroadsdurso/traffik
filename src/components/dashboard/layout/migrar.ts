@@ -170,20 +170,89 @@ export const HERO_PADRAO = ["faturamento", "gasto", "roas", "lucroLiquido"];
 export const FAIXA_PADRAO = ["ticket", "ctr", "cpa", "arpu", "margem", "pendentes", "reembolsadas"];
 export const MAX_FAIXA = 8;
 
+/**
+ * 🔴 O LAYOUT PADRÃO — a ORDEM e a LARGURA de conta nova, aprovadas em
+ * 07/08/2026.
+ *
+ * ### A ordem: dinheiro → por quê → quando/onde → a ferramenta
+ *
+ * Não é ordem de importância. O rodapé é o bloco menos importante da tela e é o
+ * único com largura cheia — porque ele responde outra pergunta ("a ferramenta
+ * está funcionando?"), e largura cheia é o que o separa do resto em vez de
+ * promovê-lo.
+ *
+ * ### As oito linhas, e por que cada largura
+ *
+ * | # | Blocos | col | Por quê |
+ * |---|---|---|---|
+ * | 1 | Receita×gasto · Alertas | 8+4 | a leitura central e o que exige ação. A série precisa de largura para o eixo; alerta é lista de texto e não ganha nada com ela |
+ * | 2 | Funil · Top campanhas | 6+6 | onde perde × quem paga. Metades iguais porque as duas perguntas têm o mesmo peso — e 6 é onde a fita do funil finalmente existe |
+ * | 3 | Origem · Produtos · Pagamentos | 4+4+4 | 🔑 **a linha de três.** Mesmo formato (tabela curta com barra atrás do texto) respondendo a mesma pergunta por três dimensões: lê-se em varredura horizontal |
+ * | 4 | Quando compram · Taxa de aprovação | 8+4 | o heatmap é o bloco mais faminto de largura da tela (24 colunas de célula); o medidor é o menos. Emparelhá-los é o que põe os dois no tamanho certo |
+ * | 5 | Vendas por país · Atividade | 8+4 | 8 é exatamente onde o globo aparece (a container query o esconde abaixo de 640px úteis). Em 6 haveria só o ranking — legítimo, mas o padrão deve mostrar o recurso |
+ * | 6 | Vendas por dia · por horário | 6+6 | duas séries de barra na mesma escala de leitura. "Que dia" × "que hora" lado a lado é o uso real |
+ * | 7 | Lucro por horário · Posicionamento | 6+6 | o que sobra dos dois formatos, sem nenhum sozinho numa linha de 12 |
+ * | 8 | Estado do sistema | 12 | faixa de quatro indicadores, `auto-fit` |
+ *
+ * ### ⛔ A LINHA 3 EXISTE PARA ENSINAR QUE CABEM TRÊS
+ *
+ * Com dezesseis blocos, o padrão fácil é uma pilha de largura cheia — e aí
+ * ninguém descobre que a grade aceita mais de um por linha. O modo de edição
+ * seria um recurso que existe e não é encontrado.
+ *
+ * ⛔ **Nenhum bloco em 3 colunas, mesmo com sete deles aceitando.** 3 é o piso
+ * para quem quer apertar; não é um tamanho que o produto deva sugerir.
+ *
+ * ⚠️ **Toda linha fecha 12.** Não é estética: o `avisoDeSobra` do modo de edição
+ * escreve "N colunas livres" em toda linha incompleta, e um padrão que já nasce
+ * com sobra ensina que o aviso é ruído.
+ *
+ * ### 🔴 A LISTA É EXPLÍCITA, E ANTES ERA DERIVADA DO CATÁLOGO
+ *
+ * Era `CATALOGO_META.map(b => b.colPadrao)` — a ordem do arquivo virava a ordem
+ * da tela, e o arranjo era a soma de dezesseis decisões locais. Nenhuma linha
+ * fechava 12 por acidente, e ninguém podia ter escrito o raciocínio acima,
+ * porque não existia um lugar onde o arranjo fosse decidido.
+ *
+ * ⚠️ O preço é que **um bloco novo no catálogo não entra sozinho no padrão** —
+ * e isso é bom: uma asserção reprova a divergência, e ela força a pergunta "em
+ * que linha ele entra, e o que sai para caber?". Derivar respondia essa pergunta
+ * sozinha, sempre com "no fim, largura solta".
+ */
+const PADRAO_PAINEIS: readonly (readonly [string, number])[] = [
+  ["receita-gasto", 8], ["alertas", 4],
+  ["funil", 6], ["top-campanhas", 6],
+  ["fontes", 4], ["produtos", 4], ["pagamentos", 4],
+  ["heatmap", 8], ["aprovacao", 4],
+  ["paises", 8], ["atividade", 4],
+  ["vendas-por-dia", 6], ["vendas-por-hora", 6],
+  ["lucro-por-hora", 6], ["posicionamento", 6],
+  ["rodape", 12],
+];
+
 /** O padrão do produto — o que toda conta nova vê. */
 export function layoutPadrao(): LayoutZonas {
-  return {
-    hero: [...HERO_PADRAO],
-    faixa: [...FAIXA_PADRAO],
-    paineis: CATALOGO_META.filter((b) => b.zona === "paineis").map((b) => ({
-      id: b.id,
-      col: b.colPadrao,
+  const paineis: LayoutZonas["paineis"] = [];
+  for (const [id, col] of PADRAO_PAINEIS) {
+    const meta = CATALOGO_META.find((b) => b.id === id);
+    /* Um id que saiu do catálogo é PULADO, não quebra a tela. A asserção do
+       teste é quem denuncia a divergência — aqui o pior caso tem de ser uma
+       linha a menos, nunca um Dashboard que não carrega. */
+    if (!meta) continue;
+    paineis.push({
+      id,
+      /* ⚠️ Passa pelo `encaixarColunas`: a largura escrita acima é uma escolha
+         de ARRANJO, e o mínimo do bloco continua mandando. Se alguém baixar uma
+         coluna aqui abaixo do `colMin`, ela sobe — em vez de o padrão nascer
+         num tamanho que o redimensionamento recusaria. */
+      col: encaixarColunas(col, meta),
       /* ⛔ Sem altura: quem não é `alturaAjustavel` não tem `linhas` no layout.
          `encaixarLinhas` devolve `undefined` para eles, e é esse `undefined` que
          faz a grade usar a altura do CONTEÚDO — a correção do esburacado. */
-      linhas: encaixarLinhas(undefined, b),
-    })),
-  };
+      linhas: encaixarLinhas(undefined, meta),
+    });
+  }
+  return { hero: [...HERO_PADRAO], faixa: [...FAIXA_PADRAO], paineis };
 }
 
 /**

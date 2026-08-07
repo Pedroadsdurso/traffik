@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { useTamanho } from "@/components/dashboard/ui/useTamanho";
+
 /**
  * MedidorRadial — arco feito de BARRAS INDIVIDUAIS arredondadas, não de um traço
  * contínuo. É a versão da referência 4 (Insighta), que o `06` §6 aponta como a
@@ -43,7 +45,29 @@ import * as React from "react";
 
 /** Abertura embaixo, em graus. 240° de arco desenhado (`06` §6). */
 const ARCO = 240;
-const BARRAS = 24;
+
+/**
+ * Quantas barras o arco tem, pela largura MEDIDA do medidor (`06` §6: "24 a 32
+ * barras").
+ *
+ * 🔴 ESTE É O ÚNICO PEDAÇO DA ESCALA QUE CSS NÃO EXPRESSA. Diâmetro, altura e
+ * tamanho de fonte saem de container query; **quantidade de elementos SVG não**
+ * — as barras são geradas em JS, e nenhuma consulta de contêiner conta nós.
+ *
+ * ⚠️ É por isso que aqui (e só aqui) entra um `ResizeObserver`. Não é o começo
+ * de medir tudo em JS: é o caso que a folha de estilo não alcança.
+ *
+ * ⛔ `BARRAS_PADRAO` é o que sai na renderização do SERVIDOR, onde não há
+ * medida. Ele é o piso da faixa, não um número neutro: um medidor que nascesse
+ * com 32 barras e encolhesse para 24 na hidratação piscaria.
+ */
+const BARRAS_PADRAO = 24;
+function barrasPara(largura: number): number {
+  if (largura <= 0) return BARRAS_PADRAO; // ainda não medido — ver `useTamanho`
+  if (largura >= 150) return 32;
+  if (largura >= 118) return 28;
+  return BARRAS_PADRAO;
+}
 /** Fração do passo ocupada pela barra. O resto é a folga entre elas. */
 const OCUPACAO = 0.62;
 
@@ -65,6 +89,12 @@ export function MedidorRadial({
   tamanho?: number;
 }) {
   const id = React.useId();
+  /* 🔴 PRIMEIRO CONSUMIDOR DO `useTamanho`, que estava ÓRFÃO desde que foi
+     escrito — hook completo, comentado, testado por ninguém e importado por
+     ninguém. Achado ao construir a escala, em 07/08/2026. Ele é exatamente a
+     ferramenta certa para a única medida que CSS não dá. */
+  const { ref: refMedida, largura } = useTamanho<HTMLDivElement>();
+  const BARRAS = barrasPara(largura);
   const R = 50;
   const raioInterno = R * 0.72;
 
@@ -100,8 +130,14 @@ export function MedidorRadial({
   const passo = ARCO / BARRAS;
 
   return (
-    <div style={{ display: "grid", placeItems: "center", position: "relative", width: tamanho, height: tamanho }}>
-      <svg viewBox="0 0 100 100" width={tamanho} height={tamanho} aria-hidden="true" style={{ display: "block" }}>
+    /* 🎨 DIÂMETRO CONTÍNUO (`--tk-b-radial`), pelo mesmo motivo do donut:
+       geometria não tem meio-tamanho feio. A prop `tamanho` é o fallback para
+       uso fora de um `.tk-escala`. */
+    <div
+      ref={refMedida}
+      style={{ display: "grid", placeItems: "center", position: "relative", width: `var(--tk-b-radial, ${tamanho}px)`, aspectRatio: "1" }}
+    >
+      <svg viewBox="0 0 100 100" width="100%" height="100%" aria-hidden="true" style={{ display: "block" }}>
         {Array.from({ length: BARRAS }, (_, i) => {
           const ang = ((inicio + i * passo + passo / 2) * Math.PI) / 180;
           const cos = Math.cos(ang);

@@ -1709,6 +1709,89 @@ a {
   }
 }
 
+/* ══ ESCALA DO CONTEÚDO — o bloco cresce, o conteúdo cresce COM ele ═════════
+   🔴 O PROBLEMA QUE ISTO RESOLVE (07/08/2026, pedido do dono)
+
+   As container queries de baixo só REPOSICIONAM: elas escondem coluna quando o
+   bloco encolhe. Nada crescia. Um bloco em 12 colunas tinha o mesmo desenho de
+   um em 4, centralizado num quadro maior — o número do mesmo tamanho perdido no
+   vazio, a tabela com 300px de ar embaixo.
+
+   ### ⛔ DEGRAU PARA TIPOGRAFIA, CONTÍNUO PARA GEOMETRIA
+
+   A distinção é do dono e não é estética: **meio-tamanho de letra é feio, meio
+   tamanho de círculo não existe.** Um número em 37,4px tem hinting ruim e pesa
+   diferente do vizinho; um donut de 163px é só um donut. Então:
+
+   | | Como escala | Quem |
+   |---|---|---|
+   | Tipografia e altura de plotagem | **degraus** (4 faixas) | número do KPI, altura de gráfico, altura de linha de lista |
+   | Geometria pura | **contínuo** (`clamp` + `cqw`) | donut, medidor radial, heatmap |
+
+   Degrau numa geometria seria salto visível sem ganho nenhum. Contínuo numa
+   tipografia dá o meio-tamanho.
+
+   ### As faixas, em largura do CONTÊINER (não útil)
+
+   O contêiner é a CÉLULA da grade, que inclui o `--tk-pad-card` dos dois lados.
+   Os limites úteis acordados (340 / 560 / 820) viram 380 / 600 / 860 aqui.
+
+   ⚠️ **`.tk-escala` só funciona dentro de um `.tk-medida`** (ou da célula da
+   grade, que já é contêiner). Sem ancestral contêiner, o `@container` cai na
+   RAIZ e passa a responder sobre a JANELA — um card estreito numa tela larga
+   receberia os valores de `amplo`. É por isso que o `Card` só ganha a classe
+   quando quem o desenha declara `escala`, em vez de ela vir sempre. */
+@layer components {
+  .tk-medida { container-type: inline-size; }
+
+  /* O PISO. Vale sem query nenhuma, e é o que um bloco no `colMin` recebe. */
+  .tk-escala {
+    --tk-b-metrica: 30px;   /* número do KPI hero */
+    --tk-b-metrica-sm: 17px;/* número da faixa de Resumo */
+    --tk-b-spark: 32px;     /* altura do sparkline do hero */
+    --tk-b-plot: 190px;     /* altura da plotagem do LineChart */
+    --tk-b-barras: 120px;   /* altura da área de barras do SerieTemporal */
+    --tk-b-linha: 40px;     /* altura da linha de lista/tabela */
+    --tk-b-fita: 130px;     /* altura da fita do funil */
+    --tk-b-fita-num: 24px;  /* os três números do cabeçalho do funil */
+
+    /* CONTÍNUOS. `cqw` é 1% da largura do contêiner: o piso e o teto são de
+       LEITURA (abaixo some, acima vira azulejo) e o meio é proporção. */
+    --tk-b-donut: clamp(132px, 40cqw, 230px);
+    --tk-b-radial: clamp(88px, 26cqw, 168px);
+  }
+
+  @container (min-width: 380px) {
+    .tk-escala {
+      --tk-b-metrica: 34px;  --tk-b-metrica-sm: 19px; --tk-b-spark: 40px;
+      --tk-b-plot: 230px;    --tk-b-barras: 150px;    --tk-b-linha: 44px;
+      --tk-b-fita: 160px;    --tk-b-fita-num: 27px;
+    }
+  }
+
+  @container (min-width: 600px) {
+    .tk-escala {
+      --tk-b-metrica: 40px;  --tk-b-metrica-sm: 21px; --tk-b-spark: 52px;
+      --tk-b-plot: 290px;    --tk-b-barras: 190px;    --tk-b-linha: 48px;
+      --tk-b-fita: 190px;    --tk-b-fita-num: 30px;
+    }
+  }
+
+  @container (min-width: 860px) {
+    .tk-escala {
+      --tk-b-metrica: 48px;  --tk-b-metrica-sm: 23px; --tk-b-spark: 64px;
+      --tk-b-plot: 350px;    --tk-b-barras: 235px;    --tk-b-linha: 52px;
+      --tk-b-fita: 220px;    --tk-b-fita-num: 34px;
+    }
+  }
+
+  /* ⚠️ A ORDEM DAS QUATRO REGRAS É A GARANTIA, e ela já mordeu esta base: as
+     quatro têm a MESMA especificidade, então quem vence é a última que casa.
+     `min-width` crescente + ordem crescente = a maior faixa que couber ganha.
+     Foi exatamente isto que o override de `--tk-shadow-card` no tema claro
+     errou — `:root` e `[data-theme]` empatados, e o `:root` vinha depois. */
+}
+
 /* ══ CONTAINER QUERIES DOS BLOCOS — C3, 07/08/2026 ══════════════════════════
    ⛔ CONTAINER, e não `@media`. O mesmo bloco pode ter 3 colunas numa tela de
    1920px e 12 numa de 1280 — a janela não diz nada sobre a largura DELE. É esta
@@ -1742,6 +1825,11 @@ a {
     gap: 10px;
     align-items: center;
   }
+  /* ⚠️ Só o CORPO recebe a altura de linha da escala — o cabeçalho tem padding
+     próprio e cresceria junto sem motivo. `--tk-b-linha` tem fallback porque a
+     tabela pode ser usada fora de um `.tk-escala`. */
+  .tk-linha.tk-camp-linha { min-height: var(--tk-b-linha, 40px); }
+  .tk-breakdown .tk-linha { min-height: var(--tk-b-linha, 40px); }
 
   /* Abaixo de 440px úteis sai VENDAS; abaixo de 380px sai também GASTO. A ordem
      e o motivo estão no cabeçalho do `TabelaCampanhas.tsx`. */

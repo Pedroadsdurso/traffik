@@ -131,6 +131,23 @@ function celulaDaGrade(col: number, linhas: number | undefined, temDado: boolean
        os testadores mais veem. A altura escolhida pelo usuário é sobre o BLOCO
        COM DADO; aplicá-la ao vazio reserva espaço para o que não existe. */
     ...(linhas && temDado ? { minHeight: linhas * ALTURA_LINHA } : null),
+    /* 🔴 E O `stretch` DA GRADE TAMBÉM NÃO — visto na tela em 07/08/2026, depois
+       de o piso já estar tratado.
+
+       Tirar o `minHeight` não bastava: `align-items` é `stretch` por padrão, e
+       todo item de uma linha fica com a altura do MAIOR. Um `Posicionamento`
+       vazio ao lado de um `Taxa de aprovação` de quatro medidores virava uma
+       caixa de ~300px com uma frase de 60px centrada nela. O bloco tinha parado
+       de sumir e continuava reservando espaço para o dado que não existe.
+
+       ⚠️ O preço é a linha ficar DESALINHADA embaixo, e é o preço certo: o
+       alinhamento é uma propriedade estética da linha; o espaço morto é a tela
+       afirmando que ali cabia alguma coisa. Entre os dois, some o desalinhamento.
+
+       ⛔ Só no vazio. Com dado, `stretch` continua — é ele que faz os blocos de
+       uma linha terminarem juntos, e o `distribuir` do `Card` centra o conteúdo
+       do menor na sobra. */
+    ...(temDado ? null : { alignSelf: "start" as const }),
   };
 }
 
@@ -416,9 +433,16 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
           </div>
         </ZonaEdicao>
       ) : (
-        <div style={{ display: "grid", gap: "var(--tk-gap-grid)", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+        /* ⚠️ `.tk-medida` em cada card, e não na fileira: a fileira é
+           `auto-fit`, então a largura de UM card não é a dela dividida por
+           quatro — com o rail recolhido cabem quatro, com ele aberto e a janela
+           estreita cabem dois, e o card dobra de tamanho sem a fileira mudar.
+           Medir a fileira daria a mesma faixa para os quatro, sempre. */
+        <div className="tk-hero" style={{ display: "grid", gap: "var(--tk-gap-grid)", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
           {heros.map((k) => (
-            <KpiHero key={k.chave} dados={k} carregando={carregando} />
+            <div key={k.chave} className="tk-medida" style={{ minWidth: 0, display: "flex" }}>
+              <KpiHero dados={k} carregando={carregando} />
+            </div>
           ))}
         </div>
       )}
@@ -674,6 +698,9 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
                 <Card
                   preencher
                   distribuir
+                  /* A célula da grade já tem `containerType: inline-size` — é o
+                     contêiner que a escala mede. Ver o ⛔ da prop no `Card`. */
+                  escala
                   titulo={meta.titulo}
                   descricao={meta.descricao}
                   /* ⚠️ O CONTROLE SOME NO ESTADO VAZIO, e o título fica. Um

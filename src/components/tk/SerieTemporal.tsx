@@ -67,7 +67,12 @@ export function SerieTemporal({
           barra. Com `gap` no contêiner a folga seria fixa em pixels: com 7 dias
           as barras ficariam gordas e a folga sumiria, com 90 dias o contrário.
           A proporção só se mantém se a folga escalar junto com o passo. */}
-      <div style={{ position: "relative", height: 120, display: "flex", alignItems: "flex-end", gap: 0 }}>
+      {/* 🎨 A ALTURA ESCALA EM DEGRAUS (`--tk-b-barras`, 4 faixas). Era 120px
+          cravados: num bloco de 12 colunas as barras ficavam baixas e largas,
+          com metade do card vazia embaixo. ⚠️ Degrau, não `cqh`: a altura da
+          barra é o que carrega a comparação entre horas, e um valor
+          intermediário muda a inclinação percebida sem que o dado tenha mudado. */}
+      <div style={{ position: "relative", height: "var(--tk-b-barras, 120px)", display: "flex", alignItems: "flex-end", gap: 0 }}>
         {permitirNegativo && (
           /* A linha de zero. Sem ela, uma barra para baixo não tem referência e
              o desenho não diz onde o lucro deixou de existir. */

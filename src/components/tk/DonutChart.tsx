@@ -113,8 +113,15 @@ export function DonutChart({
         minHeight: 0,
       }}
     >
-      <div style={{ position: "relative", width: tamanho, height: tamanho, flex: "none" }}>
-        <svg viewBox="0 0 180 180" width={tamanho} height={tamanho} style={{ transform: "rotate(-90deg)" }}>
+      {/* 🎨 DIÂMETRO CONTÍNUO, não em degraus — decisão do dono em 07/08/2026.
+          Geometria pura não tem meio-tamanho feio: um donut de 163px é só um
+          donut, enquanto um número em 37,4px perde hinting. O `clamp` de
+          `--tk-b-donut` tem piso e teto de LEITURA (abaixo some, acima vira
+          disco), e o meio é proporção da largura do bloco (`cqw`).
+
+          ⚠️ A prop `tamanho` vira o FALLBACK, para uso fora de um `.tk-escala`. */}
+      <div style={{ position: "relative", width: `var(--tk-b-donut, ${tamanho}px)`, aspectRatio: "1", flex: "none" }}>
+        <svg viewBox="0 0 180 180" width="100%" height="100%" style={{ transform: "rotate(-90deg)" }}>
           <circle cx="90" cy="90" r={R} fill="none" stroke="var(--tk-surface-hover)" strokeWidth={ESPESSURA} />
           {arcos.map((a) => (
             <circle

@@ -64,6 +64,22 @@ type PropsCard = {
    * centrar.
    */
   distribuir?: boolean;
+  /**
+   * Liga a ESCALA DO CONTEÚDO: o card passa a expor `--tk-b-*`, e o que estiver
+   * dentro cresce com a largura dele (número do KPI, altura de gráfico, altura
+   * de linha de lista, diâmetro de donut).
+   *
+   * ⛔ **SÓ passe `escala` quando o card estiver dentro de um contêiner medido**
+   * — a célula da grade do Dashboard, ou um `.tk-medida`. As container queries
+   * consultam o ancestral contêiner MAIS PRÓXIMO; sem nenhum, elas caem na raiz
+   * e passam a responder sobre a JANELA. O efeito seria um card estreito numa
+   * tela larga recebendo os valores da faixa `amplo`: número gigante espremido.
+   *
+   * ⚠️ É por isso que a classe não vem sempre. Um default "conveniente" aqui
+   * produziria o defeito exatamente nos lugares em que ninguém pensou no
+   * contêiner — que são os que mais precisam da proteção.
+   */
+  escala?: boolean;
   style?: React.CSSProperties;
 };
 
@@ -77,6 +93,7 @@ export function Card({
   semPadding = false,
   preencher = false,
   distribuir = false,
+  escala = false,
   style,
 }: PropsCard) {
   const Tag = aoClicar ? "button" : "div";
@@ -87,6 +104,7 @@ export function Card({
       className={
         "bg-surface border border-border rounded-card text-left w-full " +
         "transition-[background-color,border-color] " +
+        (escala ? "tk-escala " : "") +
         (aoClicar
           ? "cursor-pointer hover:bg-surface-hover focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 "
           : "")

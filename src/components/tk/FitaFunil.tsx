@@ -105,9 +105,13 @@ export function FitaFunil({ etapas }: { etapas: EtapaEntradaFita[] }) {
           const taxa = fluxo.etapas[i]?.taxa ?? null;
           return (
             <div key={e.label} style={{ minWidth: 0 }}>
+              {/* 🎨 Os três números do cabeçalho (`06` §9) escalam em degraus com
+                  a largura do bloco. Eles são a leitura rápida do funil — e no
+                  mínimo do bloco são a ÚNICA coisa que sobra, porque abaixo de
+                  360px úteis a fita some. */}
               <div
                 className="text-metric-md"
-                style={{ color: i === 0 ? "var(--tk-text)" : "var(--tk-primary)", fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}
+                style={{ fontSize: "var(--tk-b-fita-num, 24px)", color: i === 0 ? "var(--tk-text)" : "var(--tk-primary)", fontVariantNumeric: "tabular-nums", lineHeight: 1.1 }}
               >
                 {/* A primeira etapa é o TOTAL e não tem taxa — mostrar "—" ali
                     prometeria uma comparação que não existe. Ela mostra o
@@ -123,9 +127,18 @@ export function FitaFunil({ etapas }: { etapas: EtapaEntradaFita[] }) {
       </div>
 
       <div className="tk-fita-desenho" style={{ position: "relative" }}>
+        {/* 🎨 A ALTURA DESENHADA escala (`--tk-b-fita`), o `viewBox` não muda.
+            O SVG estica a geometria e o texto de dentro junto — e aqui isso é o
+            certo, ao contrário dos gráficos com eixo: a fita não tem rótulo de
+            valor dentro do desenho, só as duas pílulas de perda, que crescem na
+            mesma proporção da faixa a que pertencem.
+
+            ⚠️ `preserveAspectRatio` fica no padrão (`xMidYMid meet`), então a
+            fita cresce sem distorcer. O `--tk-b-fita` é um TETO de altura, não
+            um esticamento. */}
         <svg
           width="100%"
-          height={ALTURA_SVG}
+          height={`var(--tk-b-fita, ${ALTURA_SVG}px)`}
           viewBox={`0 0 ${xFim} ${ALTURA_SVG}`}
           role="img"
           aria-label={

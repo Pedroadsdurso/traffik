@@ -135,9 +135,41 @@ export function CatalogoLateral({
       <hr style={{ border: 0, borderTop: "1px solid var(--tk-border)", margin: 0 }} />
 
       <section style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <h3 className="text-label text-text" style={{ margin: 0 }}>
-          Painéis disponíveis
-        </h3>
+        {/* 🔴 O CONTADOR EXISTE PARA QUE O BLOCO NOVO SEJA DESCOBERTO SEM QUE
+            NINGUÉM MEXA NO ARRANJO DE NINGUÉM (decisão do dono, 07/08/2026).
+
+            Três blocos entraram no catálogo naquele dia e **não aparecem para
+            quem já tem layout salvo** — injetá-los seria alterar um arranjo que
+            o usuário montou. Sem nenhum aviso, porém, eles seriam recurso que
+            existe e não é encontrável. O contador é o meio-termo: a informação
+            fica a um clique em "Editar painel", e a decisão continua sendo dele.
+
+            ### ⚠️ DIZ "DISPONÍVEIS", NÃO "NOVOS" — e a diferença é de verdade
+
+            O pedido era "3 novos disponíveis". O produto **não sabe o que é
+            novo**: a única coisa que ele consegue calcular é "está no catálogo e
+            não está no layout", e isso inclui o bloco que o usuário REMOVEU de
+            propósito ontem. Chamar de novo o que ele acabou de tirar é o produto
+            afirmando algo que não mediu — a distinção "ausência de observação ≠
+            observação" na camada da microcópia.
+
+            ⛔ Saber o que é novo exigiria persistir os ids já vistos, e para os
+            layouts que já existem não há resposta: eles foram gravados antes do
+            campo. O default teria de ser uma lista datada no código — cicatriz
+            esperando para virar anatomia. Não vale o preço de uma palavra. */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <h3 className="text-label text-text" style={{ margin: 0 }}>
+            Painéis disponíveis
+          </h3>
+          {paineis.length > 0 && (
+            <span
+              className="text-caption bg-tint-primary text-on-tint-primary"
+              style={{ padding: "1px 8px", borderRadius: "var(--tk-radius-pill)", lineHeight: 1.5, whiteSpace: "nowrap", flex: "none" }}
+            >
+              {paineis.length} {paineis.length === 1 ? "disponível" : "disponíveis"}
+            </span>
+          )}
+        </div>
         {paineis.length === 0 ? (
           <p className="text-caption text-text-muted" style={{ margin: 0 }}>
             Todos os painéis já estão no painel.

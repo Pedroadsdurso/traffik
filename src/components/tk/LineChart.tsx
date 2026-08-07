@@ -174,10 +174,16 @@ export function LineChart({
         style={{ position: "relative", flex: 1, minHeight: 0, display: "flex" }}
         onMouseLeave={() => setAlvo(null)}
       >
+      {/* 🎨 A ALTURA VEM DA ESCALA DO BLOCO (`--tk-b-plot`, 4 faixas), com a
+          prop como piso para quem usar o gráfico fora de um `.tk-escala`.
+
+          ⛔ Não é `height="100%"` com proporção do `viewBox`: aí a altura
+          seguiria a LARGURA e um bloco de 12 colunas ficaria com 400px de
+          gráfico e uma tela de rolagem. Degrau desacopla as duas. */}
       <svg
         viewBox={`0 0 ${L} ${A}`}
         width="100%"
-        height={altura}
+        height={`var(--tk-b-plot, ${altura}px)`}
         role="img"
         aria-label={`${rotuloA} contra ${rotuloB} ao longo do período`}
         style={{ display: "block", flex: 1, minHeight: 0 }}

@@ -73,7 +73,11 @@ const VAZIA = {
   payments: [],
   placements: [],
   placementSemDados: 0,
-  byDay: [],
+  /* 🔴 UM BALDE ZERADO, NÃO UMA LISTA VAZIA — e a diferença é o bug que este
+     campo pegou. `byDay` traz um item POR DIA da janela, zerado ou não; com o
+     filtro em "Hoje" ele tem comprimento 1. Um `[]` aqui deixaria passar o
+     `temDado: length > 0`, que foi exatamente o defeito visto na tela. */
+  byDay: [{ date: "2026-08-07", revenue: 0, sales: 0 }],
   byHour: [],
   byCountry: [],
   approval: [],
@@ -161,8 +165,49 @@ const IDS_COLAPSAVEIS = IDS_PADRAO.filter((id) => !("sempreCheio" in RENDERS[id]
 secao("1. Com dado ZERADO, a grade continua com os MESMOS N itens");
 
 checar("o layout padrão tem painel para todo bloco do catálogo", () => {
-  assert.equal(IDS_PADRAO.length, CATALOGO_META.length);
+  /* 🔴 O PADRÃO É UMA LISTA ESCRITA À MÃO (o arranjo aprovado), e o catálogo é
+     outra lista. Duas listas que precisam concordar — a família que esta base
+     já pagou várias vezes. Esta asserção é a ponte: um bloco novo no catálogo
+     que ninguém colocou no arranjo cai aqui, e a pergunta que ela força é
+     "em que linha ele entra, e o que sai para caber?". */
+  const faltando = CATALOGO_META.map((b) => b.id).filter((id) => !IDS_PADRAO.includes(id));
+  assert.deepEqual(faltando, [], `no catálogo e fora do layout padrão: ${faltando.join(", ")}`);
+  assert.equal(IDS_PADRAO.length, CATALOGO_META.length, "o padrão tem bloco repetido");
   assert.ok(IDS_PADRAO.length >= 10, `só ${IDS_PADRAO.length} painéis — a asserção seria fraca`);
+});
+
+checar("TODA linha do layout padrão fecha 12 colunas", () => {
+  /* ⛔ Não é estética. O `avisoDeSobra` escreve "N colunas livres" em toda linha
+     incompleta do modo de edição; um padrão que nasce com sobra ensina que o
+     aviso é ruído — e aí ele para de ser lido quando importa. */
+  let linha = 0;
+  const sobras = [];
+  for (const p of layoutPadrao().paineis) {
+    if (linha + p.col > 12) { sobras.push(`${12 - linha} livres antes de ${p.id}`); linha = 0; }
+    linha += p.col;
+    if (linha === 12) linha = 0;
+  }
+  if (linha !== 0) sobras.push(`${12 - linha} livres na última linha`);
+  assert.deepEqual(sobras, [], sobras.join(" · "));
+});
+
+checar("nenhum bloco do padrão nasce em 3 colunas", () => {
+  /* Decisão do dono: 3 é o PISO para quem quer apertar, não um tamanho que o
+     produto sugira. Sete blocos aceitam 3 — a asserção prova que a escolha foi
+     deliberada e não coincidência do arranjo. */
+  const estreitos = layoutPadrao().paineis.filter((p) => p.col < 4).map((p) => p.id);
+  assert.deepEqual(estreitos, [], `nasceram em menos de 4 colunas: ${estreitos.join(", ")}`);
+  assert.ok(CATALOGO_META.some((b) => b.colMin === 3), "nenhum bloco aceita 3 — a asserção é vácuo");
+});
+
+checar("os dois blocos que precisam de largura a receberam", () => {
+  /* A asserção que liga o ARRANJO às container queries: sem 8 colunas, o globo
+     de `paises` não aparece (CQ em 640px úteis) e o `heatmap` fica no piso da
+     célula. São as duas larguras do padrão que NÃO são preferência — são o que
+     faz o recurso existir na primeira vez que a pessoa abre a tela. */
+  const col = (id) => layoutPadrao().paineis.find((p) => p.id === id)?.col;
+  assert.ok(col("paises") >= 8, `paises em ${col("paises")} col — o globo não apareceria`);
+  assert.ok(col("heatmap") >= 8, `heatmap em ${col("heatmap")} col`);
 });
 
 /* 🔴🔴 ESTA É UMA GUARDA ESTÁTICA, E A ESCOLHA FOI DELIBERADA.

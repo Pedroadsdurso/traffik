@@ -159,8 +159,12 @@ export function KpiHero({ dados, carregando = false }: { dados: DadosKpi; carreg
   const corLinha = dados.cor ?? "var(--tk-primary)";
 
   return (
+    /* 🎨 `tk-escala` — o número e o sparkline crescem com a largura DESTE card.
+       ⛔ Ele depende de estar dentro de um `.tk-medida`, que é quem carrega o
+       `container-type`. Sem o ancestral, a consulta cai na raiz e responde
+       sobre a janela: ver o ⛔ da prop `escala` no `Card`. */
     <div
-      className="bg-surface border border-border"
+      className="bg-surface border border-border tk-escala"
       style={{
         borderRadius: "var(--tk-radius-card)",
         padding: "var(--tk-pad-hero)",
@@ -169,6 +173,7 @@ export function KpiHero({ dados, carregando = false }: { dados: DadosKpi; carreg
         flexDirection: "column",
         gap: 6,
         minWidth: 0,
+        flex: 1,
         overflow: "hidden",
       }}
     >
@@ -184,9 +189,17 @@ export function KpiHero({ dados, carregando = false }: { dados: DadosKpi; carreg
           do arranjo que o usuário salvou: no card mais estreito a pílula desce
           para a linha de baixo em vez de espremer o número. */}
       <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", minWidth: 0 }}>
+        {/* 🎨 O NÚMERO ESCALA EM DEGRAUS com a largura do card (`--tk-b-metrica`,
+            4 faixas). `text-metric-xl` continua definindo peso, tracking e
+            `font-variant-numeric`; só o TAMANHO passa a vir da escala — senão
+            um hero de 12 colunas teria o mesmo número de um de 3, perdido no
+            meio do quadro.
+
+            ⛔ Degrau e não interpolação: em tamanho intermediário o dígito perde
+            hinting e pesa diferente do card vizinho. */}
         <span
           className="text-metric-xl"
-          style={{ color: corNumero, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}
+          style={{ fontSize: "var(--tk-b-metrica, 30px)", lineHeight: 1.05, color: corNumero, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}
         >
           {carregando ? "—" : dados.valor}
         </span>
@@ -205,7 +218,11 @@ export function KpiHero({ dados, carregando = false }: { dados: DadosKpi; carreg
 
           A área tem altura FIXA nos quatro cards, com ou sem série — senão um
           card sem dado fica mais baixo e a fileira desalinha. */}
-      <div style={{ margin: "2px -4px 0", height: 38 }}>
+      {/* ⚠️ A altura vem da MESMA faixa do número, e é o que mantém a proporção
+          entre os dois quando o card cresce. Continua FIXA dentro de cada faixa,
+          com ou sem série — senão um card sem dado fica mais baixo e a fileira
+          desalinha. */}
+      <div className="tk-spark" style={{ margin: "2px -4px 0", height: "var(--tk-b-spark, 32px)" }}>
         <Sparkline valores={dados.serie ?? []} cor={corLinha} altura={38} />
       </div>
 
@@ -256,9 +273,23 @@ export function MetricStrip({ itens, carregando = false }: { itens: DadosKpi[]; 
         padding: "10px 4px",
       }}
     >
+      {/* 🔴 `.tk-medida` NO ITEM e `.tk-escala` NO NÚMERO — nunca os dois no
+          mesmo elemento, e eu escrevi assim primeiro. **Um elemento com
+          `container-type` não é contêiner de si mesmo**: a consulta sobe para o
+          ancestral, e como a faixa não está numa célula da grade ela cairia na
+          RAIZ, respondendo sobre a janela.
+
+          ⚠️ E medir o ITEM, não a faixa: a faixa é sempre da largura da tela, e
+          o que varia é a QUANTIDADE de métricas nela — com três, cada item tem o
+          dobro do espaço de quando há oito. Medir a faixa daria a mesma resposta
+          sempre, que é um controle que não controla nada.
+
+          São só duas faixas aqui (17 → 23px): a strip é compacta por desenho, e
+          escalar mais a transformaria de volta em "mais cards". */}
       {itens.map((m, i) => (
         <div
           key={m.chave}
+          className="tk-medida"
           style={{
             display: "flex",
             flexDirection: "column",
@@ -278,8 +309,8 @@ export function MetricStrip({ itens, carregando = false }: { itens: DadosKpi[]; 
 
               Os dois pesos de número agora dizem a mesma coisa ao mesmo tempo. */}
           <span
-            className="text-metric-md"
-            style={{ color: m.cor ?? "var(--tk-text)", whiteSpace: "nowrap" }}
+            className="text-metric-md tk-escala"
+            style={{ fontSize: "var(--tk-b-metrica-sm, 17px)", color: m.cor ?? "var(--tk-text)", whiteSpace: "nowrap" }}
           >
             {carregando ? "—" : m.valor}
           </span>

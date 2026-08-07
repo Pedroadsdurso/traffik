@@ -374,7 +374,18 @@ export const RENDERS: Record<IdBloco, RenderBloco> = {
   },
 
   "vendas-por-dia": {
-    temDado: (v) => v.byDay.length > 0,
+    /* 🔴 `.some(movimento)`, NÃO `.length > 0` — visto na tela em 07/08/2026,
+       no print do estado vazio. `byDay` traz UM BALDE POR DIA da janela, zerado
+       ou não: com o filtro em "Hoje" ele tem comprimento 1 e receita 0, então o
+       bloco se declarava com dado e desenhava um eixo vazio com o rótulo
+       "08-07" e nada acima.
+
+       ⚠️ É o mesmo erro que o bloco inteiro existe para corrigir, uma camada
+       abaixo: "existe um balde" não é "houve venda". Confundir a EXISTÊNCIA da
+       série com a existência de OBSERVAÇÃO é a distinção central do projeto —
+       e aqui ela produzia a única caixa da tela sem explicação, no meio de doze
+       que explicavam. */
+    temDado: (v) => v.byDay.some((d) => d.revenue > 0 || d.sales > 0),
     vazio: { titulo: "Nenhuma venda no período", causa: CAUSA_VENDA, acao: IR_WEBHOOKS },
     render: (v) => (
       <SerieTemporal
