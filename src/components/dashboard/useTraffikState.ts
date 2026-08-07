@@ -840,26 +840,16 @@ export function useTraffikState(
     barWidth: Math.round((x.total / payMax) * 100) + "%",
   }));
 
-  const fn = d?.funnel ?? { cliques: 0, checkouts: 0, vendas: 0 };
-  /* Sem etapa anterior nao existe taxa de conversao — devolvia "0%", que afirma
-     que TODO mundo caiu fora, quando na verdade nao houve de onde cair. */
-  const rate = (a: number, b: number) => {
-    const r = div(a, b);
-    return r === null ? TRACO : (r * 100).toFixed(1).replace(".", ",") + "%";
-  };
-  /* ⛔ `height` e `color` SAÍRAM daqui em 07/08/2026. Eles eram medida de
-     DESENHO calculada no hook — e o desenho virou a fita, que mede a espessura
-     sozinha a partir da largura real do bloco. Metade da geometria aqui e
-     metade lá foi o que produziu o `calc(120px / 120 * 100%)` das barras.
+  /* ⛔ O `funnel` de TRÊS etapas foi DELETADO em 07/08/2026, junto do `rate()`
+     que só ele usava. Ele montava `{label, acao, valor, count, hasRate, rate}`
+     para o desenho antigo, e ficou sem consumidor quando o bloco passou a ler
+     `funnelStages` — que tem CINCO etapas, os nomes curtos da referência e a
+     `fonte` de cada número.
 
-     ⚠️ `valor` cru vai junto do formatado, e não em vez dele: quem desenha
-     precisa somar e comparar; quem escreve precisa do separador de milhar. É o
-     mesmo padrão do `despesaRows`. */
-  const funnel = [
-    { label: "Cliques", acao: "clicaram no anúncio", valor: fn.cliques, count: fn.cliques.toLocaleString("pt-BR"), hasRate: false, rate: "" },
-    { label: "Checkouts iniciados", acao: "chegam ao checkout", valor: fn.checkouts, count: fn.checkouts.toLocaleString("pt-BR"), hasRate: true, rate: rate(fn.checkouts, fn.cliques) },
-    { label: "Vendas", acao: "compram", valor: fn.vendas, count: fn.vendas.toLocaleString("pt-BR"), hasRate: true, rate: rate(fn.vendas, fn.checkouts) },
-  ];
+     ⚠️ Ele calculava a conversão em relação à etapa ANTERIOR. A fita mostra a
+     fração do MÁXIMO, que é outra conta: as duas coincidem num funil que só
+     cai e divergem quando uma etapa cresce. Reaproveitar o `rate` daqui na
+     figura nova daria "194%" numa pílula. */
 
   // Feed unificado: cada tipo de evento tem rótulo e cor próprios.
   const EVENTO_META: Record<string, { label: string; cor: string }> = {
@@ -1376,7 +1366,7 @@ export function useTraffikState(
 
     // Registro por chave: o grid do Bloco 2 renderiza cada KPI como bloco
     // independente, então precisa acessar a métrica pelo id e não pela ordem.
-    kpiCards, chart, chartPeriodLabel, products, sources, placements, placementSemDados, payments, funnel, feed,
+    kpiCards, chart, chartPeriodLabel, products, sources, placements, placementSemDados, payments, feed,
     metricCards: reg,
     // Séries do Bloco 4 (por horário / por dia), já filtradas no servidor.
     // Bloco 5: séries brutas para os gráficos novos (o front formata).

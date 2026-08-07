@@ -1788,6 +1788,71 @@ mesma classe do controle inerte: o produto tem a coisa e o usuário não.
 > lista datada no código — cicatriz esperando para virar anatomia. Não vale o
 > preço de uma palavra.
 
+# 🧾 SCRIPT DE TESTE FORA DO AGREGADO É TESTE QUE NÃO EXISTE
+
+> **O nono caso da família "passa no build com a coisa desligada" — e o
+> primeiro em que o inerte era a própria VIGILÂNCIA.** 07/08/2026.
+
+`teste-fita.mjs` existia, tinha `npm run test:fita` no `package.json`, e
+verificava a geometria da fita do funil. Ele **não estava no `npm test`**. Ao
+mudar o contrato da fita, ele passou a ter **9 asserções quebradas** — e a
+suíte continuou verde, porque ninguém o invocava.
+
+### A varredura que o dono mandou fazer
+
+| | |
+|---|---|
+| Arquivos `teste-*.mjs` | **47** |
+| Dentro do `npm test` antes | **7** |
+| **Fora** | **40** |
+
+Dos 40, **26 eram puros** (sem banco, sem rede) e podiam entrar no mesmo dia.
+Rodados um a um: **os 26 passavam.** Estavam órfãos e saudáveis — o `teste-fita`
+era o único podre, e não havia como saber qual sem executar todos.
+
+**O agregado foi de 8 para 34 scripts.** Os 13 que precisam do banco de dev
+viraram `npm run test:banco`, separado de propósito: um agregado que exige banco
+não roda em máquina limpa, e aí ninguém roda o agregado.
+
+> ### ⛔ A REGRA QUE FICA
+> **Todo arquivo de teste novo entra no agregado no MESMO commit em que nasce.
+> Se não entrou, não foi escrito.**
+>
+> É a mesma regra da rota de cron ("ao criar, agende no mesmo commit") aplicada
+> a teste. E é pior que a do cron: uma rota nunca agendada não faz nada; um teste
+> nunca executado **produz a crença de que a coisa está coberta**.
+
+⚠️ E ao mudar o contrato de um módulo, o `grep` que importa não é pelos
+consumidores de produção — é pelos **testes** dele, inclusive os que o agregado
+não roda.
+
+# 🎨 GRADIENTE DE OPACIDADE MENTE SOBRE QUANTIDADE. DE MATIZ, NÃO.
+
+> **A diferença entre o defeito da 4ª versão do funil e o acerto da 6ª**, e ela
+> generaliza para qualquer gráfico. 07/08/2026.
+
+| | |
+|---|---|
+| **Opacidade** | lê como INTENSIDADE. O olho integra "quão forte é isto aqui" e responde com uma grandeza — que compete com a que a forma já codifica |
+| **Matiz ao longo de x** | lê como PERCURSO. Ninguém lê "mais violeta" como "mais quantidade" |
+
+O caso: a fita do funil tinha `stopOpacity` de `0,55` na esquerda a `1,0` na
+direita. A massa ia de 132px a 0,8px — ou seja, **a intensidade subia enquanto a
+quantidade descia**. Medido, 1,24:1 de contraste contra o vizinho na ponta
+grossa: a borda sumia justamente onde havia área, e sobrava uma névoa que
+resolvia num traço nítido à direita. Isso lê como algo *emergindo*.
+
+O comentário que defendia a rampa dizia que era *"ESTILO, não dado: ela não
+codifica nada que a posição em x já não diga"*. **Codificava.**
+
+> ### ⛔ A PERGUNTA
+> **"Este canal varia junto com uma grandeza que o desenho já mostra?"** Se
+> varia, ou ele concorda com ela ou está mentindo — e concordar é redundância.
+> Matiz ao longo do comprimento escapa porque não é lido como magnitude.
+
+⚠️ Vale para opacidade, saturação e espessura de traço. **Não** vale para matiz
+percorrendo uma rampa contínua — que é o que faz a fita parecer fluxo.
+
 # 🩹 A CICATRIZ QUE VIROU ANATOMIA
 
 **Uma decisão tomada para contornar uma limitação técnica sobrevive à limitação

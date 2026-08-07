@@ -63,11 +63,18 @@ const VAZIA = {
   chartSerie: { labels: ["01-08", "02-08"], revenue: [0, 0], spend: [0, 0] },
   finance: { breakEven: null, unicasForaDoCalculo: 0 },
   metricCards: {},
-  funnel: [
-    { label: "Cliques", valor: 0, count: "0", acao: null },
-    { label: "Checkouts", valor: 0, count: "0", acao: null },
-    { label: "Vendas", valor: 0, count: "0", acao: null },
+  /* ⚠️ `funnelStages` tem as CINCO etapas mesmo com o bloco mostrando quatro:
+     a fixture reproduz o HOOK, não a tela. Quem filtra é o `ETAPAS_DO_FUNIL` do
+     catalogoRender, e é justamente ele que se quer exercitar. */
+  funnelStages: [
+    { chaveInfo: "cliques", label: "Cliques no anúncio", curto: "Cliques", value: 0, fonte: "Meta Ads" },
+    { chaveInfo: "visitas", label: "Visita na página", curto: "Vis. Página", value: 0, fonte: "Nosso script" },
+    { chaveInfo: "checkouts", label: "Initiate Checkout", curto: "ICs", value: 0, fonte: "Pixel" },
+    { chaveInfo: "iniciadas", label: "Vendas iniciadas", curto: "Vendas Inic.", value: 0, fonte: "Gateway" },
+    { chaveInfo: "aprovadas", label: "Vendas aprovadas", curto: "Vendas Apr.", value: 0, fonte: "Gateway" },
   ],
+  bots: [],
+  ambientesDeTeste: [],
   sources: [],
   products: [],
   payments: [],
@@ -98,11 +105,18 @@ const CHEIA = {
   ...VAZIA,
   chartSerie: { labels: ["01-08", "02-08"], revenue: [500, 800], spend: [200, 300] },
   finance: { breakEven: 700, unicasForaDoCalculo: 0 },
-  funnel: [
-    { label: "Cliques", valor: 1000, count: "1.000", acao: null },
-    { label: "Checkouts", valor: 200, count: "200", acao: null },
-    { label: "Vendas", valor: 50, count: "50", acao: null },
+  funnelStages: [
+    { chaveInfo: "cliques", label: "Cliques no anúncio", curto: "Cliques", value: 1000, fonte: "Meta Ads" },
+    { chaveInfo: "visitas", label: "Visita na página", curto: "Vis. Página", value: 700, fonte: "Nosso script" },
+    { chaveInfo: "checkouts", label: "Initiate Checkout", curto: "ICs", value: 200, fonte: "Pixel" },
+    { chaveInfo: "iniciadas", label: "Vendas iniciadas", curto: "Vendas Inic.", value: 80, fonte: "Gateway" },
+    { chaveInfo: "aprovadas", label: "Vendas aprovadas", curto: "Vendas Apr.", value: 50, fonte: "Gateway" },
   ],
+  /* Com dado, a declaração do que saiu do cálculo TEM de aparecer — é ela que
+     exercita o `EXCLUSOES_DO_FUNIL`. Com as duas listas vazias o contador não
+     renderiza, e o teste passaria sem nunca ter visto a linha. */
+  bots: [{ motivo: "user-agent conhecido", total: 119 }],
+  ambientesDeTeste: [{ ambiente: "localhost", total: 42 }],
   sources: [{ name: "facebook", total: 500, totalLabel: "R$ 500", pctLabel: "100%", barWidth: "100%" }],
   products: [{ name: "Curso", total: 500, sales: 5, totalLabel: "R$ 500", pctLabel: "100%", barWidth: "100%" }],
   payments: [{ name: "PIX", total: 500, count: 5, totalLabel: "R$ 500", pctLabel: "100%", barWidth: "100%" }],

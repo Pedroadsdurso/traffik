@@ -61,13 +61,36 @@ export interface EtapaEntradaFita {
   valor: number;
   /** Já formatado com separador de milhar — a tela não formata de novo. */
   valorFmt: string;
-  /** Nome curto para a versão compacta ("chegam ao checkout"). */
-  acao: string;
+  /** De onde o número vem ("Meta Ads", "Gateway — status APROVADA"). */
+  fonte?: string;
 }
 
 const pct1 = (t: number) => `${(t * 100).toFixed(1).replace(".", ",")}%`;
 
-export function FitaFunil({ etapas }: { etapas: EtapaEntradaFita[] }) {
+/**
+ * Uma linha do canto: o que foi TIRADO do cálculo.
+ *
+ * 🔴 Declarar o que saiu é a disciplina deste projeto, e a referência faz o
+ * mesmo ("119 acessos de robô removidos"). Sem isto, "removemos os robôs" é uma
+ * afirmação que o usuário teria de aceitar no escuro — ele não consegue julgar
+ * se o filtro exagera ou se falha.
+ *
+ * ⚠️ Só aparece quando há o que declarar. Uma linha fixa dizendo "0 removidos"
+ * seria ruído em todo período limpo, e o que importa é o caso em que houve
+ * remoção.
+ */
+export interface ExclusaoFita {
+  /** Já formatado e por extenso: "119 acessos de robô removidos". */
+  texto: string;
+}
+
+export function FitaFunil({
+  etapas,
+  exclusoes = [],
+}: {
+  etapas: EtapaEntradaFita[];
+  exclusoes?: ExclusaoFita[];
+}) {
   const [caixa, setCaixa] = React.useState<HTMLDivElement | null>(null);
   const [desenho, setDesenho] = React.useState<HTMLDivElement | null>(null);
   const [largura, setLargura] = React.useState(0);
@@ -158,6 +181,20 @@ export function FitaFunil({ etapas }: { etapas: EtapaEntradaFita[] }) {
           </div>
         ))}
       </div>
+
+      {/* ── O que saiu do cálculo, no canto superior direito ─────────────────
+          Discreto de propósito: é procedência, não resultado. Quem lê o bloco
+          quer o funil; quem desconfia do funil quer isto, e vai procurar. */}
+      {exclusoes.length > 0 && (
+        <div
+          className="text-caption text-text-muted"
+          style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, marginBottom: 2 }}
+        >
+          {exclusoes.map((x) => (
+            <span key={x.texto}>{x.texto}</span>
+          ))}
+        </div>
+      )}
 
       <div
         ref={setDesenho}

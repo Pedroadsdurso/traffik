@@ -12,6 +12,7 @@
  * | `DonutChart`   | a ponta arredondada come arco dos dois lados. Sem descontar a espessura junto com a folga, os segmentos se tocam e o `strokeLinecap` vira **enfeite invisível** |
  * | `Sparkline`    | buraco na série. O `null` precisa **quebrar o traçado** — ligado por cima, a interpolação inventa um dia que ninguém mediu |
  * | `MedidorRadial`| barras individuais. Um erro de arredondamento nos extremos pinta 24 de 24 num valor de 99,6%, ou 0 de 24 num de 2% |
+ * | `FitaFunil`    | a linha "N acessos de robô removidos". No banco de dev `bots` é `[]`, então ela **nunca renderizou** — guarda que não dispara não é guarda |
  *
  * Nos três, a asserção é sobre o **markup renderizado**. Testar a função pura
  * provaria a conta e não provaria o desenho — que é a única coisa que o usuário
@@ -28,6 +29,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 const { DonutChart } = await import("../src/components/tk/DonutChart.tsx");
 const { Sparkline } = await import("../src/components/tk/Sparkline.tsx");
 const { MedidorRadial } = await import("../src/components/tk/MedidorRadial.tsx");
+const { FitaFunil } = await import("../src/components/tk/FitaFunil.tsx");
 
 let ok = 0;
 const falhas = [];
@@ -213,6 +215,51 @@ checar("a cor vem de FORA — o medidor não deriva tom nenhum do valor", () => 
   );
   assert.ok(html.includes("var(--tk-text-muted)"), "ignorou a cor recebida");
   assert.ok(!html.includes("var(--tk-success)"), "inventou verde a partir do valor");
+});
+
+/* ── A DECLARAÇÃO DO QUE SAIU DO CÁLCULO ───────────────────────────────────────
+
+   🔴 Ela existe porque afirmar "removemos os robôs" sem mostrar o número é pedir
+   que o usuário aceite no escuro — ele não consegue julgar se o filtro exagera
+   ou se falha.
+
+   ⚠️ E ela está aqui porque NÃO DISPARA no ambiente de desenvolvimento: o
+   `/api/dashboard` do dev devolve `bots: []`, medido em 07/08/2026. Sem este
+   teste, a linha teria sido escrita, revisada, commitada e nunca vista — que é
+   exatamente a família "passa no build com a coisa desligada".
+
+   As duas metades importam: que ela APAREÇA com dado, e que ela SUMA sem. Uma
+   linha fixa dizendo "0 removidos" seria ruído em todo período limpo. */
+
+const ETAPAS_FALSAS = [
+  { label: "Cliques", valor: 1220, valorFmt: "1.220" },
+  { label: "ICs", valor: 35, valorFmt: "35" },
+  { label: "Vendas Apr.", valor: 25, valorFmt: "25" },
+];
+
+checar("a linha de exclusão RENDERIZA o número e o texto", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(FitaFunil, {
+      etapas: ETAPAS_FALSAS,
+      exclusoes: [{ texto: "119 acessos de robô removidos" }, { texto: "42 eventos de teste fora do funil" }],
+    }),
+  );
+  assert.ok(html.includes("119 acessos de robô removidos"), "a linha dos robôs não saiu no markup");
+  assert.ok(html.includes("42 eventos de teste fora do funil"), "a linha dos ambientes de teste não saiu");
+});
+
+checar("sem exclusão nenhuma, a linha SOME — não vira '0 removidos'", () => {
+  const html = renderToStaticMarkup(React.createElement(FitaFunil, { etapas: ETAPAS_FALSAS }));
+  assert.ok(!/removid|fora do funil/.test(html), `apareceu declaração sem ter o que declarar: ${html.slice(0, 200)}`);
+});
+
+checar("a fita renderiza as pílulas de etapa e a de perda", () => {
+  /* ⚠️ `largura` nasce 0 no servidor (o ResizeObserver só roda no cliente),
+     então a GEOMETRIA não sai daqui — o que se prova é que os rótulos existem
+     e que o componente não quebra sem medida. A forma quem responde é a tela. */
+  const html = renderToStaticMarkup(React.createElement(FitaFunil, { etapas: ETAPAS_FALSAS }));
+  assert.ok(html.includes("1.220"), "o número absoluto não saiu");
+  assert.ok(!/NaN|Infinity/.test(html), "coordenada inválida no markup");
 });
 
 console.log(

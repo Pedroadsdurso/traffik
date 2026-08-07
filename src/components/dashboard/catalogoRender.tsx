@@ -148,6 +148,57 @@ const IR_ANUNCIOS = { texto: "Conferir integrações", href: "/dashboard/integra
    `−1.185 · 97,1%`, na guia da transição. */
 
 
+/**
+ * 🔴 QUAL ETAPA DO FUNIL VAI PARA A TELA — e a lista é UMA linha, de propósito.
+ *
+ * `v.funnelStages` tem **cinco**: Cliques · Vis. Página · ICs · Vendas Inic. ·
+ * Vendas Apr. Este filtro mostra quatro.
+ *
+ * ### ⚠️ O motivo da exclusão NÃO é falta de dado — eu afirmei que era, e errei
+ *
+ * Em 07/08/2026 eu disse ao dono que "Visita na página" era impossível porque
+ * `PixelEventType` não tem `PAGE_VIEW`. **A conclusão não seguia da premissa.**
+ * O enum de fato não tem `PAGE_VIEW`, mas `funnel.visitas` nunca dependeu dele:
+ * ele é `w.clicks.length`, a tabela `Click` — as páginas que o NOSSO script
+ * carregou. O dado existe e está computado desde o Bloco 5.
+ *
+ * A decisão de mostrar quatro é do dono, e foi tomada sobre a minha informação
+ * errada. Ela fica valendo até ele reabrir com a informação certa.
+ *
+ * ⛔ Não "conserte" isto religando `visitas` por conta própria: cinco etapas
+ * numa largura de 4 colunas apertam as pílulas, e a escolha de qual etapa
+ * merece o espaço é de produto, não de código.
+ *
+ * ✅ Para voltar aos cinco, apague o `.filter(...)`. É só isso.
+ */
+const ETAPAS_DO_FUNIL = (v: TraffikView) =>
+  v.funnelStages.filter((e) => e.chaveInfo !== "visitas");
+
+/**
+ * O que foi TIRADO do cálculo, declarado na tela.
+ *
+ * ⚠️ Os dois acessores (`bots`, `ambientesDeTeste`) existiam no hook desde o
+ * Bloco 5 com **ZERO consumidores** — mais um caso de "passa no build com a
+ * coisa desligada". O dado sempre esteve certo: os robôs já saíam das métricas.
+ * O que faltava era o produto DIZER isso.
+ */
+const EXCLUSOES_DO_FUNIL = (v: TraffikView) => {
+  const fora: { texto: string }[] = [];
+  const robos = v.bots.reduce((s, b) => s + b.total, 0);
+  if (robos > 0) {
+    fora.push({
+      texto: `${robos.toLocaleString("pt-BR")} ${robos === 1 ? "acesso de robô removido" : "acessos de robô removidos"}`,
+    });
+  }
+  const teste = v.ambientesDeTeste.reduce((s, a) => s + a.total, 0);
+  if (teste > 0) {
+    fora.push({
+      texto: `${teste.toLocaleString("pt-BR")} ${teste === 1 ? "evento de teste fora do funil" : "eventos de teste fora do funil"}`,
+    });
+  }
+  return fora;
+};
+
 export const RENDERS: Record<IdBloco, RenderBloco> = {
   /* ── OS QUATRO ESTRUTURAIS ────────────────────────────────────────────────
      ⚠️ Eles vieram do JSX fixo do `DashboardScreen`. **Nenhum ganhou um render
@@ -247,7 +298,7 @@ export const RENDERS: Record<IdBloco, RenderBloco> = {
 
   /* ── OS OPCIONAIS ─────────────────────────────────────────────────────── */
   funil: {
-    temDado: (v) => v.funnel.some((e) => e.valor > 0),
+    temDado: (v) => ETAPAS_DO_FUNIL(v).some((e) => e.value > 0),
     vazio: {
       titulo: "Nenhum clique rastreado no período",
       causa: (
@@ -260,12 +311,13 @@ export const RENDERS: Record<IdBloco, RenderBloco> = {
     },
     render: (v) => (
       <FitaFunil
-        etapas={v.funnel.map((e) => ({
-          label: e.label,
-          valor: e.valor,
-          valorFmt: e.count,
-          acao: e.acao,
+        etapas={ETAPAS_DO_FUNIL(v).map((e) => ({
+          label: e.curto,
+          valor: e.value,
+          valorFmt: e.value.toLocaleString("pt-BR"),
+          fonte: e.fonte,
         }))}
+        exclusoes={EXCLUSOES_DO_FUNIL(v)}
       />
     ),
   },
