@@ -55,31 +55,87 @@ function apoioUtil(texto?: string): boolean {
   return !/^(vs\.?\s|no per[ií]odo$|sem compara)/i.test(texto.trim());
 }
 
-function Delta({ delta, invertido }: { delta: number; invertido?: boolean }) {
+/** Fundo tingido do tom, a 12% — o `06` §2. `muted` usa o texto de apoio. */
+const TINTA_TOM = {
+  success: "var(--tk-tint-success)",
+  danger: "var(--tk-tint-danger)",
+  muted: "var(--tk-tint-neutral)",
+} as const;
+
+/** Texto sobre o tingimento. ⛔ Nunca a cor pura: é o par de 3.55:1 que os
+ *  tokens `on-tint-*` existem para não deixar acontecer. */
+const COR_SOBRE_TINTA = {
+  success: "var(--tk-on-tint-success)",
+  danger: "var(--tk-on-tint-danger)",
+  muted: "var(--tk-on-tint-neutral)",
+} as const;
+
+/**
+ * PílulaDelta — a cápsula de variação, AO LADO do número.
+ *
+ * 🎨 Ela era texto solto embaixo do valor, e trocá-la de lugar é o item 1 da
+ * ordem de aplicação do `06` — "maior mudança de percepção, menor custo". O
+ * motivo é que texto solto se lê como legenda e cápsula se lê como OBJETO: a
+ * variação deixa de ser uma nota de rodapé do número e passa a ser um dado ao
+ * lado dele.
+ *
+ * ⛔ A SETA SEGUE O SINAL E A COR SEGUE O SIGNIFICADO, e são coisas separadas.
+ * Um CPA que cai tem seta para BAIXO e cor VERDE — as duas certas ao mesmo
+ * tempo. Amarrar a seta à cor faria "o CPA caiu" aparecer com seta para cima.
+ */
+function PilulaDelta({ delta, invertido }: { delta: number; invertido?: boolean }) {
   const tom = tomDoDelta(delta, invertido);
   const sobe = delta > 0;
   return (
-    <span className="text-caption" style={{ color: COR_TOM[tom], display: "inline-flex", alignItems: "center", gap: 4 }}>
-      {/* A seta segue o SINAL e a cor segue o SIGNIFICADO. Um CPA que cai tem
-          seta para baixo e cor verde — as duas coisas certas ao mesmo tempo.
-          Amarrar a seta à cor faria "CPA caiu" aparecer com seta para cima. */}
-      <span aria-hidden="true">{delta === 0 ? "—" : sobe ? "↑" : "↓"}</span>
+    <span
+      className="text-caption"
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 3,
+        flex: "none",
+        height: 22,
+        padding: "0 8px",
+        borderRadius: "var(--tk-radius-pill)",
+        background: TINTA_TOM[tom],
+        color: COR_SOBRE_TINTA[tom],
+        fontWeight: 600,
+        // Sem isto a pílula muda de largura a cada atualização do tempo real e
+        // o número ao lado dela balança junto.
+        fontVariantNumeric: "tabular-nums",
+        lineHeight: 1,
+      }}
+    >
+      <span aria-hidden="true" style={{ fontSize: 12 }}>
+        {delta === 0 ? "—" : sobe ? "↑" : "↓"}
+      </span>
       {Math.abs(delta).toFixed(1).replace(".", ",")}%
-      <span className="text-text-muted">vs. período anterior</span>
     </span>
   );
 }
 
 export function KpiHero({ dados, carregando = false }: { dados: DadosKpi; carregando?: boolean }) {
   const corNumero = dados.cor ?? "var(--tk-text)";
-  const corLinha = dados.delta != null ? COR_TOM[tomDoDelta(dados.delta, dados.invertido)] : "var(--tk-primary)";
+
+  /* 🔄 A LINHA SEGUIA O TOM DO DELTA, e parou em 07/08/2026. Um sparkline verde
+     porque a variação foi positiva pinta de "lucro" uma série que é de
+     FATURAMENTO — e o `06` §10 reserva verde/vermelho para a pílula de variação,
+     o valor de lucro e o alerta. A pílula ao lado já diz o tom; a linha dizendo
+     de novo é a mesma informação ocupando a cor que dá significado.
+
+     A exceção é o `dados.cor`, e ela é a regra e não um furo: quando ele vem
+     preenchido é porque o VALOR é negativo (Lucro em prejuízo), que é
+     literalmente o "valor de lucro" que o §10 permite colorir. Aí a linha
+     acompanha o número, e as duas coisas na tela dizem a mesma verdade. */
+  const corLinha = dados.cor ?? "var(--tk-primary)";
 
   return (
     <div
       className="bg-surface border border-border"
       style={{
         borderRadius: "var(--tk-radius-card)",
-        padding: "var(--tk-pad-card)",
+        padding: "var(--tk-pad-hero)",
+        boxShadow: "var(--tk-shadow-card)",
         display: "flex",
         flexDirection: "column",
         gap: 6,
@@ -91,12 +147,28 @@ export function KpiHero({ dados, carregando = false }: { dados: DadosKpi; carreg
         {dados.rotulo}
       </span>
 
-      <span
-        className="text-metric-xl"
-        style={{ color: corNumero, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
-      >
-        {carregando ? "—" : dados.valor}
-      </span>
+      {/* Número e pílula na MESMA linha. O `baseline` alinha a cápsula pela
+          linha do texto do valor, não pelo topo da caixa dele — com `center` ela
+          flutua alto, porque a caixa do número é bem mais alta que a glifa.
+
+          `flexWrap` porque a fileira tem 4 cards e a largura de cada um depende
+          do arranjo que o usuário salvou: no card mais estreito a pílula desce
+          para a linha de baixo em vez de espremer o número. */}
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", minWidth: 0 }}>
+        <span
+          className="text-metric-xl"
+          style={{ color: corNumero, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}
+        >
+          {carregando ? "—" : dados.valor}
+        </span>
+
+        {/* ⛔ Some durante o carregamento junto com o número. Uma cápsula verde
+            de "+18,6%" ao lado de um "—" afirma uma comparação que a tela acabou
+            de dizer que não tem. */}
+        {!carregando && dados.delta != null && (
+          <PilulaDelta delta={dados.delta} invertido={dados.invertido} />
+        )}
+      </div>
 
       {/* O sparkline vem ANTES do delta e depois do número: ele é o contexto do
           número, e o delta é a conclusão. Lido de cima para baixo dá
@@ -113,7 +185,13 @@ export function KpiHero({ dados, carregando = false }: { dados: DadosKpi; carreg
           comparação para um card que não compara coisa nenhuma. Ela some. O que
           fica é `trendLabel` que DIZ algo ("12 vendas aguardando pagamento"). */}
       {dados.delta != null ? (
-        <Delta delta={dados.delta} invertido={dados.invertido} />
+        /* A pílula subiu para junto do número; o que sobra aqui é a LEGENDA dela
+           — contra o que a variação está sendo medida. Ela é neutra de propósito:
+           a cor já foi dita uma vez, e dizê-la duas vezes na mesma coluna faz o
+           card inteiro parecer vermelho num dia ruim. */
+        <span className="text-caption text-text-muted" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          vs. período anterior
+        </span>
       ) : apoioUtil(dados.trendLabel) ? (
         <span className="text-caption text-text-muted" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {dados.trendLabel}

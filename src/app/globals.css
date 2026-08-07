@@ -1123,6 +1123,11 @@ a {
 
 :root,
 [data-theme="dark"] {
+  /* 🎨 SOMBRA DO CARD — a reversão de 07/08/2026 (ver o bloco de raio). No
+     escuro ela precisa de MAIS alfa que no claro para produzir a mesma leitura
+     de profundidade: 6% de preto sobre `--tk-background` não existe. */
+  --tk-shadow-card: 0 1px 2px rgb(0 0 0 / .28), 0 8px 24px -6px rgb(0 0 0 / .34);
+
   --tk-tint-primary:   color-mix(in oklch, var(--tk-primary)  14%, transparent);
   --tk-tint-accent:    color-mix(in oklch, var(--tk-accent)   14%, transparent);
   --tk-tint-success:   color-mix(in oklch, var(--tk-success)  14%, transparent);
@@ -1142,6 +1147,17 @@ a {
 }
 
 [data-theme="light"] {
+  /* 🎨 A SOMBRA DO CARD É MAIS FRACA NO CLARO E MAIS VISÍVEL AO MESMO TEMPO — as
+     duas coisas, e não é contradição. O `06` §12 pede sombra mais visível no
+     claro porque é ela que separa o cartão branco do fundo cinza; o §1 pede
+     alfa mais baixo. O que resolve é a ALTURA do preto: sobre branco, 6% de
+     preto se vê; sobre quase-preto, 6% de preto não existe, e por isso o escuro
+     precisa de 28/34% para produzir a MESMA leitura de profundidade.
+
+     ⛔ Não "corrija" o escuro para os valores do §1 achando que estão errados —
+     eles produzem sombra nenhuma sobre `--tk-background`. Medir é olhar. */
+  --tk-shadow-card: 0 1px 2px rgb(0 0 0 / .04), 0 8px 24px -4px rgb(0 0 0 / .08);
+
   /* Um degrau MAIS ESCURO que a cor pura — no claro o tingimento clareia. Aqui
      NENHUM par passava com a cor pura: o pior era o accent, a 1.97:1. */
   --tk-on-tint-primary:   oklch(0.5111 0.2152 262.88); /* #1A57DF  4.56:1  (puro: 3.91) */
@@ -1191,13 +1207,31 @@ a {
 
 :root {
   --tk-radius-controle: 6px;   /* botão, input, badge */
-  --tk-radius-card:     10px;  /* card, painel de conteúdo */
-  --tk-radius-painel:   14px;  /* modal, gaveta */
+  --tk-radius-card:     16px;  /* card, painel de conteúdo */
+  --tk-radius-painel:   20px;  /* modal, gaveta */
   --tk-radius-pill:     999px; /* pill, avatar, indicador */
 
-  /* Sombra existe APENAS em overlay (popover, dropdown, modal, toast). Em
-     superfície fixa, a elevação é a escada de cor background→surface→surface-hover. */
+  /* ⚠️ O CARD ERA 10px E O PAINEL 14px. Subiram para 16 e 20 em 07/08/2026, pelo
+     `06-LINGUAGEM-VISUAL.md` §1. O painel subiu junto para preservar a ESCADA:
+     gaveta com raio menor que o card que ela contém lê como erro de renderização,
+     e a escada é o que faz o raio significar hierarquia em vez de decoração. */
+
   --tk-shadow-overlay: 0 8px 24px -4px rgb(0 0 0 / .55);
+
+  /* ⚠️ AQUI DIZIA "sombra existe APENAS em overlay; em superfície fixa a elevação
+     é a escada de cor". **A regra mudou em 07/08/2026** — o `06` §1 pede sombra
+     no card, e ela é metade do que separa as referências do que tínhamos.
+     Registrado como reversão explícita, e não apagado, porque a regra antiga
+     ainda vale para tudo que NÃO é card: faixa, rail, linha de tabela e header
+     continuam sem sombra.
+
+     A escada de cor não foi substituída — as duas atuam juntas.
+
+     ⛔ `--tk-shadow-card` NÃO MORA AQUI, e a tentativa custou uma medição: este
+     bloco é `:root` puro e vem DEPOIS do `[data-theme="light"]` no arquivo. As
+     duas seletoras têm a mesma especificidade (0,1,0), então quem vence é a
+     ordem — e o valor do escuro sobrescrevia o do claro em silêncio. O token
+     está nos dois blocos de tema, lá em cima. */
 
   /* Só três momentos merecem animação: pulso do LiveIndicator, hover de linha de
      tabela, entrada de painel lateral. */
@@ -1267,9 +1301,18 @@ a {
    valores compactos: sem isso, quem carregasse a página antes do JS aplicar a
    preferência veria o layout saltar de tamanho. */
 
+/* ⚠️ `--tk-pad-hero` é o SEGUNDO degrau de padding, e existe porque o `06` §1
+   pede 20px no bloco normal e 24px no hero. Não é "um pouco mais": os quatro
+   heros são a única coisa da tela cujo trabalho é ser lida de longe, e o respiro
+   em volta do número é o que faz a distância funcionar.
+
+   ⛔ Ele acompanha a densidade como todo o resto. Um valor fixo aqui faria o
+   hero encolher em relação aos vizinhos no `comfortable` e inchar no `compact`. */
+
 :root,
 [data-density="compact"] {
-  --tk-pad-card:        16px;
+  --tk-pad-card:        20px;
+  --tk-pad-hero:        24px;
   --tk-gap-grid:        12px;
   --tk-altura-linha:    36px;  /* linha de tabela */
   --tk-altura-controle: 32px;  /* botão, input, select */
@@ -1278,7 +1321,8 @@ a {
 }
 
 [data-density="default"] {
-  --tk-pad-card:        20px;
+  --tk-pad-card:        24px;
+  --tk-pad-hero:        28px;
   --tk-gap-grid:        16px;
   --tk-altura-linha:    44px;
   --tk-altura-controle: 36px;
@@ -1287,7 +1331,8 @@ a {
 }
 
 [data-density="comfortable"] {
-  --tk-pad-card:        24px;
+  --tk-pad-card:        28px;
+  --tk-pad-hero:        32px;
   --tk-gap-grid:        20px;
   --tk-altura-linha:    52px;
   --tk-altura-controle: 40px;
@@ -1373,6 +1418,7 @@ a {
   --radius-pill:            var(--tk-radius-pill);
 
   --shadow-overlay:         var(--tk-shadow-overlay);
+  --shadow-card:            var(--tk-shadow-card);
   --shadow-live:            var(--tk-glow-live);
 
   --font-sans:              var(--tk-font-sans);
@@ -1506,8 +1552,13 @@ a {
    fundo quase preto some no tema escuro. */
 .tk-tema .card {
   border: 1px solid var(--tk-border);
+  border-radius: var(--tk-radius-card);
   padding: var(--tk-pad-card);
   gap: 10px;
+  /* O `.card` legado entra no acabamento junto com o resto: são 41 telas que
+     ainda o usam, e deixá-las sem sombra faria o Dashboard parecer de outro
+     produto assim que se navega para Taxas. */
+  box-shadow: var(--tk-shadow-card);
 }
 
 /* `.card-kicker` era o rótulo em ROXO no topo de cada bloco — o tell visual mais

@@ -91,7 +91,11 @@ export function Card({
         flexDirection: "column",
         gap: titulo || descricao || acao ? "var(--tk-gap-grid)" : 0,
         padding: semPadding ? 0 : "var(--tk-pad-card)",
-        boxShadow: aoVivo ? "var(--tk-glow-live)" : undefined,
+        /* O glow de "ao vivo" SUBSTITUI a sombra em vez de somar: os dois são
+           `box-shadow`, e empilhados o halo da marca fica lavado por um preto
+           que ninguém pediu. Card ao vivo já é o que se olha — ele não precisa
+           também estar elevado. */
+        boxShadow: aoVivo ? "var(--tk-glow-live)" : "var(--tk-shadow-card)",
         ...(preencher ? { height: "100%", minHeight: 0 } : null),
         ...style,
       }}

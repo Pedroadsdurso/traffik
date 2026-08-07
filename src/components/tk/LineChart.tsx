@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { caminhoSuave, fecharArea } from "@/lib/grafico/curva";
+
 /**
  * LineChart — duas séries com pontos e a LINHA DE BREAK-EVEN.
  *
@@ -47,6 +49,7 @@ export function LineChart({
   altura?: number;
 }) {
   const [alvo, setAlvo] = React.useState<number | null>(null);
+  const id = React.useId();
 
   const L = 760;
   const A = 260;
@@ -63,19 +66,35 @@ export function LineChart({
   const y = (v: number) => PAD.t + alt - (v / max) * alt;
 
   const caminho = (chave: "a" | "b") =>
-    pontos.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p[chave]).toFixed(1)}`).join(" ");
+    caminhoSuave(pontos.map((p, i) => [x(i), y(p[chave])] as const));
+
+  /* ⛔ SÓ A SÉRIE PRINCIPAL GANHA ÁREA. Duas áreas sobrepostas viram lama: a de
+     baixo fica visível através da de cima e o olho lê uma terceira cor que não
+     significa nada. O `06` §3 dá a outra metade da resposta — a série secundária
+     se distingue por TEXTURA (hachura), não por preenchimento. Isso é o item 5
+     da ordem de aplicação e ainda não foi feito; até lá o Gasto é linha nua. */
+  const area = fecharArea(caminho("a"), x(0), x(pontos.length - 1), PAD.t + alt);
 
   const linhas = [0, 0.25, 0.5, 0.75, 1].map((f) => max * f);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minHeight: 0 }}>
       <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-        {/* 🔴 DENTRO DA ÁREA DE DADO só existe neutro, lucro, prejuízo, atenção
-            e cor de canal — `primary` e `accent` são cores de INTERFACE. Receita
-            e gasto em dois azuis eram duas linhas quase da mesma cor num gráfico
-            de duas séries: exatamente o problema que este redesign desfaz.
-            Receita fica com a cor de valor positivo; gasto vai para o neutro. */}
-        <Legenda cor="var(--tk-success)" texto={rotuloA} />
+        {/* 🔄 A RECEITA ERA VERDE, E MUDOU EM 07/08/2026. Aqui dizia que `primary`
+            é "cor de interface" e que a receita devia usar a cor de valor
+            positivo. O `06` §10 inverte, e a razão é mais forte que a anterior:
+
+            **verde/vermelho significam LUCRO E PREJUÍZO nesta ferramenta.** Uma
+            linha de faturamento verde afirma que faturar é lucrar — e no dia em
+            que o ROAS está em 0,4 a linha continua verde, dizendo o contrário do
+            que o card de Lucro logo acima diz em vermelho.
+
+            A regra que fica: destaque (azul de marca) é a série PRINCIPAL;
+            lucro/prejuízo/atenção existem EXCLUSIVAMENTE na pílula de variação,
+            no valor de lucro e no alerta. O medo antigo — "dois azuis quase
+            iguais" — não se aplica: o gasto é neutro, não um segundo azul, e a
+            partir do item 5 ele também é hachurado. */}
+        <Legenda cor="var(--tk-primary)" texto={rotuloA} />
         <Legenda cor="var(--tk-text-muted)" texto={rotuloB} />
         {breakEven != null ? (
           /* ⚠️ "(estimado pelo período)" NÃO é modéstia: a taxa efetiva é medida
@@ -121,6 +140,16 @@ export function LineChart({
         style={{ display: "block", flex: 1, minHeight: 0 }}
         onMouseLeave={() => setAlvo(null)}
       >
+        <defs>
+          {/* 18% no topo → 0 na base (`06` §3). O gradiente é o que faz a área
+              "morrer para baixo" em vez de ser um bloco chapado — sem ele o
+              preenchimento compete com a grade e com a linha de break-even. */}
+          <linearGradient id={`areaA${id}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--tk-primary)" stopOpacity="0.18" />
+            <stop offset="100%" stopColor="var(--tk-primary)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+
         {linhas.map((v, i) => (
           <g key={i}>
             <line x1={PAD.l} x2={L - PAD.r} y1={y(v)} y2={y(v)} stroke="var(--tk-border)" strokeWidth="1" />
@@ -137,13 +166,16 @@ export function LineChart({
           />
         )}
 
+        {/* A área vai ANTES das duas linhas: desenhada depois, o preenchimento
+            lavaria o traço do Gasto que passa por dentro dela. */}
+        <path d={area} fill={`url(#areaA${id})`} />
         <path d={caminho("b")} fill="none" stroke="var(--tk-text-muted)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-        <path d={caminho("a")} fill="none" stroke="var(--tk-success)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        <path d={caminho("a")} fill="none" stroke="var(--tk-primary)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
 
         {pontos.map((p, i) => (
           <g key={i}>
             <circle cx={x(i)} cy={y(p.b)} r={alvo === i ? 4.5 : 3} fill="var(--tk-text-muted)" />
-            <circle cx={x(i)} cy={y(p.a)} r={alvo === i ? 4.5 : 3} fill="var(--tk-success)" />
+            <circle cx={x(i)} cy={y(p.a)} r={alvo === i ? 4.5 : 3} fill="var(--tk-primary)" />
             {/* Faixa invisível de captura: mirar num ponto de 3px é o que faz
                 gráfico custom parecer quebrado no mouse. */}
             <rect
@@ -170,7 +202,7 @@ export function LineChart({
       {alvo != null && pontos[alvo] && (
         <div className="text-caption" style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
           <span className="text-text-secondary">{pontos[alvo]!.rotulo}</span>
-          <span style={{ color: "var(--tk-success)" }}>{rotuloA} {formatar(pontos[alvo]!.a)}</span>
+          <span style={{ color: "var(--tk-primary)" }}>{rotuloA} {formatar(pontos[alvo]!.a)}</span>
           <span style={{ color: "var(--tk-text-muted)" }}>{rotuloB} {formatar(pontos[alvo]!.b)}</span>
         </div>
       )}

@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { caminhoSuave, fecharArea } from "@/lib/grafico/curva";
+
 /**
  * Sparkline — a linha miúda que vive DENTRO do KPI hero.
  *
@@ -117,16 +119,18 @@ export function Sparkline({
   });
   if (atual.length) trechos.push(atual);
 
-  const dDe = (t: readonly (readonly [number, number])[]) =>
-    t.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(2)},${y.toFixed(2)}`).join(" ");
+  /* ⛔ A CURVA É SUAVIZADA POR TRECHO, nunca sobre a série inteira. Suavizar o
+     todo faria a tangente de um trecho ser calculada com o vizinho do OUTRO lado
+     do buraco — a curva se inclinaria em direção a um ponto que a linha não
+     chega a alcançar, que é interpolar por cima da lacuna pela porta dos fundos. */
+  const linha = trechos.map((t) => caminhoSuave(t)).join(" ");
 
-  const linha = trechos.map(dDe).join(" ");
   /* A área também é por trecho, e fecha na base do PRÓPRIO trecho — uma área
      única de ponta a ponta preencheria por baixo do buraco e desfaria, no
      preenchimento, a interrupção que a linha acabou de mostrar. */
   const area = trechos
     .filter((t) => t.length > 1)
-    .map((t) => `${dDe(t)} L${t[t.length - 1]![0].toFixed(2)},${A} L${t[0]![0].toFixed(2)},${A} Z`)
+    .map((t) => fecharArea(caminhoSuave(t), t[0]![0], t[t.length - 1]![0], A))
     .join(" ");
 
   /* Um trecho de 1 ponto não vira `<path>` visível (nem linha, nem área). Ele
@@ -144,8 +148,11 @@ export function Sparkline({
       style={{ display: "block", overflow: "visible" }}
     >
       <defs>
+        {/* 18% no topo, 0 embaixo — `06` §3. Estava em 28%: no sparkline, que é
+            miúdo e mora dentro de um card já tingido, o preenchimento forte
+            competia com a própria linha. */}
         <linearGradient id={`g${id}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={cor} stopOpacity="0.28" />
+          <stop offset="0%" stopColor={cor} stopOpacity="0.18" />
           <stop offset="100%" stopColor={cor} stopOpacity="0" />
         </linearGradient>
       </defs>
