@@ -71,7 +71,12 @@ export function WorkspaceMenu({
         aria-haspopup="menu"
         aria-expanded={aberto}
         title={atual ? `Área de trabalho: ${atual.name}` : "Carregando áreas…"}
-        className="hover:bg-surface-hover flex w-full cursor-pointer items-center gap-2.5 rounded-controle border-0 bg-transparent px-2 py-2 text-left focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
+        className={
+          "hover:bg-surface-hover flex w-full cursor-pointer items-center rounded-controle border-0 bg-transparent py-2 text-left focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 " +
+          // Colapsado o ponto é o único conteúdo, e ele se centra no eixo do rail
+          // como todo o resto. Com `px-2` ele ficava 9px à esquerda dos vizinhos.
+          (colapsado ? "justify-center px-0" : "gap-2.5 px-2")
+        }
       >
         <Ponto cor={atual?.color ?? null} />
         {!colapsado && (

@@ -23,11 +23,29 @@ import { WorkspaceMenu } from "./WorkspaceMenu";
  * ⛔ E O ITEM ATIVO NÃO É SÓ COR. Fundo tingido + barra de 2px à esquerda +
  * `aria-current`. Cor sozinha reprova em WCAG 1.4.1 e, no tema claro, o
  * tingimento sozinho é fraco demais para ler à distância.
+ *
+ * ⛔ TODO FILHO DIRETO DO RAIL COLAPSADO SE CENTRA NO EIXO DO RAIL (x = 30).
+ * O estado recolhido é uma coluna de ícones, e uma coluna de ícones só se lê se
+ * eles estiverem alinhados. Em 07/08/2026 os sete itens de menu estavam 13px à
+ * esquerda do logo, do botão e do rodapé, porque o embrulho da `Tooltip` encolhia
+ * o link (ver `larguraCheia` lá). Ao acrescentar qualquer linha aqui, MEÇA: o
+ * centro dela tem de bater com o dos vizinhos.
+ *
+ * ⛔ E VERIFIQUE O RECOLHIDO NA TELA, não só o expandido. Os quatro defeitos que
+ * esta reescrita consertou passaram por `tsc`, `lint` e `build` — nenhum deles
+ * pergunta como o estado alternativo ficou.
  */
 
 const LARGURA_ABERTO = 236;
 const LARGURA_FECHADO = 60;
 const CHAVE_COLAPSO = "tk.rail.colapsado";
+
+/**
+ * Recuo lateral do conteúdo quando colapsado — o MESMO nas três faixas (marca,
+ * navegação, rodapé). É o que faz o eixo bater: com recuos diferentes, cada
+ * faixa se centra num lugar.
+ */
+const RECUO_FECHADO = 8;
 
 type ItemNav = {
   href: string;
@@ -148,20 +166,34 @@ export function Rail({
         width: colapsado ? LARGURA_FECHADO : LARGURA_ABERTO,
         flexShrink: 0,
         position: "sticky",
-        top: 0,
+        /**
+         * 🐛 `top: 0` CORTAVA O LOGO. A faixa de ambiente é `position: fixed` no
+         * topo da janela, e o `paddingTop` do shell empurra o rail para baixo dela
+         * — mas só enquanto a página não rola. Grudado em `top: 0`, o rail subia
+         * para trás de uma faixa que não sai do lugar: medido em 07/08/2026, com
+         * `scrollY = 600`, **12,8px dos 26px do símbolo ficavam cobertos**. Só
+         * aparecia depois de rolar, que é por que passou.
+         */
+        top: deslocamentoTopo,
         height: `calc(100vh - ${deslocamentoTopo}px)`,
         transition: "width var(--tk-dur-painel) var(--tk-ease-padrao)",
       }}
     >
-      {/* ── Marca + recolher ────────────────────────────────────────────────── */}
+      {/* ── Marca ───────────────────────────────────────────────────────────── */}
       <div
-        className="flex items-center gap-2"
-        style={{ height: 56, flex: "none", padding: colapsado ? "0 8px" : "0 12px" }}
+        className="flex items-center"
+        style={{
+          height: 56,
+          flex: "none",
+          padding: colapsado ? `0 ${RECUO_FECHADO}px` : "0 12px",
+        }}
       >
         <Link
           href="/dashboard"
           aria-label="TrackHub — ir para o Dashboard"
-          className="flex min-w-0 flex-1 items-center"
+          className={
+            "flex min-w-0 flex-1 items-center " + (colapsado ? "justify-center" : "")
+          }
         >
           {/* ⚠️ A CONVENÇÃO DE NOME INVERTEU entre as duas pastas de ativo. Em
               `/logos/` o sufixo era a cor das LETRAS; em `/marca/` é o TEMA
@@ -185,24 +217,27 @@ export function Rail({
             }}
           />
         </Link>
-
-        {!colapsado && <BotaoColapso colapsado={colapsado} aoAlternar={alternarColapso} />}
       </div>
 
-      {colapsado && (
-        <div className="flex justify-center" style={{ flex: "none", paddingBottom: 4 }}>
-          <BotaoColapso colapsado={colapsado} aoAlternar={alternarColapso} />
-        </div>
-      )}
-
       {/* ── Navegação ───────────────────────────────────────────────────────── */}
-      <div className="min-h-0 flex-1 overflow-y-auto" style={{ padding: colapsado ? "4px 8px" : "4px 10px" }}>
-        {nav.map((g) => (
+      <div
+        className="min-h-0 flex-1 overflow-y-auto"
+        style={{ padding: colapsado ? `4px ${RECUO_FECHADO}px` : "4px 10px" }}
+      >
+        {nav.map((g, iGrupo) => (
           <div key={g.grupo} className="mb-1">
             {/* Colapsado, o rótulo do grupo vira um traço: o texto não cabe, e
-                escondê-lo sem nada no lugar funde os três grupos num bloco só. */}
+                escondê-lo sem nada no lugar funde os três grupos num bloco só.
+
+                ⛔ MAS SÓ ENTRE GRUPOS. O traço antes do PRIMEIRO não separava
+                nada — separava a navegação da marca, que já têm 56px de faixa
+                própria entre elas. E ele encostava no ícone de Dashboard, que é
+                metade do defeito relatado; a outra metade era a folga de 8px,
+                menor que o respiro de 12px que o `06` pede em toda parte. */}
             {colapsado ? (
-              <div className="bg-border" aria-hidden style={{ height: 1, margin: "8px 6px" }} />
+              iGrupo > 0 && (
+                <div className="bg-border" aria-hidden style={{ height: 1, margin: "12px 6px" }} />
+              )
             ) : (
               <div className="text-micro text-text-muted" style={{ padding: "10px 10px 4px" }}>
                 {g.grupo}
@@ -221,13 +256,21 @@ export function Rail({
         ))}
       </div>
 
-      {/* ── Rodapé: área de trabalho + perfil ───────────────────────────────── */}
+      {/* ── Rodapé: área de trabalho + perfil + recolher ────────────────────── */}
       <div
         className="border-t border-border flex flex-col gap-1"
-        style={{ flex: "none", padding: colapsado ? "8px" : "8px 10px" }}
+        style={{ flex: "none", padding: colapsado ? `8px ${RECUO_FECHADO}px` : "8px 10px" }}
       >
         <WorkspaceMenu areas={areas} ativa={areaAtiva} aoTrocar={aoTrocarArea} colapsado={colapsado} />
         <UserMenu usuario={usuario} variante={colapsado ? "avatar" : "bloco"} />
+
+        {/* ⛔ UM LUGAR SÓ, NOS DOIS ESTADOS. O botão morava no cabeçalho quando
+            aberto e numa linha própria logo abaixo da marca quando fechado — onde
+            ficava solto, sem nada a que pertencer, e disputava com o logo a
+            leitura de "topo do rail". Aqui ele é o último item do rodapé: o
+            controle que muda a MOLDURA fica junto dos outros controles de
+            moldura, e não se move quando o estado troca. */}
+        <BotaoColapso colapsado={colapsado} aoAlternar={alternarColapso} />
       </div>
 
       {/*
@@ -246,23 +289,38 @@ export function Rail({
 
 function BotaoColapso({ colapsado, aoAlternar }: { colapsado: boolean; aoAlternar: () => void }) {
   const rotulo = colapsado ? "Expandir menu" : "Recolher menu";
-  return (
-    <Tooltip texto={rotulo} lado="baixo">
-      <button
-        type="button"
-        onClick={aoAlternar}
-        aria-label={rotulo}
-        aria-expanded={!colapsado}
-        className="text-text-muted hover:bg-surface-hover hover:text-text grid flex-none cursor-pointer place-items-center rounded-controle border-0 bg-transparent focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
-        style={{ width: 28, height: 28 }}
-      >
-        <Icone
-          nome="chevronDireita"
-          tamanho={16}
-          style={{ transform: colapsado ? undefined : "rotate(180deg)" }}
-        />
-      </button>
+
+  const botao = (
+    <button
+      type="button"
+      onClick={aoAlternar}
+      aria-label={rotulo}
+      aria-expanded={!colapsado}
+      className={
+        "text-text-muted hover:bg-surface-hover hover:text-text flex w-full cursor-pointer items-center rounded-controle border-0 bg-transparent focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 " +
+        (colapsado ? "justify-center" : "gap-2.5")
+      }
+      style={{ padding: colapsado ? "7px 0" : "7px 8px" }}
+    >
+      <Icone
+        nome="chevronDireita"
+        tamanho={16}
+        style={{ transform: colapsado ? undefined : "rotate(180deg)" }}
+      />
+      {/* Aberto há espaço para o rótulo, e ele evita o ícone-charada. Fechado o
+          nome vive na tooltip, como em todo item do rail. */}
+      {!colapsado && <span className="text-label">Recolher</span>}
+    </button>
+  );
+
+  // `larguraCheia`: sem isso o embrulho encolhe o botão e ele sai do eixo — é o
+  // mesmo defeito que tirou os sete itens de menu do lugar.
+  return colapsado ? (
+    <Tooltip texto={rotulo} lado="cima" larguraCheia>
+      {botao}
     </Tooltip>
+  ) : (
+    botao
   );
 }
 
@@ -347,7 +405,14 @@ function ItemDoRail({
           ícones sem nome, que é o defeito da barra flutuante que este redesign
           está matando. */}
       {colapsado ? (
-        <Tooltip texto={item.contagem ? `${item.label} (${item.contagem})` : item.label} lado="baixo">
+        <Tooltip
+          texto={item.contagem ? `${item.label} (${item.contagem})` : item.label}
+          lado="baixo"
+          /* 🐛 SEM ISTO O ITEM MEDE 17px. Ver `larguraCheia` na `Tooltip`: o
+             embrulho encolhia o link ao tamanho do ícone, jogando os sete itens
+             13px para fora do eixo e reduzindo a área de clique de 43px para 17. */
+          larguraCheia
+        >
           {conteudo}
         </Tooltip>
       ) : (

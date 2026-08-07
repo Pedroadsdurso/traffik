@@ -28,11 +28,27 @@ export function Tooltip({
   texto,
   children,
   lado = "cima",
+  larguraCheia = false,
 }: {
   texto: React.ReactNode;
   /** O gatilho. Precisa aceitar ref e eventos — um elemento, não um fragmento. */
   children: React.ReactElement;
   lado?: "cima" | "baixo";
+  /**
+   * 🐛 O EMBRULHO ENCOLHE O GATILHO, e isso já quebrou o rail recolhido.
+   *
+   * O `<span>` abaixo é `inline-flex`, então ele mede o CONTEÚDO — e o gatilho
+   * dentro dele perde a largura que tinha no pai. No rail colapsado os sete itens
+   * de menu eram links de 43px com `justify-center`; embrulhados, viraram links de
+   * **17px** (o tamanho do ícone) grudados na borda esquerda. Duas consequências,
+   * e a segunda é pior que a estética: os ícones ficaram 13px fora do eixo
+   * vertical de todo o resto, e a **área de clique caiu de 43px para 17px**.
+   *
+   * Com `larguraCheia`, o embrulho vira `block` e devolve a largura ao gatilho.
+   * É opt-in porque o caso comum — tooltip num botão de ícone solto — quer mesmo
+   * o embrulho do tamanho do conteúdo.
+   */
+  larguraCheia?: boolean;
 }) {
   const [aberto, setAberto] = React.useState(false);
   const [gatilho, setGatilho] = React.useState<HTMLElement | null>(null);
@@ -63,7 +79,7 @@ export function Tooltip({
         onPointerLeave={cancelar}
         onFocusCapture={() => setAberto(true)}
         onBlurCapture={cancelar}
-        style={{ display: "inline-flex" }}
+        style={{ display: larguraCheia ? "block" : "inline-flex" }}
       >
         {children}
       </span>
