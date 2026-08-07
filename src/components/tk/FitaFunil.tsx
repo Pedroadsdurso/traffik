@@ -195,16 +195,24 @@ export function FitaFunil({ etapas }: { etapas: EtapaEntradaFita[] }) {
                 maxWidth: "62%",
                 pointerEvents: "none",
                 color: "var(--tk-text-secondary)",
-                /* 🎨 FAIXA FINA GANHA CHIP SÓLIDO; FAIXA GROSSA, NÃO.
-                   Medido na tela: a perda do checkout tem 3px, e o rótulo
-                   centrado nela cai exatamente em cima do fio do fluxo que
-                   passa logo acima — dois textos e uma linha no mesmo pixel.
-                   O chip tira o rótulo do desenho sem tirá-lo do lugar, que é
-                   o que o `06` §9 pede ("rótulo FORA da faixa").
+                /* 🎨 O CHIP É FUNÇÃO, NÃO ESTILO — e é essa a razão de ele não
+                   ser aplicado às duas faixas.
 
-                   ⛔ Não aplique o chip nas duas: dentro da faixa de 126px ele
-                   viraria uma caixa flutuando num vazio, e duas convenções para
-                   a mesma coisa na mesma figura é pior que nenhuma. */
+                   Ele existe porque **o rótulo cairia sobre o fluxo**: medido
+                   na tela, a perda do checkout tem 3px e o texto centrado nela
+                   ocupa o mesmo pixel do fio que passa logo acima. O chip tira
+                   o rótulo do desenho sem tirá-lo do lugar, que é o que o `06`
+                   §9 pede ("rótulo FORA da faixa").
+
+                   ⛔ Na faixa de 126px não há colisão nenhuma — ali o chip
+                   viraria uma caixa flutuando num vazio, decoração pura. E duas
+                   convenções para a mesma coisa na mesma figura é pior que
+                   nenhuma: o leitor procuraria o significado da diferença.
+
+                   ⚠️ Logo, o limiar acompanha a ALTURA DO TEXTO (26px), não um
+                   número escolhido por gosto. Se a tipografia crescer, ele
+                   cresce junto — senão o chip some justo quando passa a ser
+                   necessário. */
                 ...(cabeDentro
                   ? null
                   : {

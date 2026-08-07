@@ -71,7 +71,30 @@ export function MedidorRadial({
   /* O clamp não é paranoia: `rate` vem do servidor e um arredondamento de
      100,4% pintaria uma barra a mais que não existe no arco. */
   const fracao = Math.min(1, Math.max(0, valor / 100));
-  const preenchidas = Math.round(fracao * BARRAS);
+
+  /**
+   * 🔴 OS EXTREMOS SÃO RESERVADOS, e `Math.round` sozinho os roubava. Achado
+   * pelo `test:desenho` em 07/08/2026 — os dois casos são de mentira, não de
+   * arredondamento:
+   *
+   * | Taxa | `round` dava | Lia-se como |
+   * |---|---|---|
+   * | **99,6%** | 24 de 24 | "fechou" — indistinguível de 100% |
+   * | **2%** | 0 de 24 | "nenhuma" — indistinguível de 0% |
+   *
+   * É a distinção central deste projeto na camada do desenho: *medido e quase
+   * nada* ≠ *nada*, e *quase tudo* ≠ *tudo*. A mesma razão do piso de 3px na
+   * fita do funil e do `null` que quebra o sparkline.
+   *
+   * Então: `0` só com fração zero, `BARRAS` só com fração cheia, e tudo entre
+   * os dois fica entre 1 e 23 — por mais perto que esteja da ponta.
+   */
+  const preenchidas =
+    fracao <= 0
+      ? 0
+      : fracao >= 1
+        ? BARRAS
+        : Math.min(BARRAS - 1, Math.max(1, Math.round(fracao * BARRAS)));
 
   const inicio = 90 + (360 - ARCO) / 2; // abre embaixo, simétrico
   const passo = ARCO / BARRAS;

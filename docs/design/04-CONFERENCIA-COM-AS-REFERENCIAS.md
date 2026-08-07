@@ -149,24 +149,41 @@ Referência: imagem 1. **Decisão: tudo da imagem 1 + tudo que já construímos.
 foi invertida: Top Campanhas e heatmap precisavam existir antes, senão o catálogo
 nasceria e teria de ser revisitado para acrescentá-los.
 
+**✅ FECHADO em 07/08/2026.** Era o último item do Dashboard.
+
 | Elemento | |
 |---|---|
-| Botão `Editar dashboard` | ❌ |
-| Três zonas com contorno e rótulo no modo de edição | ❌ |
-| Zona 1 — hero: exatamente 4, escolha de quais e ordem | ❌ |
-| Zona 2 — faixa: quantidade e ordem livres, máx. 8 | ❌ |
-| Zona 3 — painéis: reordenar, ocultar, larguras declaradas | ❌ |
-| Painel lateral `Métricas disponíveis` / `Painéis disponíveis` | ❌ |
-| `Salvar` · `Cancelar` · `Redefinir configurações` | ❌ |
-| **Migração dos layouts salvos** | ❌ 🔴 **usuários com layout customizado perderam a customização** na reescrita, e `useDashboardLayout.ts` está órfão desde então |
-| Catálogo completo de blocos (ver `03`) | ❌ — mas os blocos **existem**: hero, faixa, Receita×Gasto, Canais, Alertas, Top Campanhas, Quando compram, Vendas por país, rodapé |
-| `BreakdownPanel` único parametrizado por dimensão | ❌ |
+| Botão `Editar painel` | ✅ |
+| Três zonas com contorno e **a REGRA no rótulo** | ✅ — "Principais — sempre 4", "Resumo — até 8", "Painéis" |
+| Zona 1 — hero: exatamente 4, escolha de quais e ordem | ✅ |
+| Zona 2 — faixa: quantidade e ordem livres, máx. 8 | ✅ |
+| Zona 3 — painéis: reordenar, ocultar, larguras declaradas | ✅ — grade de **12 colunas** com encaixe, todas as larguras inteiras |
+| Painel lateral `Métricas disponíveis` / `Painéis disponíveis` | ✅ `CatalogoLateral` |
+| `Salvar` · `Cancelar` · `Redefinir configurações` | ✅ `BarraEdicao` |
+| **Migração dos layouts salvos** | ✅ — `test:migrar-layout`, 41 asserções. 🔴 Achou de quebra o defeito que **anulava o Salvar**: `loadDashboardLayouts` passava o envelope v2 por `sanitizeLayout`, que recusa o que não é array — salvar parecia funcionar e o arranjo sumia no recarregamento |
+| Arrasto entre posições | ✅ — substituiu o clique |
+| Alça de altura | ✅ — `minHeight`, nunca `grid-row: span`: piso, não teto |
+| Aviso `N colunas livres` por linha | ✅ 🔧 não está em referência nenhuma |
+| Catálogo completo de blocos | ✅ — **nenhum item sem destino.** Os nove são de `paineis` e todos têm zona; as métricas vão para Principais ou Resumo |
+| `BreakdownPanel` único parametrizado por dimensão | ✅ — absorveu Fontes, Produtos e Pagamentos |
 
-⚠️ **O catálogo do `blocks.ts` antigo tinha blocos que a reescrita não recriou:**
-funil, fontes, produtos, pagamentos, vendas por dia, aprovação e atividade
-recente. Decidir um a um se voltam **antes** de construir o painel de "Painéis
-disponíveis" — um catálogo que oferece bloco inexistente é o pior tipo de
-controle inerte, porque o usuário o escolhe e nada aparece.
+> ### 🔧 Os quatro estruturais ficam FORA do catálogo, com o motivo como DADO
+>
+> Hero, faixa, Receita×Gasto e rodapé de estado aparecem no modo de edição numa
+> zona **"Sempre visíveis"**, cada um com o motivo de não poder ser ocultado — e
+> o motivo vem do catálogo, não escrito na tela.
+>
+> A alternativa seria omiti-los, e aí o usuário procura por que "Alertas" não
+> está em lista nenhuma e conclui que a ferramenta perdeu o bloco dele.
+
+> ### ⚠️ O que o modo de edição NÃO faz, de propósito
+>
+> - **Não anima a entrada dos blocos.** Fora dele os blocos entram escalonados
+>   (`06` §11); ali eles entram e saem a cada arrasto, e reanimar cada mudança
+>   seria um piscar constante.
+> - **Não tem arrasto ENTRE zonas.** As regras de zona são diferentes (hero são
+>   exatamente 4; faixa aceita até 8), e um item arrastado para uma zona que não
+>   o aceita precisaria ser recusado no meio do gesto.
 
 ---
 

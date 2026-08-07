@@ -965,13 +965,10 @@ O raciocínio completo de cada item está em **`docs/FILA.md`**.
 >
 > ### 🔜 PENDENTE do Dashboard
 >
-> - **Modo de edição / `useDashboardLayout.ts` órfão.** A reescrita não consome o
->   hook: **usuários com layout customizado perderam a customização**, e o
->   catálogo de `blocks.ts` (funil, fontes, produtos, pagamentos, vendas por dia
->   e por hora, aprovação, atividade recente) sumiu da tela. O desenho já está
->   decidido — **três zonas** (hero fixo em 4 · faixa livre até 8 · painéis com
->   larguras declaradas), sem arrasto entre zonas, mais a migração dos layouts
->   salvos.
+> - ~~**Modo de edição / `useDashboardLayout.ts` órfão**~~ → ✅ **FEITO em
+>   07/08/2026.** Três zonas, catálogo lateral, grade de 12 com arrasto, alça de
+>   altura, migração dos layouts salvos. O hook deixou de ser órfão: o passo C
+>   absorveu o salvar dele. Ver a seção própria.
 > - **`metrics.ts` (aditivo apenas):** break-even → Top Campanhas → token
 >   expirando → heatmap hora × dia.
 > ### ⛔ SHELL: o que NÃO foi construído, e por quê (06/08/2026)
@@ -1289,7 +1286,6 @@ em arquivo local, de propósito. Quem responde é
 | **`Integrações › Visão geral` fora da sidebar** | a tela não existe (`integracoes/page.tsx` é `redirect`). Entra como PRIMEIRO filho no passo de Integrações |
 | **`/dashboard/integracoes/testes` fora da navegação** | decisão do `03`. Ela **morre** no passo de Integrações. ⛔ Não religue link para ela — ver a seção própria acima |
 | **Medidor de plano no rail** | não há backend de billing. Confirmado por `grep` no schema |
-| **Modo de edição do Dashboard** | `useDashboardLayout.ts` órfão; usuários com layout salvo perderam a customização. Desenho já decidido (três zonas) |
 | **Guarda estático de CSS sem camada** | proposto e **não construído**. Reprovaria o `test:contraste` quando o `globals.css` declarasse `color` em seletor de elemento fora de `@layer`. ~15 linhas, sem dependência. Medir a cor PINTADA automaticamente é caro (navegador + servidor + sessão `httpOnly`) e foi **descartado** |
 | **Item (d) — viewport estreito** | segue bloqueado por ambiente (`resize_window` mente) |
 
@@ -1616,45 +1612,27 @@ metadado que nenhum teste alcança.
 PERGUNTAR, toda vez que escrever "⛔ sempre faça X" num comentário: *dá para o
 compilador cobrar isto?*
 
-# 🧩 MODO DE EDIÇÃO DO DASHBOARD — ⏳ ESTADO INTERMEDIÁRIO DECLARADO
+# 🧩 MODO DE EDIÇÃO DO DASHBOARD — ✅ COMPLETO
 
-> ### ⛔ NÃO LEIA "modo de edição" COMO FEITO. Ele NÃO existe.
->
-> **O que existe hoje (06/08/2026):** o layout salvo é LIDO, MIGRADO e
-> RESPEITADO. **O que não existe:** qualquer forma de editá-lo pela tela.
->
-> | Quem | O que vê |
-> |---|---|
-> | tinha layout customizado | **o dele**, migrado para as três zonas |
-> | nunca customizou | o padrão |
->
-> **Ninguém fica pior que antes.** Antes da migração, quem customizou via o
-> padrão — a customização estava no banco e a tela nova a ignorava.
->
-> ### As três entregas, e onde estamos
+> **O ⛔ que ficava aqui saiu em 07/08/2026.** Ele dizia "NÃO LEIA como feito.
+> Ele NÃO existe" — e isso deixou de ser verdade. As três entregas fecharam:
 >
 > | | | |
 > |---|---|---|
 > | **A** | blocos e catálogo | ✅ `2750258` |
-> | **B** | persistência e migração | ✅ **aqui** |
-> | **C** | interface de edição | 🚧 **base pronta** (`2c59e8e`: estado, snapshot, guardas, envelope v2 — 52 asserções). **Falta toda a interface** |
+> | **B** | persistência e migração | ✅ |
+> | **C** | interface de edição | ✅ `bd32262` · `ac97fb7` · `6cbb846` |
 >
-> ### A ordem do que falta no C, e uma exigência dentro dela
+> Três zonas com a REGRA no rótulo, catálogo lateral, grade de 12 com encaixe,
+> arrasto, alça de altura, `N colunas livres` por linha, Salvar/Cancelar/Redefinir.
 >
-> 1. zonas com contorno + rótulo que diz a REGRA ("Principais — sempre 4")
-> 2. painéis laterais + adicionar/remover + a pergunta do hero cheio
-> 3. Salvar/Cancelar/Redefinir na tela + **o ciclo de verificação: entrar, mudar 3 coisas, cancelar, RECARREGAR**
-> 4. arrasto — por último, é o mais caro
-> 5. limpeza: deletar `/dashboard/blocos`, absorver o salvar do `useDashboardLayout` e deletá-lo, tirar este ⛔, preencher o `04`
+> ⚠️ **`useDashboardLayout.ts` deixou de ser órfão** — o C absorveu o salvar
+> dele. Se ainda existir referência a "hook órfão de propósito" em algum
+> comentário, é resíduo desta seção e pode sair.
 >
-> ⛔ **O BOTÃO DE REORDENAR ENTRA NO PASSO 2, NÃO NO 4.** Se o arrasto ficar por
-> último e o orçamento acabar antes dele, a zona precisa reordenar de ALGUM
-> jeito. Zona que promete reordenação e não reordena é controle inerte — e o
-> `moverMetrica`/`moverPainel` do hook já existe, então o botão é só a ponta.
->
-> ⚠️ `useDashboardLayout.ts` **continua órfão de propósito**: ele tem a lógica de
-> SALVAR, que o C vai reaproveitar. Quem ler o `useLayoutDashboard` novo e achar
-> que o antigo virou lixo vai deletar o que o C precisa.
+> 🔜 **O que segue aberto, e não é do modo de edição:** `metrics.ts` aditivo
+> (Top Campanhas já entrou; falta heatmap hora × dia por métrica nova) e a
+> varredura de comentários que afirmam efeito.
 
 # 🩹 A CICATRIZ QUE VIROU ANATOMIA
 
@@ -1695,6 +1673,70 @@ uma cicatriz esperando para virar anatomia.
 **Provavelmente há outras nesta base.** Candidatas: toda decisão tomada "porque
 o `react-grid-layout` fazia assim", "porque o `--experimental-strip-types` não
 lê `.tsx`" e "porque o plano Hobby só aceita cron diário".
+
+# 🎲 QUANDO A PROPRIEDADE É UMA INVARIANTE, GERE ENTRADA ALEATÓRIA
+
+> **Método, não nota de um bloco.** Registrado em 07/08/2026, depois de 200
+> funis aleatórios acharem um bug que nenhuma asserção escrita à mão teria pego.
+
+O funil promete uma invariante: **fluxo que continua + todas as perdas = a faixa
+inteira**. Eu escrevi as asserções que se escrevem — o funil real, a perda
+minúscula, a etapa que cresce, tudo zero. Todas passaram.
+
+O que quebrou foi `[967, 959]`: **uma perda só, e ela é a maior.** O piso a
+engrossava e o código compensava "descontando da maior" — que era ela mesma.
+Ninguém escreve esse caso, porque ninguém pensa nele.
+
+```js
+for (let t = 0; t < 200; t++) {
+  const vals = gerarFunilDecrescente();
+  assert.ok(Math.abs(fluxoFinal(f) + somaPerdas(f) - faixa) < 0.01);
+}
+```
+
+⚠️ **A semente é FIXA** (`semente = 7` no `teste-fluxo`). Aleatório de verdade dá
+teste que falha uma vez por semana e ninguém consegue reproduzir. Com semente
+fixa, o conjunto é sempre o mesmo e continua sendo grande demais para alguém ter
+escolhido a dedo.
+
+### É a mesma ideia do round-trip do break-even
+
+| Teste | A relação verificada |
+|---|---|
+| Break-even | *"faturar exatamente o break-even dá lucro ZERO"* |
+| Curva | *"a curva não sai do intervalo entre dois pontos consecutivos"* |
+| Funil | *"fluxo + perdas = a faixa"* |
+
+**Nenhum dos três conhece número nenhum.** Os três caem sozinhos quando alguém
+quebra a relação, sem que ninguém tenha previsto o valor novo. Teste que congela
+VALOR defende o bug; teste que congela RELAÇÃO defende o conserto.
+
+⛔ Aleatório **não substitui** o caso nomeado. O funil real do dono continua
+tendo asserção própria — ela é a que documenta o que se espera. O aleatório é o
+que encontra o que ninguém esperava.
+
+# 🧬 CORRIJA A SEQUÊNCIA QUE GERA O ERRO, NUNCA O RESULTADO DELA
+
+> **Compensar depois é o `?? 0` de novo:** conserta o número final e preserva a
+> origem. Toda vez que a correção for "somar/subtrair um delta para fechar a
+> conta", a pergunta certa é *que passo anterior produziu o valor errado?*
+
+O caso (07/08/2026, no funil): o piso de 3px engrossava a faixa de perda, o total
+estourava, e eu descontava o excedente "da maior perda". Funcionava — até o caso
+em que só existe uma perda, e a maior é ela mesma.
+
+A correção certa não toca no total: ela mexe na **sequência de espessuras** que
+gera as faixas. Garantindo que cada etapa fique pelo menos `piso` mais fina que a
+anterior, a soma volta a fechar **por construção** — não há o que compensar,
+porque as faixas são diferenças da mesma sequência.
+
+| | |
+|---|---|
+| ❌ compensar | `total -= excedente` · a invariante vira uma conta a mais, que pode faltar |
+| ✅ na origem | a invariante é consequência da estrutura, e não pode faltar |
+
+⚠️ O sinal de alerta é literal: **se o código tem uma linha cuja única função é
+fazer a soma fechar, a soma não estava fechando por si.**
 
 # 🔗 QUANDO DOIS CÁLCULOS PRECISAM CONCORDAR, TESTE A PROPRIEDADE
 

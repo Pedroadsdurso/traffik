@@ -85,6 +85,7 @@
     "test:heatmap": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-heatmap.mjs",
     "dev:diversificar": "node scripts/diversificar-dev.mjs",
     "test:pontos": "tsx scripts/teste-pontos-serie.mjs",
+    "test:desenho": "tsx scripts/teste-desenho.mjs",
     "test:fluxo": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-fluxo.mjs",
     "test:curva": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-curva.mjs",
     "test:fita": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-fita.mjs",
