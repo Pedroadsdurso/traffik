@@ -14,40 +14,35 @@
  * (`−1.185 · 97,1%`) na guia da transição. Quem responde "quanto se perdeu" é o
  * número, com precisão total; quem responde "para onde isto vai" é a forma.
  *
- * ## 🔴 O PISO É 10px, E ISTO REVERTE A "ESPESSURA FIEL"
+ * ## 🔴 ESPESSURA FIEL, COM PISO DE 3px — e os 10px foram REVERTIDOS
  *
- * A regra anterior proibia qualquer compressão de escala, e o argumento era bom:
- * *"a fita vira um fio, e 'quase ninguém passa' é a conclusão CERTA"*. Ele
- * dependia de uma premissa que **deixou de valer**: a de que a forma era a única
- * resposta disponível.
+ * Houve uma versão de 07/08/2026 com piso de 10px, e o argumento era que a
+ * pílula não cabe sobre uma fita de 4px. **O dono recusou, e estava certo:**
+ * 35/1220 é 2,9%, que num topo de 132px dá 3,8px. Um piso de 10px desenha isso
+ * como ~7,6% — quase o triplo. É a mesma mentira que fez a raiz quadrada ser
+ * rejeitada, com outro nome.
  *
- * Com a pílula de perda escrevendo `−1.185 · 97,1%` em cada transição, a
- * precisão está no texto. A fita passa a responder só a DIREÇÃO, e uma fita
- * invisível não responde nem isso.
+ * ⛔ **A legibilidade da etiqueta não se paga com a espessura da fita.** Se
+ * pagasse, o bloco deixaria de responder "quanto sobrou", que é a única
+ * pergunta que ele existe para responder. O conflito se resolve do outro lado:
+ * a pílula que não couber SAI de cima da fita e é ancorada fora, com um traço
+ * curto ligando — ver `FitaFunil`.
  *
- * ⚠️ **Isto não é a raiz quadrada que foi recusada.** A raiz comprime a escala e
- * deixa a forma dizendo `17%` onde há `2,9%` — número plausível e errado, sem
- * nada ao lado para corrigir. O piso não mente sobre proporção nenhuma: ele
- * garante altura mínima de desenho, e o valor exato está escrito a 20px dali.
- * A diferença é a existência do número, não a matemática.
- *
- * ⛔ Se um dia as pílulas saírem da figura, o piso volta a ser indefensável e
- * esta decisão tem de ser reaberta junto.
+ * O piso de 3px continua, e o papel dele é o de sempre: uma etapa NÃO VAZIA não
+ * pode sumir da tela. Com faixa de 132px ele só entra abaixo de ~2,3%.
  */
 
 /**
  * Espessura mínima, em px, de uma etapa **não vazia**.
  *
- * Era 3px enquanto a perda era desenhada — ali ele só evitava que uma etapa
- * sumisse. Agora ele responde pela legibilidade da fita inteira: na referência,
- * a etapa de 1,4% ainda é uma faixa que se vê, não um fio.
+ * ⚠️ ELE NÃO FABRICA DADO, e a distinção é a mesma que condenou o `|| 1` do
+ * `srcTotal`: aquele **inventava um denominador** e produzia um percentual
+ * sobre uma unidade que não existe. Este garante que uma etapa medida não suma
+ * da tela — e o valor exato está escrito embaixo dela, em número.
  *
- * ⚠️ Ele NÃO fabrica dado. A distinção é a mesma que condenou o `|| 1` do
- * `srcTotal`: aquele inventava um denominador e produzia um percentual sobre
- * uma unidade inexistente. Este garante que o que foi medido seja visível — e
- * o valor medido está escrito embaixo, em número.
+ * ⛔ 3px, não 10. Ver a nota de reversão no topo do arquivo antes de subir.
  */
-export const PISO_ESPESSURA = 10;
+export const PISO_ESPESSURA = 3;
 
 export interface EtapaFita {
   /** O valor cru da etapa. */

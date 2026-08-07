@@ -126,15 +126,41 @@ checar("perda cuja ORIGEM é zero não vira percentual", () => {
 checar("etapa não-vazia nunca fica abaixo do piso, por menor que seja", () => {
   const f = calcularFluxo([100000, 1], OPC);
   assert.equal(f.etapas[1].espessura, PISO_ESPESSURA);
-  assert.ok(PISO_ESPESSURA >= 10, "o piso caiu abaixo de 10px — a fita volta a virar fio");
+});
+
+checar("o piso é 3px — 10px desenharia 2,9% como ~7,6%", () => {
+  /* 🔴 A asserção que impede a reversão de voltar. Houve um piso de 10px em
+     07/08/2026, posto para a pílula caber sobre a fita; ele foi recusado porque
+     comprime a razão, que é a mesma objeção que matou a raiz quadrada.
+
+     ⛔ Se este número subir, a fita passa a MENTIR sobre a proporção. A pílula
+     que não couber sai de cima dela — a espessura não é moeda de troca. */
+  assert.equal(PISO_ESPESSURA, 3);
+});
+
+checar("o funil do seed: a última etapa fica FINA — o piso não a engorda", () => {
+  /* O caso que o dono pediu (item 7). Com o seed real (1220 → 35 → 35 → 25) e a
+     faixa de 132px, 25/1220 = 2,05% dá ~2,7px, e o piso de 3px mal encosta.
+     Com o piso de 10px isto daria 10px: quase quatro vezes. */
+  const f = calcularFluxo([1220, 35, 35, 25], { ...OPC, faixa: 132 });
+  const ultima = f.etapas[f.etapas.length - 1].espessura;
+  assert.ok(ultima <= 5, `a última etapa veio com ${ultima.toFixed(2)}px — o piso está engordando a fita`);
+  /* E a pílula dela NÃO cabe dentro — é o gatilho de "sai para fora com traço".
+     A asserção existe para o caso continuar sendo exercitado: se um dia a fita
+     engordar, este ramo deixa de rodar em silêncio e o traço vira código morto. */
+  assert.ok(ultima < 22, "a pílula caberia dentro — o caso de sair para fora deixou de ser exercitado");
 });
 
 checar("etapa VAZIA tem espessura zero — o piso não inventa presença", () => {
   /* A distinção central do projeto, na camada do desenho: 1 é pouco, 0 é nada.
      Um piso que pintasse o zero afirmaria uma etapa que não aconteceu. */
-  const f = calcularFluxo([100, 0, 5], OPC);
-  assert.equal(f.etapas[1].espessura, 0);
-  assert.equal(f.etapas[2].espessura, PISO_ESPESSURA);
+  /* ⚠️ `1` e não `5`: com o piso em 3px e a faixa em 130, 5/100 já dá 6,5px e o
+     piso não entraria — a asserção passaria sem exercitar o que alega medir.
+     `1/100` dá 1,3px, abaixo do piso, que é o caso que se quer ver ao lado do
+     zero. */
+  const f = calcularFluxo([100, 0, 1], OPC);
+  assert.equal(f.etapas[1].espessura, 0, "o ZERO ganhou espessura — o piso inventou presença");
+  assert.equal(f.etapas[2].espessura, PISO_ESPESSURA, "o 1 sumiria sem o piso");
 });
 
 checar("a espessura preserva a ORDEM dos valores", () => {

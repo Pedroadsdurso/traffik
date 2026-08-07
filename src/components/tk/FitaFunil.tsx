@@ -48,12 +48,16 @@ import { calcularFluxo, caminhoDaFita } from "@/lib/funil/fita";
  */
 
 const MARGEM_X = 12;
-/** Espaço acima da fita, para os nomes das etapas. */
-const TOPO = 26;
+/** Espaço acima da fita: os nomes das etapas E a pílula que não coube. */
+const TOPO = 26 + 22 + 10;
 /** Espaço abaixo da fita, para a pílula de perda e o número absoluto. */
 const RODAPE = 58;
 /** Piso da altura da FAIXA (a fita em si), sem o topo e o rodapé. */
 const FAIXA_MIN = 150;
+/** Altura aproximada da cápsula: 2 × padding + a linha do `text-caption`. */
+const ALTURA_PILULA = 22;
+/** Quanto a pílula que saiu fica acima da fita — é o tamanho do traço. */
+const FOLGA_PILULA = 10;
 
 export interface EtapaEntradaFita {
   label: string;
@@ -281,27 +285,66 @@ export function FitaFunil({
             </div>
           ))}
 
-        {/* ── Pílula da TAXA, SOBRE a fita ─────────────────────────────────────
+        {/* ── Pílula da TAXA ───────────────────────────────────────────────────
             O elemento mais visível da figura, e é assim de propósito: a
-            pergunta do bloco é "que fração sobrevive", e a resposta fica em
-            cima da forma que a representa, não numa legenda ao lado. */}
+            pergunta do bloco é "que fração sobrevive", e a resposta fica na
+            forma que a representa, não numa legenda ao lado.
+
+            🔴 QUANDO NÃO CABE, ELA SAI — A FITA NÃO ENGORDA.
+
+            Houve uma versão com piso de 10px justamente para a pílula caber
+            sobre a fita. Isso desenha 2,9% como ~7,6%: a legibilidade da
+            etiqueta paga com a espessura, e o bloco deixa de responder "quanto
+            sobrou", que é a única pergunta que ele existe para responder.
+
+            ⛔ Se um dia a pílula voltar a ficar apertada, a saída é mexer NELA
+            (fonte, padding, sair para o outro lado) — nunca no piso da fita. */}
         {largura > 0 &&
-          fluxo.etapas.map((e, i) =>
-            e.fracao == null ? null : (
-              <div
-                key={`taxa-${etapas[i]!.label}`}
-                className="text-caption"
-                style={{
-                  ...pilula("var(--tk-pilula)", "var(--tk-on-pilula)"),
-                  left: e.x,
-                  top: centroY,
-                  fontWeight: 700,
-                }}
-              >
-                {pct1(e.fracao)}
-              </div>
-            ),
-          )}
+          fluxo.etapas.map((e, i) => {
+            if (e.fracao == null) return null;
+            const cabe = e.espessura >= ALTURA_PILULA + 4;
+            /* Fora, ela sobe: abaixo ficaria em cima da pílula de perda, que
+               mora logo ali. `topoDaFita` é a borda de cima da etapa. */
+            const topoDaFita = centroY - e.espessura / 2;
+            const y = cabe ? centroY : topoDaFita - FOLGA_PILULA - ALTURA_PILULA / 2;
+            return (
+              <React.Fragment key={`taxa-${etapas[i]!.label}`}>
+                {/* O traço só existe quando a pílula saiu: ele é o que a mantém
+                    LIGADA à etapa. Sem ele, uma etiqueta solta no ar acima de
+                    uma fita fina não diz a qual etapa pertence. */}
+                {!cabe && (
+                  <span
+                    aria-hidden
+                    style={{
+                      position: "absolute",
+                      left: e.x,
+                      top: topoDaFita - FOLGA_PILULA,
+                      width: 1,
+                      height: FOLGA_PILULA,
+                      /* ⚠️ Cor da FITA, não da cápsula. `--tk-pilula` é #090D14
+                         no escuro — mais escuro que o card (1,15:1): o traço
+                         existia no DOM e era invisível na tela. E a cor da fita
+                         é a certa também por significado: o traço liga a
+                         etiqueta à ETAPA, não a si mesma. */
+                      background: "var(--tk-fluxo)",
+                      pointerEvents: "none",
+                    }}
+                  />
+                )}
+                <div
+                  className="text-caption"
+                  style={{
+                    ...pilula("var(--tk-pilula)", "var(--tk-on-pilula)"),
+                    left: e.x,
+                    top: y,
+                    fontWeight: 700,
+                  }}
+                >
+                  {pct1(e.fracao)}
+                </div>
+              </React.Fragment>
+            );
+          })}
 
         {/* ── Pílula da PERDA, ABAIXO da fita, na GUIA ─────────────────────────
             🔴 É AQUI que a perda existe: em número, não em área. Ancorada na
