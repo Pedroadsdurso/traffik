@@ -480,6 +480,25 @@ usada em código novo** — ela não porta para o body. Hoje **nenhum `.tsx` a u
 Migrados nesta rodada (eram os 3 últimos com o modelo antigo): "Parâmetros de URL"
 (UTMs), "Adicionar Credencial" (Webhooks) e "Alterar orçamento" (Gerenciador).
 
+## 🔜 DUAS PERGUNTAS ABERTAS DO FUNIL — não abrir antes do Gerenciador
+
+Levantadas pelo dono em 07/08/2026, a partir dos 97,1% de perda no primeiro
+trecho. **Anotadas, não decididas.**
+
+**1. A partir de que perda o rastreamento deixa de ser observação e vira
+ALERTA?** Perda de 97% entre `Cliques` e `Sessões` não é característica de
+campanha — é instalação quebrada. E `Alertas` é bloco estrutural justamente
+para o que exige ação.
+
+**2. As taxas rio abaixo devem declarar a BASE sobre a qual foram medidas?**
+Com 1.220 → 35, tudo que vem depois é medido sobre **2,9% do tráfego**. "IC →
+Venda a 100%" é 100% de 35 pessoas, não do funil. No dev é seed; em produção,
+num cliente com snippet mal instalado, é um funil inteiro contando história
+sobre uma amostra **que ninguém sabe que é amostra**.
+
+⚠️ A alternativa barata é considerar que a etapa 1→2 estar visível logo acima já
+declara a base. A cara é cada taxa carregar o denominador. A decisão é do dono.
+
 ## 🔜 PENDÊNCIA: o `test:contraste` confere uma LISTA MANTIDA À MÃO
 
 Registrada em 07/08/2026, **não executada**, e ela junta com a pendência antiga
@@ -1855,6 +1874,86 @@ não roda em máquina limpa, e aí ninguém roda o agregado.
 ⚠️ E ao mudar o contrato de um módulo, o `grep` que importa não é pelos
 consumidores de produção — é pelos **testes** dele, inclusive os que o agregado
 não roda.
+
+# 🔬 TESTE DIFERENCIAL: compare DOIS ESTADOS do mesmo fixture, não conteúdo literal
+
+> **Padrão de teste, não conserto de um caso.** Decisão do dono, 07/08/2026,
+> depois de duas asserções literais minhas falharem pelo motivo errado no mesmo
+> arquivo.
+
+A pergunta era *"o estado NÃO MEDIDO não pode afirmar 100% de conversão"*. As
+duas primeiras tentativas foram literais, e as duas mediam outra coisa:
+
+| tentativa | por que não servia |
+|---|---|
+| `!html.includes("100%")` | pegava o `100,0%` da **etapa de topo**, que é a fração do máximo e está correta |
+| `count("100,0%") === 1` | são **3** ocorrências legítimas do mesmo valor: a pílula, o `aria-label` e a versão compacta |
+
+A que vale renderiza o **mesmo fixture nos dois estados** e compara:
+
+```js
+const medido = FIXTURE.map((e) => ({ ...e, trechoNaoMedido: undefined }));
+assert.equal(cem(htmlNaoMedido), cem(htmlMedido));
+```
+
+> ### ⛔ A REGRA
+> **Ela não sabe quais números existem — sabe o que a mudança de estado tem
+> PERMISSÃO de acrescentar.** Por isso sobrevive a valores que ninguém previu:
+> se alguém puser uma pílula de conversão no trecho, a contagem sobe de um lado
+> só e o teste cai, sem que nenhum número tenha sido escrito na asserção.
+
+É a mesma família de "congelar RELAÇÃO em vez de VALOR" (o break-even, a curva,
+a conservação do funil), aplicada a **markup**: o par de estados faz o papel que
+a invariante fazia na conta.
+
+⚠️ **Onde procurar aplicação:** todo lugar onde um estado do produto ADICIONA
+algo à tela — vazio × cheio, medido × não medido, com permissão × sem, uma área
+× todas. A pergunta é sempre *"o que este estado tem direito de acrescentar?"*,
+e a resposta é um diff, não uma string.
+
+# 🧱 ANOTE O TIPO NO PONTO EM QUE O OBJETO DE PROPS NASCE
+
+> **A checagem de propriedade excedente do TypeScript não alcança objeto vindo
+> de função — nem de `.map()` escrito direto na prop.** Medido em 07/08/2026.
+
+Eu montei um `perdaLabel` no `catalogoRender` para um componente que não tinha
+esse campo. `tsc`, `lint` e `build` passaram; a etiqueta não apareceu na tela.
+
+A conclusão certa **não é "prestar mais atenção"** — foi o dono que apontou. O
+registro no CLAUDE.md não tinha como pegar, porque nenhuma quantidade de
+vigilância cobre uma checagem que o compilador desligou.
+
+### O buraco é maior do que o caso
+
+Medido com um `zzzCampoInventado`:
+
+| onde | checagem |
+|---|---|
+| objeto literal atribuído direto | ✅ pega |
+| retorno de função nomeada | ❌ **passa** |
+| `.map()` escrito DIRETO na prop JSX | ❌ **passa** — a inferência do genérico desliga |
+
+O terceiro é o que surpreende: parece o caso literal, e não é.
+
+### O conserto, e ele é o mesmo do `RENDERS`
+
+Uma anotação por ponto de construção:
+
+```ts
+etapas.map((e): EtapaEntradaFita => ({ … }))
+const f = (v: TraffikView): ExclusaoFita[] => { … }
+```
+
+**Provado pelo lado negativo:** com os campos inventados de volta, `tsc` sai com
+dois erros — e um deles ainda diz *"Did you mean to write 'perdaLabel'?"*, que é
+exatamente o bug que passou.
+
+> ### ⛔ A REGRA
+> **`.map()` que monta props leva anotação no retorno do callback.** Sem ela, o
+> campo com nome errado morre na tela em vez de morrer no build.
+
+⚠️ É a mesma jogada de `Record<IdBloco, RenderBloco>`: quando uma regra depende
+de alguém lembrar, procure a forma de o COMPILADOR cobrar.
 
 # 🪞 ETAPA DERIVADA DA SEGUINTE DESENHA 100% DE CONVERSÃO — e isso é uma MENTIRA LISONJEIRA
 

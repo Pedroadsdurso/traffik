@@ -8,11 +8,11 @@ import { BreakdownPanel } from "@/components/tk/BreakdownPanel";
 import { AlternadorPais, CountryPanel } from "@/components/tk/CountryPanel";
 import { DonutChart } from "@/components/tk/DonutChart";
 import { FeedVendas } from "@/components/tk/FeedVendas";
-import { FitaFunil } from "@/components/tk/FitaFunil";
-import { Heatmap } from "@/components/tk/Heatmap";
+import { FitaFunil, type EtapaEntradaFita, type ExclusaoFita } from "@/components/tk/FitaFunil";
+import { Heatmap, type CelulaHeat } from "@/components/tk/Heatmap";
 import { LineChart } from "@/components/tk/LineChart";
 import { Segmented } from "@/components/tk/Segmented";
-import { SerieTemporal } from "@/components/tk/SerieTemporal";
+import { SerieTemporal, type PontoSerieTemporal } from "@/components/tk/SerieTemporal";
 import { StatusFooter } from "@/components/tk/StatusFooter";
 import { TabelaCampanhas } from "@/components/tk/TabelaCampanhas";
 
@@ -118,6 +118,30 @@ export function vazioDoBloco(r: RenderBloco, v: TraffikView, c: CtxBlocos): Bloc
   return r.temDado(v, c) ? null : r.vazio;
 }
 
+/* ── ⛔ TODO OBJETO DE PROPS LEVA ANOTAÇÃO DE TIPO NO PONTO EM QUE NASCE ───────
+   Não é estilo. É o que faz o compilador recusar um campo que ninguém lê.
+
+   🔴 O caso (07/08/2026): `perdaLabel` foi montado aqui e o componente nem
+   tinha esse campo. `tsc`, `lint` e `build` passaram os três, e a etiqueta
+   simplesmente não apareceu na tela. A "checagem de propriedade excedente" do
+   TypeScript só vale para OBJETO LITERAL atribuído diretamente — o nosso vinha
+   do retorno de uma função, e ali ela não alcança.
+
+   ⚠️ E o buraco é maior do que parecia. MEDIDO: um `zzzCampoInventado` num
+   `.map()` escrito DIRETO na prop JSX **também passa** — a inferência do
+   genérico do `map` desliga a checagem do mesmo jeito. O arquivo inteiro estava
+   exposto, não só o funil.
+
+   A correção é a mesma que já fechou esta família no `RENDERS`
+   (`Record<IdBloco, …>`): tirar a regra da vigilância e pôr no tipo. Aqui é uma
+   anotação por ponto de construção:
+
+       etapas.map((e): EtapaEntradaFita => ({ … }))
+       const f = (v: TraffikView): ExclusaoFita[] => { … }
+
+   ⛔ Ao acrescentar um `.map()` que monta props, ANOTE o retorno do callback.
+   Sem isso, o campo com nome errado morre na tela em vez de morrer no build. */
+
 /* ── Causas que se repetem ──────────────────────────────────────────────────
    ⚠️ Constante, e não a frase escrita cinco vezes: quando a explicação de "de
    onde vem uma venda" mudar, ela muda num lugar. Frase de produto repetida é a
@@ -200,11 +224,11 @@ const PERDA_DE_RASTREAMENTO_AJUDA =
   "abandono: é o rastreamento que não os viu — bloqueador de anúncio, redirect " +
   "que descarta a UTM, ou o snippet ausente na página de destino.";
 
-const ETAPAS_PARA_FITA = (v: TraffikView) => {
+const ETAPAS_PARA_FITA = (v: TraffikView): EtapaEntradaFita[] => {
   const etapas = ETAPAS_DO_FUNIL(v);
   const ics = etapas.find((e) => e.chaveInfo === "checkouts");
   const semPixel = ics != null && ics.value > 0 && (ics.doNavegador ?? 0) === 0;
-  return etapas.map((e) => ({
+  return etapas.map((e): EtapaEntradaFita => ({
     label: e.curto,
     valor: e.value,
     valorFmt: e.value.toLocaleString("pt-BR"),
@@ -231,8 +255,8 @@ const ETAPAS_PARA_FITA = (v: TraffikView) => {
  * coisa desligada". O dado sempre esteve certo: os robôs já saíam das métricas.
  * O que faltava era o produto DIZER isso.
  */
-const EXCLUSOES_DO_FUNIL = (v: TraffikView) => {
-  const fora: { texto: string }[] = [];
+const EXCLUSOES_DO_FUNIL = (v: TraffikView): ExclusaoFita[] => {
+  const fora: ExclusaoFita[] = [];
   const robos = v.bots.reduce((s, b) => s + b.total, 0);
   if (robos > 0) {
     fora.push({
@@ -480,7 +504,7 @@ export const RENDERS: Record<IdBloco, RenderBloco> = {
     vazio: { titulo: "Nenhuma venda no período", causa: CAUSA_VENDA, acao: IR_WEBHOOKS },
     render: (v) => (
       <SerieTemporal
-        pontos={v.byDay.map((d) => ({ rotulo: d.date.slice(5), valor: d.revenue, apoio: d.sales }))}
+        pontos={v.byDay.map((d): PontoSerieTemporal => ({ rotulo: d.date.slice(5), valor: d.revenue, apoio: d.sales }))}
         rotuloValor="Receita"
         rotuloApoio="vendas"
       />
@@ -492,7 +516,7 @@ export const RENDERS: Record<IdBloco, RenderBloco> = {
     vazio: { titulo: "Nenhuma venda no período", causa: CAUSA_VENDA, acao: IR_WEBHOOKS },
     render: (v) => (
       <SerieTemporal
-        pontos={v.byHour.map((h) => ({ rotulo: `${h.hour}h`, valor: h.revenue, apoio: h.sales }))}
+        pontos={v.byHour.map((h): PontoSerieTemporal => ({ rotulo: `${h.hour}h`, valor: h.revenue, apoio: h.sales }))}
         rotuloValor="Receita"
         rotuloApoio="vendas"
       />
@@ -512,7 +536,7 @@ export const RENDERS: Record<IdBloco, RenderBloco> = {
        lucro por hora sem essa ressalva se lê como medição direta. */
     render: (v) => (
       <SerieTemporal
-        pontos={v.byHour.map((h) => ({ rotulo: `${h.hour}h`, valor: h.profit }))}
+        pontos={v.byHour.map((h): PontoSerieTemporal => ({ rotulo: `${h.hour}h`, valor: h.profit }))}
         rotuloValor="Lucro (custo rateado pela receita da hora)"
         permitirNegativo
       />
@@ -595,7 +619,7 @@ export const RENDERS: Record<IdBloco, RenderBloco> = {
       <>
         <Heatmap
           celulas={v.heatmap.celulas.map((linha) =>
-            linha.map((cel) => ({ valor: cel[c.metricaHeat], observacoes: cel.observacoes })),
+            linha.map((cel): CelulaHeat => ({ valor: cel[c.metricaHeat], observacoes: cel.observacoes })),
           )}
           formatar={c.metricaHeat === "sales" ? (n) => String(Math.round(n * 10) / 10) : brl0}
           rotuloMetrica={ROTULO_HEAT[c.metricaHeat]}
