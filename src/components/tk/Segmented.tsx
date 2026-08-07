@@ -13,6 +13,12 @@ import * as React from "react";
  *
  * Usa `radiogroup` em vez de botões soltos: com radio, a seta do teclado navega
  * entre as opções e o leitor de tela anuncia "2 de 3".
+ *
+ * ⛔ A ALTURA SAI DE `--tk-altura-controle`, como todo controle do sistema, e
+ * **não de padding solto**. Era 26px por acidente aritmético (2 de moldura + 4
+ * de padding + a linha do `text-caption`) enquanto Select, Input e Button no
+ * mesmo cabeçalho de cartão mediam 32. A diferença de 6px não se lê como
+ * "componente diferente" — se lê como desalinhamento, que é o `06` §14.1.
  */
 
 export function Segmented<T extends string>({
@@ -31,7 +37,15 @@ export function Segmented<T extends string>({
       role="radiogroup"
       aria-label={rotuloAcessivel}
       className="bg-surface-hover border border-border"
-      style={{ display: "inline-flex", padding: 2, borderRadius: "var(--tk-radius-controle)", gap: 2, flex: "none" }}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        height: "var(--tk-altura-controle)",
+        padding: 3,
+        borderRadius: "var(--tk-radius-controle)",
+        gap: 2,
+        flex: "none",
+      }}
     >
       {opcoes.map((o) => {
         const ativo = o.valor === valor;
@@ -45,8 +59,13 @@ export function Segmented<T extends string>({
             onClick={() => aoTrocar(o.valor)}
             className={`text-caption ${ativo ? "bg-primary-solid text-on-primary" : "text-text-secondary"}`}
             style={{
-              padding: "4px 10px",
-              borderRadius: 4,
+              display: "inline-flex",
+              alignItems: "center",
+              height: "100%",
+              padding: "0 10px",
+              // Raio interno = externo − padding, senão o botão ativo "vaza" do
+              // canto da moldura e os dois arredondamentos brigam.
+              borderRadius: "calc(var(--tk-radius-controle) - 3px)",
               border: 0,
               cursor: "pointer",
               fontWeight: 500,

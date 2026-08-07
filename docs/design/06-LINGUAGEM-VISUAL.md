@@ -243,6 +243,29 @@ Não é o escuro invertido:
 
 ---
 
+## 📏 MEDIDA QUE PRECISA MANTER PROPORÇÃO NÃO NASCE EM PIXEL
+
+> Regra transversal, e não uma seção de bloco. Ela já apareceu **três vezes** em
+> 07/08/2026, sempre com o mesmo formato: um valor fixo em px que estava certo no
+> tamanho em que foi escrito e errado em todos os outros.
+
+| Onde | Em pixel daria | O que se usa |
+|---|---|---|
+| Hachura do Gasto | `patternUnits="objectBoundingBox"` faz o passo da listra **escalar com a área** — a mesma textura com densidades diferentes em dois dias | `userSpaceOnUse` |
+| Folga entre barras | `gap` fixo: com 7 dias as barras engordam e a folga some; com 90, o contrário | 40% do **passo**, por dentro do slot |
+| Largura da barra do medidor | fixa, as barras se tocam num medidor pequeno e se espalham num grande | comprimento do arco × ocupação |
+
+**A pergunta, antes de escrever qualquer número em px:** *este valor precisa
+parecer o mesmo em tamanhos diferentes, ou precisa SER o mesmo?* Espessura de
+traço e raio de canto precisam SER; folga, passo e densidade de textura precisam
+PARECER — e essas saem de uma fração do contêiner, nunca de um px.
+
+⚠️ O sintoma é sempre o mesmo e é fácil de não ver: **fica bom no tamanho em que
+você olhou.** Só aparece quando alguém redimensiona o bloco — que no Dashboard é
+o modo de edição, ou seja, o usuário.
+
+---
+
 ## 13. ÍCONE EM RECIPIENTE TINGIDO
 
 > Acrescentado em 07/08/2026, por decisão do dono. Estava na **imagem 1** e não

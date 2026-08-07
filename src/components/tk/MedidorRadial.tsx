@@ -17,16 +17,28 @@ import * as React from "react";
  * ⚠️ E o arredondamento das pontas não é enfeite aqui: com pontas retas as
  * barras viram os dentes de uma serra e o conjunto lê como engrenagem.
  *
- * ## O que este componente NÃO faz
+ * ## ⛔ AS DUAS COISAS QUE ELE NÃO FAZ — e não são omissão
  *
- * ⛔ Ele **não calcula taxa nenhuma**. Recebe `valor` de 0 a 100 já pronto. Duas
- * divisões da mesma coisa divergem sempre, e aqui a divergência seria muda: o
- * medidor mostraria um número e a linha ao lado outro.
+ * As duas parecem simplificação esperando para acontecer. Alguém vai olhar este
+ * componente, ver que ele recebe `valor` E `cor` de fora, e pensar *"por que ele
+ * não deriva a cor do valor? É a mesma regra em todo lugar"*. **Não é.**
  *
- * ⛔ E ele **não decide cor**. Quem sabe se 100% sobre 1 tentativa merece verde é
- * quem tem o denominador — ver `tom()` em `Aprovacao.tsx`, que fica neutro
- * abaixo de 5 tentativas. Um medidor que escolhesse a própria cor pintaria de
- * verde uma amostra de uma venda.
+ * **1. Ele não calcula taxa nenhuma.** Recebe 0–100 pronto. Duas divisões da
+ * mesma coisa divergem sempre, e aqui a divergência seria muda: o medidor
+ * mostraria um número e a linha ao lado outro, os dois plausíveis.
+ *
+ * **2. Ele não decide cor** — e este é o que dói. A cor da taxa de aprovação
+ * **depende do DENOMINADOR, que o medidor não tem**: `tom()` em `Aprovacao.tsx`
+ * devolve NEUTRO abaixo de 5 tentativas, porque `1 de 1 = 100%` não é sinal de
+ * nada. Um medidor que derivasse a própria cor de `valor >= 80` pintaria essa
+ * amostra de verde, e a tela afirmaria uma confiança que não existe.
+ *
+ * O defeito não apareceria como erro: apareceria como um medidor verde, bonito,
+ * sobre uma venda. E a regra das 5 tentativas morreria em silêncio — que é a
+ * definição de proteção morta nesta base.
+ *
+ * ⛔ **Não "limpe" isso.** Se um dia o medidor precisar saber a cor sozinho, ele
+ * precisa receber o denominador junto, não adivinhar.
  */
 
 /** Abertura embaixo, em graus. 240° de arco desenhado (`06` §6). */

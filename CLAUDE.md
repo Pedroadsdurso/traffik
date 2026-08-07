@@ -1429,6 +1429,40 @@ repositório** — só o `06` chegou. O documento cita "as quatro referências" 
 "referência 1/2/3/4" o tempo todo; sem os arquivos, quem ler não tem como
 conferir contra o que o texto descreve. **Peça os arquivos antes do acabamento.**
 
+# 📝 DOCUMENTAÇÃO QUE *AFIRMA* UM VALOR ENVELHECE. QUE *LÊ* O VALOR, NÃO.
+
+> **A regra:** onde a documentação e o código convivem, a documentação **deriva**
+> do código em tempo de execução. Copiar o valor cria uma segunda fonte, e a
+> segunda fonte diverge no primeiro commit — em silêncio, porque `tsc`, `lint` e
+> `build` não leem string de documentação.
+
+Três instâncias da MESMA família, e por isso ficam juntas em vez de viraram três
+notas soltas:
+
+| Onde | Afirmava | A verdade |
+|---|---|---|
+| `financeiro.ts:123` | *"Despesas recorrentes **rateadas** no período"* | `+= e.amount`, o valor cheio, 219 linhas abaixo |
+| `metrics.ts:923` | *"o lucro por hora rateia … **recorrentes**"* | usava `totalDescontos`, que as EXCLUI |
+| `/design-system` | `rounded-card` · **`"10px"`** | o token virava 16 em 07/08/2026, e a página seguiu dizendo 10 |
+
+O terceiro é o mais instrutivo porque é a página **que existe para documentar o
+sistema**, documentando o sistema antigo — e o cabeçalho dela ainda afirmava
+*"todos os valores desta página são lidos do navegador"*, o que era verdade só
+para as cores.
+
+> ### ⛔ A CORREÇÃO É ESTRUTURAL, NUNCA "atualizar o texto"
+> Atualizar o texto conserta a instância e deixa a família viva. O conserto é
+> **tirar a cópia**: a `/design-system` lê `--tk-radius-*` com `getComputedStyle`,
+> então só dá para ficar errada se o token sumir.
+>
+> Onde não der para derivar — comentário em prosa —, a saída é **descrever a
+> DECISÃO, não o efeito**. *"Rateamos por dia porque um divisor fixo de 30 erra
+> em fevereiro"* continua verdadeiro depois de o código mudar; *"as recorrentes
+> são rateadas aqui"* vira mentira no primeiro commit que contraria.
+
+⚠️ **A varredura completa por comentários que afirmam efeito segue na fila.**
+Estes três são a evidência de que ela vale.
+
 # 🟩 COR SEMÂNTICA É PARA A GRANDEZA SEMÂNTICA — volume não é resultado
 
 > **Decisão do dono, 07/08/2026.** Vale para toda tela, todo gráfico, todo

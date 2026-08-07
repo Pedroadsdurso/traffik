@@ -305,7 +305,7 @@ export default function DesignSystemPage() {
         {/* ── Cabeçalho ── */}
         <header style={{ marginBottom: 32 }}>
           <p className="text-micro text-text-muted" style={{ marginBottom: 8 }}>
-            Fase 1 · fundação de tokens
+            Banco de estados · não é vitrine de componente
           </p>
           <h1
             className="text-display"
@@ -320,11 +320,22 @@ export default function DesignSystemPage() {
           >
             Design system do TrackHub
           </h1>
+          {/* ⛔ O QUE ESTA PÁGINA É, e a definição é do dono (07/08/2026). Ela
+              não é galeria: galeria de componente foi recusada, e com razão —
+              vira trabalho que não entrega tela. */}
           <p className="text-body text-text-secondary" style={{ marginTop: 8, maxWidth: 640 }}>
-            Todos os valores desta página são lidos do navegador com{" "}
-            <code style={{ fontFamily: "var(--tk-font-mono)" }}>getComputedStyle</code> — não há
-            hexadecimal escrito neste arquivo. Se um token mudar no{" "}
-            <code style={{ fontFamily: "var(--tk-font-mono)" }}>globals.css</code>, muda aqui.
+            <strong>Banco de estados.</strong> Ela existe para exercitar estados que a tela real
+            não consegue produzir com o dado disponível. <strong>Não é vitrine de componente</strong> —
+            um componente só entra aqui se o Dashboard não conseguir mostrá-lo.
+          </p>
+          <p className="text-caption text-text-muted" style={{ marginTop: 6, maxWidth: 640 }}>
+            Os valores de token são lidos do navegador com{" "}
+            <code style={mono}>getComputedStyle</code>: se mudarem no{" "}
+            <code style={mono}>globals.css</code>, mudam aqui.{" "}
+            <strong>E é para continuar assim.</strong> Até 07/08/2026 o raio do card estava escrito
+            à mão como <code style={mono}>&quot;10px&quot;</code> e seguiu dizendo isso depois de o token
+            virar 16 — a página que documenta o sistema documentava o sistema antigo. Documentação
+            que <em>afirma</em> um valor envelhece; documentação que <em>lê</em> o valor não.
           </p>
           <p className="text-caption text-text-muted" style={{ marginTop: 6, maxWidth: 640 }}>
             O valor cru abaixo de cada cor vem em <code style={mono}>lab()</code>, e não em{" "}

@@ -102,14 +102,48 @@ async function main() {
       const [pais, pesoPais] = PAISES[n % PAISES.length];
       const clique = id(), fbclid = `dev-${o.suf}-${n}`;
       const quando = new Date(Date.now() - (n + 1) * 90 * 60 * 1000);
-      await q(`INSERT INTO "Click" ("id","clickId","userId","fbclid","utmSource","utmCampaign","timestamp") VALUES ($1,$1,$2,$3,'facebook',$4,$5)`,
-        [clique, userId, fbclid, `${campNome}|${campFb}`, quando]);
+
+      /* ⛔ CANAL E FORMA DE PAGAMENTO VARIAM, e não é enfeite de realismo.
+         Com `utmSource` fixo em 'facebook' e `paymentMethod` fixo em 'PIX', a
+         rosca de Canais caía no atalho de fatia única e a Taxa de aprovação
+         mostrava um medidor sozinho — os dois blocos ficavam com o estado
+         principal INVISÍVEL no único banco em que dá para olhar.
+
+         As proporções são desiguais de propósito: a rosca existe para comparar
+         fatias, e com três iguais não dá para ver se a folga entre segmentos e
+         a ponta arredondada funcionam. A quarta fatia é minúscula (1 em 7) —
+         é ela que exerce o piso que impede a fatia pequena de sumir. */
+      const CANAIS = ["facebook", "facebook", "facebook", "google", "google", "tiktok", "organico"];
+      const canal = CANAIS[n % CANAIS.length];
+
+      /* As taxas de aprovação precisam DIVERGIR entre as formas: sem
+         divergência, os quatro tons do medidor (verde, âmbar, vermelho e o
+         neutro de amostra pequena) nunca aparecem juntos, e o bloco fica sem
+         estado para conferir. `OUTRO` aparece uma vez em doze — é ele que fica
+         abaixo de 5 tentativas e exerce o tom neutro.
+
+         ⚠️ Os módulos do `pendente` são COPRIMOS com o tamanho da lista. Com
+         `n % 2` sobre uma lista de 6 o BOLETO caía sempre em posição ímpar,
+         nenhum casava, e a forma saía com 100% de aprovação — três verdes e
+         nenhuma divergência. Ver o mesmo comentário em `diversificar-dev.mjs`. */
+      const FORMAS = [
+        "PIX", "PIX", "PIX", "PIX",
+        "CARTAO", "CARTAO", "CARTAO",
+        "BOLETO", "BOLETO",
+        "PIX", "CARTAO", "OUTRO",
+      ];
+      const forma = FORMAS[n % FORMAS.length];
+      const pendente =
+        forma === "BOLETO" ? n % 8 !== 0 : forma === "CARTAO" ? n % 3 === 0 : n % 5 === 0;
+
+      await q(`INSERT INTO "Click" ("id","clickId","userId","fbclid","utmSource","utmCampaign","timestamp") VALUES ($1,$1,$2,$3,$6,$4,$5)`,
+        [clique, userId, fbclid, `${campNome}|${campFb}`, quando, canal]);
       await q(
         `INSERT INTO "Sale" ("id","userId","clickId","webhookId","externalId","product","value","status","paymentMethod","buyerEmail","country","timestamp","updatedAt")
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'PIX',$9,$11,$10,now())`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$12,$9,$11,$10,now())`,
         [id(), userId, clique, hook, `dev-${o.suf}-${n}`, `${MARCA} ${o.produto}`,
          Math.round(o.ticket * pesoPais * 100) / 100,
-         n % 4 === 3 ? "PENDENTE" : "APROVADA", `comprador${n}@exemplo.dev`, quando, pais],
+         pendente ? "PENDENTE" : "APROVADA", `comprador${n}@exemplo.dev`, quando, pais, forma],
       );
       await q(
         `INSERT INTO "PixelEvent" ("id","userId","event","eventId","url","fbclid","pixelConfigId","timestamp")
