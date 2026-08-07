@@ -1,20 +1,32 @@
 /**
- * A MASSA SE CONSERVA no funil de fluxo com perdas.
+ * O FUNIL COMO FITA — geometria e números das pílulas.
  *
- * ## A propriedade, e por que ela é a asserção certa
+ * Referência: `docs/design/referencias/16-funil-referencia.png`.
  *
- * O desenho promete UMA coisa: quem sai não desaparece, vira faixa. Em qualquer
- * ponto da esquerda para a direita,
+ * ## O que mudou, e por que a asserção antiga saiu
  *
- *     fluxo que continua  +  todas as perdas até ali  =  a faixa inteira
+ * Este arquivo verificava CONSERVAÇÃO DE MASSA — "fluxo que continua + todas as
+ * perdas = a faixa". Era a asserção certa enquanto a perda era uma faixa cinza
+ * desenhada colada no fluxo. **A perda deixou de ser desenhada**: ela é número
+ * na pílula, e não há massa para conservar.
  *
- * Um teste de COORDENADA passaria igual com uma faixa de perda desenhada com a
- * espessura errada — os números seriam outros, mas o teste só saberia se alguém
- * tivesse previsto os novos. A soma não: ela cai sozinha no dia em que uma
- * perda for calculada por outra conta que a do fluxo, sem ninguém prever nada.
+ * O que sobra para verificar é de outra natureza:
  *
- * É a mesma escolha do break-even ("faturar o break-even dá lucro zero") e da
- * curva ("não ultrapassa o intervalo do trecho").
+ *  - a ARITMÉTICA das pílulas (fração do máximo, perda e percentual);
+ *  - o VETOR DE LEITURA, em coordenada de tela;
+ *  - o piso, que agora responde pela legibilidade da fita inteira.
+ *
+ * ## `teste-fita.mjs` foi DELETADO e absorvido aqui
+ *
+ * Ele verificava o contrato ANTIGO — espessura fiel sem piso, guias nas margens,
+ * "NAO e raiz quadrada" — e esses três deixaram de ser verdade por DECISÃO, não
+ * por bug. Um teste que afirma o contrato revogado não se conserta: ele
+ * contradiz a decisão, e mantê-lo verde exigiria desfazê-la.
+ *
+ * ⚠️ E ele não estava no `npm test`: só em `npm run test:fita`, que ninguém
+ * roda. Passou nove asserções quebradas sem a suíte acusar. **Script de teste
+ * fora do agregado é teste que não existe** — se criar um, agende no mesmo
+ * commit, que é a mesma regra da rota de cron.
  *
  * Puro: sem banco, sem DOM.
  *
@@ -22,9 +34,7 @@
  */
 import assert from "node:assert/strict";
 
-const { calcularFluxo, caminhoPerda, caminhoFluxo, PISO_ESPESSURA } = await import(
-  "../src/lib/funil/fita.ts"
-);
+const { calcularFluxo, caminhoDaFita, PISO_ESPESSURA } = await import("../src/lib/funil/fita.ts");
 
 let ok = 0;
 const falhas = [];
@@ -40,120 +50,130 @@ function checar(nome, fn) {
 }
 
 const OPC = { largura: 600, faixa: 130, margem: 12 };
-const somaPerdas = (f) => f.perdas.reduce((s, p) => s + (p.base - p.topo), 0);
-const fluxoFinal = (f) => f.etapas[f.etapas.length - 1].espessura;
 
-console.log("\n\x1b[1mFunil de fluxo — a massa se conserva\x1b[0m\n");
+console.log("\n\x1b[1mFunil — a fita, e a perda como número\x1b[0m\n");
 
-/* ── A propriedade ─────────────────────────────────────────────────────────── */
+/* ── A aritmética das pílulas ──────────────────────────────────────────────────
+   Os valores vêm da REFERÊNCIA, e é de propósito: se a nossa conta divergir da
+   dela, a figura deixa de ser a mesma figura. Foram conferidos à mão no print
+   antes de virarem asserção. */
 
-checar("funil real do dono (1220 → 35 → 27): fluxo + perdas = faixa", () => {
-  const f = calcularFluxo([1220, 35, 27], OPC);
-  assert.ok(
-    Math.abs(fluxoFinal(f) + somaPerdas(f) - OPC.faixa) < 0.01,
-    `fluxo ${fluxoFinal(f)} + perdas ${somaPerdas(f)} ≠ ${OPC.faixa}`,
-  );
+const REFERENCIA = [444, 861, 165, 64, 12];
+
+checar("a pílula da etapa é a fração do MAIOR, não a conversão da anterior", () => {
+  const f = calcularFluxo(REFERENCIA, OPC);
+  const vistos = f.etapas.map((e) => (e.fracao * 100).toFixed(1));
+  assert.deepEqual(vistos, ["51.6", "100.0", "19.2", "7.4", "1.4"]);
 });
 
-checar("conserva em 200 funis aleatórios, inclusive com etapas minúsculas", () => {
-  let semente = 7;
-  const rnd = () => ((semente = (semente * 1103515245 + 12345) % 2147483648) / 2147483648);
-  for (let t = 0; t < 200; t++) {
-    const n = 2 + Math.floor(rnd() * 4);
-    const vals = [Math.ceil(rnd() * 5000)];
-    for (let i = 1; i < n; i++) vals.push(Math.floor(vals[i - 1] * rnd()));
-    const f = calcularFluxo(vals, OPC);
-    const total = fluxoFinal(f) + somaPerdas(f);
-    assert.ok(
-      Math.abs(total - OPC.faixa) < 0.01 || vals[0] === 0,
-      `[${vals}] somou ${total.toFixed(2)}, esperado ${OPC.faixa}`,
-    );
-  }
+checar("as duas leituras DIVERGEM quando uma etapa cresce — e é por isso que importa", () => {
+  /* Se `fracao` fosse a conversão da anterior, a primeira daria `null` e a
+     segunda passaria de 100%. A asserção só mede alguma coisa porque as duas
+     contas são de fato diferentes: com um funil que só cai, elas coincidiriam e
+     ela passaria por coincidência. */
+  const f = calcularFluxo(REFERENCIA, OPC);
+  assert.equal(f.etapas[0].taxa, null, "a primeira não tem de onde cair");
+  assert.ok(f.etapas[1].taxa > 1, "a segunda CRESCE: a conversão passa de 100%");
+  assert.equal((f.etapas[0].fracao * 100).toFixed(1), "51.6", "mas a fração do máximo é 51,6%");
 });
 
-/* ── O piso, e a razão de ele ser DESCONTADO em vez de somado ──────────────── */
+checar("a pílula de perda traz o absoluto e o percentual DA ORIGEM", () => {
+  const f = calcularFluxo(REFERENCIA, OPC);
+  const vistos = f.perdas.map((p) => `${p.de}:−${p.valor}·${(p.pct * 100).toFixed(1)}`);
+  assert.deepEqual(vistos, ["1:−696·80.8", "2:−101·61.2", "3:−52·81.3"]);
+});
 
-checar("perda minúscula recebe o piso — e não some", () => {
-  // 1000 → 999 → 1: a perda de 1 vale 0,13px na faixa de 130.
-  const f = calcularFluxo([1000, 999, 1], OPC);
+checar("etapa que CRESCE não gera pílula de perda", () => {
+  // Na referência, Cliques (444) → Vis. Página (861) não tem pílula nenhuma.
+  const f = calcularFluxo(REFERENCIA, OPC);
+  assert.ok(!f.perdas.some((p) => p.de === 0), "o passo que cresce virou perda");
+  assert.equal(f.perdas.length, 3, "são três transições de queda em cinco etapas");
+});
+
+checar("o funil do dono (1220 → 35 → 25) bate com o que o dono escreveu", () => {
+  const f = calcularFluxo([1220, 35, 25], OPC);
   const primeira = f.perdas.find((p) => p.de === 0);
-  assert.ok(primeira, "a perda de 1 deveria existir");
-  assert.ok(
-    primeira.base - primeira.topo >= PISO_ESPESSURA - 0.01,
-    `veio ${(primeira.base - primeira.topo).toFixed(2)}px, piso é ${PISO_ESPESSURA}`,
-  );
+  assert.equal(primeira.valor, 1185);
+  assert.equal((primeira.pct * 100).toFixed(1), "97.1"); // "−1.185 · 97,1%"
 });
 
-checar("o piso NÃO estoura a faixa — ele afina o FLUXO, não engrossa a perda", () => {
-  // Engrossar a perda direto somaria altura por cima do total. O piso mexe na
-  // sequência que gera as faixas, então não há o que compensar.
-  const f = calcularFluxo([1000, 999, 1], OPC);
-  const total = fluxoFinal(f) + somaPerdas(f);
-  assert.ok(Math.abs(total - OPC.faixa) < 0.01, `estourou: ${total.toFixed(2)} > ${OPC.faixa}`);
+checar("fração ZERO e fração INDEFINIDA não são a mesma coisa", () => {
+  /* 🔴 A distinção central do projeto, e esta asserção nasceu de eu errá-la:
+     escrevi `[0, 0, 5]` esperando `null` e recebi `0`. O `0` estava CERTO —
+     existe um máximo (5), e `0/5` é uma medição de verdade. Indefinido é só
+     quando não há denominador nenhum, ou seja quando o funil inteiro é zero.
+
+     Se as duas colapsassem, um funil sem tráfego mostraria "0,0%" — que se lê
+     como "ninguém converteu" onde a verdade é "não houve o que medir". */
+  const comMaximo = calcularFluxo([0, 0, 5], OPC);
+  assert.equal(comMaximo.etapas[0].fracao, 0, "há máximo: 0/5 é medição, e vale 0");
+
+  const semNada = calcularFluxo([0, 0], OPC);
+  assert.equal(semNada.etapas[0].fracao, null, "sem máximo, a fração é INDEFINIDA");
 });
 
-/* ── As faixas se ENCAIXAM, sem sobrepor nem deixar vão ────────────────────── */
+checar("perda cuja ORIGEM é zero não vira percentual", () => {
+  // Não existe "0 de 0 se perderam". Se houver perda ali, o pct é indefinido.
+  const f = calcularFluxo([5, 0, 0], OPC);
+  for (const p of f.perdas) {
+    const origem = f.etapas[p.de].valor;
+    if (origem === 0) assert.equal(p.pct, null, "dividiu por uma origem zerada");
+  }
+});
 
-checar("as perdas não se sobrepõem entre si nem invadem o fluxo", () => {
-  const f = calcularFluxo([1220, 400, 120, 27], OPC);
-  const espFinal = fluxoFinal(f);
-  const cimaFinal = (OPC.faixa - espFinal) / 2; // o fluxo é CENTRADO
-  const faixas = [{ topo: cimaFinal, base: cimaFinal + espFinal }, ...f.perdas.map((p) => ({ topo: p.topo, base: p.base }))]
-    .sort((a, b) => a.topo - b.topo);
-  for (let i = 1; i < faixas.length; i++) {
+/* ── O piso ────────────────────────────────────────────────────────────────── */
+
+checar("etapa não-vazia nunca fica abaixo do piso, por menor que seja", () => {
+  const f = calcularFluxo([100000, 1], OPC);
+  assert.equal(f.etapas[1].espessura, PISO_ESPESSURA);
+  assert.ok(PISO_ESPESSURA >= 10, "o piso caiu abaixo de 10px — a fita volta a virar fio");
+});
+
+checar("etapa VAZIA tem espessura zero — o piso não inventa presença", () => {
+  /* A distinção central do projeto, na camada do desenho: 1 é pouco, 0 é nada.
+     Um piso que pintasse o zero afirmaria uma etapa que não aconteceu. */
+  const f = calcularFluxo([100, 0, 5], OPC);
+  assert.equal(f.etapas[1].espessura, 0);
+  assert.equal(f.etapas[2].espessura, PISO_ESPESSURA);
+});
+
+checar("a espessura preserva a ORDEM dos valores", () => {
+  // O piso comprime, mas nunca inverte: maior valor, espessura maior ou igual.
+  const f = calcularFluxo([1220, 900, 35, 30, 25], OPC);
+  for (let i = 1; i < f.etapas.length; i++) {
     assert.ok(
-      faixas[i].topo >= faixas[i - 1].base - 0.01,
-      `faixa ${i} começa em ${faixas[i].topo} e a anterior termina em ${faixas[i - 1].base}`,
+      f.etapas[i].espessura <= f.etapas[i - 1].espessura + 0.01,
+      `a etapa ${i} ficou mais grossa que a anterior`,
     );
   }
 });
 
-/* ── Casos que não são perda ───────────────────────────────────────────────── */
+/* ── As guias ficam ENTRE as etapas ────────────────────────────────────────── */
 
-checar("etapa que CRESCE não vira perda negativa", () => {
-  // Cliques vêm da Meta e checkouts do pixel: as duas fontes não se conversam.
-  const f = calcularFluxo([100, 140, 20], OPC);
-  assert.ok(f.perdas.every((p) => p.valor > 0), "apareceu perda de valor não-positivo");
-  /* ⚠️ Conta EVENTOS, não faixas: desde o fluxo centrado cada perda vira duas
-     metades. Comparar `perdas.length` com 1 mediria a geometria, não a regra. */
-  const eventos = new Set(f.perdas.map((p) => p.de));
-  assert.equal(eventos.size, 1, "só o passo 140→20 é perda");
-  assert.deepEqual([...eventos], [1]);
-});
-
-checar("funil sem perda nenhuma (nada cai) não inventa faixa", () => {
-  const f = calcularFluxo([50, 50, 50], OPC);
-  assert.equal(f.perdas.length, 0);
-  assert.ok(Math.abs(fluxoFinal(f) - OPC.faixa) < 0.01, "o fluxo deveria ocupar a faixa toda");
-});
-
-checar("tudo zero não produz NaN em coordenada nenhuma", () => {
-  const f = calcularFluxo([0, 0], OPC);
-  const d = caminhoFluxo(f.etapas, 10, OPC.faixa) + f.perdas.map((p) => caminhoPerda(p, 10, 600)).join(" ");
-  assert.ok(!/NaN|Infinity/.test(d), d);
-});
-
-/* ── O caminho desenhado ───────────────────────────────────────────────────── */
-
-checar("a faixa de perda nasce com espessura ZERO na guia de onde sai", () => {
-  // Se ela nascesse já cheia, pareceria que a perda aconteceu ANTES da etapa.
-  const f = calcularFluxo([1220, 35, 27], OPC);
-  for (const p of f.perdas.filter((q) => q.de === 0)) {
-    const d = caminhoPerda(p, 10, 600);
-    const inicio = d.match(/^M([\d.]+),([\d.]+)/);
-    assert.ok(inicio, d);
-    assert.ok(Math.abs(+inicio[1] - p.x0) < 0.01, "não começa na guia de origem");
+checar("as guias caem ENTRE as etapas, nunca sobre elas", () => {
+  /* Conferido na referência: guias em ≈270/530/790/1048, centros em
+     ≈140/400/660/920/1180. A pílula de perda mora na guia porque perda é o que
+     acontece ENTRE duas etapas — sobre a etapa, ela seria atribuída a uma. */
+  const f = calcularFluxo(REFERENCIA, OPC);
+  assert.equal(f.guias.length, f.etapas.length - 1);
+  for (let i = 0; i < f.guias.length; i++) {
     assert.ok(
-      Math.abs(+inicio[2] - (10 + p.ancora)) < 0.01,
-      `a metade de ${p.lado} não nasce colada na borda do fluxo`,
+      f.guias[i] > f.etapas[i].x && f.guias[i] < f.etapas[i + 1].x,
+      `a guia ${i} (${f.guias[i]}) não está entre ${f.etapas[i].x} e ${f.etapas[i + 1].x}`,
     );
   }
+});
+
+checar("a pílula de perda se ancora na guia da SUA transição", () => {
+  const f = calcularFluxo(REFERENCIA, OPC);
+  for (const p of f.perdas) assert.equal(p.x, f.guias[p.de], `a perda ${p.de} saiu da guia`);
 });
 
 /* ── O VETOR DE LEITURA, EM COORDENADA DE TELA ─────────────────────────────────
 
    🔴 ESTAS ASSERÇÕES SÃO ESCRITAS EM PIXEL DE TELA, NÃO EM `y` DE SVG, e a
-   distinção não é preciosismo — foi exatamente aí que a versão anterior mentiu.
+   distinção não é preciosismo — foi exatamente aí que uma versão anterior
+   mentiu.
 
    Existiu aqui um teste chamado "a linha de colapso DESCE — nunca sobe". Ele
    passava, e afirmava `y` DECRESCENTE. Em SVG o eixo `y` aponta para BAIXO,
@@ -164,67 +184,112 @@ checar("a faixa de perda nasce com espessura ZERO na guia de onde sai", () => {
    ⛔ A REGRA: asserção sobre direção VISUAL vai em coordenada de tela. Se o
    formato inverte um eixo, a asserção CONVERTE antes de comparar, e o nome do
    teste diz "na tela". Um verbo ambíguo ("desce") lê como tela e mede
-   coordenada — e as duas são opostas.
+   coordenada — e as duas são opostas. */
 
-   `naTela` é a conversão, e existe para que nenhuma asserção abaixo compare
-   `y` cru: quanto maior o número, mais ALTO na tela. */
+const CENTRO = 100;
+const naTela = (ySvg) => -ySvg; // maior número = mais ALTO na tela
+const bordaCima = (f, i) => naTela(CENTRO - f.etapas[i].espessura / 2);
+const bordaBaixo = (f, i) => naTela(CENTRO + f.etapas[i].espessura / 2);
 
-const naTela = (ySvg) => OPC.faixa - ySvg;
-const bordaCima = (f, i) => (OPC.faixa - f.etapas[i].espessura) / 2;
-const bordaBaixo = (f, i) => bordaCima(f, i) + f.etapas[i].espessura;
-
-checar("NA TELA: a borda de cima do fluxo DESCE da esquerda para a direita", () => {
-  const f = calcularFluxo([1220, 35, 27], OPC);
-  const alturas = f.etapas.map((_, i) => naTela(bordaCima(f, i)));
+checar("NA TELA: num funil que cai, a borda de cima DESCE", () => {
+  const f = calcularFluxo([1220, 35, 25], OPC);
+  const alturas = f.etapas.map((_, i) => bordaCima(f, i));
   for (let i = 1; i < alturas.length; i++) {
-    assert.ok(
-      alturas[i] <= alturas[i - 1] + 0.01,
-      `a borda de cima subiu entre a guia ${i - 1} e a ${i}: ${alturas.map((a) => a.toFixed(1))}`,
-    );
+    assert.ok(alturas[i] <= alturas[i - 1] + 0.01, `a borda de cima subiu na etapa ${i}: ${alturas}`);
   }
-  assert.ok(alturas[0] - alturas[alturas.length - 1] > 10, "a borda de cima mal se moveu");
 });
 
-checar("NA TELA: a borda de baixo do fluxo SOBE da esquerda para a direita", () => {
-  const f = calcularFluxo([1220, 35, 27], OPC);
-  const alturas = f.etapas.map((_, i) => naTela(bordaBaixo(f, i)));
+checar("NA TELA: num funil que cai, a borda de baixo SOBE", () => {
+  const f = calcularFluxo([1220, 35, 25], OPC);
+  const alturas = f.etapas.map((_, i) => bordaBaixo(f, i));
   for (let i = 1; i < alturas.length; i++) {
-    assert.ok(
-      alturas[i] >= alturas[i - 1] - 0.01,
-      `a borda de baixo desceu entre a guia ${i - 1} e a ${i}: ${alturas.map((a) => a.toFixed(1))}`,
-    );
+    assert.ok(alturas[i] >= alturas[i - 1] - 0.01, `a borda de baixo desceu na etapa ${i}: ${alturas}`);
   }
-  assert.ok(alturas[alturas.length - 1] - alturas[0] > 10, "a borda de baixo mal se moveu");
 });
 
-checar("NA TELA: a figura CONVERGE — nenhuma borda escorrega para um lado só", () => {
-  /* A propriedade que o centro compra, e a que o topo NÃO podia cumprir: as
-     duas bordas caminham uma na direção da outra, em módulo igual. Ancorado no
-     topo, a de cima ficava parada e só a de baixo subia — a assinatura de
-     "crescimento" que o dono leu. */
-  const f = calcularFluxo([1220, 35, 27], OPC);
+checar("NA TELA: a figura CONVERGE — as duas bordas caminham uma para a outra", () => {
+  /* A propriedade que a fita CENTRADA compra, e a que a ancorada no topo não
+     podia cumprir: lá a borda de cima ficava parada e só a de baixo subia — a
+     assinatura de "crescimento" que o dono leu na tela. */
+  const f = calcularFluxo([1220, 35, 25], OPC);
   for (let i = 1; i < f.etapas.length; i++) {
-    const desceu = naTela(bordaCima(f, i - 1)) - naTela(bordaCima(f, i));
-    const subiu = naTela(bordaBaixo(f, i)) - naTela(bordaBaixo(f, i - 1));
-    assert.ok(desceu >= -0.01 && subiu >= -0.01, `a guia ${i} não convergiu`);
+    const desceu = bordaCima(f, i - 1) - bordaCima(f, i);
+    const subiu = bordaBaixo(f, i) - bordaBaixo(f, i - 1);
+    assert.ok(desceu >= -0.01 && subiu >= -0.01, `a etapa ${i} não convergiu`);
     assert.ok(
       Math.abs(desceu - subiu) < 0.01,
-      `convergência assimétrica na guia ${i}: cima ${desceu.toFixed(2)} vs baixo ${subiu.toFixed(2)}`,
+      `convergência assimétrica na etapa ${i}: cima ${desceu.toFixed(2)} vs baixo ${subiu.toFixed(2)}`,
     );
   }
 });
 
-checar("NA TELA: toda perda sai PELOS DOIS LADOS, com metade da espessura cada", () => {
-  const f = calcularFluxo([1220, 35, 27], OPC);
-  const eventos = [...new Set(f.perdas.map((p) => p.de))];
-  for (const de of eventos) {
-    const metades = f.perdas.filter((p) => p.de === de);
-    assert.equal(metades.length, 2, `o evento ${de} não virou duas metades`);
-    const lados = metades.map((m) => m.lado).sort();
-    assert.deepEqual(lados, ["baixo", "cima"]);
-    const [a, b] = metades.map((m) => m.base - m.topo);
-    assert.ok(Math.abs(a - b) < 0.01, `as metades do evento ${de} têm espessuras diferentes: ${a} e ${b}`);
+checar("a asserção de convergência PODE FALHAR — um funil que cresce a derruba", () => {
+  /* Guarda que nunca disparou não é guarda. Com valores crescentes a borda de
+     cima SOBE, que é o caso errado que as três asserções acima alegam pegar. */
+  const f = calcularFluxo([25, 35, 1220], OPC);
+  let subiu = false;
+  for (let i = 1; i < f.etapas.length; i++) if (bordaCima(f, i) > bordaCima(f, i - 1) + 0.01) subiu = true;
+  assert.ok(subiu, "num funil crescente a borda de cima deveria subir — a asserção está morta");
+});
+
+/* ── O caminho desenhado ───────────────────────────────────────────────────── */
+
+checar("a fita chega às DUAS bordas do desenho, sem começar no ar", () => {
+  const f = calcularFluxo([1220, 35, 25], OPC);
+  const d = caminhoDaFita(f.etapas, CENTRO, { x0: 0, x1: 600 });
+  assert.ok(d.startsWith("M0.00,"), `não começa na borda esquerda: ${d.slice(0, 40)}`);
+  assert.ok(d.includes("600.00,"), "não alcança a borda direita");
+});
+
+checar("sem extremos a fita começa no CENTRO da primeira etapa", () => {
+  const f = calcularFluxo([1220, 35, 25], OPC);
+  const d = caminhoDaFita(f.etapas, CENTRO);
+  assert.ok(d.startsWith(`M${f.etapas[0].x.toFixed(2)},`), d.slice(0, 40));
+});
+
+checar("a fita é SIMÉTRICA em torno do centro", () => {
+  const f = calcularFluxo([1220, 35, 25], OPC);
+  for (const e of f.etapas) {
+    const cima = CENTRO - e.espessura / 2;
+    const baixo = CENTRO + e.espessura / 2;
+    assert.ok(Math.abs((CENTRO - cima) - (baixo - CENTRO)) < 0.01, "a fita saiu do eixo");
   }
+});
+
+checar("o caminho abre com M, fecha com Z e usa CÚBICAS entre as etapas", () => {
+  /* Absorvido do `teste-fita.mjs`, deletado em 07/08/2026 (ver o cabeçalho).
+     Segmento reto entre etapas mataria a leitura de fluxo — vira gráfico de
+     área. São 2 cúbicas por vão, ida e volta, mais as dos extremos. */
+  const f = calcularFluxo([1220, 35, 25], OPC);
+  const d = caminhoDaFita(f.etapas, CENTRO);
+  assert.ok(d.startsWith("M"), "não abre com M");
+  assert.ok(d.trimEnd().endsWith("Z"), "não fecha com Z");
+  /* ⚠️ Existe UM `L`, e ele é legítimo: a tampa vertical da ponta direita, onde
+     a borda de cima encontra a de baixo. Um segundo `L` seria vão desenhado
+     reto — aí sim a fita viraria gráfico de área. */
+  const retos = d.match(/L[\d.]+,[\d.]+/g) ?? [];
+  assert.equal(retos.length, 1, `esperava só a tampa; vieram ${retos.length} retas: ${retos}`);
+  const xTampa = +retos[0].slice(1).split(",")[0];
+  assert.equal(xTampa, f.etapas[f.etapas.length - 1].x, "a tampa não está na última etapa");
+  assert.equal((d.match(/C/g) ?? []).length, 4, "2 vãos × ida e volta = 4 cúbicas");
+});
+
+checar("os controles da cúbica ficam no MEIO do vão", () => {
+  /* Controle a 1/3 dá tangente inclinada na guia, e a fita chega torta na
+     etapa — o estreitamento parece começar antes de onde começa. */
+  const f = calcularFluxo([1220, 35], OPC);
+  const d = caminhoDaFita(f.etapas, CENTRO);
+  const meio = ((f.etapas[0].x + f.etapas[1].x) / 2).toFixed(2);
+  assert.ok(d.includes(`C${meio},`), `os controles não estão em x=${meio}: ${d}`);
+});
+
+checar("tudo zero não produz NaN em coordenada nenhuma", () => {
+  const f = calcularFluxo([0, 0], OPC);
+  assert.ok(!/NaN|Infinity/.test(caminhoDaFita(f.etapas, CENTRO, { x0: 0, x1: 600 })));
+});
+
+checar("sem etapa nenhuma o caminho é vazio, não um 'M' solto", () => {
+  assert.equal(caminhoDaFita([], CENTRO), "");
 });
 
 console.log(

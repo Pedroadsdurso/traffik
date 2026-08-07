@@ -403,48 +403,44 @@ for (const [nomeTema, tokens] of Object.entries(temas)) {
     "--tk-accent",
   );
 
-  /* 🔴 FITA DO FUNIL — o único par ADJACENTE do sistema, e o único objeto
-     gráfico que REPROVA (`obrigatorio: true`).
-
-     Todos os outros pares deste arquivo medem cor-sobre-FUNDO: se um deles cai,
-     o elemento fica difícil de ver. Aqui as duas cores se encostam por uma
-     borda comum, e o que se perde quando o par cai não é visibilidade — é a
-     FRONTEIRA. Sem ela o fluxo e a perda viram uma mancha só, e a figura passa
-     a afirmar o contrário do dado (foi exatamente o que a rampa de opacidade
-     fazia, a 1,24:1, até 07/08/2026).
-
-     Por isso ele não é "aviso de design": é a correção da 4ª tentativa do
-     funil, e uma regressão aqui reintroduz um gráfico que se lê ao contrário.
-     Se um dia precisar ser afrouxado, o caminho é ACEITOS com piso e motivo —
-     não trocar para `false`. */
-  console.log(`\n\x1b[1mTema ${nomeTema} — fita do funil (faixas ADJACENTES; 3:1 reprova)\x1b[0m`);
+  /* 🔴 FITA DO FUNIL. Os pares ADJACENTES (fluxo × perda) sumiram em
+     07/08/2026 junto com as faixas de perda: elas deixaram de ser desenhadas.
+     O que sobrou não é adjacência — é a fita sobre o card, e a cápsula sobre a
+     fita. Os dois REPROVAM, porque a legibilidade da pílula é a figura inteira:
+     ela é onde a perda existe agora, e ilegível ali não há outro lugar. */
+  console.log(`
+[1mTema ${nomeTema} — fita do funil (3:1 reprova)[0m`);
   medir(
-    "fluxo | perda forte  " + cinza("a fronteira que diz o que sobrevive"),
+    "fita: entrada sobre surface  " + cinza("a fita precisa existir contra o card"),
     rgb(tokens, "--tk-fluxo"),
-    rgb(tokens, "--tk-perda-forte"),
+    superficie,
     3,
     true,
     "--tk-fluxo",
   );
   medir(
-    "perda forte sobre surface  " + cinza("a perda precisa existir contra o card"),
-    rgb(tokens, "--tk-perda-forte"),
+    "fita: saída sobre surface  " + cinza("a ponta violeta da rampa"),
+    rgb(tokens, "--tk-fluxo-fim"),
     superficie,
-    1.5,
-    true,
-    "--tk-perda-forte",
-  );
-  /* ⚠️ NÃO obrigatório, e a frouxidão é a decisão: as duas perdas ficam a
-     ~1,4:1, e quem as separa é o contorno de 1px na cor da superfície, não o
-     tom. Medido aqui para que o número fique à vista de quem pensar em remover
-     aquele `stroke` — ver a nota no FitaFunil. */
-  medir(
-    "perda forte | perda fraca  " + cinza("tom é REFORÇO; quem separa é o contorno de 1px"),
-    rgb(tokens, "--tk-perda-forte"),
-    rgb(tokens, "--tk-perda-fraca"),
     3,
-    false,
-    "--tk-perda-fraca",
+    true,
+    "--tk-fluxo-fim",
+  );
+  medir(
+    "cápsula da pílula sobre a fita  " + cinza("a pílula é o elemento mais visível"),
+    rgb(tokens, "--tk-pilula"),
+    rgb(tokens, "--tk-fluxo"),
+    3,
+    true,
+    "--tk-pilula",
+  );
+  medir(
+    "texto da pílula sobre a cápsula  " + cinza("é TEXTO: 4.5:1"),
+    rgb(tokens, "--tk-on-pilula"),
+    rgb(tokens, "--tk-pilula"),
+    4.5,
+    true,
+    "--tk-on-pilula",
   );
 }
 

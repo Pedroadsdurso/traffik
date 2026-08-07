@@ -138,19 +138,15 @@ const IR_WEBHOOKS = { texto: "Conferir webhooks", href: "/dashboard/integracoes/
 const IR_UTMS = { texto: "Ver códigos de UTM", href: "/dashboard/integracoes/utms" };
 const IR_ANUNCIOS = { texto: "Conferir integrações", href: "/dashboard/integracoes/anuncios" };
 
-/**
- * O que aconteceu com quem NÃO passou de cada etapa do funil para a seguinte.
- *
- * ⛔ INDEXADO PELA ETAPA DE ORIGEM, e a frase é específica de propósito: "1.185
- * saíram sem iniciar checkout" e "8 abandonaram o checkout" descrevem
- * comportamentos DIFERENTES — um nunca chegou à página de pagamento, o outro
- * chegou e desistiu. Um genérico ("não avançaram") apagaria a distinção, que é
- * justamente o que se vai fazer com a informação.
- *
- * ⚠️ Se o funil ganhar uma etapa, o índice novo cai no texto genérico do
- * componente. É degradação visível, não erro — mas vale acrescentar a frase.
- */
-const PERDA_DO_FUNIL = ["saíram sem iniciar checkout", "abandonaram o checkout"];
+/* ⛔ `PERDA_DO_FUNIL` foi DELETADA em 07/08/2026, e o motivo é o da regra dos
+   textos órfãos: ela descrevia um comportamento que MUDOU. Eram as frases
+   ("saíram sem iniciar checkout") que rotulavam as FAIXAS DE PERDA da fita — e
+   as faixas deixaram de existir quando a perda virou pílula numérica.
+
+   Mantê-la como constante órfã convidaria a "reaproveitar" um verbo para um
+   desenho que não tem mais onde escrevê-lo. Quem diz quanto se perdeu agora é
+   `−1.185 · 97,1%`, na guia da transição. */
+
 
 export const RENDERS: Record<IdBloco, RenderBloco> = {
   /* ── OS QUATRO ESTRUTURAIS ────────────────────────────────────────────────
@@ -264,12 +260,11 @@ export const RENDERS: Record<IdBloco, RenderBloco> = {
     },
     render: (v) => (
       <FitaFunil
-        etapas={v.funnel.map((e, i) => ({
+        etapas={v.funnel.map((e) => ({
           label: e.label,
           valor: e.valor,
           valorFmt: e.count,
           acao: e.acao,
-          perdaLabel: PERDA_DO_FUNIL[i],
         }))}
       />
     ),

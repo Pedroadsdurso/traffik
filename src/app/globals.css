@@ -896,23 +896,25 @@ a {
   --tk-warning:         oklch(0.7686 0.1647 70.08);  /* #F59E0B  limite, atenção, pendente */
   --tk-danger:          oklch(0.6368 0.2078 25.33);  /* #EF4444  prejuízo, erro */
 
-  /* 🔴 FITA DO FUNIL — o fluxo e as duas perdas. Três tokens OPACOS, e o
-     "opacos" é a decisão: eles nasceram de `--tk-text-muted` a 0,38 e 0,16 de
-     alpha, escritos no componente. Alpha no componente é uma SEGUNDA FONTE — a
-     cor que a tela pinta não existia em lugar nenhum que o `test:contraste`
-     pudesse ler, e a fronteira entre duas faixas de dado é exatamente o que o
-     WCAG 1.4.11 mede. Resolvidas aqui, o teste as compara como qualquer par.
+  /* 🔴 FITA DO FUNIL. Os tokens de PERDA foram removidos em 07/08/2026 junto
+     com as faixas cinza: a perda deixou de ser desenhada e virou número na
+     pílula. Se algo pedir `--tk-perda-*`, é resíduo — a resposta é a pílula.
 
      ⚠️ `--tk-fluxo` NÃO é `--tk-primary` no escuro, e a divergência é medida:
-     o primary (#3B82F6) dá 2,48:1 contra a perda forte — abaixo dos 3:1. Em
-     #59A1FF a fronteira vai a 3,47:1. No claro os dois coincidem (3,10:1), por
-     isso lá o token repete o primary em vez de inventar um azul.
+     o primary (#3B82F6) sai a 2,48:1 contra a superfície tingida da fita. Em
+     #59A1FF a fita ganha corpo sem virar outra cor. No claro os dois coincidem.
 
-     ⛔ Não troque por `--tk-primary` "para unificar": a unificação apaga a
-     fronteira no escuro, que é o defeito que estes tokens existem para corrigir. */
-  --tk-fluxo:           oklch(0.7200 0.1880 259.81); /* #59A1FF  o fluxo que sobrevive */
-  --tk-perda-forte:     oklch(0.4024 0.0353 261.25); /* #3E495C  a maior perda do funil */
-  --tk-perda-fraca:     oklch(0.3061 0.0339 262.59); /* #262F41  as demais perdas */
+     A rampa vai do azul de marca a um VIOLETA mais claro. A referência vai a
+     rosa; rosa aqui encosta no vermelho de prejuízo, e a ponta direita da fita
+     é a VENDA — o objetivo. ⛔ Nunca leve esta rampa a verde nem a vermelho. */
+  --tk-fluxo:           oklch(0.7200 0.1880 259.81); /* #59A1FF  entrada da fita */
+  --tk-fluxo-fim:       oklch(0.7800 0.1500 310.00); /* #D59BFF  saída — 7.96:1 sobre surface */
+
+  /* A cápsula das pílulas (taxa sobre a fita, perda abaixo dela). Sólida e
+     escura nos DOIS temas: ela precisa vencer a fita colorida por baixo, e no
+     claro uma cápsula clara sumiria sobre o branco do card. */
+  --tk-pilula:          oklch(0.1584 0.0164 261.32); /* #090D14  7.38:1 sobre a fita */
+  --tk-on-pilula:       oklch(0.9842 0.0034 247.86); /* #F8FAFC  18.60:1 sobre a cápsula */
 }
 
 /* ── Tema CLARO — mesmos nomes de token ─────────────────────────────────────── */
@@ -952,12 +954,11 @@ a {
   --tk-warning:         oklch(0.5528 0.1319 58.32);  /* #AA5B00  era #D97706 (escuro usa #F59E0B) */
   --tk-danger:          oklch(0.5691 0.2152 27.33);  /* #D92223  era #DC2626 */
 
-  /* Fita do funil — ver a nota no bloco escuro. Aqui o fluxo COINCIDE com o
-     primary (3,10:1 contra a perda forte, acima dos 3:1), e as perdas são o
-     muted a 0,38 e 0,16 já resolvidos sobre o branco. */
-  --tk-fluxo:           oklch(0.5461 0.2152 262.88); /* #2563EB  o fluxo que sobrevive */
-  --tk-perda-forte:     oklch(0.8340 0.0116 255.95); /* #C4C9D0  a maior perda do funil */
-  --tk-perda-fraca:     oklch(0.9310 0.0048 255.91); /* #E6E8EB  as demais perdas */
+  /* Fita do funil — ver a nota no bloco escuro. */
+  --tk-fluxo:           oklch(0.5461 0.2152 262.88); /* #2563EB  entrada da fita */
+  --tk-fluxo-fim:       oklch(0.5800 0.2000 310.00); /* #9E4DD0  saída — 4.73:1 sobre branco */
+  --tk-pilula:          oklch(0.2077 0.0398 265.75); /* #0F172A  3.45:1 sobre a fita */
+  --tk-on-pilula:       oklch(1.0000 0.0000 0.00);   /* #FFFFFF  17.85:1 sobre a cápsula */
 }
 
 /* ══ FASE 6 — o tema claro, e as DUAS coisas que a previsão errou ══════════════
@@ -1874,6 +1875,9 @@ a {
      legível" em vez da fita espremida. */
   @container (max-width: 360px) {
     .tk-fita-desenho { display: none; }
+    /* ⚠️ `flex`, não `block`: o compacto é uma coluna de linhas. E os dois
+       NUNCA convivem — se ambos aparecessem, os números sairiam duplicados. */
+    .tk-fita-compacto { display: flex !important; }
   }
 
   @container (max-width: 320px) {
