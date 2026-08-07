@@ -29,26 +29,59 @@
  * ele possa fazer. Barulho sem ação é ruído.
  */
 
-import { CATALOGO_META, type Largura } from "../catalogo";
+import { CATALOGO_META, encaixarColunas, encaixarLinhas, type MetaBloco } from "../catalogo";
 
 /** O envelope gravado hoje. `v` é o que separa dele do grid antigo. */
-export interface LayoutV2 extends LayoutZonas {
-  v: 2;
-}
-
-function ehLayoutV2(x: unknown): x is LayoutV2 {
-  return !!x && typeof x === "object" && !Array.isArray(x) && (x as LayoutV2).v === 2;
+export interface LayoutV3 extends LayoutZonas {
+  v: 3;
 }
 
 /**
- * Um layout v2 vindo do banco ainda precisa passar pelas MESMAS regras.
+ * O envelope da entrega C, com largura por RÓTULO. Ele ainda existe no banco de
+ * quem salvou entre 06 e 07/08/2026 — poucos, mas o produto não sabe quantos.
+ *
+ * ⛔ Não delete este tipo junto com o `Largura`: quem tem um v2 gravado depende
+ * dele para não cair no padrão, e cair no padrão é perder o arranjo em silêncio.
+ */
+interface PainelV2 {
+  id: string;
+  largura: "um-terco" | "metade" | "cheia";
+}
+interface LayoutV2 {
+  v: 2;
+  hero: string[];
+  faixa: string[];
+  paineis: PainelV2[];
+}
+
+function versaoDe(x: unknown): 2 | 3 | null {
+  if (!x || typeof x !== "object" || Array.isArray(x)) return null;
+  const v = (x as { v?: unknown }).v;
+  return v === 3 ? 3 : v === 2 ? 2 : null;
+}
+
+/**
+ * A largura por rótulo do v2, em colunas de 12.
+ *
+ * ⚠️ Ela passa pelo `encaixarColunas` do bloco na hora de usar: um `um-terco`
+ * gravado para um painel cujo mínimo hoje é 6 tem de virar 6, não 4. O rótulo
+ * antigo é a INTENÇÃO do usuário, não uma medida que o produto ainda garante.
+ */
+const COLUNAS_DO_ROTULO: Record<PainelV2["largura"], number> = {
+  "um-terco": 4,
+  metade: 6,
+  cheia: 12,
+};
+
+/**
+ * Um layout com marca de versão ainda precisa passar pelas MESMAS regras.
  *
  * ⛔ Não é paranoia: o payload pode ter sido gravado por uma versão anterior do
  * modo de edição, editado à mão, ou conter um bloco que saiu do catálogo depois.
- * **Confiar em `v: 2` para pular a validação é confiar que o passado obedeceu
+ * **Confiar em `v: 3` para pular a validação é confiar que o passado obedeceu
  * regras que só existem no presente.**
  */
-function sanearV2(raw: LayoutV2): LayoutZonas {
+function sanearEnvelope(raw: LayoutV2 | LayoutV3, versao: 2 | 3): LayoutZonas {
   const padrao = layoutPadrao();
   const hero = Array.isArray(raw.hero) ? raw.hero.filter((x) => typeof x === "string").slice(0, 4) : [];
   for (const m of HERO_PADRAO) {
@@ -70,13 +103,25 @@ function sanearV2(raw: LayoutV2): LayoutZonas {
   if (!Array.isArray(raw.paineis)) return { hero, faixa, paineis: padrao.paineis };
 
   const paineis: LayoutZonas["paineis"] = [];
-  for (const p of raw.paineis) {
+  for (const p of raw.paineis as ({ id?: unknown } & Partial<PainelV2> & Partial<PainelGrade>)[]) {
     const meta = CATALOGO_META.find((b) => b.id === p?.id);
     if (!meta) continue; // bloco que saiu do catálogo depois de gravado
     if (paineis.some((x) => x.id === meta.id)) continue;
-    /* Largura que o bloco não declara vira a padrão DELE — nunca a gravada. */
-    const largura = (meta.larguras as readonly Largura[]).includes(p.largura) ? p.largura : meta.larguraPadrao;
-    paineis.push({ id: meta.id, largura });
+    /* v2 falava por RÓTULO, v3 fala em colunas. O rótulo vira coluna e passa
+       pelo mesmo encaixe — um `um-terco` gravado para um bloco cujo mínimo hoje
+       é 6 sobe para 6, em vez de nascer num tamanho que o produto recusaria. */
+    const colBruta =
+      versao === 2
+        ? COLUNAS_DO_ROTULO[(p as PainelV2).largura] ?? meta.colPadrao
+        : typeof p.col === "number"
+          ? p.col
+          : meta.colPadrao;
+    const linhasBrutas = versao === 2 || typeof p.linhas !== "number" ? meta.linhasPadrao : p.linhas;
+    paineis.push({
+      id: meta.id,
+      col: encaixarColunas(colBruta, meta),
+      linhas: encaixarLinhas(linhasBrutas, meta),
+    });
   }
   return { hero, faixa, paineis };
 }
@@ -90,14 +135,24 @@ export interface ItemAntigo {
   h: number;
 }
 
+/** Um painel posicionado na grade de 12 colunas. */
+export interface PainelGrade {
+  id: string;
+  /** Largura em colunas de 12. Nunca abaixo do `colMin` do bloco. */
+  col: number;
+  /** Altura em linhas da grade. Nunca abaixo do `linhasMin` do bloco. */
+  linhas: number;
+}
+
 /** O layout novo: três zonas, cada uma com suas regras. */
 export interface LayoutZonas {
   /** EXATAMENTE 4 chaves de métrica. Nunca 3, nunca 5. */
   hero: string[];
   /** Até 8 chaves de métrica. */
   faixa: string[];
-  /** Painéis, na ordem, com a largura escolhida entre as permitidas do bloco. */
-  paineis: { id: string; largura: Largura }[];
+  /** Painéis, na ORDEM. A posição na linha é consequência da largura de quem
+      veio antes — a grade acomoda, e o que não couber desce. */
+  paineis: PainelGrade[];
 }
 
 export const HERO_PADRAO = ["faturamento", "gasto", "roas", "lucroLiquido"];
@@ -111,7 +166,8 @@ export function layoutPadrao(): LayoutZonas {
     faixa: [...FAIXA_PADRAO],
     paineis: CATALOGO_META.filter((b) => b.zona === "paineis").map((b) => ({
       id: b.id,
-      largura: b.larguraPadrao,
+      col: b.colPadrao,
+      linhas: b.linhasPadrao,
     })),
   };
 }
@@ -145,27 +201,32 @@ const DE_PARA: Record<string, string> = {
 };
 
 /**
- * A largura do grid antigo (em colunas de 12) vira a largura permitida mais
- * PRÓXIMA entre as que o bloco aceita.
+ * 🔴 O GRID ANTIGO JÁ ERA DE 12 COLUNAS, e isso torna esta migração quase uma
+ * identidade: o `w` gravado É a largura em colunas. O que era perda de
+ * informação na entrega C — espremer três rótulos numa fração — deixou de
+ * existir, e o arranjo do usuário chega inteiro.
  *
- * ⚠️ "Mais próxima entre as DELE", não a mais próxima em absoluto: se o bloco só
- * aceita `um-terco` e `metade`, um item que ocupava 12 colunas vira `metade`, não
- * `cheia`. É o que impede a migração de produzir um layout que o modo de edição
- * recusaria.
+ * ⚠️ O `encaixarColunas` ainda roda por cima, e não é redundância: um `w: 3`
+ * gravado para um bloco cujo mínimo hoje é 6 tem de subir. A migração nunca
+ * pode produzir um estado que o redimensionamento recusaria.
  */
-export function larguraMaisProxima(colunas: number, permitidas: Largura[]): Largura {
-  const fracao = Math.min(1, Math.max(0, colunas / 12));
-  const valor: Record<Largura, number> = { "um-terco": 1 / 3, metade: 1 / 2, cheia: 1 };
-  let melhor = permitidas[0] ?? "um-terco";
-  let dist = Infinity;
-  for (const p of permitidas) {
-    const d = Math.abs(valor[p] - fracao);
-    if (d < dist) {
-      dist = d;
-      melhor = p;
-    }
-  }
-  return melhor;
+export function colunasDoGridAntigo(w: number, meta: MetaBloco): number {
+  return encaixarColunas(Math.min(COLUNAS_ANTIGAS, Math.max(1, w)), meta);
+}
+
+/** O grid antigo tinha 12 colunas no desktop — a mesma contagem de hoje. */
+const COLUNAS_ANTIGAS = 12;
+
+/**
+ * A altura do grid antigo em linhas da grade nova.
+ *
+ * ⚠️ As unidades NÃO são as mesmas: a linha do `react-grid-layout` valia ~30px
+ * mais margem; a de hoje vale `ALTURA_LINHA` (44px). O fator de 0,75 é o que faz
+ * um gráfico de `h: 8` chegar com 6 linhas — a mesma altura na tela, que é o que
+ * o usuário reconhece. Converter 1:1 dobraria todo bloco de gráfico.
+ */
+export function linhasDoGridAntigo(h: number, meta: MetaBloco): number {
+  return encaixarLinhas(h * 0.75, meta);
 }
 
 /**
@@ -178,16 +239,20 @@ export function larguraMaisProxima(colunas: number, permitidas: Largura[]): Larg
 export function migrarLayout(bruto: unknown): LayoutZonas {
   const padrao = layoutPadrao();
 
-  /* ── FORMA NOVA (v2) ──────────────────────────────────────────────────────
+  /* ── FORMA NOVA (v2 e v3) ─────────────────────────────────────────────────
      🔴 O PAYLOAD É VERSIONADO, e não foi capricho: as três zonas NÃO são um
-     grid, e espremê-las de volta em `{i,x,y,w,h}` para reusar o formato antigo
-     perderia informação (qual zona? qual largura declarada?) e obrigaria a
-     migração a rodar em toda leitura de um layout que ela mesma acabou de
-     escrever — reinterpretando o próprio resultado, que é onde arranjo salvo
-     vira arranjo diferente do salvo.
+     grid livre, e espremê-las de volta em `{i,x,y,w,h}` para reusar o formato
+     antigo perderia informação (qual zona?) e obrigaria a migração a rodar em
+     toda leitura de um layout que ela mesma acabou de escrever —
+     reinterpretando o próprio resultado, que é onde arranjo salvo vira arranjo
+     diferente do salvo.
 
-     `v: 2` é a marca. Sem ela, é grid antigo e migra. */
-  if (ehLayoutV2(bruto)) return sanearV2(bruto);
+     ⚠️ O v2 (largura por rótulo) continua sendo lido, e não é zelo excessivo:
+     ele foi o formato gravado entre 06 e 07/08/2026. Tratá-lo como
+     desconhecido faria quem salvou naquela janela cair no padrão — perder o
+     arranjo, em silêncio, por causa de uma decisão nossa. */
+  const versao = versaoDe(bruto);
+  if (versao) return sanearEnvelope(bruto as LayoutV2 | LayoutV3, versao);
 
   if (!Array.isArray(bruto) || bruto.length === 0) return padrao;
 
@@ -230,7 +295,11 @@ export function migrarLayout(bruto: unknown): LayoutZonas {
          catálogo depois. Sem isto a migração produziria um painel órfão. */
       if (!bloco) continue;
       if (paineis.some((p) => p.id === id)) continue; // duplicata no salvo
-      paineis.push({ id, largura: larguraMaisProxima(it.w, [...bloco.larguras]) });
+      paineis.push({
+        id,
+        col: colunasDoGridAntigo(it.w, bloco),
+        linhas: linhasDoGridAntigo(it.h, bloco),
+      });
     }
 
     /* Layout salvo SÓ com blocos que sumiram: cai no padrão de painéis em vez de

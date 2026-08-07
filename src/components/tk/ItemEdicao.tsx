@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { AlcaRedimensionar } from "./AlcaRedimensionar";
 import { Tooltip } from "./Tooltip";
 
 /**
@@ -10,13 +11,19 @@ import { Tooltip } from "./Tooltip";
  * uma lista de nomes em vez do painel faria a escolha ser feita sobre um rótulo,
  * e o "não era isso que eu queria" só apareceria depois de salvar.
  *
+ * ### ⛔ OS BOTÕES DE LARGURA (`⅓ ½ cheia`) SAÍRAM — 07/08/2026
+ *
+ * No lugar entrou a alça do canto, com encaixe na grade de 12. Escolher entre
+ * três rótulos é preencher um formulário sobre o bloco; arrastar o canto e ver
+ * ele encaixar é manipular o bloco. O produto tinha um formulário disfarçado de
+ * layout.
+ *
  * ### 🔴 BLOCO FIXO APARECE SEM ✕ — não com o ✕ desabilitado
  *
  * Um ✕ apagado é um controle que existe e não funciona, e a pessoa clica nele
  * antes de ler qualquer coisa. A ausência dele, com o selo `Fixo` e o motivo a
  * um hover de distância, é uma afirmação sobre o produto em vez de um botão
- * quebrado. **O motivo vem do catálogo**, não escrito aqui: segunda cópia da
- * mesma decisão diverge no primeiro dia em que alguém mudar uma delas.
+ * quebrado. **O motivo vem do catálogo**, não escrito aqui.
  *
  * ### ⛔ REORDENAR POR BOTÃO EXISTE MESMO COM ARRASTO
  *
@@ -24,11 +31,6 @@ import { Tooltip } from "./Tooltip";
  * zona cuja única forma de reordenar é o mouse é uma zona que parte dos usuários
  * não reordena. Os dois caminhos chamam a MESMA operação do hook.
  */
-
-export interface OpcaoLargura {
-  valor: string;
-  rotulo: string;
-}
 
 export function ItemEdicao({
   titulo,
@@ -38,13 +40,13 @@ export function ItemEdicao({
   aoMover,
   podeAntes = false,
   podeDepois = false,
-  larguras,
   arrastando = false,
   alvo = false,
+  avisoAlvo,
   aoIniciarArrasto,
   aoTerminarArrasto,
-  aoPassarPorCima,
-  aoSoltar,
+  destino,
+  redimensionar,
   children,
 }: {
   titulo: string;
@@ -52,9 +54,7 @@ export function ItemEdicao({
    * `false` quando o próprio bloco já escreve o nome dele — o KPI hero é o caso.
    *
    * ⚠️ O título continua existindo: ele é o que nomeia os botões para o leitor
-   * de tela (`Mover Faturamento para antes`). O que sai é a REPETIÇÃO VISUAL, e
-   * só ela. Aceitar `titulo` opcional deixaria os `aria-label` como "Mover para
-   * antes" — indistinguíveis entre si numa fileira de quatro.
+   * de tela (`Mover Faturamento para antes`). O que sai é a REPETIÇÃO VISUAL.
    */
   tituloVisivel?: boolean;
   /** O motivo de o bloco ser estrutural. Presente = sem ✕, com selo `Fixo`. */
@@ -63,26 +63,41 @@ export function ItemEdicao({
   aoMover?: (direcao: -1 | 1) => void;
   podeAntes?: boolean;
   podeDepois?: boolean;
-  larguras?: { atual: string; opcoes: readonly OpcaoLargura[]; aoTrocar: (valor: string) => void };
   /** Este item é o que está sendo arrastado agora. */
   arrastando?: boolean;
   /** O item arrastado está por cima DESTE, e a soltura é permitida. */
   alvo?: boolean;
+  /**
+   * O que vai acontecer se soltar AQUI. Aparece só enquanto `alvo`.
+   *
+   * 🔴 Existe por causa do hero cheio: soltar um quinto KPI ali TROCA pelo que
+   * está debaixo do cursor, e sem a prévia o usuário descobre qual saiu depois
+   * de ter acontecido. "Sai: Margem de lucro" antes da soltura transforma uma
+   * surpresa numa escolha.
+   */
+  avisoAlvo?: string;
   aoIniciarArrasto?: () => void;
   aoTerminarArrasto?: () => void;
-  aoPassarPorCima?: (e: React.DragEvent) => void;
-  aoSoltar?: (e: React.DragEvent) => void;
+  /**
+   * Handlers do destino, vindos do `useArrasto`. **`null` significa que este
+   * item não aceita a carga atual** — e é a ausência de `onDragOver` que faz o
+   * navegador desenhar o cursor de proibido durante o gesto.
+   */
+  destino?: { onDragOver: (e: React.DragEvent) => void; onDrop: (e: React.DragEvent) => void } | null;
+  redimensionar?: {
+    aoArrastar: (larguraPx: number, alturaPx: number) => void;
+    aoTeclado: (dCol: number, dLinhas: number) => void;
+  };
   /**
    * O bloco de verdade. **Ausente só nos fixos**, que já estão desenhados em
    * outro lugar da tela — repetir o conteúdo deles aqui mostraria o mesmo dado
-   * duas vezes na mesma página, e o segundo não seria o que o usuário vê fora
-   * do modo de edição.
+   * duas vezes na mesma página.
    */
   children?: React.ReactNode;
 }) {
   /* O item inteiro é arrastável, mas o gesto só COMEÇA pela alça. Sem isto, um
-     clique no seletor de largura ou um texto selecionado dentro do bloco viram
-     arrasto acidental — e o usuário reordena sem ter pedido. */
+     texto selecionado dentro do bloco vira arrasto acidental — e o usuário
+     reordena sem ter pedido. */
   const [pelaAlca, setPelaAlca] = React.useState(false);
   const podeArrastar = pelaAlca && !!aoIniciarArrasto;
 
@@ -92,8 +107,8 @@ export function ItemEdicao({
       onDragStart={(e) => {
         /* `dataTransfer` precisa de ALGUM dado, senão o Firefox não inicia o
            arrasto. O conteúdo não é lido: quem sabe o que está sendo arrastado é
-           o estado do React, e enfiar índice numa string seria uma segunda fonte
-           de verdade para a mesma coisa. */
+           o `useArrasto`, e enfiar índice numa string seria uma segunda fonte de
+           verdade para a mesma coisa. */
         e.dataTransfer.setData("text/plain", titulo);
         e.dataTransfer.effectAllowed = "move";
         aoIniciarArrasto?.();
@@ -102,17 +117,18 @@ export function ItemEdicao({
         setPelaAlca(false);
         aoTerminarArrasto?.();
       }}
-      onDragOver={aoPassarPorCima}
-      onDrop={aoSoltar}
+      {...(destino ?? {})}
       style={{
+        position: "relative",
         border: `1px solid ${alvo ? "var(--tk-primary)" : "var(--tk-border)"}`,
         borderRadius: "var(--tk-radius-card)",
-        background: "var(--tk-surface)",
+        background: alvo ? "var(--tk-tint-primary)" : "var(--tk-surface)",
         opacity: arrastando ? 0.4 : 1,
-        transition: "border-color 120ms, opacity 120ms",
+        transition: "border-color 120ms, opacity 120ms, background-color 120ms",
         display: "flex",
         flexDirection: "column",
         minWidth: 0,
+        height: "100%",
         overflow: "hidden",
       }}
     >
@@ -124,6 +140,7 @@ export function ItemEdicao({
           padding: "6px 8px",
           borderBottom: "1px solid var(--tk-border)",
           background: "var(--tk-surface-hover)",
+          flex: "none",
         }}
       >
         {aoIniciarArrasto && (
@@ -131,7 +148,7 @@ export function ItemEdicao({
             aria-hidden="true"
             onPointerDown={() => setPelaAlca(true)}
             onPointerUp={() => setPelaAlca(false)}
-            title="Arraste para reordenar"
+            title="Arraste para mover"
             className="text-text-muted"
             style={{ cursor: "grab", lineHeight: 1, padding: "0 2px", touchAction: "none" }}
           >
@@ -139,36 +156,12 @@ export function ItemEdicao({
           </span>
         )}
 
-        <span className="text-caption text-text" style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <span
+          className="text-caption text-text"
+          style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+        >
           {tituloVisivel ? titulo : ""}
         </span>
-
-        {larguras && larguras.opcoes.length > 1 && (
-          /* ⛔ SÓ AS LARGURAS QUE O BLOCO DECLAROU. É o que separa escolher entre
-             opções de redimensionamento livre — e é o que impede o painel de
-             voltar a ser uma grade de doze caixas iguais. */
-          <span style={{ display: "inline-flex", gap: 2 }}>
-            {larguras.opcoes.map((o) => {
-              const ativa = o.valor === larguras.atual;
-              return (
-                <button
-                  key={o.valor}
-                  type="button"
-                  aria-pressed={ativa}
-                  onClick={() => larguras.aoTrocar(o.valor)}
-                  className={`text-caption cursor-pointer rounded-controle border ${
-                    ativa
-                      ? "bg-tint-primary text-on-tint-primary border-transparent"
-                      : "bg-transparent text-text-secondary border-border hover:bg-surface"
-                  } focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-1`}
-                  style={{ padding: "1px 6px", lineHeight: 1.5 }}
-                >
-                  {o.rotulo}
-                </button>
-              );
-            })}
-          </span>
-        )}
 
         {aoMover && (
           <>
@@ -179,6 +172,15 @@ export function ItemEdicao({
               →
             </BotaoMini>
           </>
+        )}
+
+        {alvo && avisoAlvo && (
+          <span
+            className="text-caption bg-tint-warning text-on-tint-warning"
+            style={{ padding: "1px 7px", borderRadius: "var(--tk-radius-pill)", lineHeight: 1.5, whiteSpace: "nowrap" }}
+          >
+            {avisoAlvo}
+          </span>
         )}
 
         {fixo ? (
@@ -200,7 +202,17 @@ export function ItemEdicao({
         )}
       </div>
 
-      {children != null && <div style={{ padding: "var(--tk-pad-card)", minWidth: 0, flex: 1 }}>{children}</div>}
+      {children != null && (
+        <div style={{ padding: "var(--tk-pad-card)", minWidth: 0, flex: 1, overflow: "hidden" }}>{children}</div>
+      )}
+
+      {redimensionar && (
+        <AlcaRedimensionar
+          rotulo={titulo}
+          aoArrastar={redimensionar.aoArrastar}
+          aoTeclado={redimensionar.aoTeclado}
+        />
+      )}
     </div>
   );
 }
@@ -228,7 +240,9 @@ function BotaoMini({
       onClick={aoClicar}
       className={
         "text-caption border border-transparent rounded-controle cursor-pointer " +
-        (perigo ? "text-text-secondary hover:text-danger hover:bg-tint-danger " : "text-text-secondary hover:text-text hover:bg-surface ") +
+        (perigo
+          ? "text-text-secondary hover:text-danger hover:bg-tint-danger "
+          : "text-text-secondary hover:text-text hover:bg-surface ") +
         "disabled:opacity-35 disabled:cursor-not-allowed disabled:hover:bg-transparent " +
         "focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-1"
       }

@@ -14,7 +14,8 @@
  * Mais os que a leitura do código exigiu: hero incompleto, faixa acima do teto,
  * layout corrompido, e o layout que só tem blocos mortos.
  */
-import { migrarLayout, layoutPadrao, larguraMaisProxima, MAX_FAIXA } from "@/components/dashboard/layout/migrar";
+import { migrarLayout, layoutPadrao, colunasDoGridAntigo, linhasDoGridAntigo, MAX_FAIXA } from "@/components/dashboard/layout/migrar";
+import { encaixarColunas, metaDoBloco, proximoPasso } from "@/components/dashboard/catalogo";
 import { readFileSync } from "node:fs";
 
 /**
@@ -48,17 +49,17 @@ let falhas = 0;
 function eq(nome, obtido, esperado) {
   if (JSON.stringify(obtido) === JSON.stringify(esperado)) {
     ok++;
-    console.log(`  \x1b[32m✓\x1b[0m ${nome} — ${JSON.stringify(obtido)}`);
+    console.log(`  [32m✓[0m ${nome} — ${JSON.stringify(obtido)}`);
   } else {
     falhas++;
-    console.log(`  \x1b[31m✗\x1b[0m ${nome}\n      obtido:   ${JSON.stringify(obtido)}\n      esperado: ${JSON.stringify(esperado)}`);
+    console.log(`  [31m✗[0m ${nome}\n      obtido:   ${JSON.stringify(obtido)}\n      esperado: ${JSON.stringify(esperado)}`);
   }
 }
 
 const kpi = (m, x, y) => ({ i: `kpi:${m}`, x, y, w: 3, h: 4 });
 const chart = (n, x, y, w) => ({ i: `chart:${n}`, x, y, w, h: 8 });
 
-console.log("\n\x1b[1m1. Sem layout salvo\x1b[0m");
+console.log("\n[1m1. Sem layout salvo[0m");
 {
   const p = layoutPadrao();
   eq("null vira o padrão", migrarLayout(null), p);
@@ -69,7 +70,7 @@ console.log("\n\x1b[1m1. Sem layout salvo\x1b[0m");
   eq("  …e painéis de verdade", p.paineis.length > 0, true);
 }
 
-console.log("\n\x1b[1m2. Layout antigo VÁLIDO\x1b[0m");
+console.log("\n[1m2. Layout antigo VÁLIDO[0m");
 {
   const antigo = [
     kpi("faturamento", 0, 0), kpi("vendas", 3, 0), kpi("roas", 6, 0), kpi("cpa", 9, 0),
@@ -85,8 +86,8 @@ console.log("\n\x1b[1m2. Layout antigo VÁLIDO\x1b[0m");
   /* A LARGURA cai na permitida mais próxima ENTRE AS DO BLOCO. `vendasDia`
      ocupava 12 colunas e aceita metade/cheia → cheia. `funil` ocupava 4 e
      aceita um-terco/metade → um-terco. */
-  eq("12 colunas -> cheia (o bloco aceita)", r.paineis.find((p) => p.id === "vendas-por-dia").largura, "cheia");
-  eq("4 colunas -> um-terco", r.paineis.find((p) => p.id === "funil").largura, "um-terco");
+  eq("12 colunas do grid antigo chegam como 12", r.paineis.find((p) => p.id === "vendas-por-dia").col, 12);
+  eq("4 colunas do grid antigo chegam como 4", r.paineis.find((p) => p.id === "funil").col, 4);
 
   /* 🔴 NINGUÉM PERDE BLOCO QUE EXISTE. A asserção mede o conjunto, não a
      contagem: contar 3 passaria se um bloco tivesse virado outro. */
@@ -94,7 +95,7 @@ console.log("\n\x1b[1m2. Layout antigo VÁLIDO\x1b[0m");
   eq("nenhum bloco que ainda existe se perdeu", esperados.every((id) => r.paineis.some((p) => p.id === id)), true);
 }
 
-console.log("\n\x1b[1m3. Bloco que NÃO EXISTE mais\x1b[0m");
+console.log("\n[1m3. Bloco que NÃO EXISTE mais[0m");
 {
   /* `chart:posicionamento` sumiu do produto; `chart:receita` e `chart:paises`
      viraram blocos ESTRUTURAIS, fixos no Dashboard e fora do catálogo. Os três
@@ -116,7 +117,7 @@ console.log("\n\x1b[1m3. Bloco que NÃO EXISTE mais\x1b[0m");
   eq("e o hero ficou intacto", r.hero, ["faturamento", "gasto", "roas", "lucroLiquido"]);
 }
 
-console.log("\n\x1b[1mAs guardas que a leitura do código exigiu\x1b[0m");
+console.log("\n[1mAs guardas que a leitura do código exigiu[0m");
 {
   /* HERO COM MENOS DE 4 — o modo de edição proíbe esse estado, então ele não
      pode NASCER da migração. Completa com o padrão, sem repetir. */
@@ -146,13 +147,47 @@ console.log("\n\x1b[1mAs guardas que a leitura do código exigiu\x1b[0m");
   eq("bloco duplicado entra uma vez só", r4.paineis.filter((p) => p.id === "funil").length, 1);
 }
 
-console.log("\n\x1b[1mLargura: a mais próxima ENTRE AS DO BLOCO\x1b[0m");
+console.log("");
+console.log("A grade de 12: encaixe, piso e o grid antigo");
 {
-  eq("12 col, só aceita um-terco/metade -> metade", larguraMaisProxima(12, ["um-terco", "metade"]), "metade");
-  eq("  …e NÃO 'cheia', que o bloco não aceita", larguraMaisProxima(12, ["um-terco", "metade"]) === "cheia", false);
-  eq("4 col -> um-terco", larguraMaisProxima(4, ["um-terco", "metade", "cheia"]), "um-terco");
-  eq("6 col -> metade", larguraMaisProxima(6, ["um-terco", "metade", "cheia"]), "metade");
-  eq("largura absurda não quebra", larguraMaisProxima(99, ["um-terco"]), "um-terco");
+  const funil = metaDoBloco("funil");            // colMin 4
+  const porDia = metaDoBloco("vendas-por-dia");  // colMin 6
+
+  eq("encaixe vai para o passo MAIS PRÓXIMO, não para baixo", encaixarColunas(5, funil), 4);
+  /* ⚠️ EMPATE VAI PARA BAIXO, e isto é a regra, não um acidente do laço: 7 está
+     a 1 de 6 e a 1 de 8. Encolher no empate é o lado seguro — crescer pode
+     empurrar o vizinho para a linha de baixo enquanto o usuário ainda arrasta,
+     e o layout pularia debaixo do ponteiro. */
+  eq("empate (7 entre 6 e 8) desce para 6", encaixarColunas(7, funil), 6);
+  eq("  …mas 7,6 sobe para 8, porque não é empate", encaixarColunas(7.6, funil), 8);
+  eq("nunca abaixo do mínimo do bloco", encaixarColunas(3, porDia), 6);
+  eq("  …nem com valor absurdo", encaixarColunas(-99, porDia), 6);
+  eq("teto na largura da grade", encaixarColunas(999, funil), 12);
+
+  /* 🔴 O grid ANTIGO já era de 12 colunas, então esta migração é quase uma
+     identidade — e o `encaixarColunas` por cima é o que impede que um `w`
+     gravado abaixo do mínimo de hoje entre num tamanho que o redimensionamento
+     recusaria. Sem ele o modo de edição mostraria um bloco menor do que o
+     próprio produto permite arrastar. */
+  /* 🔴 A GUARDA DO CONTROLE INERTE. As setas da alça somavam +1 coluna e o
+     encaixe devolvia o mesmo valor — de 4, `4+1=5` desempata para 4. As setas
+     existiam e não moviam nada, e `tsc`/`lint`/`build` passaram os três. Estas
+     quatro asserções são o caso que faz o defeito voltar a aparecer. */
+  eq("seta para a direita SAI do passo atual", proximoPasso(funil, 4, +1), 6);
+  eq("  …e a da esquerda volta", proximoPasso(funil, 6, -1), 4);
+  eq("no maior passo, a direita não passa do teto", proximoPasso(funil, 12, +1), 12);
+  eq("no mínimo do bloco, a esquerda não desce", proximoPasso(porDia, 6, -1), 6);
+
+  eq("grid antigo w=4 -> 4 colunas", colunasDoGridAntigo(4, funil), 4);
+  eq("grid antigo w=12 -> 12 colunas", colunasDoGridAntigo(12, funil), 12);
+  eq("grid antigo w=3 num bloco de mínimo 6 SOBE para 6", colunasDoGridAntigo(3, porDia), 6);
+
+  /* ⚠️ A unidade de ALTURA mudou entre os dois grids: a linha do
+     `react-grid-layout` valia ~30px e a de hoje vale 44. Um gráfico de `h: 8`
+     tem de chegar com 6 linhas — a mesma altura na tela. 1:1 dobraria todo
+     bloco de gráfico, e o usuário veria um layout que não é o dele. */
+  eq("grid antigo h=8 -> 6 linhas (mesma altura na tela)", linhasDoGridAntigo(8, funil), 6);
+  eq("altura nunca abaixo do mínimo do bloco", linhasDoGridAntigo(1, funil), funil.linhasMin);
 }
 
 
@@ -162,7 +197,7 @@ console.log("\n\x1b[1mLargura: a mais próxima ENTRE AS DO BLOCO\x1b[0m");
 // dele diz "transcrito do arranjo do usuário (30/07/2026)". É o layout que toda
 // conta viu por semanas, e o que está gravado nos `DashboardLayout` de quem
 // nunca customizou. Migrar ELE é o teste que mais se aproxima de produção.
-console.log("\n\x1b[1mO layout REAL do produto (defaultLayout de blocks.ts)\x1b[0m");
+console.log("\n[1mO layout REAL do produto (defaultLayout de blocks.ts)[0m");
 {
   for (const vp of ["desktop", "mobile"]) {
     const antigo = defaultLayout(vp);
@@ -195,7 +230,7 @@ console.log("\n\x1b[1mO layout REAL do produto (defaultLayout de blocks.ts)\x1b[
 // para pular a validação é confiar que o passado obedeceu regras que só existem
 // no presente — e o payload pode ter vindo de uma versão anterior do editor, de
 // edição manual, ou de um restore de backup.
-console.log("\n\x1b[1mO envelope v2\x1b[0m");
+console.log("\n[1mO envelope v2[0m");
 {
   const v2 = (o) => migrarLayout({ v: 2, hero: [], faixa: [], paineis: [], ...o });
 
@@ -210,14 +245,21 @@ console.log("\n\x1b[1mO envelope v2\x1b[0m");
   const r = v2({ paineis: [{ id: "funil", largura: "metade" }, { id: "bloco-que-morreu", largura: "cheia" }] });
   eq("v2 descarta bloco fora do catálogo", r.paineis.map((p) => p.id), ["funil"]);
 
-  /* 🔴 GUARDA: largura que o bloco NÃO declara. `funil` aceita um-terco/metade;
+  /* 🔴 GUARDA: o v2 falava por RÓTULO e continua sendo lido — ele foi o formato
+     gravado entre 06 e 07/08/2026, e tratá-lo como desconhecido faria quem
+     salvou naquela janela cair no padrão, perdendo o arranjo em silêncio.
+     Antes: largura que o bloco NÃO declara. `funil` aceitava um-terco/metade;
      um `cheia` gravado (por versão antiga ou edição manual) cai na padrão DELE,
      não é aceito. Sem isto o modo de edição mostraria uma largura que ele mesmo
      não oferece. */
-  eq("v2 com largura não declarada cai na padrão do bloco",
-     v2({ paineis: [{ id: "funil", largura: "cheia" }] }).paineis[0].largura, "um-terco");
-  eq("  …e a largura declarada é mantida",
-     v2({ paineis: [{ id: "funil", largura: "metade" }] }).paineis[0].largura, "metade");
+  eq("v2 'cheia' vira 12 colunas",
+     v2({ paineis: [{ id: "funil", largura: "cheia" }] }).paineis[0].col, 12);
+  eq("v2 'metade' vira 6 colunas",
+     v2({ paineis: [{ id: "funil", largura: "metade" }] }).paineis[0].col, 6);
+  eq("v2 'um-terco' num bloco de mínimo 6 SOBE para 6",
+     v2({ paineis: [{ id: "vendas-por-dia", largura: "um-terco" }] }).paineis[0].col, 6);
+  eq("v2 não trazia altura — cai na padrão do bloco",
+     v2({ paineis: [{ id: "funil", largura: "metade" }] }).paineis[0].linhas, metaDoBloco("funil").linhasPadrao);
 
   /* GUARDA: faixa acima do teto e duplicata entre hero e faixa. */
   eq("v2 respeita o teto da faixa",
@@ -244,7 +286,7 @@ console.log("\n\x1b[1mO envelope v2\x1b[0m");
 
 console.log(
   falhas === 0
-    ? `\n\x1b[1m\x1b[32m${ok} asserções passaram, 0 falharam.\x1b[0m\n`
-    : `\n\x1b[1m\x1b[31m${ok} passaram, ${falhas} FALHARAM.\x1b[0m\n`,
+    ? `\n[1m[32m${ok} asserções passaram, 0 falharam.[0m\n`
+    : `\n[1m[31m${ok} passaram, ${falhas} FALHARAM.[0m\n`,
 );
 process.exit(falhas === 0 ? 0 : 1);

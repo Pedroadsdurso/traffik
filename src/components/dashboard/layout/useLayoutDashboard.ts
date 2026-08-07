@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { loadLayoutZonas, resetDashboardLayout, saveLayoutZonas } from "@/lib/actions/dashboardLayout";
 import { MAX_FAIXA, layoutPadrao, migrarLayout, type LayoutZonas } from "./migrar";
-import { CATALOGO_META, type Largura } from "../catalogo";
+import { CATALOGO_META, encaixarColunas, encaixarLinhas, metaDoBloco } from "../catalogo";
 
 /**
  * Lê o layout salvo e o entrega já MIGRADO para as três zonas.
@@ -168,11 +168,13 @@ export function useLayoutDashboard(workspaceId?: string | null) {
   /** `true` quando a faixa está no teto — a tela usa para bloquear COM AVISO. */
   const faixaCheia = layout.faixa.length >= MAX_FAIXA;
 
-  const addFaixa = useCallback((metrica: string) => {
+  const inserirFaixa = useCallback((metrica: string, indice?: number) => {
     setLayout((l) => {
       if (l.faixa.length >= MAX_FAIXA) return l; // guarda; a tela avisa antes
       if (l.faixa.includes(metrica) || l.hero.includes(metrica)) return l;
-      return { ...l, faixa: [...l.faixa, metrica] };
+      const lista = [...l.faixa];
+      lista.splice(indice ?? lista.length, 0, metrica);
+      return { ...l, faixa: lista };
     });
   }, []);
 
@@ -180,11 +182,21 @@ export function useLayoutDashboard(workspaceId?: string | null) {
     setLayout((l) => ({ ...l, faixa: l.faixa.filter((m) => m !== metrica) }));
   }, []);
 
-  const addPainel = useCallback((id: string) => {
+  /**
+   * Põe um painel na zona, NUMA POSIÇÃO.
+   *
+   * ⚠️ `indice` existe porque o arrasto solta em algum lugar, não no fim. Um
+   * `addPainel` que sempre empilha embaixo obrigaria o usuário a soltar e depois
+   * reordenar — dois gestos para o que ele acabou de expressar com um.
+   */
+  const inserirPainel = useCallback((id: string, indice?: number) => {
     setLayout((l) => {
       const meta = CATALOGO_META.find((b) => b.id === id);
       if (!meta || l.paineis.some((p) => p.id === id)) return l;
-      return { ...l, paineis: [...l.paineis, { id, largura: meta.larguraPadrao }] };
+      const novo = { id, col: meta.colPadrao, linhas: meta.linhasPadrao };
+      const lista = [...l.paineis];
+      lista.splice(indice ?? lista.length, 0, novo);
+      return { ...l, paineis: lista };
     });
   }, []);
 
@@ -193,17 +205,25 @@ export function useLayoutDashboard(workspaceId?: string | null) {
   }, []);
 
   /**
-   * Troca a largura de um painel.
+   * Redimensiona um painel. Recebe as medidas CRUAS do arrasto e encaixa.
    *
-   * ⛔ SÓ ACEITA LARGURA QUE O BLOCO DECLAROU. É o que separa "escolher entre
-   * opções" de redimensionamento livre — e a guarda fica aqui, não na tela,
-   * porque a tela só oferece as permitidas e uma segunda validação divergiria.
+   * ⛔ O ENCAIXE E O PISO FICAM AQUI, não na alça. A alça sabe quantos pixels o
+   * ponteiro andou; ela não sabe o mínimo de nenhum bloco, e não deve saber —
+   * duas validações da mesma regra divergem, e a de lá não teria como avisar.
+   *
+   * ⚠️ Isto roda a cada quadro do arrasto, de propósito: o bloco encaixa DEBAIXO
+   * do ponteiro. Encaixar só ao soltar faria o usuário arrastar às cegas e
+   * descobrir o resultado depois — o mesmo defeito da rejeição pós-soltura.
    */
-  const trocarLargura = useCallback((id: string, largura: Largura) => {
+  const redimensionar = useCallback((id: string, colBruta: number, linhasBrutas: number) => {
     setLayout((l) => {
-      const meta = CATALOGO_META.find((b) => b.id === id);
-      if (!meta || !(meta.larguras as readonly Largura[]).includes(largura)) return l;
-      return { ...l, paineis: l.paineis.map((p) => (p.id === id ? { ...p, largura } : p)) };
+      const meta = metaDoBloco(id);
+      if (!meta) return l;
+      const col = encaixarColunas(colBruta, meta);
+      const linhas = encaixarLinhas(linhasBrutas, meta);
+      const atual = l.paineis.find((p) => p.id === id);
+      if (!atual || (atual.col === col && atual.linhas === linhas)) return l; // nada mudou
+      return { ...l, paineis: l.paineis.map((p) => (p.id === id ? { ...p, col, linhas } : p)) };
     });
   }, []);
 
@@ -220,11 +240,11 @@ export function useLayoutDashboard(workspaceId?: string | null) {
     moverMetrica,
     moverPainel,
     trocarHero,
-    addFaixa,
+    inserirFaixa,
     removerFaixa,
-    addPainel,
+    inserirPainel,
     removerPainel,
-    trocarLargura,
+    redimensionar,
   };
 }
 

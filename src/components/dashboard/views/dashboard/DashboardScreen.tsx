@@ -19,8 +19,9 @@ import { EmptyState } from "@/components/tk/EmptyState";
 import { KpiHero, MetricStrip, type DadosKpi } from "@/components/tk/Kpi";
 import { LineChart, type PontoSerie } from "@/components/tk/LineChart";
 import { RENDERS } from "../../catalogoRender";
-import { CATALOGO_META, ESTRUTURAIS_META, metaDoBloco, type Largura, type Zona } from "../../catalogo";
+import { ALTURA_LINHA, CATALOGO_META, COLUNAS_GRADE, ESTRUTURAIS_META, metaDoBloco, proximoPasso } from "../../catalogo";
 import { useLayoutDashboard } from "../../layout/useLayoutDashboard";
+import { useArrasto, type Carga } from "../../layout/useArrasto";
 import { MAX_FAIXA } from "../../layout/migrar";
 import { BarraEdicao } from "@/components/tk/BarraEdicao";
 import { CatalogoLateral } from "@/components/tk/CatalogoLateral";
@@ -74,13 +75,8 @@ import type { TraffikView } from "../../useTraffikState";
 /* A grade da zona 3 tem SEIS colunas, não doze: com seis, 1/3 são 2 e 1/2 são 3
    — inteiros exatos. Com doze, um terço daria 4 e a conta ainda fecharia, mas a
    grade aceitaria larguras que o catálogo não oferece, e alguém acabaria usando. */
-const COLUNAS: Record<Largura, number> = { "um-terco": 2, metade: 3, cheia: 6 };
-
-/** O rótulo curto de cada largura, no seletor do modo de edição. */
-const ROTULO_LARGURA: Record<Largura, string> = { "um-terco": "⅓", metade: "½", cheia: "cheia" };
-
-/** Onde um item estava quando o arrasto começou. */
-type Posicao = { zona: Zona; indice: number };
+/* ⛔ O `COLUNAS: Record<Largura, number>` SAIU. A grade agora tem doze colunas e
+   a largura de cada painel é um número nelas — não um rótulo traduzido aqui. */
 
 type MetricaHeat = "revenue" | "sales" | "profit";
 const ROTULO_HEAT: Record<MetricaHeat, string> = { revenue: "Receita", sales: "Vendas", profit: "Lucro" };
@@ -150,50 +146,96 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
   const faixa = layout.faixa.map(kpi).filter((k): k is DadosKpi => k !== null);
 
   /* ── ARRASTO ──────────────────────────────────────────────────────────────
-     🔴 A RECUSA ENTRE ZONAS APARECE DURANTE O GESTO, NÃO NA SOLTURA.
+     🔴 O DESTINO VÁLIDO ACENDE NO INÍCIO DO GESTO; O INCOMPATÍVEL APAGA.
 
-     O mecanismo é o `preventDefault` do `dragover`: **só o item da MESMA zona o
-     chama**. Sem ele o navegador põe `dropEffect: "none"` e desenha o cursor de
-     proibido enquanto o ponteiro passa — e a `ZonaEdicao` de destino pinta o
-     contorno de perigo junto, com a frase do porquê.
+     Substituiu o clique-para-adicionar da entrega C, por decisão do dono: duas
+     mecânicas diferentes para a mesma intenção, e nenhuma delas visível antes do
+     clique. Agora é um gesto só, e a regra aparece ANTES da soltura — quem
+     decide o que aceita é o `useArrasto`, uma fonte para as três zonas.
 
-     ⚠️ Recusar depois de soltar faria o usuário executar o gesto inteiro para
-     descobrir que ele não era possível, e ainda não diria o que fazer. */
-  const [origem, setOrigem] = React.useState<Posicao | null>(null);
-  const [sobre, setSobre] = React.useState<Posicao | null>(null);
+     ⛔ A recusa nunca é pós-soltura: o destino incompatível devolve `null` em vez
+     de handlers, e sem `preventDefault` no `dragover` o navegador desenha o
+     cursor de proibido no meio do gesto. */
+  const arr = useArrasto();
 
-  const propsArrasto = React.useCallback(
-    (zona: Zona, indice: number, mover: (de: number, para: number) => void) => ({
-      arrastando: origem?.zona === zona && origem.indice === indice,
-      alvo: origem?.zona === zona && sobre?.zona === zona && sobre.indice === indice,
-      aoIniciarArrasto: () => setOrigem({ zona, indice }),
-      aoTerminarArrasto: () => {
-        setOrigem(null);
-        setSobre(null);
-      },
-      aoPassarPorCima: (e: React.DragEvent) => {
-        // ⛔ Zona estrangeira: sai SEM `preventDefault`. É o que produz o 🚫.
-        if (!origem || origem.zona !== zona) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "move";
-        setSobre({ zona, indice });
-      },
-      aoSoltar: (e: React.DragEvent) => {
-        if (!origem || origem.zona !== zona) return;
-        e.preventDefault();
-        mover(origem.indice, indice);
-        setOrigem(null);
-        setSobre(null);
-      },
-    }),
-    [origem, sobre],
+  /* ⚠️ A grade é MEDIDA, não calculada de um breakpoint. A conversão px→coluna
+     precisa da largura real do container, e ela muda com o rail recolhido, com a
+     coluna do catálogo aberta e com o zoom do navegador. */
+  const gradeRef = React.useRef<HTMLDivElement>(null);
+
+  /**
+   * Converte o tamanho em px que a alça reportou para colunas e linhas CRUAS.
+   *
+   * ⛔ Cruas de propósito: quem encaixa no passo e aplica o mínimo do bloco é o
+   * hook. Encaixar aqui criaria a segunda implementação da regra, e a daqui não
+   * teria como saber o `colMin` de cada bloco sem ir buscá-lo — que é o começo
+   * de duas verdades.
+   */
+  const paraGrade = React.useCallback((larguraPx: number, alturaPx: number) => {
+    const el = gradeRef.current;
+    if (!el) return { col: 1, linhas: 1 };
+    const gap = parseFloat(getComputedStyle(el).columnGap || "16") || 16;
+    const larguraCol = (el.getBoundingClientRect().width - gap * (COLUNAS_GRADE - 1)) / COLUNAS_GRADE;
+    return {
+      col: (larguraPx + gap) / (larguraCol + gap),
+      linhas: (alturaPx + gap) / (ALTURA_LINHA + gap),
+    };
+  }, []);
+
+  /* ── O que cada zona faz com o que foi solto ──────────────────────────────
+     ⚠️ Estas funções são a TRADUÇÃO do gesto para a operação do hook; a REGRA
+     continua lá. É por isso que soltar um hero no Resumo vira `trocarHero`: o
+     hero não pode ficar com 3, e a troca é a única leitura do gesto que respeita
+     isso sem recusar o que o usuário pediu. */
+  const soltarNoHero = React.useCallback(
+    (c: Carga, indice: number) => {
+      if (c.tipo !== "metrica") return;
+      if (c.origem === "hero") ed.moverMetrica("hero", c.indice, indice);
+      else ed.trocarHero(c.chave, indice);
+    },
+    [ed],
+  );
+
+  const soltarNaFaixa = React.useCallback(
+    (c: Carga, indice: number) => {
+      if (c.tipo !== "metrica") return;
+      if (c.origem === "faixa") ed.moverMetrica("faixa", c.indice, indice);
+      else if (c.origem === "hero") {
+        /* Hero → Resumo é uma TROCA: quem estava no Resumo sobe para a vaga que
+           o hero abriria. Tirar sem repor deixaria Principais com 3. */
+        const entra = layout.faixa[indice];
+        if (entra) ed.trocarHero(entra, c.indice);
+      } else ed.inserirFaixa(c.chave, indice);
+    },
+    [ed, layout.faixa],
+  );
+
+  const soltarNosPaineis = React.useCallback(
+    (c: Carga, indice: number) => {
+      if (c.tipo !== "painel") return;
+      if (c.origem === "paineis") ed.moverPainel(c.indice, indice);
+      else ed.inserirPainel(c.id, indice);
+    },
+    [ed],
+  );
+
+  const soltarNoCatalogo = React.useCallback(
+    (c: Carga) => {
+      if (c.tipo === "painel") ed.removerPainel(c.id);
+      else if (c.origem === "faixa") ed.removerFaixa(c.chave);
+    },
+    [ed],
   );
 
   /* ── O que ainda não está no painel ───────────────────────────────────────
      ⚠️ A lista de métricas sai de `metricCards`, que é o catálogo REAL do hook —
      não de uma lista escrita aqui. Uma segunda lista ofereceria a métrica que
      alguém acrescentou lá e esqueceu de espelhar aqui, ou o contrário: oferecer
-     uma que não existe mais e não desenha nada. */
+     uma que não existe mais e não desenha nada.
+
+     ⛔ TUDO O QUE APARECE AQUI TEM DESTINO. Métrica vai para Principais ou
+     Resumo; painel vai para Painéis. Não existe item listado sem zona que o
+     receba — opção sem destino é a versão de catálogo do botão inerte. */
   const rotuloMetrica = React.useCallback(
     (chave: string) => v.metricCards[chave as keyof typeof v.metricCards]?.label ?? chave,
     [v],
@@ -520,7 +562,12 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
 
       {/* ── 4 KPIs hero ─────────────────────────────────────────────────────── */}
       {editando ? (
-        <ZonaEdicao titulo="Principais" regra="sempre 4" recusaSe={origem != null && origem.zona !== "hero"}>
+        <ZonaEdicao
+          titulo="Principais"
+          regra="sempre 4"
+          arrastando={arr.arrastando}
+          aceita={arr.carga?.tipo === "metrica"}
+        >
           <div style={{ display: "grid", gap: "var(--tk-gap-grid)", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
             {heros.map((k, i) => (
               <ItemEdicao
@@ -530,12 +577,21 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
                    cabeçalho da moldura é a mesma palavra duas vezes em 40px. */
                 tituloVisivel={false}
                 /* ⛔ SEM ✕ NO HERO, e não é esquecimento: remover deixaria a zona
-                   com 3, que é o estado que a regra proíbe. Aqui só se TROCA, e
-                   quem faz a pergunta é o catálogo lateral. */
+                   com 3, que é o estado que a regra proíbe. Aqui só se TROCA. */
                 aoMover={(dir) => ed.moverMetrica("hero", i, i + dir)}
                 podeAntes={i > 0}
                 podeDepois={i < heros.length - 1}
-                {...propsArrasto("hero", i, (de, para) => ed.moverMetrica("hero", de, para))}
+                arrastando={arr.carga?.tipo === "metrica" && arr.carga.origem === "hero" && arr.carga.indice === i}
+                alvo={arr.ehAlvo({ tipo: "zona", zona: "hero", indice: i })}
+                /* 🔴 A PRÉVIA DE QUEM SAI. Soltar um quinto KPI aqui troca pelo
+                   que está debaixo do cursor; sem dizer qual, o usuário descobre
+                   depois de ter acontecido. */
+                avisoAlvo={arr.carga?.tipo === "metrica" && arr.carga.origem !== "hero" ? `sai: ${k.rotulo}` : undefined}
+                aoIniciarArrasto={() =>
+                  arr.comecar({ tipo: "metrica", chave: k.chave, rotulo: k.rotulo, origem: "hero", indice: i })
+                }
+                aoTerminarArrasto={arr.terminar}
+                destino={arr.destino({ tipo: "zona", zona: "hero", indice: i }, (c) => soltarNoHero(c, i))}
               >
                 <KpiHero dados={k} carregando={carregando} />
               </ItemEdicao>
@@ -556,11 +612,15 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
           titulo="Resumo"
           regra="até 8"
           contador={`${layout.faixa.length} de ${MAX_FAIXA}`}
-          recusaSe={origem != null && origem.zona !== "faixa"}
+          arrastando={arr.arrastando}
+          aceita={arr.carga?.tipo === "metrica"}
+          destino={arr.destino({ tipo: "zona", zona: "faixa", indice: layout.faixa.length }, (c) =>
+            soltarNaFaixa(c, layout.faixa.length),
+          )}
         >
           {faixa.length === 0 ? (
             <p className="text-caption text-text-muted" style={{ margin: 0 }}>
-              O resumo está vazio. Escolha métricas ao lado — ou deixe assim, se a faixa não te serve.
+              O resumo está vazio. Arraste métricas para cá — ou salve assim, se a faixa não te serve.
             </p>
           ) : (
             <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))" }}>
@@ -572,7 +632,14 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
                   aoMover={(dir) => ed.moverMetrica("faixa", i, i + dir)}
                   podeAntes={i > 0}
                   podeDepois={i < faixa.length - 1}
-                  {...propsArrasto("faixa", i, (de, para) => ed.moverMetrica("faixa", de, para))}
+                  arrastando={arr.carga?.tipo === "metrica" && arr.carga.origem === "faixa" && arr.carga.indice === i}
+                  alvo={arr.ehAlvo({ tipo: "zona", zona: "faixa", indice: i })}
+                  avisoAlvo={arr.carga?.tipo === "metrica" && arr.carga.origem === "hero" ? `sobe: ${k.rotulo}` : undefined}
+                  aoIniciarArrasto={() =>
+                    arr.comecar({ tipo: "metrica", chave: k.chave, rotulo: k.rotulo, origem: "faixa", indice: i })
+                  }
+                  aoTerminarArrasto={arr.terminar}
+                  destino={arr.destino({ tipo: "zona", zona: "faixa", indice: i }, (c) => soltarNaFaixa(c, i))}
                 >
                   {/* O valor, e não só o nome: escolher "ARPU" sem ver que ele
                       está em R$ 0,00 neste período é escolher às cegas. */}
@@ -770,33 +837,82 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
       {editando ? (
         <ZonaEdicao
           titulo="Painéis"
-          regra="reordene, redimensione e oculte"
-          recusaSe={origem != null && origem.zona !== "paineis"}
+          regra="arraste o canto para redimensionar"
+          arrastando={arr.arrastando}
+          aceita={arr.carga?.tipo === "painel"}
+          destino={arr.destino({ tipo: "zona", zona: "paineis", indice: layout.paineis.length }, (c) =>
+            soltarNosPaineis(c, layout.paineis.length),
+          )}
         >
           {layout.paineis.length === 0 ? (
             <p className="text-caption text-text-muted" style={{ margin: 0 }}>
-              Nenhum painel. Escolha ao lado — ou salve assim: a escolha de não ter nenhum é respeitada.
+              Nenhum painel. Arraste um da lista ao lado — ou salve assim: a escolha de não ter nenhum é respeitada.
             </p>
           ) : (
-            <div style={{ display: "grid", gap: "var(--tk-gap-grid)", gridTemplateColumns: "repeat(6, minmax(0, 1fr))" }}>
+            /* 🔴 A GRADE DE 12 COLUNAS. `grid-auto-rows` na altura da linha e
+               `span` em colunas e linhas: quem cabe na mesma fileira fica, e o
+               que não couber desce. Quem acomoda é o CSS, não uma conta nossa —
+               reimplementar empacotamento em JS seria a terceira fonte de
+               verdade sobre onde cada bloco está.
+
+               ⛔ NÃO use `grid-auto-flow: dense`. Ele preenche buracos com
+               blocos de MAIS ADIANTE na lista, e aí a ordem que o usuário
+               arrastou deixa de ser a ordem que ele vê. */
+            <div
+              ref={gradeRef}
+              style={{
+                display: "grid",
+                gap: "var(--tk-gap-grid)",
+                gridTemplateColumns: `repeat(${COLUNAS_GRADE}, minmax(0, 1fr))`,
+                gridAutoRows: `${ALTURA_LINHA}px`,
+              }}
+            >
               {layout.paineis.map((p, i) => {
                 const r = RENDERS[p.id as keyof typeof RENDERS];
                 const meta = metaDoBloco(p.id);
                 if (!r || !meta) return null;
                 return (
-                  <div key={p.id} style={{ gridColumn: `span ${COLUNAS[p.largura]}`, minWidth: 0 }}>
+                  <div
+                    key={p.id}
+                    style={{ gridColumn: `span ${p.col}`, gridRow: `span ${p.linhas}`, minWidth: 0, minHeight: 0 }}
+                  >
                     <ItemEdicao
                       titulo={meta.titulo}
                       aoRemover={() => ed.removerPainel(p.id)}
                       aoMover={(dir) => ed.moverPainel(i, i + dir)}
                       podeAntes={i > 0}
                       podeDepois={i < layout.paineis.length - 1}
-                      larguras={{
-                        atual: p.largura,
-                        opcoes: meta.larguras.map((l) => ({ valor: l, rotulo: ROTULO_LARGURA[l] })),
-                        aoTrocar: (valor) => ed.trocarLargura(p.id, valor as Largura),
+                      arrastando={arr.carga?.tipo === "painel" && arr.carga.origem === "paineis" && arr.carga.indice === i}
+                      alvo={arr.ehAlvo({ tipo: "zona", zona: "paineis", indice: i })}
+                      aoIniciarArrasto={() =>
+                        arr.comecar({ tipo: "painel", id: p.id, rotulo: meta.titulo, origem: "paineis", indice: i })
+                      }
+                      aoTerminarArrasto={arr.terminar}
+                      destino={arr.destino({ tipo: "zona", zona: "paineis", indice: i }, (c) => soltarNosPaineis(c, i))}
+                      redimensionar={{
+                        aoArrastar: (larguraPx, alturaPx) => {
+                          const g = paraGrade(larguraPx, alturaPx);
+                          ed.redimensionar(p.id, g.col, g.linhas);
+                        },
+                        /* O teclado anda em PASSO, não em pixel: é o que ele sabe
+                           expressar. O encaixe do hook recebe `col + dCol` e
+                           devolve o passo permitido mais próximo — então uma seta
+                           pode pular de 4 para 6 quando não há 5. Isso é o
+                           correto: o intermediário não existe na grade. */
+                        /* 🔴 `proximoPasso`, NÃO `p.col + dCol`. A soma direta
+                           não movia NADA: `4 + 1 = 5`, e o encaixe devolvia 4 de
+                           volta pelo desempate para baixo. As setas existiam e
+                           eram inertes — visto na tela, não no build, e com
+                           `tsc`/`lint`/`build` verdes. O teclado anda por ÍNDICE
+                           na lista de passos do bloco; a alça anda em pixel. As
+                           duas entradas falam línguas diferentes. */
+                        aoTeclado: (dCol, dLinhas) =>
+                          ed.redimensionar(
+                            p.id,
+                            dCol ? proximoPasso(meta, p.col, dCol) : p.col,
+                            p.linhas + dLinhas,
+                          ),
                       }}
-                      {...propsArrasto("paineis", i, ed.moverPainel)}
                     >
                       {/* 🔴 NO MODO DE EDIÇÃO O PAINEL SEM DADO CONTINUA NA TELA,
                           com a frase. Fora dele ele some — mas sumir enquanto se
@@ -840,14 +956,24 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
         const visiveis = layout.paineis.filter((p) => RENDERS[p.id as keyof typeof RENDERS]?.temDado(v));
         if (visiveis.length === 0) return null;
         return (
-          <div style={{ display: "grid", gap: "var(--tk-gap-grid)", gridTemplateColumns: "repeat(6, minmax(0, 1fr))" }}>
+          <div
+            style={{
+              display: "grid",
+              gap: "var(--tk-gap-grid)",
+              gridTemplateColumns: `repeat(${COLUNAS_GRADE}, minmax(0, 1fr))`,
+              gridAutoRows: `${ALTURA_LINHA}px`,
+            }}
+          >
             {visiveis.map((p) => {
               const r = RENDERS[p.id as keyof typeof RENDERS];
               const meta = metaDoBloco(p.id);
               if (!r || !meta) return null;
               return (
-                <div key={p.id} style={{ gridColumn: `span ${COLUNAS[p.largura]}`, minWidth: 0 }}>
-                  <Card titulo={meta.titulo} descricao={meta.descricao}>
+                <div
+                  key={p.id}
+                  style={{ gridColumn: `span ${p.col}`, gridRow: `span ${p.linhas}`, minWidth: 0, minHeight: 0 }}
+                >
+                  <Card preencher titulo={meta.titulo} descricao={meta.descricao} style={{ overflow: "hidden" }}>
                     {r.render(v)}
                   </Card>
                 </div>
@@ -901,12 +1027,18 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
           <div style={coluna}>{conteudo}</div>
           <CatalogoLateral
             metricas={metricasDisponiveis}
-            heroAtual={layout.hero.map((chave) => ({ chave, rotulo: rotuloMetrica(chave) }))}
-            faixaCheia={ed.faixaCheia}
-            aoAdicionarFaixa={ed.addFaixa}
-            aoTrocarHero={ed.trocarHero}
             paineis={paineisDisponiveis}
-            aoAdicionarPainel={ed.addPainel}
+            faixaCheia={ed.faixaCheia}
+            arrastando={arr.arrastando}
+            ehAlvo={arr.ehAlvo({ tipo: "catalogo" })}
+            destino={arr.destino({ tipo: "catalogo" }, soltarNoCatalogo)}
+            aoArrastarMetrica={(chave, rotulo) =>
+              arr.comecar({ tipo: "metrica", chave, rotulo, origem: "catalogo", indice: -1 })
+            }
+            aoArrastarPainel={(id, titulo) =>
+              arr.comecar({ tipo: "painel", id, rotulo: titulo, origem: "catalogo", indice: -1 })
+            }
+            aoTerminarArrasto={arr.terminar}
           />
         </div>
       ) : (

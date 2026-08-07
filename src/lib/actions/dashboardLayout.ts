@@ -50,8 +50,9 @@ export async function resetDashboardLayout(viewport: Viewport, workspaceId?: str
 
 /* ── LAYOUT v2 — as três zonas ──────────────────────────────────────────────
    ⚠️ Grava no MESMO `DashboardLayout.layout`, que é `Json`. O envelope leva
-   `v: 2` e a leitura decide: com a marca é forma nova, sem ela é grid antigo e
-   passa pela migração. Uma segunda tabela para o mesmo conceito daria dois
+   `v: 3` (era `v: 2` até 07/08/2026, quando a largura por rótulo virou coluna
+   de uma grade de 12) e a leitura decide: `v: 3` e `v: 2` são formas novas,
+   sem marca é grid antigo e passa pela migração. Uma segunda tabela para o mesmo conceito daria dois
    lugares para o layout de um usuário morar, e o dia em que divergirem ninguém
    saberia qual vale.
 
@@ -91,12 +92,12 @@ export async function loadLayoutZonas(workspaceId?: string | null): Promise<unkn
 }
 
 export async function saveLayoutZonas(
-  layout: { hero: string[]; faixa: string[]; paineis: { id: string; largura: string }[] },
+  layout: { hero: string[]; faixa: string[]; paineis: { id: string; col: number; linhas: number }[] },
   workspaceId?: string | null,
 ): Promise<{ ok: true }> {
   const userId = await requireUserId();
   const wsId = await resolverArea(workspaceId);
-  const payload = { v: 2, ...layout } as unknown as Prisma.InputJsonValue;
+  const payload = { v: 3, ...layout } as unknown as Prisma.InputJsonValue;
 
   const existente = await prisma.dashboardLayout.findFirst({
     where: { userId, workspaceId: wsId, viewport: "desktop" },
