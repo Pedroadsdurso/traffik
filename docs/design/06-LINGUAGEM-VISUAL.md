@@ -6,6 +6,25 @@
 
 ---
 
+## ONDE ESTÃO AS QUATRO REFERÊNCIAS — e por que o número é duplo
+
+Elas chegaram ao repositório em 07/08/2026, com nome de download (`preview
+(1).webp`). Renomeadas para o padrão do `04`, que numera por posição na pasta.
+
+| Este documento diz | Arquivo | Matiz |
+|---|---|---|
+| **referência 1** | `referencias/12-linguagem-1-emprestimos-claro.webp` | multicor (é a exceção — ver §10) |
+| **referência 2** | `referencias/13-linguagem-2-acru-claro.webp` | verde |
+| **referência 3** | `referencias/14-linguagem-3-veselty-claro.webp` | laranja |
+| **referência 4** | `referencias/15-linguagem-4-insighta-escuro.webp` | roxo |
+
+⚠️ **O nome carrega os DOIS números de propósito.** A pasta é do `04` e conta
+01…15; este documento conta 1…4. Sem o `linguagem-N` no meio, "referência 4"
+apontaria para `04-campanhas-claro.png`, que é outra coisa — e o erro seria mudo,
+porque as duas são imagens plausíveis de dashboard.
+
+---
+
 ## O QUE AS QUATRO REFERÊNCIAS TÊM EM COMUM
 
 Antes das medidas, o que realmente as separa do que temos hoje:

@@ -289,7 +289,17 @@ export function LineChart({
               width={8}
               height={alt}
               rx={4}
-              fill="var(--tk-tint-primary)"
+              /* 🔍 CONFERIDO CONTRA AS REFERÊNCIAS 3 E 4 (07/08/2026), e a
+                 primeira versão reprovou: eu usei `tint-primary` (14%) e a alça
+                 quase não existia sobre a área preenchida. Nas duas referências
+                 ela é uma cápsula SÓLIDA — laranja cheia na Veselty, cinza
+                 cheia na Insighta —, e é isso que a faz parecer uma peça sob o
+                 cursor em vez de um brilho.
+
+                 45% é o meio-termo desta base: peça de verdade, e ainda deixa a
+                 curva passar por dentro. Opaca de vez esconderia o cruzamento
+                 das duas séries, que é o momento em que se olha o gráfico. */
+              fill="color-mix(in oklch, var(--tk-primary) 45%, transparent)"
             />
             <line
               x1={x(alvo!.i)} x2={x(alvo!.i)} y1={PAD.t} y2={base}
