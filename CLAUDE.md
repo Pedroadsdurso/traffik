@@ -1441,6 +1441,46 @@ compilador cobrar isto?*
 > SALVAR, que o C vai reaproveitar. Quem ler o `useLayoutDashboard` novo e achar
 > que o antigo virou lixo vai deletar o que o C precisa.
 
+# 🩹 A CICATRIZ QUE VIROU ANATOMIA
+
+**Uma decisão tomada para contornar uma limitação técnica sobrevive à limitação
+e passa a parecer intenção.** Ninguém mente: quem escreveu tinha razão, e quem
+lê depois só encontra a regra, sem a limitação que a justificava.
+
+O caso que nomeou a família (07/08/2026, na grade do Dashboard):
+
+| | |
+|---|---|
+| A limitação | as larguras eram cinco presets — `[3, 4, 6, 8, 12]` |
+| A decisão | *"empate desce"*, porque entre 6 e 8 o 7 fica à mesma distância |
+| Como foi escrita | como decisão de PRODUTO: *"encolher no empate é o lado seguro — crescer empurraria o vizinho para a linha de baixo"* |
+| O que ela custou | **as setas do teclado ficaram inertes**: `4 + 1 = 5` desempatava de volta para 4, e de qualquer preset uma seta voltava para ele |
+| O que aconteceu com a limitação | ela sumiu. Com todas as colunas inteiras não existe empate entre consecutivos |
+
+O argumento do "lado seguro" continuava **soando** correto depois que a lista
+morreu — e é isso que torna a família perigosa. Cicatriz não dói; ela só fica
+onde está, e a próxima pessoa a lê como parte do corpo.
+
+> ### ⛔ A PERGUNTA QUE A DESMASCARA
+> **"Esta regra ainda seria escolhida se eu estivesse começando hoje?"**
+>
+> Não é "ela está certa?" — ela costuma estar. É "ela é resposta a um problema
+> que ainda existe?".
+
+⚠️ **O sintoma é o controle inerte.** Uma regra órfã raramente aparece como erro:
+ela aparece como um botão que não faz nada, um filtro que não filtra, uma seta
+que não move. Quando um controle nasce inerte e o código parece certo, **procure
+a regra que ele obedece e pergunte de qual limitação ela nasceu.**
+
+⚠️ E ao escrever qualquer "⛔ sempre faça X" por causa de uma restrição —
+biblioteca, formato, limite de API, ferramenta —, **escreva a restrição junto**.
+É o que permite reavaliar quando ela cair. Uma regra sem a causa registrada é
+uma cicatriz esperando para virar anatomia.
+
+**Provavelmente há outras nesta base.** Candidatas: toda decisão tomada "porque
+o `react-grid-layout` fazia assim", "porque o `--experimental-strip-types` não
+lê `.tsx`" e "porque o plano Hobby só aceita cron diário".
+
 # 🔗 QUANDO DOIS CÁLCULOS PRECISAM CONCORDAR, TESTE A PROPRIEDADE
 
 **Teste que congela VALOR defende o bug. Teste que congela RELAÇÃO defende o

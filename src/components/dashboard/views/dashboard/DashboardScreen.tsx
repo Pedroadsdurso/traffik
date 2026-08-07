@@ -22,6 +22,7 @@ import { RENDERS } from "../../catalogoRender";
 import { ALTURA_LINHA, CATALOGO_META, COLUNAS_GRADE, ESTRUTURAIS_META, metaDoBloco, proximoPasso } from "../../catalogo";
 import { useLayoutDashboard } from "../../layout/useLayoutDashboard";
 import { useArrasto, type Carga } from "../../layout/useArrasto";
+import { avisoDeSobra, linhasDaGrade } from "../../layout/grade";
 import { MAX_FAIXA } from "../../layout/migrar";
 import { BarraEdicao } from "@/components/tk/BarraEdicao";
 import { CatalogoLateral } from "@/components/tk/CatalogoLateral";
@@ -905,7 +906,13 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
                blocos de MAIS ADIANTE na lista, e aí a ordem que o usuário
                arrastou deixa de ser a ordem que ele vê. */
             <div ref={gradeRef} style={GRADE}>
-              {layout.paineis.map((p, i) => {
+              {/* 🔴 O AVISO DE SOBRA é o que separa "você escolheu assim" de
+                  "quebrou". Sem ele, uma linha que não soma 12 é indistinguível de
+                  defeito — e agora que todas as colunas existem, fechar a linha
+                  é só arrastar. O texto diz quanto falta. */}
+              {linhasDaGrade(layout.paineis.map((p) => p.col)).flatMap((linha) => [
+                ...linha.indices.map((i) => {
+                const p = layout.paineis[i]!;
                 const r = RENDERS[p.id as keyof typeof RENDERS];
                 const meta = metaDoBloco(p.id);
                 if (!r || !meta) return null;
@@ -970,7 +977,32 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
                     </ItemEdicao>
                   </div>
                 );
-              })}
+                }),
+                /* ⛔ TEXTO, e não área pontilhada. Pontilhado no fim da linha é
+                   lido como alvo de soltura, e ali não se solta nada: o arrasto
+                   insere na ORDEM da lista, não numa coordenada. Seria
+                   affordance mentindo — o mesmo defeito do cursor de ponteiro
+                   sobre o globo que não respondia.
+
+                   ⚠️ Ele é um ITEM DA GRADE, e isso é de propósito: se a simulação
+                   de `linhasDaGrade` errar, o aviso aparece na linha errada, à
+                   vista de quem edita. Guarda que falha em silêncio não é guarda. */
+                avisoDeSobra(linha.livres) ? (
+                  <span
+                    key={`sobra-${linha.indices[0]}`}
+                    className="text-caption text-text-muted"
+                    style={{
+                      gridColumn: `span ${linha.livres}`,
+                      alignSelf: "center",
+                      textAlign: "right",
+                      paddingRight: 2,
+                      minWidth: 0,
+                    }}
+                  >
+                    {avisoDeSobra(linha.livres)}
+                  </span>
+                ) : null,
+              ])}
             </div>
           )}
         </ZonaEdicao>

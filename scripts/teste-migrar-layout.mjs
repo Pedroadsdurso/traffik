@@ -16,6 +16,7 @@
  */
 import { migrarLayout, layoutPadrao, colunasDoGridAntigo, linhasDoGridAntigo, MAX_FAIXA } from "@/components/dashboard/layout/migrar";
 import { encaixarColunas, metaDoBloco, passosDoBloco, proximoPasso } from "@/components/dashboard/catalogo";
+import { avisoDeSobra, linhasDaGrade } from "@/components/dashboard/layout/grade";
 import { readFileSync } from "node:fs";
 
 /**
@@ -148,6 +149,31 @@ console.log("\n[1mAs guardas que a leitura do código exigiu[0m");
 }
 
 console.log("");
+console.log("Empacotamento da linha e o aviso de sobra");
+{
+  eq("linha que fecha em 12 nao tem sobra", linhasDaGrade([6, 6]).map((l) => l.livres).join(","), "0");
+  eq("6+4 deixa 2 livres", linhasDaGrade([6, 4])[0].livres, 2);
+  eq("  ...e o aviso diz quantas", avisoDeSobra(linhasDaGrade([6, 4])[0].livres), "2 colunas livres");
+  eq("uma sozinha fica no singular", avisoDeSobra(1), "1 coluna livre");
+  eq("linha fechada NAO tem aviso", avisoDeSobra(0), null);
+
+  /* O que nao cabe DESCE inteiro -- e o proximo comeca a linha nova. E a
+     politica do CSS Grid sem `dense`, que esta funcao simula. */
+  const tres = linhasDaGrade([6, 4, 4]);
+  eq("o que nao cabe desce", tres.length, 2);
+  eq("  ...e a linha 1 fica com dois", tres[0].indices.join(","), "0,1");
+  eq("  ...e a 2 comeca com o terceiro", tres[1].indices.join(","), "2");
+  eq("  ...com 8 livres nela", tres[1].livres, 8);
+
+  /* ⚠️ Largura invalida vira grade CHEIA, nunca descartada. Descartar faria o
+     painel sumir do agrupamento e aparecer na tela -- o aviso mentiria sobre
+     uma linha que existe. */
+  eq("largura zero nao some do agrupamento", linhasDaGrade([0, 6]).length, 2);
+  eq("  ...e ocupa a linha inteira", linhasDaGrade([0, 6])[0].livres, 0);
+
+  eq("lista vazia nao produz linha", linhasDaGrade([]).length, 0);
+}
+
 console.log("A grade de 12: encaixe, piso e o grid antigo");
 {
   const funil = metaDoBloco("funil");            // colMin 4
