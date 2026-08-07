@@ -1429,6 +1429,30 @@ repositório** — só o `06` chegou. O documento cita "as quatro referências" 
 "referência 1/2/3/4" o tempo todo; sem os arquivos, quem ler não tem como
 conferir contra o que o texto descreve. **Peça os arquivos antes do acabamento.**
 
+# 🩼 AJUSTE MANUAL AO LADO DE UM VALOR DE SISTEMA É SEMPRE SINTOMA
+
+> **Alguém viu o desalinhamento, compensou, e o compensador escondeu a causa por
+> tempo indeterminado.**
+
+O caso (07/08/2026): o botão de busca global do header tinha `height: 34` fixo —
+2px a mais que o `Filtros` ao lado, que é `Button` e lê `--tk-altura-controle`. E
+carregava um **`marginTop: 4`**. O empurrãozinho existia para disfarçar o
+desencontro que os 34px criaram.
+
+O resultado é o pior dos dois mundos: a tela fica *quase* certa, ninguém sabe
+nomear o incômodo, e a próxima pessoa que trocar a densidade descobre que um
+controle não acompanha.
+
+> ### ⛔ A REGRA
+> **Encontrou `marginTop`, `top`, `position: relative` com deslocamento de 1–4px,
+> ou `transform: translateY(2px)` ao lado de um componente do sistema? Não ajuste
+> o ajuste. Procure o valor que deveria vir de token e não vem.**
+
+⚠️ **É prima do `?? 0` sobre valor recém-anulável.** As duas consertam a
+MANIFESTAÇÃO e preservam a ORIGEM — e as duas compilam, passam no lint e ficam
+parecendo cuidado com o detalhe. A diferença entre as duas famílias é só onde
+dói: o `?? 0` mente sobre um número, o empurrãozinho mente sobre um alinhamento.
+
 # 🌱 O GERADOR DE ESTADO TAMBÉM PRECISA SER VERIFICADO
 
 > **Um seed que produz o estado errado faz o teste passar pelo motivo errado — e

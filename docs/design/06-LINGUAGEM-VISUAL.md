@@ -226,9 +226,27 @@ O que faz parecer moderno não é ter muitas cores. É ter **uma**, e usá-la co
 ## 11. MOVIMENTO
 
 - Transição de entrada dos blocos: 200ms, deslocamento de 4px para cima, escalonado em 30ms por bloco.
-- Troca de filtro: os números fazem *count-up* de 400ms; as séries transicionam o caminho.
+- Troca de filtro: o número faz **crossfade de ~150ms** — nunca *count-up*. As
+  **séries** transicionam o caminho normalmente.
+
+  > ### ⛔ COUNT-UP ESTÁ PROIBIDO, e este parágrafo pedia por ele até 07/08/2026
+  >
+  > Contar de `R$ 0` até `R$ 3.636` exibe `R$ 1.200`, `R$ 2.400` e uma dezena de
+  > valores **que nunca foram verdade**. Quem bate o olho no meio da animação lê
+  > um número errado — e numa ferramenta em que o número **é** o produto, isso é
+  > a tela afirmando o que não mediu.
+  >
+  > O crossfade não tem esse problema: em qualquer instante o que está na tela é
+  > **ou o valor antigo, ou o novo**. Nunca um terceiro que ninguém calculou.
+  >
+  > ⚠️ **E a distinção com a série é real, não uma exceção de conveniência.** Uma
+  > linha que se move não afirma valor pontual — ela mostra forma. Um número
+  > afirma. Por isso o caminho pode transicionar e o dígito não.
+  >
+  > ⛔ Não "implemente o que faltou" aqui. A ausência é a decisão.
 - Hover: 120ms.
-- Respeite `prefers-reduced-motion`: sem deslocamento, sem contagem.
+- Respeite `prefers-reduced-motion`: sem deslocamento, sem escalonamento. (Não
+  há contagem a suprimir — ver acima.)
 
 ---
 

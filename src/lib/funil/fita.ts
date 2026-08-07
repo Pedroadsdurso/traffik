@@ -92,6 +92,153 @@ export function calcularFita(
   });
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   FLUXO COM PERDAS EXPLÍCITAS — a massa se conserva da esquerda para a direita
+   ═══════════════════════════════════════════════════════════════════════════
+
+   🔴 A FITA SOZINHA ESCONDIA A PERGUNTA. Ela afinava de 1.220 para 27, e os
+   1.193 que sumiram **simplesmente não estavam em lugar nenhum do desenho**. O
+   estreitamento diz QUE se perdeu; não diz QUANTO nem ONDE, e é isso que um
+   funil existe para responder.
+
+   Aqui quem sai vira **faixa própria, rotulada**. Em qualquer x vertical:
+
+       fluxo que continua  +  todas as perdas até ali  =  a faixa inteira
+
+   ⛔ A CONSERVAÇÃO É A PROPRIEDADE, e é ela que o `test:fluxo` verifica — não
+   as coordenadas. Um teste de coordenada passa igual com uma faixa de perda
+   desenhada com a espessura errada; a soma não.
+
+   ### Por que as perdas empilham para BAIXO sem overlap
+
+   A faixa de uma perda ocupa exatamente o intervalo entre a espessura do fluxo
+   ANTES e DEPOIS dela: `[esp(i+1), esp(i)]`. Como `esp` só decresce, o intervalo
+   da perda seguinte fica inteiro ACIMA do da anterior — elas se encaixam sem
+   cálculo de empilhamento e sem poder se sobrepor. A altura total nunca muda. */
+
+export interface PerdaFita {
+  /** Índice da etapa de onde a perda sai. */
+  de: number;
+  /** Quantos se perderam entre `de` e `de + 1`. */
+  valor: number;
+  /** Deslocamento do topo da faixa até o TOPO da perda (= espessura do fluxo depois). */
+  topo: number;
+  /** Deslocamento até a BASE da perda (= espessura do fluxo antes). */
+  base: number;
+  x0: number;
+  x1: number;
+}
+
+export interface Fluxo {
+  etapas: EtapaFita[];
+  perdas: PerdaFita[];
+  /** Altura total da faixa, em px. Constante em todo x. */
+  faixa: number;
+}
+
+/**
+ * ⛔ O PISO MEXE NA ESPESSURA DO FLUXO, NUNCA NA DA PERDA — e a primeira versão
+ * fazia o contrário, o que quebrava a conservação.
+ *
+ * As faixas não são independentes: cada perda é a DIFERENÇA entre a espessura do
+ * fluxo antes e depois dela. Engrossar uma perda direto soma altura por cima do
+ * total, e o desenho passa a prometer uma conservação que não vale. A primeira
+ * tentativa compensava descontando "da maior perda" — e o teste aleatório achou
+ * o caso em que isso não existe: com **uma perda só**, ela é a maior, e descontar
+ * dela desfaz o piso que acabou de ser aplicado. `[967, 959]` somava 131,92.
+ *
+ * A correção é mexer na sequência que GERA as faixas: garantir, andando para a
+ * frente, que cada etapa seja pelo menos `piso` mais fina que a anterior sempre
+ * que houver perda entre elas. A soma continua sendo `esp[0]` por construção,
+ * porque as faixas são diferenças da mesma sequência — não há o que compensar.
+ *
+ * ⚠️ Isso afina o FLUXO em alguns px. É a troca certa: no funil real o fluxo
+ * final tem 2,9px e a perda 126px — 3px a menos na perda seriam imperceptíveis,
+ * mas 3px a menos no fluxo o fariam sumir, e o fluxo é o que sobrevive.
+ * Por isso o piso do fluxo (`calcularFita`) é respeitado como limite inferior.
+ */
+export function calcularFluxo(
+  valores: number[],
+  opcoes: { largura: number; faixa: number; margem?: number; piso?: number },
+): Fluxo {
+  const piso = opcoes.piso ?? PISO_ESPESSURA;
+  const etapas = calcularFita(valores, opcoes);
+  const faixa = opcoes.faixa;
+
+  /* Abre espaço para cada perda afinando a etapa SEGUINTE. Andando para a
+     frente: `esp[k+1]` nunca fica a menos de `piso` de `esp[k]` quando há
+     perda entre as duas. */
+  for (let i = 0; i < etapas.length - 1; i++) {
+    const a = etapas[i]!;
+    const b = etapas[i + 1]!;
+    if (a.valor <= b.valor) continue;
+    const teto = a.espessura - piso;
+    // `b.valor > 0` mantém o piso do próprio fluxo: etapa não-vazia não some.
+    const chao = b.valor > 0 ? Math.min(piso, Math.max(0, teto)) : 0;
+    b.espessura = Math.max(chao, Math.min(b.espessura, teto));
+  }
+
+  const perdas: PerdaFita[] = [];
+  for (let i = 0; i < etapas.length - 1; i++) {
+    const a = etapas[i]!;
+    const b = etapas[i + 1]!;
+    // Etapa que CRESCE não é perda. Pode acontecer: cliques vêm da Meta e
+    // checkouts vêm do pixel, e as duas fontes não se conversam.
+    if (a.valor <= b.valor) continue;
+    perdas.push({ de: i, valor: a.valor - b.valor, topo: b.espessura, base: a.espessura, x0: a.x, x1: b.x });
+  }
+
+  return { etapas, perdas, faixa };
+}
+
+/**
+ * A faixa de UMA perda: nasce com espessura zero na guia de onde ela sai e
+ * abre até a espessura cheia na guia seguinte, seguindo a MESMA curva da borda
+ * de baixo do fluxo — é o que faz parecer que ela se descolou dele.
+ *
+ * Depois da guia seguinte ela segue reta até o fim do desenho, para caber o
+ * rótulo sem o traço morrer no meio da frase.
+ */
+export function caminhoPerda(p: PerdaFita, yTopo: number, xFim: number): string {
+  const meio = (p.x0 + p.x1) / 2;
+  const topoY = yTopo + p.topo;
+  const baseY = yTopo + p.base;
+  // Sobe pela borda de baixo do fluxo (curva), segue reta, e fecha pela base.
+  return (
+    `M${p.x0.toFixed(2)},${baseY.toFixed(2)} ` +
+    `C${meio.toFixed(2)},${baseY.toFixed(2)} ${meio.toFixed(2)},${topoY.toFixed(2)} ${p.x1.toFixed(2)},${topoY.toFixed(2)} ` +
+    `L${xFim.toFixed(2)},${topoY.toFixed(2)} ` +
+    `L${xFim.toFixed(2)},${baseY.toFixed(2)} Z`
+  );
+}
+
+/**
+ * O fluxo que CONTINUA: borda de cima reta no topo da faixa, borda de baixo
+ * acompanhando a espessura de cada etapa.
+ */
+export function caminhoFluxo(etapas: EtapaFita[], yTopo: number): string {
+  if (etapas.length === 0) return "";
+  const ultimo = etapas[etapas.length - 1]!;
+  const partes = [`M${etapas[0]!.x.toFixed(2)},${yTopo.toFixed(2)}`];
+  partes.push(`L${ultimo.x.toFixed(2)},${yTopo.toFixed(2)}`);
+  // Volta pela borda de baixo, da direita para a esquerda.
+  const inverso = [...etapas].reverse();
+  inverso.forEach((e, i) => {
+    const y = yTopo + e.espessura;
+    if (i === 0) {
+      partes.push(`L${e.x.toFixed(2)},${y.toFixed(2)}`);
+      return;
+    }
+    const ant = inverso[i - 1]!;
+    const meio = (ant.x + e.x) / 2;
+    partes.push(
+      `C${meio.toFixed(2)},${(yTopo + ant.espessura).toFixed(2)} ${meio.toFixed(2)},${y.toFixed(2)} ${e.x.toFixed(2)},${y.toFixed(2)}`,
+    );
+  });
+  partes.push("Z");
+  return partes.join(" ");
+}
+
 /**
  * O contorno da fita, como um `d` de `<path>` fechado.
  *

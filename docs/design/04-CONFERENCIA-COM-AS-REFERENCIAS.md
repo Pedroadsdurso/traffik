@@ -79,6 +79,25 @@ em `components/tk/`.
 
 ---
 
+## 🔌 OS 🔧 QUE TÊM A MESMA CAUSA — a ferramenta é MONO-PLATAFORMA hoje
+
+> Agrupados em 07/08/2026 por decisão do dono. **Eles voltam JUNTOS no dia em que
+> existir a segunda plataforma**, e é por isso que ficam numa lista só: revistos
+> separadamente, cada um pareceria uma decisão de estética.
+
+| Onde | O que sai | Por quê |
+|---|---|---|
+| Top campanhas — **ícone da plataforma** por linha | 🔧 fora | não há ativo de marca de terceiro nesta base |
+| Top campanhas — **sub-rótulo `Google Ads` sob o nome** (`06` §14.4) | 🔧 fora | diria **"Meta Ads" em todas as linhas** — uma coluna de ruído idêntico. E trazê-lo exigiria campo novo em `metrics.ts`, que é fora da apresentação |
+| Integrações — **cards por plataforma** | 🔧 fora | mesma causa |
+
+⚠️ **O critério de volta é objetivo:** quando a segunda plataforma existir, o
+sub-rótulo passa a DISTINGUIR linhas em vez de repetir. Enquanto só houver Meta,
+ele é ruído — e ruído idêntico em toda linha é pior que ausência, porque ocupa a
+coluna que a informação usaria.
+
+---
+
 ## DASHBOARD — mesclagem
 
 Referência: imagem 1. **Decisão: tudo da imagem 1 + tudo que já construímos.**
