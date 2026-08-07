@@ -45,7 +45,10 @@ export function HelpMenu() {
         aria-label="Central de ajuda"
         title="Central de ajuda"
         className="text-text-secondary hover:bg-surface-hover hover:text-text grid cursor-pointer place-items-center rounded-controle border-0 bg-transparent focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
-        style={{ width: 32, height: 32 }}
+        /* Quadrado, e o lado é `--tk-altura-controle` — o mesmo dos vizinhos na
+           barra de topo. Fixo em px ele concordava com eles só na densidade
+           padrão, que é a única em que se testa. */
+        style={{ width: "var(--tk-altura-controle)", height: "var(--tk-altura-controle)" }}
       >
         <Icone nome="info" tamanho={17} />
       </button>

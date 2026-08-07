@@ -85,11 +85,6 @@ export function ContextBar({
         onClick={aoAbrirPaleta}
         aria-label="Buscar (Ctrl+K)"
         className="bg-surface border-border text-text-muted hover:bg-surface-hover hover:text-text-secondary flex cursor-pointer items-center gap-2 rounded-controle border focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
-        /* 34px fixos e `marginTop: 4` eram o MESMO defeito do `Segmented`: o
-           botão ficava 2px mais alto que o `Filtros` ao lado (que é `Button`, e
-           sai do token), e o empurrãozinho de margem existia para disfarçar o
-           desencontro. Ajuste manual ao lado de um valor de sistema é sempre o
-           sintoma — o certo é os dois lerem a mesma variável. */
         style={{ height: "var(--tk-altura-controle)", padding: "0 10px", width: "min(340px, 32vw)", flex: "0 1 auto" }}
       >
         <Icone nome="bussola" tamanho={16} cor="suave" />
@@ -99,7 +94,25 @@ export function ContextBar({
         </kbd>
       </button>
 
-      <div className="flex flex-shrink-0 items-center gap-1.5" style={{ marginTop: 4 }}>
+      {/* ⛔ TODO CONTROLE DESTA BARRA LÊ `--tk-altura-controle`, sem exceção — a
+          busca acima, o `Filtros`, a ajuda, o sino e o tema. É a mesma medida
+          que `Button`, `Input`, `Select` e `Segmented` consomem.
+
+          🩼 E não há `marginTop` de alinhamento aqui. Havia: o grupo inteiro
+          carregava um `marginTop: 4` que o empurrava para baixo da busca. Ele
+          nasceu como curativo de 2px num botão de 34px fixos, e quando aquele
+          botão passou a ler o token o curativo NÃO morreu — SUBIU UM NÍVEL, do
+          botão para o `<div>` do grupo, onde ninguém mais o relacionava com a
+          causa. É a variação mais difícil da família: o ajuste manual não fica
+          ao lado do valor que ele compensa, então o `grep` que procura os dois
+          juntos não acha.
+
+          ⚠️ O defeito das alturas na mão era MUDO na configuração em que se
+          testa: o app roda em `:root`, onde `--tk-altura-controle` vale
+          exatamente `32px`. Os quatro controles fixos em `32` concordavam por
+          coincidência. Em `[data-density="default"]` (36px) e `comfortable`
+          (40px) só a busca crescia e a barra se partia. */}
+      <div className="flex flex-shrink-0 items-center gap-1.5">
         {/*
           ⛔ O BOTÃO `Filtros` SÓ EXISTE ONDE HÁ FAIXA DE FILTROS, e isso é
           verificado em tempo de execução, não presumido: a tela REGISTRA a faixa
@@ -119,7 +132,7 @@ export function ContextBar({
                 ? "bg-tint-primary text-primary border-transparent"
                 : "bg-transparent text-text-secondary border-border hover:bg-surface-hover hover:text-text")
             }
-            style={{ height: 32 }}
+            style={{ height: "var(--tk-altura-controle)" }}
           >
             <Icone nome="ajustes" tamanho={16} cor={filtros.visivel ? "marca" : "neutro"} />
             <span className="text-label">Filtros</span>
@@ -140,7 +153,7 @@ export function ContextBar({
           aria-label={theme === "dark" ? "Alternar para tema claro" : "Alternar para tema escuro"}
           title={theme === "dark" ? "Tema claro" : "Tema escuro"}
           className="text-text-secondary hover:bg-surface-hover hover:text-text grid cursor-pointer place-items-center rounded-controle border-0 bg-transparent focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
-          style={{ width: 32, height: 32 }}
+          style={{ width: "var(--tk-altura-controle)", height: "var(--tk-altura-controle)" }}
         >
           <Icone nome={theme === "dark" ? "temaClaro" : "temaEscuro"} tamanho={17} />
         </button>

@@ -28,13 +28,11 @@ export function EmptyState({
   titulo,
   causa,
   acao,
-  icone,
   compacto = false,
 }: {
   titulo: string;
   causa?: React.ReactNode;
   acao?: { texto: string; href?: string; aoClicar?: () => void };
-  icone?: React.ReactNode;
   compacto?: boolean;
 }) {
   return (
@@ -51,7 +49,11 @@ export function EmptyState({
         minHeight: compacto ? 0 : 120,
       }}
     >
-      {icone && <div className="text-text-muted" style={{ opacity: 0.7, marginBottom: 2 }}>{icone}</div>}
+      {/* ⚠️ NÃO VOLTE COM UMA PROP `icone` SOLTA. Havia uma, com zero chamadores,
+          e ela renderizava o ícone direto sobre o fundo do card — o oposto do
+          `06` §13, que exige recipiente tingido (quadrado neutro de 36px para o
+          que ILUSTRA UM BLOCO). Se um ícone for pedido aqui um dia, ele nasce
+          dentro do recipiente, não ao lado da regra. */}
       <p className="text-label text-text" style={{ margin: 0 }}>{titulo}</p>
       {causa && (
         <p className="text-caption text-text-muted" style={{ margin: 0, maxWidth: 320, lineHeight: 1.5 }}>

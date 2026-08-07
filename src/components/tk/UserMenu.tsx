@@ -74,6 +74,13 @@ export function UserMenu({
           "hover:bg-surface-hover flex cursor-pointer items-center rounded-controle border-0 bg-transparent focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 " +
           (variante === "bloco" ? "w-full gap-2.5 px-2 py-2 text-left" : "justify-center p-0.5")
         }
+        /* Na `avatar` a CAIXA é do tamanho dos vizinhos da barra de topo; o
+           avatar dentro dela continua 28px. Antes a caixa media o conteúdo
+           (28 + 2 de padding = 30), e só não destoava porque os vizinhos
+           estavam fixos em 32 — dois erros que se anulavam na densidade padrão.
+           Na `bloco` (rodapé do rail) a altura é do conteúdo, de propósito: ali
+           ele é uma linha de lista com nome e e-mail, não um controle. */
+        style={variante === "avatar" ? { height: "var(--tk-altura-controle)", width: "var(--tk-altura-controle)" } : undefined}
       >
         <Avatar inicial={inicial} />
         {variante === "bloco" && (

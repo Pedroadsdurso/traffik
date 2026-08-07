@@ -49,7 +49,8 @@ export function NotificationsBell({
         aria-expanded={aberto}
         aria-label={naoLidas > 0 ? `Notificações, ${naoLidas} não lidas` : "Notificações"}
         className="text-text-secondary hover:bg-surface-hover hover:text-text relative grid cursor-pointer place-items-center rounded-controle border-0 bg-transparent focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2"
-        style={{ width: 32, height: 32 }}
+        /* Lado = `--tk-altura-controle`, como todo controle da barra de topo. */
+        style={{ width: "var(--tk-altura-controle)", height: "var(--tk-altura-controle)" }}
       >
         <Icone nome="sino" tamanho={17} />
         {naoLidas > 0 && (

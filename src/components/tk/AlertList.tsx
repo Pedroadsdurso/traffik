@@ -32,10 +32,15 @@ export type Alerta = {
   severidade: Severidade;
   titulo: string;
   detalhe?: string;
-  /** Já formatado — "há 2h". A formatação de tempo é do fuso do usuário. */
-  quando?: string;
   href?: string;
 };
+
+/* ⚠️ NÃO ACRESCENTE UM CARIMBO DE TEMPO AQUI ("há 2h", `06` §14.3).
+   Havia uma prop `quando`, com ZERO chamadores, e ela não tinha como ser
+   preenchida: alerta nesta base é DERIVADO do período filtrado
+   (`dadosDosBlocos.tsx`), não uma linha guardada com instante de criação. Não
+   existe o dado. É a mesma razão que removeu a `aoVerTodos` — ver o comentário
+   do rodapé, mais abaixo. */
 
 const TOM: Record<Severidade, { classe: string; glifo: string; rotulo: string }> = {
   danger: { classe: "bg-tint-danger text-on-tint-danger", glifo: "✕", rotulo: "Crítico" },
@@ -101,18 +106,6 @@ export function AlertList({
               </span>
               {a.detalhe && <span className="text-caption text-text-muted" style={{ display: "block" }}>{a.detalhe}</span>}
             </span>
-            {a.quando && (
-              <span
-                className="text-caption text-text-muted"
-                /* Alinhado à PRIMEIRA LINHA do texto (`06` §14.3), não ao topo
-                   da caixa nem ao centro: com duas linhas de detalhe o carimbo
-                   centrado flutua no meio do nada, e colado no topo fica acima
-                   da maiúscula do título. */
-                style={{ flex: "none", whiteSpace: "nowrap", alignSelf: "flex-start", marginTop: 5 }}
-              >
-                {a.quando}
-              </span>
-            )}
           </>
         );
 

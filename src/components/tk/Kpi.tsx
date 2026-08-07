@@ -299,6 +299,11 @@ export function MetricStrip({ itens, carregando = false }: { itens: DadosKpi[]; 
       className="bg-surface border border-border"
       style={{
         borderRadius: "var(--tk-radius-card)",
+        /* A faixa tem fundo, borda e raio de card — então tem a SOMBRA de card
+           (`06` §1). Sem ela a faixa ficava rente ao fundo logo abaixo de quatro
+           heros elevados, e a fileira inteira parecia meio desenhada. Os ITENS
+           dentro continuam sem card, que é o que o comentário acima diz. */
+        boxShadow: "var(--tk-shadow-card)",
         display: "flex",
         alignItems: "stretch",
         overflowX: "auto",
