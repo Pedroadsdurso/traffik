@@ -1545,6 +1545,67 @@ dono corrigiu. **Não unifique os dois.**
 
 ---
 
+# 📌 ESTADO DA SESSÃO — 07/08/2026 (preparação do Gerenciador)
+
+> **A mais nova. Se contradisser qualquer coisa acima, ela vence.**
+>
+> ⛔ **NADA FOI PARA O GITHUB.** `main` intacta, **11 commits locais** em
+> `redesign/dashboard`. O push é decisão do dono, e ele não a tomou.
+
+## ➡️ A PRÓXIMA SESSÃO CONSTRÓI O GERENCIADOR, DO COMEÇO AO FIM
+
+Decisão do dono, e o motivo está na seção **MODO DE TRABALHO ATÉ AS DEZ TELAS
+EXISTIREM**, no fim deste arquivo. Leia-a antes de começar — ela muda o que
+fazer com uma descoberta no meio do caminho.
+
+**Está tudo pronto para desenhar:**
+
+| | |
+|---|---|
+| `CampaignRow.medicao` | os **três** estados, com `test:medicao` (9 asserções, no `test:banco`) |
+| `CampaignRow.objective` | chega à tela; `AdRow`/`AdSetRow` herdam da campanha |
+| Insights | especificado: os 4 cartões filtram por **`effectiveStatus`**, não por `status`. O 5º cartão (melhor ROAS pausada) é condicional e sai da mesma lista |
+| `04`, seção CAMPANHAS | 15 ❌ e 5 🔧, todos com motivo escrito |
+| dev | 12 campanhas · 4 status · 1 nunca sincronizada e sem métrica · 14 checkouts de navegador + 24 de gateway |
+
+⚠️ **Onde eu suspeito que estoura** continua sendo `AdsTable` com ~20 colunas —
+conjuntos nomeados e colunas congeladas são a única parte do plano **sem modelo
+na referência**. Avise antes de improvisar ali.
+
+## ✅ O que ficou pronto
+
+| | |
+|---|---|
+| ✅ | **`--tk-altura-controle` passou a controlar os 5 controles do header.** 4 traziam `height: 32` na mão e concordavam por coincidência (`:root` vale 32). Provado nos dois: 32 no padrão, **40 no `comfortable`**, `top` idêntico nos cinco |
+| ✅ | **`no-use-before-define` LIGADA**, e as **53 violações CONSERTADAS** (5 símbolos, todos desta branch). Lint sai com 0 erros |
+| ✅ | **Os três estados de medição** no `CampaignRow` — `sumAds` intocado, é fato sobre existência de linha |
+| ✅ | **O funil não desenha mais gravata-borboleta** — etapa zero com posterior positiva vira "não medida" e a fita interpola |
+| ✅ | **`dev:campanhas`** — 12 campanhas com estado, receita, e checkout nos dois ramos |
+| ✅ | **`docs:estado`** só conta tabela de item, morre se uma seção perder todas, e carimba o dia de **São Paulo** |
+| ✅ | **`.gitattributes`** — resolve 1 dos 3 sintomas de CRLF; os outros dois estão explicados nele |
+
+## 🐛 O que eu quebrei e consertei nesta sessão
+
+**Vale mais que a lista de acertos**, porque três dos quatro passaram por `tsc`,
+`lint` e `build`:
+
+| | |
+|---|---|
+| **TDZ ×2 no `overview.ts`** | `campaignObjectiveById` e `medicaoDe` declarados abaixo de quem os consome. A 1ª derrubou a `/api/ads` com **500 de corpo vazio**; a 2ª foi o teste que pegou. É o que motivou ligar o lint |
+| **Renomear campanha zerou a receita de 2** | `splitPipe` descarta id não numérico, então o dev sempre atribuiu por NOME. Expôs que **o ramo do ID nunca foi percorrido no dev** |
+| **`teste-medicao` comeu o seed** | apagava métrica que não criou. Virou regra própria |
+| **2 edições por casamento de string que não pegaram** | a do `eslint.config.mjs` (quase reportei silêncio como medição) e o `console.log` do seed — este último **denunciado pelo lint novo**, duas variáveis contadas e nunca lidas |
+
+## 🕳️ O que ficou devendo
+
+- **A tela do Gerenciador.** Terceira sessão seguida em que a preparação
+  consumiu tudo — desta vez por defeitos meus, não por descoberta.
+- **4 advertências de `no-unused-vars`** (`i` não usado em `.map`), em
+  `VisaoGeralScreen` ×3 e `FeedVendas`. Pré-existentes, triviais.
+- A lista **ACHADOS ADIADOS**, no fim deste arquivo, com 9 itens medidos.
+
+---
+
 # 📌 ESTADO DA SESSÃO — 07/08/2026 (acabamento)
 
 > Substitui a seção anterior de 07/08, que descrevia o estado no COMEÇO do dia.
@@ -3129,7 +3190,6 @@ leva o que foi MEDIDO, para ninguém ter de medir de novo.
 
 | Achado | O que já se sabe |
 |---|---|
-| **`eslint.config.mjs` com erro de sintaxe** | 🔴 **URGENTE, e não é adiável de verdade:** o bloco da regra foi colado FORA do array `defineConfig([…])`. `npx eslint` morre com `SyntaxError: Unexpected token ':'` em **qualquer** arquivo. O `npm test` não roda lint, então a suíte fica verde com o lint inteiro caído. O hook `config-protection` me impede de consertar — ver o arquivo corrigido no relatório de 07/08 |
 | **Filtro `Ativas` lê o status CONFIGURADO** | `lib/ads/status.ts:32` e `useTraffikState:1172`. Lista campanha que não entrega. É o que o Gerenciador da Meta faz, e é anterior a `4e6aa9e`. ⛔ O Insights escolheu o EFETIVO de propósito — quem unificar os dois reintroduz o defeito onde ele recomenda |
 | **Varredura de comentários que afirmam efeito** | 5 casos documentados, o resto nunca varrido. O `grep` inicial é por verbo no presente descrevendo o que o código faz |
 | **`docs:estado`: seção com 2 tabelas que perde 1** | a guarda só pega quem perde TODAS. Cobrir exigiria saber quantas cada seção deve ter — lista à mão, que envelhece |

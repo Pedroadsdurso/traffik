@@ -467,6 +467,15 @@ async function main() {
      WHERE a."userId" = $1 GROUP BY 1 ORDER BY 2 DESC`,
     [userId],
   );
+  /* ⛔ O CABEÇALHO DESTE ARQUIVO PROMETE "ele IMPRIME o que gerou", e esta linha
+     é metade dessa promessa. Ela ficou de fora por uma edição por casamento de
+     string que não casou e não reclamou — o defeito exato que virou regra no
+     CLAUDE.md, cometido no commit que a escreveu. Quem denunciou foi o lint:
+     duas variáveis contadas e nunca lidas. */
+  console.log(
+    `  checkouts semeados — navegador: \x1b[1m${checkoutsNavegador}\x1b[0m · ` +
+      `gateway: \x1b[1m${checkoutsGateway}\x1b[0m\n`,
+  );
   console.log(`  \x1b[1mConferência no banco\x1b[0m\n`);
   console.table(conferencia);
 

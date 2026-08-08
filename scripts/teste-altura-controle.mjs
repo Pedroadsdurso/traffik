@@ -35,7 +35,6 @@
  *
  *   npm run test:altura-controle
  */
-import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 

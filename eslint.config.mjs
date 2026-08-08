@@ -17,15 +17,18 @@ const eslintConfig = defineConfig([
     // ruído em código que não é da aplicação.
     "public/*.js",
   ]),
-]);
-
-{
-  rules: {
-    "@typescript-eslint/no-use-before-define": [
-      "error",
-      { functions: false, classes: false, variables: true, enums: true, typedefs: false },
-    ],
+  {
+    // TDZ não é erro de tipo — tsc passa e a página quebra em execução.
+    // Ligada em 07/08/2026 depois de a mesma família morder quatro vezes.
+    // functions: false de propósito: function é içada, e chamá-la antes da
+    // declaração é idioma normal de JS. O que estoura é const/let.
+    rules: {
+      "@typescript-eslint/no-use-before-define": [
+        "error",
+        { functions: false, classes: false, variables: true, enums: true, typedefs: false },
+      ],
+    },
   },
-},
+]);
 
 export default eslintConfig;
