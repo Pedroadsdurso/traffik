@@ -980,7 +980,6 @@ qualquer resize, leia `innerWidth` e compare. `innerWidth === screen.availWidth`
 > ⛔ **GERADO A PARTIR DO `04` — NÃO EDITE À MÃO.** Rode `npm run docs:estado`.
 > Ele garante que este arquivo e o `04` não discordem. **Não** garante que o
 > `04` concorde com o código — isso continua sendo conferência manual.
-> Última geração: 07/08/2026.
 
 | Tela | ✅ feito | ❌ falta | 🔧 diverge por decisão |
 |---|---|---|---|
@@ -1552,7 +1551,12 @@ dono corrigiu. **Não unifique os dois.**
 > ⛔ **NADA FOI PARA O GITHUB.** `main` intacta, **11 commits locais** em
 > `redesign/dashboard`. O push é decisão do dono, e ele não a tomou.
 
-## ➡️ A PRÓXIMA SESSÃO CONSTRÓI O GERENCIADOR, DO COMEÇO AO FIM
+## ✅ A PRÓXIMA SESSÃO CONSTRÓI O GERENCIADOR — e construiu, em 07–08/08
+
+> **RESOLVIDO.** A tela existe desde 08/08/2026 (`GerenciadorScreen`, 925
+> linhas). O que segue abaixo é o inventário de PREPARAÇÃO que ela consumiu, e
+> continua útil como referência do que já estava pronto — mas **não leia como
+> tarefa pendente**. O estado de hoje é a seção de **08/08** no fim do arquivo.
 
 Decisão do dono, e o motivo está na seção **MODO DE TRABALHO ATÉ AS DEZ TELAS
 EXISTIREM**, no fim deste arquivo. Leia-a antes de começar — ela muda o que
@@ -1581,7 +1585,7 @@ na referência**. Avise antes de improvisar ali.
 | ✅ | **Os três estados de medição** no `CampaignRow` — `sumAds` intocado, é fato sobre existência de linha |
 | ✅ | **O funil não desenha mais gravata-borboleta** — etapa zero com posterior positiva vira "não medida" e a fita interpola |
 | ✅ | **`dev:campanhas`** — 12 campanhas com estado, receita, e checkout nos dois ramos |
-| ✅ | **`docs:estado`** só conta tabela de item, morre se uma seção perder todas, e carimba o dia de **São Paulo** |
+| ✅ | **`docs:estado`** só conta tabela de item e morre se uma seção perder todas. ⚠️ O carimbo de data que ele ganhou aqui **foi REMOVIDO em 08/08** — trocar UTC pelo dia de São Paulo consertou a janela das 21h e deixou a origem em pé; o bloco continuava reprovando sozinho à meia-noite |
 | ✅ | **`.gitattributes`** — resolve 1 dos 3 sintomas de CRLF; os outros dois estão explicados nele |
 
 ## 🐛 O que eu quebrei e consertei nesta sessão
@@ -1598,8 +1602,8 @@ na referência**. Avise antes de improvisar ali.
 
 ## 🕳️ O que ficou devendo
 
-- **A tela do Gerenciador.** Terceira sessão seguida em que a preparação
-  consumiu tudo — desta vez por defeitos meus, não por descoberta.
+- ~~**A tela do Gerenciador.** Terceira sessão seguida em que a preparação
+  consumiu tudo~~ → ✅ **construída em 08/08/2026.** A quarta foi a que nasceu.
 - **4 advertências de `no-unused-vars`** (`i` não usado em `.map`), em
   `VisaoGeralScreen` ×3 e `FeedVendas`. Pré-existentes, triviais.
 - A lista **ACHADOS ADIADOS**, no fim deste arquivo, com 9 itens medidos.
@@ -1648,7 +1652,10 @@ O `CLAUDE.md` agora tem um bloco de **ESTADO gerado a partir do `04`**
 DOCUMENTO × DOCUMENTO. **Não** mata documento × código — isso segue manual, e o
 limite está escrito no script.
 
-## ➡️ PRÓXIMO: Gerenciador / Campanhas
+## ✅ PRÓXIMO ERA Gerenciador / Campanhas — feito em 08/08/2026
+
+> **Não é mais o próximo.** Ficou aqui porque o raciocínio abaixo é o que guiou
+> a construção. O próximo de verdade está na seção de **08/08**, no fim.
 
 É sobretudo TABELA, e a tabela acabou de ser resolvida: `.tk-linha` (hover, sem
 borda entre linhas), cabeçalho único e barra de proporção atrás do texto. 18
@@ -3198,4 +3205,66 @@ leva o que foi MEDIDO, para ninguém ter de medir de novo.
 | **`PixelView` com 2 `elapsed()` crus** | linhas 272 e 294. Morre na reescrita daquela tela |
 | **Ramos que o seed do dev nunca percorre** | 6 suspeitas medidas e anotadas na seção 🌗. Nenhuma investigada |
 | **`Sale.platform` NULL nas 35** | o dev só exercita um gateway |
+
+---
+
+# 📌 ESTADO DA SESSÃO — 08/08/2026 (o Gerenciador nasceu)
+
+> **A mais nova. Se contradisser qualquer coisa acima, ela vence.**
+>
+> ⛔ **NADA FOI PARA O GITHUB.** `main` intacta; tudo é commit LOCAL em
+> `redesign/dashboard`. O push é decisão do dono, e ele não a tomou.
+
+## ✅ A QUARTA TELA EXISTE — Gerenciador / Campanhas
+
+Construída na madrugada de 07→08/08 e **commitada em 08/08**. As três seções
+anteriores que a chamavam de "próximo" foram corrigidas no mesmo commit — elas
+afirmavam o oposto do repositório, que é a família que a sessão inteira de 07/08
+registrou.
+
+| | |
+|---|---|
+| `views/gerenciador/GerenciadorScreen.tsx` | **925 linhas**, do zero |
+| `tk/` | `TabelaAds` · `BarraSelecao` · `Paginacao` · `PainelInsights` · `Abas` · `ModalNovaCampanha` |
+| `lib/ads/` | `insights.ts` 181 · `apresentacao.ts` 82 · `objetivos.ts` 38 |
+| `overview.ts` | **+118** — `SerieDaCampanha`, `AdSetRow`/`AdRow`, séries diárias por campanha |
+| deletados | `AdsManagerView` · `AdsTable` · `AdsActionBar` · `NovaCampanhaModal` — o arquivo antigo é DELETADO, não editado |
+| `globals.css` | o CSS do Bloco 6 (`.ads-table`, `.ads-aba`, colunas presas) saiu inteiro |
+| `test:gerenciador` | **18 asserções**, e ele entrou no `npm test` no MESMO commit |
+
+## 🔴 O QUE O COMMIT DIZ DE SI MESMO: A TELA NÃO FOI VISTA
+
+O commit foi feito **como rede**, com a verificação visual declarada pendente na
+própria mensagem. 925 linhas sem commit é o que se perde quando o PC desliga —
+e ele já desligou nesta sessão.
+
+⛔ **`tsc` limpo + lint 0 erros + 18 asserções verdes NÃO respondem "como
+ficou".** Foi exatamente esse conjunto que deixou passar 3 dos 4 primitivos da
+Fase 2 com defeito visível. **O `04` não foi preenchido antes de ver** — escrever
+✅ contra evidência inexistente é o defeito que o `04` existe para impedir.
+
+## ✅ O `docs:estado` PAROU DE FICAR VERMELHO SOZINHO
+
+O bloco gerado carregava `Última geração: DD/MM/AAAA`. Como o conteúdo só muda
+quando o `04` muda, **a data era a única parte capaz de mudar sozinha**: à
+meia-noite o `--conferir` acusava "desatualizado" e o `npm test` ficava vermelho
+sem ninguém ter tocado em nada.
+
+A correção de 07/08 (UTC → dia de São Paulo) tratou o SINTOMA: consertou a janela
+das 21h e deixou a origem em pé — o carimbo passou a virar às 00h em vez das 21h.
+**O carimbo foi removido.** Sem valor que se mexe sozinho, não há o que reconferir.
+
+> ### ⛔ NÃO REPONHA A DATA
+> Suíte que fica vermelha sozinha **para de ser sinal**. Em uma semana todo mundo
+> lê o vermelho como ruído — e aí ela não denuncia mais o dia em que algo quebrar
+> de verdade. É o alarme que grita sem motivo envenenando a única ferramenta que
+> diz se algo quebrou.
+>
+> Quem responde *"de quando é esta geração?"* é `git log -1 -- CLAUDE.md`, que
+> não pode divergir do arquivo. Documentação que **LÊ** o valor não envelhece; a
+> que o **AFIRMA**, sim.
+
+⚠️ **Validado contra baseline**, como a regra do gerador de relatório manda: a
+regeneração mudou **exatamente uma linha** — a do carimbo. As 8 telas saíram
+idênticas.
 

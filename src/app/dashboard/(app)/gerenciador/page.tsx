@@ -1,8 +1,8 @@
 "use client";
 
 import { useTraffik } from "@/components/dashboard/TraffikContext";
-import { AdsManagerView } from "@/components/dashboard/views/AdsManagerView";
+import { GerenciadorScreen } from "@/components/dashboard/views/gerenciador/GerenciadorScreen";
 
 export default function GerenciadorPage() {
-  return <AdsManagerView v={useTraffik()} />;
+  return <GerenciadorScreen v={useTraffik()} />;
 }

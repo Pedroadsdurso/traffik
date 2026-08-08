@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { Abas } from "@/components/tk/Abas";
 import { Badge } from "@/components/tk/Badge";
 import { Button } from "@/components/tk/Button";
 import { Card } from "@/components/tk/Card";
@@ -449,24 +450,12 @@ function PainelDetalhe({ item, v }: { item: ItemIntegracao; v: TraffikView }) {
 
       {item.token && <BlocoToken token={item.token} />}
 
-      <div role="tablist" style={{ display: "flex", gap: 2, marginTop: 14, borderBottom: "1px solid var(--tk-border)" }}>
-        {abas.map((a) => (
-          <button
-            key={a.id}
-            type="button"
-            role="tab"
-            aria-selected={abaAtual === a.id}
-            onClick={() => setAba(a.id)}
-            className={`text-label ${abaAtual === a.id ? "text-text" : "text-text-secondary"}`}
-            style={{
-              background: "none", border: "none", cursor: "pointer", padding: "7px 10px",
-              borderBottom: `2px solid ${abaAtual === a.id ? "var(--tk-primary)" : "transparent"}`,
-              marginBottom: -1,
-            }}
-          >
-            {a.rotulo}
-          </button>
-        ))}
+      {/* ⚠️ Era esta mesma fileira escrita à mão aqui dentro. Ela virou
+          `components/tk/Abas` ao nascer a segunda (o Gerenciador) — duas
+          implementações da mesma coisa divergem sempre, e a divergência entre
+          duas fileiras de aba aparece como "esta tela é de outro produto". */}
+      <div style={{ marginTop: 14 }}>
+        <Abas abas={abas} ativa={abaAtual} aoTrocar={setAba} rotuloAcessivel="Seções da integração" />
       </div>
 
       <div style={{ paddingTop: 12 }}>

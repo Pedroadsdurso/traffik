@@ -2,7 +2,7 @@ import { carregarMapaDeAreas } from "@/lib/areas/atribuicao";
 import { getUserTimezone } from "@/lib/userTimezone";
 import { prisma } from "@/lib/prisma";
 import { janelaDoPeriodo, type PeriodoNome } from "@/lib/periodo";
-import { dayEnd, dayKeyInTz, dayStart, keyToDateColumn } from "@/lib/timezone";
+import { dateColumnKey, dayEnd, dayKeyInTz, dayKeyRange, dayStart, keyToDateColumn } from "@/lib/timezone";
 import { chaveDoPedido } from "@/lib/pedidos";
 import { splitPipe } from "@/lib/utm/parse";
 import { CAMPOS_UTM, utmsDaVenda } from "@/lib/vendas/utmsDaVenda";
@@ -41,6 +41,33 @@ export interface AdsFilters {
  * resposta a quem precisa conferir a integração e a quem não tem o que fazer.
  */
 export type Medicao = "nunca-sincronizada" | "sem-veiculacao" | "medida";
+
+/**
+ * A série DIÁRIA de uma campanha, alinhada a `AdsOverview.dias`.
+ *
+ * 🔴 ELA EXISTE PARA QUE O KPI E O SPARKLINE NÃO POSSAM DIVERGIR. Os cinco KPIs
+ * do Gerenciador são a soma das campanhas que passam no filtro da tela, e a
+ * linha embaixo do número é a soma das MESMAS séries — não uma segunda consulta
+ * ao servidor com outro recorte. É a regra do CLAUDE.md aplicada na origem:
+ * quando dois cálculos precisam concordar, faça deles um só.
+ *
+ * ⛔ **SÓ A CAMPANHA TEM SÉRIE, e o tipo cobra isso** (`AdSetRow`/`AdRow` a
+ * removem no `Omit`). Os KPIs descrevem o Gerenciador inteiro, não o nível que a
+ * tabela está listando — na referência eles somam as 40 campanhas enquanto a
+ * tabela mostra 7. Dar série aos outros dois níveis seria carregar 30 números
+ * por anúncio para alimentar um número que ninguém lê ali.
+ *
+ * ⚠️ Acrescentada em 07/08/2026, e é **aditiva**: `sumAds`, `results`, `revenue`
+ * e a atribuição continuam byte a byte como estavam. O que entrou foi `date` no
+ * `select` das métricas e `timestamp` no das vendas — dois campos que já
+ * existiam nas linhas e não eram pedidos.
+ */
+export interface SerieDaCampanha {
+  spend: number[];
+  revenue: number[];
+  /** Vendas aprovadas, contadas POR PEDIDO — a mesma dedup do agregado. */
+  results: number[];
+}
 
 export interface CampaignRow {
   id: string;
@@ -98,15 +125,17 @@ export interface CampaignRow {
   cliquesAtribuidos: number;
   /** Vendas em QUALQUER status (pendente, aprovada, reembolsada…). NOSSO. */
   vendasIniciadas: number;
+  /** Por dia, alinhada a `AdsOverview.dias`. Ver `SerieDaCampanha`. */
+  serie: SerieDaCampanha;
 }
-export interface AdSetRow extends Omit<CampaignRow, "dailyBudget"> {
+export interface AdSetRow extends Omit<CampaignRow, "dailyBudget" | "serie"> {
   campaignId: string;
   campaignName: string;
   dailyBudget: number | null;
   /** Bid cap do conjunto (`bid_amount`). */
   bidAmount: number | null;
 }
-export interface AdRow extends Omit<CampaignRow, "dailyBudget"> {
+export interface AdRow extends Omit<CampaignRow, "dailyBudget" | "serie"> {
   campaignId: string;
   campaignName: string;
   adSetId: string;
@@ -129,6 +158,11 @@ export interface AdsOverview {
   adSets: AdSetRow[];
   ads: AdRow[];
   accounts: AccountRow[];
+  /**
+   * Os dias da janela, em ordem, no fuso do USUÁRIO — o eixo de toda
+   * `SerieDaCampanha`. Vem uma vez, e não repetido em cada linha.
+   */
+  dias: string[];
 }
 
 /**
@@ -218,7 +252,9 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
         date: { gte: keyToDateColumn(startKey), lte: keyToDateColumn(endKey) },
         ad: { adAccount: { userId, ...accountWhere } },
       },
-      select: { adId: true, spend: true, impressions: true, clicks: true },
+      /* `date` entrou em 07/08/2026 para a série diária dos 5 KPIs. Ele já
+         existe na linha e não era pedido — a mesma armadilha do `pedidoId`. */
+      select: { adId: true, date: true, spend: true, impressions: true, clicks: true },
     }),
     /* Anúncios que têm métrica em ALGUMA janela — sem filtro de data.
      *
@@ -245,7 +281,9 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
       },
       // `CAMPOS_UTM` nas duas pontas: a relação `click` é a fonte, as colunas na
       // venda são a cópia para quando o clique some (`clickId` é `SetNull`).
-      select: { id: true, pedidoId: true, value: true, status: true, product: true, webhookId: true, apiCredentialId: true, ...CAMPOS_UTM, click: { select: { ...CAMPOS_UTM, workspaceId: true } } },
+      // `timestamp` entrou em 07/08/2026, pelo mesmo motivo do `date` acima: é o
+      // eixo da série diária. A janela da consulta NÃO mudou.
+      select: { id: true, pedidoId: true, timestamp: true, value: true, status: true, product: true, webhookId: true, apiCredentialId: true, ...CAMPOS_UTM, click: { select: { ...CAMPOS_UTM, workspaceId: true } } },
     }),
     // Cliques rastreados por NÓS, atribuídos por UTM. Chegam ao banco no
     // instante do clique (via `t.js`), sem depender do Facebook.
@@ -315,6 +353,45 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
     metByAd.set(m.adId, cur);
   }
 
+  /* ── 📈 A SÉRIE DIÁRIA (aditiva, 07/08/2026) ────────────────────────────────
+   *
+   * Ver `SerieDaCampanha`. O eixo é o mesmo para todas as linhas e vem uma vez
+   * em `AdsOverview.dias`.
+   *
+   * ⚠️ `dateColumnKey` e não `dayKeyInTz`: `DailyAdMetric.date` é `@db.Date` e
+   * volta do banco como meia-noite UTC. Passá-lo pelo fuso do usuário o jogaria
+   * para o dia anterior em todo fuso a oeste de Greenwich — que é o nosso.
+   * A venda, essa sim, tem instante e vai pelo fuso.
+   */
+  const dias = dayKeyRange(startKey, endKey);
+  const indiceDoDia = new Map(dias.map((d, i) => [d, i]));
+  const zeros = () => new Array<number>(dias.length).fill(0);
+
+  const campanhaDoAd = new Map(ads.map((a) => [a.id, a.campaignId]));
+  const gastoPorDia = new Map<string, number[]>();
+  for (const m of metrics) {
+    const cid = campanhaDoAd.get(m.adId);
+    if (!cid) continue;
+    const i = indiceDoDia.get(dateColumnKey(m.date));
+    if (i === undefined) continue;
+    const serie = gastoPorDia.get(cid) ?? gastoPorDia.set(cid, zeros()).get(cid)!;
+    serie[i] += num(m.spend);
+  }
+
+  /**
+   * Receita e vendas por dia, na MESMA chave de atribuição do agregado
+   * (`campId:<id>` ou `campNome:<nome>`).
+   *
+   * ⛔ Escrita DENTRO do `bump`, e não num laço próprio. A contagem de vendas é
+   * por PEDIDO, e a dedup mora lá — um segundo laço teria de reimplementá-la,
+   * e o dia em que as duas divergissem o sparkline mostraria um total diferente
+   * do KPI logo acima dele, sem nada acusar.
+   */
+  const vendasPorDia = new Map<string, { revenue: number[]; results: number[] }>();
+  const serieDoDestino = (destino: string) =>
+    vendasPorDia.get(destino) ??
+    vendasPorDia.set(destino, { revenue: zeros(), results: zeros() }).get(destino)!;
+
   // Atribuição por campanha: preferimos o id do Facebook extraído do
   // utm_campaign (`nome|id`, Bloco 11); caímos no nome para cliques antigos.
   interface Attr { results: number; revenue: number; iniciadas: number }
@@ -349,6 +426,10 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
     const camp = splitPipe(utms.utmCampaign);
     const cont = splitPipe(utms.utmContent);
     const aprovada = s.status === "APROVADA";
+    // Índice do dia DESTA venda na série. Fora da janela é impossível (a
+    // consulta já recorta), mas `undefined` aqui não escreve nada em vez de
+    // escrever na posição errada.
+    const iDia = indiceDoDia.get(dayKeyInTz(s.timestamp, tz));
     const bump = (map: Map<string, Attr>, key: string, prefixo: string) => {
       const cur = map.get(key) ?? vazio();
       const nova = primeiraVezNoDestino(`${prefixo}:${key}`, s);
@@ -358,6 +439,12 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
         cur.revenue += num(s.value);
       }
       map.set(key, cur);
+      // 📈 A série, com exatamente as mesmas condições da linha acima.
+      if (iDia !== undefined && aprovada) {
+        const serie = serieDoDestino(`${prefixo}:${key}`);
+        serie.revenue[iDia] += num(s.value);
+        if (nova) serie.results[iDia] += 1;
+      }
     };
     if (camp.id) bump(resultsByCampaignId, camp.id, "campId");
     else if (camp.name) bump(resultsByName, camp.name.toLowerCase(), "campNome");
@@ -511,6 +598,15 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
 
   const campaignNameById = new Map(campaigns.map((c) => [c.id, c.name]));
 
+  /* Soma elemento a elemento as séries dos DOIS caminhos de atribuição (id e
+     nome), do mesmo jeito que o agregado soma `byId` e `byName` logo abaixo.
+     Cada venda cai em só um dos dois, então a soma não conta duas vezes. */
+  const somarSeries = (...listas: (number[] | undefined)[]): number[] =>
+    listas.reduce<number[]>(
+      (acc, l) => (l ? acc.map((x, i) => x + (l[i] ?? 0)) : acc),
+      zeros(),
+    );
+
   const campaignRows: CampaignRow[] = campaigns.map((c) => {
     const agg = sumAds(adsByCampaign.get(c.id));
     // Soma id + nome: cada venda está em só um dos mapas (ver creatives.ts).
@@ -547,6 +643,17 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
         (cliquesByCampaignId.get(c.fbCampaignId) ?? 0) +
           (cliquesByCampaignName.get(c.name.toLowerCase()) ?? 0) || agg.cliquesAtribuidos,
       vendasIniciadas: attr.iniciadas || agg.vendasIniciadas,
+      serie: {
+        spend: gastoPorDia.get(c.id) ?? zeros(),
+        revenue: somarSeries(
+          vendasPorDia.get(`campId:${c.fbCampaignId}`)?.revenue,
+          vendasPorDia.get(`campNome:${c.name.toLowerCase()}`)?.revenue,
+        ),
+        results: somarSeries(
+          vendasPorDia.get(`campId:${c.fbCampaignId}`)?.results,
+          vendasPorDia.get(`campNome:${c.name.toLowerCase()}`)?.results,
+        ),
+      },
     };
   });
 
@@ -620,5 +727,6 @@ export async function computeAdsOverview(userId: string, filters: AdsFilters): P
     adSets: byFilters(adSetRows),
     ads: byFilters(adRows),
     accounts: accountRows,
+    dias,
   };
 }

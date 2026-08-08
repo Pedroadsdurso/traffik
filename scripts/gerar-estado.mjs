@@ -140,23 +140,29 @@ if (semTabela.length > 0) {
 }
 
 /* ── 2. Monta o bloco ────────────────────────────────────────────────────── */
-/* 🕐 O DIA É O DE SÃO PAULO, NÃO O DO PROCESSO.
+/* 📅 O BLOCO NÃO LEVA DATA, E ISSO É O CONSERTO — não uma simplificação.
  *
- * `toISOString()` devolve UTC. Às 21:13 em Brasília já é o dia seguinte lá, e o
- * carimbo mudava sozinho — `--conferir` passava a acusar "desatualizado" e o
- * `npm test` ficava vermelho sem ninguém ter tocado em nada. Aconteceu em
- * 07/08/2026, às 21:13.
+ * Ele carregava `Última geração: DD/MM/AAAA`. Como o conteúdo do bloco só muda
+ * quando o `04` muda, a data era a ÚNICA parte capaz de mudar sozinha: virada a
+ * meia-noite, `--conferir` acusava "desatualizado" e o `npm test` ficava
+ * VERMELHO sem ninguém ter tocado em nada. Toda madrugada.
  *
- * É a regra do projeto ("nenhuma agregação usa o dia do PROCESSO") na janela
- * exata que ela documenta — e vale para gerador de documentação igual: um teste
- * que só quebra depois das 21h é pior que um que quebra sempre, porque passa no
- * horário em que se costuma rodar. */
-const hoje = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo" }).format(new Date());
+ * A primeira tentativa foi trocar UTC pelo dia de São Paulo (07/08/2026). Ela
+ * consertou a janela das 21h e deixou a origem em pé — o carimbo continuou
+ * mudando sozinho, só que às 00h. Isto aqui é a correção na ORIGEM: sem valor
+ * que se mexe sozinho, não há o que reconferir.
+ *
+ * ⛔ NÃO REPONHA A DATA. Suíte que fica vermelha sozinha para de ser sinal: em
+ * uma semana todo mundo lê o vermelho como ruído, e aí ela não denuncia mais o
+ * dia em que algo quebrar de verdade.
+ *
+ * Quem responde "de quando é esta geração?" é o `git log -1 -- CLAUDE.md`, que
+ * não pode divergir do arquivo — e a regra do projeto já diz por quê:
+ * documentação que LÊ o valor não envelhece; a que o AFIRMA, sim. */
 const corpo = [
   `> ⛔ **GERADO A PARTIR DO \`04\` — NÃO EDITE À MÃO.** Rode \`npm run docs:estado\`.`,
   `> Ele garante que este arquivo e o \`04\` não discordem. **Não** garante que o`,
   `> \`04\` concorde com o código — isso continua sendo conferência manual.`,
-  `> Última geração: ${hoje}.`,
   "",
   "| Tela | ✅ feito | ❌ falta | 🔧 diverge por decisão |",
   "|---|---|---|---|",

@@ -713,73 +713,6 @@ a {
   background: var(--color-accent-800); color: var(--color-accent-100);
 }
 
-/* ─────────── Gerenciador de Anúncios: abas em card + tabela (Bloco 6) ─────────── */
-
-.ads-abas {
-  display: grid; gap: var(--space-3);
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-}
-.ads-aba {
-  display: flex; align-items: center; gap: 10px;
-  padding: var(--space-3); cursor: pointer; text-align: left;
-  background: var(--color-surface); color: var(--color-text); font: inherit;
-  border: 1px solid var(--color-divider); border-radius: var(--radius-md);
-  border-bottom: 2px solid transparent;
-  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out),
-    transform var(--dur-fast) var(--ease-out);
-}
-.ads-aba:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--color-accent) 45%, transparent); }
-/* Indicador de aba ativa, à la Ads Manager. */
-.ads-aba[aria-selected="true"] {
-  border-bottom-color: var(--color-accent);
-  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
-}
-.ads-aba-icone {
-  display: grid; place-items: center; width: 34px; height: 34px; flex: none;
-  border-radius: 9px; background: var(--color-accent-800); color: var(--color-accent-100);
-}
-
-/* A tabela rola na horizontal; as 3 primeiras colunas ficam presas. */
-.ads-scroll {
-  overflow: auto; max-width: 100%;
-  border: 1px solid var(--color-divider); border-radius: var(--radius-md);
-  background: var(--color-surface);
-}
-.ads-table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; font-size: 12.5px; }
-.ads-table th, .ads-table td {
-  padding: 9px 12px; text-align: right; white-space: nowrap;
-  border-bottom: 1px solid var(--color-divider);
-  font-variant-numeric: tabular-nums;
-}
-.ads-table thead th {
-  position: sticky; top: 0; z-index: 2;
-  background: var(--color-neutral-900);
-  font-size: 11px; letter-spacing: .02em; text-transform: uppercase;
-  color: color-mix(in srgb, var(--color-text) 70%, transparent);
-}
-.ads-table tfoot td {
-  position: sticky; bottom: 0; z-index: 2;
-  background: var(--color-neutral-900); font-weight: 600; border-top: 1px solid var(--color-divider);
-}
-.ads-table tbody tr:hover td { background: color-mix(in srgb, var(--color-text) 4%, transparent); }
-.ads-table tr.linha-marcada td { background: color-mix(in srgb, var(--color-accent) 12%, transparent); }
-
-/* Colunas presas. O `left` acumula a largura das anteriores. */
-.ads-table .fixa { position: sticky; z-index: 3; text-align: left; background: var(--color-surface); }
-.ads-table thead .fixa, .ads-table tfoot .fixa { z-index: 4; background: var(--color-neutral-900); }
-.ads-table .fixa-1 { left: 0; width: 44px; }
-.ads-table .fixa-2 { left: 44px; width: 66px; }
-.ads-table .fixa-3 { left: 110px; min-width: 220px; max-width: 320px; }
-/* Sombra marca onde termina a área fixa durante o scroll. */
-.ads-table .fixa-3::after {
-  content: ""; position: absolute; top: 0; right: 0; bottom: -1px; width: 10px;
-  transform: translateX(100%); pointer-events: none;
-  background: linear-gradient(90deg, rgba(0,0,0,.28), transparent);
-}
-.ads-table tbody tr:hover .fixa { background: color-mix(in srgb, var(--color-text) 4%, var(--color-surface)); }
-.ads-table tr.linha-marcada .fixa { background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface)); }
-.ads-table input[type="checkbox"] { accent-color: var(--color-accent); width: 15px; height: 15px; cursor: pointer; }
-
 /* ──────────────── Modal centralizado (padrão único de popup) ────────────────
    O `.dialog-backdrop` antigo continua no arquivo só para não quebrar estilos
    herdados, mas NÃO deve ser usado em código novo: ele não porta para o body e
@@ -1883,5 +1816,109 @@ a {
   @container (max-width: 320px) {
     .tk-col-pct { display: none; }
     .tk-feed-origem { display: none; }
+  }
+}
+
+/* ══ TABELA DO GERENCIADOR ═══════════════════════════════════════════════════
+   Mora aqui, e não em `style` inline, por UMA razão que o inline não resolve:
+   as três colunas congeladas são `position: sticky` com fundo próprio, e um
+   `:hover` no `<tr>` não pinta o fundo delas — a linha inteira acenderia menos
+   os três primeiros campos, que é justamente onde está o nome que se procura.
+   `tr:hover > td` alcança todas as células; um `style` no `<tr>` não.
+
+   ⚠️ A altura vem de `--tk-altura-controle`… não: de `--tk-altura-linha`, o
+   token de LINHA DE TABELA, que responde à densidade escolhida pelo usuário.
+   O `06` §8 pede 48px — aquilo é medida de lista curta de Dashboard, e uma
+   tabela de 19 colunas com 48px por linha mostra seis campanhas por tela. A
+   divergência é deliberada; o token já carrega 36/44/52 pelas três densidades.
+
+   ⛔ Sem borda entre linhas (`06` §8): a separação é o hover. */
+@layer components {
+  .tk-ads {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+  }
+
+  .tk-ads th,
+  .tk-ads td {
+    padding: 0 12px;
+    text-align: right;
+    white-space: nowrap;
+    height: var(--tk-altura-linha);
+    /* O fundo é OPACO em toda célula, não só nas congeladas: a coluna que rola
+       passa POR BAIXO das três primeiras, e com fundo transparente o número
+       apareceria atravessando o nome da campanha. */
+    background: var(--tk-surface);
+  }
+
+  .tk-ads thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    text-align: right;
+    /* A única régua horizontal da tabela. Ela separa cabeçalho de corpo, que é
+       outra coisa que separar linha de linha. */
+    box-shadow: inset 0 -1px 0 var(--tk-border);
+  }
+
+  .tk-ads .tk-ads-fixa {
+    position: sticky;
+    z-index: 3;
+    text-align: left;
+  }
+  .tk-ads thead .tk-ads-fixa { z-index: 4; }
+
+  /* A última congelada projeta a sombra que diz "daqui para a direita, rola".
+     Sem ela o congelamento é invisível até alguém rolar. */
+  .tk-ads .tk-ads-fixa-fim {
+    box-shadow: 6px 0 6px -6px color-mix(in oklch, var(--tk-text) 22%, transparent);
+  }
+  .tk-ads thead .tk-ads-fixa-fim {
+    box-shadow:
+      inset 0 -1px 0 var(--tk-border),
+      6px 0 6px -6px color-mix(in oklch, var(--tk-text) 22%, transparent);
+  }
+
+  .tk-ads tbody tr > td {
+    transition: background-color var(--tk-dur-rapida) var(--tk-ease-padrao);
+  }
+  .tk-ads tbody tr:hover > td {
+    background: color-mix(in oklch, var(--tk-text-secondary) 8%, var(--tk-surface));
+  }
+  /* Selecionada vence o hover: ela é estado, e o hover é passagem. */
+  .tk-ads tbody tr[data-marcada="true"] > td {
+    background: color-mix(in oklch, var(--tk-primary) 10%, var(--tk-surface));
+  }
+
+  /* Linha FILHA da expansão — conjunto e anúncio. O degrau de fundo é o que
+     diz "isto pertence à linha de cima" sem precisar de moldura. */
+  .tk-ads tbody tr[data-filha="true"] > td {
+    background: var(--tk-surface-hover);
+  }
+  .tk-ads tbody tr[data-filha="true"]:hover > td {
+    background: color-mix(in oklch, var(--tk-text-secondary) 8%, var(--tk-surface-hover));
+  }
+
+  .tk-ads tfoot td {
+    box-shadow: inset 0 1px 0 var(--tk-border);
+    font-weight: 600;
+  }
+}
+
+/* ══ GERENCIADOR — as duas fileiras de duas colunas ═══════════════════════════
+   ⚠️ Aqui é MEDIA QUERY, e não container query, de propósito: estas duas grades
+   são o layout da PÁGINA, e a largura delas é a da janela menos o rail. Os
+   blocos do Dashboard usam container query porque lá a largura é a da célula da
+   grade, que o usuário redimensiona — não é o caso.
+
+   ⛔ A ordem em que as colunas caem é a ordem de IMPORTÂNCIA: a rosca e o
+   Insights descem para baixo da tabela; a tabela nunca desce. */
+@layer components {
+  @media (max-width: 1180px) {
+    .tk-ger-corpo { grid-template-columns: minmax(0, 1fr) !important; }
+  }
+  @media (max-width: 1000px) {
+    .tk-ger-topo { grid-template-columns: minmax(0, 1fr) !important; }
   }
 }
