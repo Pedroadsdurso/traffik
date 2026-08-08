@@ -1630,6 +1630,112 @@ MANIFESTAÇÃO e preservam a ORIGEM — e as duas compilam, passam no lint e fic
 parecendo cuidado com o detalhe. A diferença entre as duas famílias é só onde
 dói: o `?? 0` mente sobre um número, o empurrãozinho mente sobre um alinhamento.
 
+# ✋ EDIÇÃO POR CASAMENTO DE STRING SE VERIFICA. SEMPRE.
+
+> **O pior defeito desta base não é o que quebra — é o que MENTE PARA A
+> VERIFICAÇÃO.** Registrado em 07/08/2026, e o caso é meu.
+
+Eu editei o `eslint.config.mjs` com um `replace` de string, medi o resultado e
+ia reportar **"zero erros com a regra ligada"**. A edição não tinha pegado — o
+arquivo está em CRLF e meu padrão tinha `\n`. O `replace` não casou, não
+reclamou, e devolveu o arquivo intacto.
+
+**A medição seguinte mediu o silêncio e eu quase o chamei de resultado.**
+
+| | |
+|---|---|
+| ✅ o que salvou | `--print-config`, que responde *"a regra está no config efetivo?"* |
+| ❌ o que não salvaria | rodar o lint e ver "0 problemas" — é o mesmo resultado dos dois estados |
+
+> ### ⛔ A REGRA
+> **Depois de toda edição por casamento de string, LEIA o resultado.** Não o
+> efeito — o resultado: o arquivo mudou, o símbolo está lá, o config efetivo
+> contém a chave.
+>
+> E ao escrever o casamento, **afirme que ele casou**: `assert s.count(alvo)==1`
+> antes de substituir. Um `replace` que não acha nada é indistinguível de um que
+> achou e substituiu por igual.
+
+⚠️ **É prima da "asserção que não pode falhar"**, e a pergunta é a mesma: *que
+valor o caso ERRADO produziria?* Se "não editei" e "editei" produzem a mesma
+saída na sua verificação, você não está verificando nada.
+
+⚠️ E o gatilho concreto neste repositório: **402 arquivos versionados estão em
+CRLF**. Todo padrão multilinha ancorado em `\n` falha em silêncio neles. O
+`.gitattributes` declara a normalização, mas **não conserta isto** — a árvore
+de trabalho continua CRLF de propósito.
+
+# 🧪 TESTE QUE ESCREVE NO BANCO DE DEV SÓ APAGA O QUE ELE MESMO CRIOU
+
+> **É o gerador de estado errado, na camada de VERIFICAÇÃO — e por isso pior.**
+> 07/08/2026.
+
+`teste-medicao.mjs` limpava as métricas das campanhas que ia usar, e restaurava
+só as linhas que ele próprio havia inserido. Rodou duas vezes e **comeu o seed
+de 3 campanhas**: elas passaram a mostrar `—` no Gerenciador, e o contador do
+seed foi de 1 para 4 "sem métrica".
+
+### Por que é pior que um seed ruim
+
+Um seed ruim produz um estado que alguém pode desconfiar. Um teste que estraga
+o banco produz um estado que **ninguém liga ao teste**: a próxima pessoa abre a
+tela, vê o que a verificação deixou para trás, e conclui sobre o PRODUTO.
+
+> ### ⛔ A REGRA
+> **Teste que escreve no banco compartilhado só apaga o que ele mesmo criou, e
+> só o que criou NESTA execução.** Precisar limpar linha alheia é o sinal de que
+> o fixture deveria criar as próprias.
+>
+> Quando o teste precisar mesmo remover algo que já existia — porque o caso a
+> exercitar é a ausência —, ele **guarda a linha e reinsere com o MESMO id**.
+> Reinserir com id novo deixa órfã na segunda execução.
+
+⚠️ **Prove o restauro rodando duas vezes seguidas.** Um teste que passa na
+primeira e falha na segunda tem restauro quebrado; um que passa nas duas mas
+deixa lixo só aparece na tela, dias depois.
+
+# 🤫 AS TRÊS FORMAS DO MESMO SILÊNCIO — teste que não existe
+
+> Elas já apareceram separadas. Juntas, o padrão fica visível: **em nenhuma das
+> três a suíte fica vermelha. Nas três ela AFIRMA que está tudo coberto.**
+
+| # | Forma | O que a suíte reporta |
+|---|---|---|
+| 1 | **script fora do agregado** (`teste-fita`) | nada — ninguém o invoca |
+| 2 | **teste verde sobre caminho morto** (`perdaLabel`) | ✅ sobre símbolo com zero chamadores de produção |
+| 3 | **`checar()` depois do `process.exit`** | ✅ **29 asserções**, com três nunca alcançadas |
+
+A terceira nasceu em 07/08/2026 e é a mais difícil de ver: o arquivo **está** no
+agregado, **roda**, e o que ele mede **importa**. As asserções foram escritas no
+fim do arquivo, depois da linha que encerra o processo. Elas nunca executaram, e
+o número no rodapé subiu com confiança para 29 — parecendo cobertura.
+
+> ### ⛔ O QUE RESPONDE ÀS TRÊS
+> **Escreva a asserção, rode, e CONFIRA QUE O NOME DELA APARECEU NA SAÍDA.** Não
+> o total; o nome. Os três casos passam por qualquer verificação baseada em
+> "ficou verde" e em "o número subiu".
+
+⚠️ Ao acrescentar asserção num arquivo existente, **olhe onde o arquivo
+termina**. Vários scripts desta base fecham com `console.log` de resumo +
+`process.exit`, e o que vem depois é código morto com sintaxe de teste.
+
+# 🕐 A REGRA DO FUSO PEGOU O PRÓPRIO GERADOR DE DOCUMENTAÇÃO
+
+`gerar-estado.mjs` carimbava `Última geração:` com
+`new Date().toISOString()` — **o dia em UTC**. Às 21:13 em Brasília já é o dia
+seguinte lá: o carimbo mudou sozinho, o `--conferir` passou a acusar
+"desatualizado", e o `npm test` ficou **vermelho sem ninguém ter tocado em
+nada**.
+
+É a janela exata que o próprio CLAUDE.md documenta ("um teste que falha só
+depois das 21h é pior que um que falha sempre"), falhando num script cuja única
+função é manter a documentação honesta.
+
+> ### ⛔ VALE PARA GERADOR DE DOCUMENTAÇÃO IGUAL
+> "Nenhuma agregação usa o dia do PROCESSO" não é regra de métrica — é regra de
+> **qualquer carimbo de data que entre num arquivo versionado**. Se o valor
+> gravado muda sozinho às 21h, ele não descreve nada; ele só produz diff.
+
 # 🌗 SEED QUE PRODUZ ESTADO **INCOMPLETO** — o ramo que nunca foi percorrido
 
 > **A agravante sobre a família do gerador: aqui o seed não produzia estado
@@ -2086,6 +2192,77 @@ não roda em máquina limpa, e aí ninguém roda o agregado.
 ⚠️ E ao mudar o contrato de um módulo, o `grep` que importa não é pelos
 consumidores de produção — é pelos **testes** dele, inclusive os que o agregado
 não roda.
+
+# ⚙️ ESTADO CONFIGURADO × ESTADO EFETIVO — toda decisão sobre "está rodando?" lê o EFETIVO
+
+> **Caso particular dos DOIS INSTRUMENTOS, e o mais caro:** `status` e
+> `effectiveStatus` são duas medições da mesma pergunta, e discordam com
+> frequência. 07/08/2026.
+
+| | fonte | responde |
+|---|---|---|
+| **`status`** | o que o usuário CONFIGUROU (`ACTIVE`, `PAUSED`, `ARCHIVED`) | *"o que ele quis?"* |
+| **`effectiveStatus`** | o que a Meta está de fato ENTREGANDO | *"está rodando?"* |
+
+O caso que produziu a regra: `Retargeting 7d` tem **o melhor ROAS da tela
+(11,10x)** com `status: ACTIVE` e `effectiveStatus: CAMPAIGN_PAUSED`. Um painel
+de Insights filtrando por `status === "ACTIVE"` recomendaria **escalar a
+campanha que não entrega** — exatamente a única que ele não deve recomendar.
+
+> ### ⛔ A REGRA
+> **Decisão** (recomendar, alertar, ranquear, agir) → **`effectiveStatus`**.
+> **Exibição do que o usuário escolheu** (o toggle, o que gravar na Graph API) →
+> **`status`**.
+
+### A varredura de 07/08/2026: **11 pontos, 10 defensáveis**
+
+| Onde | Lê `status` para | |
+|---|---|---|
+| `api/ads/status/route.ts` · `AdsTable:357` | alternar / mostrar o configurado | ✅ é a pergunta certa |
+| `veiculacao.ts` ×3 | **calcular a divergência** | ✅ precisa dos dois, por desenho |
+| `rules/engine.ts` ×2 | "já pausada" / "já ativa" | ✅ evita chamada no-op à Graph API, que opera no configurado |
+| `lib/ads/status.ts` ×2 · `useTraffikState:1172` | filtro **Ativas/Pausadas** | ⚠️ ambíguo — ver abaixo |
+
+⚠️ **O filtro "Ativas" lista o CONFIGURADO**, incluindo o que não entrega. É o
+que o Gerenciador da Meta faz, e é anterior a `4e6aa9e` — **medido, registrado,
+NÃO consertado**.
+
+> ### 🔴 QUEM FOR REABRIR AQUELE FILTRO PRECISA SABER DISTO
+> **O Insights escolheu o EFETIVO de propósito**, e é a mesma ambiguidade. Se um
+> dia alguém "unificar" os dois para eliminar a divergência, o lado que perde é
+> o Insights — e o defeito volta no lugar onde ele custa dinheiro, porque lá o
+> produto RECOMENDA em vez de listar.
+
+# 🧾 FERRAMENTA QUE GERA RELATÓRIO SE VALIDA CONTRA UM BASELINE CONHECIDO
+
+> **Ela reporta errado com a mesma confiança com que reporta certo.** Método,
+> não caso — registrado em 07/08/2026.
+
+Ao apertar a regra do `docs:estado` para ele parar de contar tabela explicativa,
+o **DASHBOARD despencou de 29 ✅ para 6**, em silêncio. A causa era boba (a
+tabela maior daquela seção usa `| Elemento | |` e a regra exigia
+`| Elemento | Status |`), mas o número errado **já tinha sido escrito no
+`CLAUDE.md`** antes de alguém olhar.
+
+Nada denunciava: o script rodou sem erro, imprimiu `✓ regenerado — 8 telas`, e
+`6` é um número perfeitamente plausível para uma tela.
+
+> ### ⛔ O QUE PEGOU
+> Comparar a saída com a **versão anterior conhecida**:
+> ```bash
+> git show <commit-antes-da-mudança>:CLAUDE.md | sed -n '/^| Tela |/,/^$/p'
+> ```
+> As sete seções que eu **não** havia tocado tinham de sair idênticas. A única
+> que mudou era a única que devia mudar.
+
+**A pergunta que generaliza:** *que parte desta saída eu sei que NÃO deveria
+mudar?* Se a resposta for "nenhuma", não há como validar a ferramenta — e aí o
+relatório é uma afirmação sem testemunha.
+
+⚠️ E prefira **ancorar no que já é convenção** a inventar marcador novo. O
+cabeçalho `| Elemento |` já existia nas 15 tabelas; um marcador novo valeria só
+para quem lembrasse de pôr, e a tabela sem ele voltaria a contar errado — em
+silêncio, de novo.
 
 # 📐 DOIS INSTRUMENTOS NÃO SE COMPARAM — a razão entre eles não é conversão
 

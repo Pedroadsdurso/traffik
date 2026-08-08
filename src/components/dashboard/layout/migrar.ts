@@ -31,6 +31,17 @@
 
 import { CATALOGO_META, encaixarColunas, encaixarLinhas, reporEstruturais, type MetaBloco } from "../catalogo";
 
+/* ⛔ AS CONSTANTES VÊM ANTES DE QUEM AS USA.
+   As três estavam declaradas depois das funções que as consomem — `const` em
+   zona morta temporal. Aqui não estourava porque o uso está dentro de função,
+   que só roda depois do módulo carregar; mas a proteção era acidental, e some
+   no dia em que alguém calcular um valor no corpo do módulo. */
+
+export const HERO_PADRAO = ["faturamento", "gasto", "roas", "lucroLiquido"];
+export const MAX_FAIXA = 8;
+/** O grid antigo tinha 12 colunas no desktop — a mesma contagem de hoje. */
+const COLUNAS_ANTIGAS = 12;
+
 /** O envelope gravado hoje. `v` é o que separa dele do grid antigo. */
 export interface LayoutV3 extends LayoutZonas {
   v: 3;
@@ -166,9 +177,7 @@ export interface LayoutZonas {
   paineis: PainelGrade[];
 }
 
-export const HERO_PADRAO = ["faturamento", "gasto", "roas", "lucroLiquido"];
 export const FAIXA_PADRAO = ["ticket", "ctr", "cpa", "arpu", "margem", "pendentes", "reembolsadas"];
-export const MAX_FAIXA = 8;
 
 /**
  * 🔴 O LAYOUT PADRÃO — a ORDEM e a LARGURA de conta nova, aprovadas em
@@ -307,8 +316,6 @@ export function colunasDoGridAntigo(w: number, meta: MetaBloco): number {
   return encaixarColunas(Math.min(COLUNAS_ANTIGAS, Math.max(1, w)), meta);
 }
 
-/** O grid antigo tinha 12 colunas no desktop — a mesma contagem de hoje. */
-const COLUNAS_ANTIGAS = 12;
 
 /**
  * A altura do grid antigo em linhas da grade nova.

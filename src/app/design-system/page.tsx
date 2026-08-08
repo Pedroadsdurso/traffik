@@ -14,6 +14,14 @@ import { Skeleton, AreaCarregando, Separator } from "@/components/tk/Skeleton";
 import { DonutChart } from "@/components/tk/DonutChart";
 import { Aprovacao } from "@/components/tk/Aprovacao";
 
+/* ⛔ ANTES DO PRIMEIRO USO. Estavam no FIM do arquivo e eram consumidas ~950
+   linhas acima: `const` em zona morta temporal. Aqui funcionava por acaso —
+   o uso mora dentro de componentes, que só executam depois do módulo
+   carregar. Mover uma daquelas chamadas para o corpo do módulo quebraria a
+   página, e nada acusaria antes da tela. */
+const mono: React.CSSProperties = { fontFamily: "var(--tk-font-mono)", fontSize: 12 };
+const celula: React.CSSProperties = { padding: "8px 12px", verticalAlign: "middle" };
+
 /**
  * /design-system — a página de verificação visual de todas as fases.
  *
@@ -1281,8 +1289,6 @@ function VitrineControles() {
 
 /* ── Peças locais desta página (nada aqui é componente do sistema) ────────── */
 
-const mono: React.CSSProperties = { fontFamily: "var(--tk-font-mono)", fontSize: 12 };
-const celula: React.CSSProperties = { padding: "8px 12px", verticalAlign: "middle" };
 
 function Secao({ titulo, resumo, children }: { titulo: string; resumo: string; children: React.ReactNode }) {
   return (

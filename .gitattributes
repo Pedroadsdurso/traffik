@@ -1,0 +1,39 @@
+# Fim de linha — declarado no REPOSITÓRIO, não na máquina de cada um.
+#
+# 🔴 POR QUE ISTO EXISTE (07/08/2026)
+#
+# O comportamento vinha inteiro do `core.autocrlf` local, que no Windows é
+# `true` por padrão: o repositório guarda LF e a árvore de trabalho fica CRLF.
+# São 402 arquivos versionados com CRLF nesta máquina.
+#
+# O sintoma que custou uma investigação: um script que reescrevia um arquivo com
+# `\n` puro produzia uma árvore SUJA com `git diff` VAZIO — a única diferença
+# era o fim de linha, que o `add` normaliza de volta. Ferramenta de verificação
+# mentindo é o pior tipo de defeito deste projeto, e o `npm test` ficou vermelho
+# por isso sem nada ter mudado de conteúdo.
+#
+# Com `text=auto` declarado aqui, a normalização deixa de depender da
+# configuração de quem clonou. Não há churn: o índice JÁ está em LF por causa do
+# `autocrlf`, então isto descreve o estado atual em vez de mudá-lo.
+#
+# ⚠️ ELE NÃO RESOLVE OS OUTROS DOIS SINTOMAS DA MESMA SESSÃO, e vale saber:
+#
+#   1. gerador escrevendo `\n` dentro de arquivo CRLF  → consertado na FONTE
+#      (`gerar-estado.mjs` escreve com o EOL do arquivo que está reescrevendo)
+#   2. edição por casamento de string que não pegou    → NÃO é fim de linha.
+#      É edição sem verificação. Ver a regra no CLAUDE.md.
+#
+# A árvore de trabalho continua CRLF no Windows, de propósito: forçar LF aqui
+# reescreveria os 402 arquivos de uma vez, num diff que não é o trabalho.
+
+* text=auto
+
+# Binários — nunca normalizar, senão corrompe.
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.webp   binary
+*.ico    binary
+*.woff   binary
+*.woff2  binary
+*.pdf    binary
