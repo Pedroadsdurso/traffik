@@ -491,28 +491,44 @@ Biblioteca: `@xyflow/react`, importação dinâmica.
 
 Referência: imagem 4.
 
+> ### 🔎 O QUE ESTA COLUNA SIGNIFICA, DEPOIS DE 08/08/2026
+>
+> **✅ = eu vi na tela**, no tema escuro, a 2560px, contra o banco de dev — não
+> "o código existe". **Linha em branco = construída e NÃO VISTA**, e ela é de
+> propósito: o `docs:estado` só conta linha com marcador, então o item fica fora
+> da contagem em vez de entrar como feito.
+>
+> ⛔ **Escrever ✅ no que não foi visto é o defeito que este documento existe
+> para impedir** — foi assim que 3 dos 4 primitivos da Fase 2 passaram verdes
+> com defeito visível. As brancas fecham quando o dono terminar a passada de
+> tema claro, largura estreita e hover.
+
 | Elemento | Status |
 |---|---|
-| 5 KPIs com sparkline: Gasto, Receita, Lucro, ROI, Conversões | ❌ |
-| Painel `Status das campanhas` — donut com Ativas / Pausadas / Rascunhos e % | ❌ · 🔧 **sem a fatia `Rascunhos`** — ver abaixo |
-| Abas `Todas / Ativas / Pausadas / Rascunhos / Arquivadas` | ❌ · 🔧 **sem a aba `Rascunhos`** — ver abaixo |
-| `Agrupar por: Campanha ⌄` | ❌ |
-| `⤓ Exportar` | ❌ |
-| `+ Nova campanha` | ❌ |
-| Busca + `Plataforma` + `Status` + `Objetivo` + `Mais filtros` | ❌ |
-| Tabela com **checkbox de seleção múltipla** | ❌ |
-| Cabeçalhos com ícone `ⓘ` de ajuda nas colunas ambíguas | ❌ |
-| Nome da campanha como link + subtítulo `Objetivo \| Plataforma` | ❌ · 🔧 **só `Objetivo`** — `Plataforma` diria "Meta Ads" em toda linha |
+| 5 KPIs com sparkline: Gasto, Receita, Lucro, ROI, Conversões | ✅ os cinco, com sparkline. 🔧 **`ROI` virou `ROAS`** no hero — o ROI de mídia é COLUNA da tabela, e os dois com o mesmo nome foi o que o `overview.ts` já proibiu |
+| Painel `Status das campanhas` — donut com Ativas / Pausadas / Rascunhos e % | ✅ visto: Ativas 50,0% (6) · Pausadas 25,0% (3) · Arquivadas 16,7% (2) · Sem status 8,3% (1), total 12. 🔧 **sem a fatia `Rascunhos`** — ver abaixo |
+| Abas `Todas / Ativas / Pausadas / Rascunhos / Arquivadas` | ✅ as quatro. 🔧 **sem a aba `Rascunhos`** — ver abaixo |
+| `Agrupar por: Campanha ⌄` | ✅ |
+| `⤓ Exportar` | ✅ na tela — ⚠️ **não clicado**, o arquivo gerado não foi conferido |
+| `+ Nova campanha` | ✅ na tela — ⚠️ **modal não aberto** |
+| Busca + `Plataforma` + `Status` + `Objetivo` + `Mais filtros` | 🔧 **o conjunto mudou:** Busca ✅ · `Objetivo` ✅ (só aparece com mais de um) · `Status` são as ABAS · `Plataforma` está 🔧 fora (mono-plataforma) · `Mais filtros` virou `Colunas`, que é a pergunta real com 19 delas |
+| Tabela com **checkbox de seleção múltipla** | ✅ exercido: marca, barra aparece, cabeçalho vai a indeterminado, `Limpar seleção` |
+| Cabeçalhos com ícone `ⓘ` de ajuda nas colunas ambíguas | ✅ o ⓘ está em toda coluna, com a linha `Cada coluna diz na ajuda de onde vem o número — e por que ele pode divergir da Meta`. ⚠️ **o CONTEÚDO do tooltip não foi lido** — é a passada de hover do dono |
+| Nome da campanha como link + subtítulo `Objetivo \| Plataforma` | ✅ nome + objetivo por baixo. 🔧 **duas divergências:** `Plataforma` diria "Meta Ads" em toda linha, e o nome **não é link** — a hierarquia é expansão inline (chevron `›`), que é o que o `03` manda |
 | Ícone da plataforma por linha | 🔧 **FORA** — plataforma única |
-| Badge de status colorido por estado | ❌ |
-| Coluna de Lucro em cor de valor positivo | ❌ |
-| Linhas de rascunho com `—` nas métricas e ação `▷` | 🔧 **o `—` FICA, o "rascunho" SAI** — ver abaixo |
-| Ações por linha: gráfico + `⋮` | ❌ |
-| **Painel `Insights`** com 4 cartões: melhor campanha, maior volume, menor custo por conversão, atenção necessária | ❌ |
+| Badge de status colorido por estado | ✅ visto nos cinco: `Veiculando` · `Pausado` · `Falta pagamento` · `Em análise` · `Campanha pausada` |
+| Coluna de Lucro em cor de valor positivo | ✅ e nos dois sentidos — `R$ 1.777,33` verde, `R$ −196,00` vermelho |
+| Linhas de rascunho com `—` nas métricas e ação `▷` | ✅ conferido **no DOM, não a olho**: `[DEV] Rascunho Importado` tem `—` em Veiculação/Gasto/Lucro/ROAS, cada um com `title` PRÓPRIO, e `R$ 0,00` só em Faturamento (`fonte: "nosso"` — medição de verdade). 🔧 **o `—` FICA, o "rascunho" SAI** — ver abaixo |
+| Ações por linha: gráfico + `⋮` | ❌ **não construído.** As ações moram na barra de seleção (`Ativar` · `Pausar` · `Mais ações`), e o `⋮` por linha duplicaria isso com um alvo de 17px |
+| **Painel `Insights`** com 4 cartões: melhor campanha, maior volume, menor custo por conversão, atenção necessária | ✅ os quatro na tela. 🔧 **há um 5º, condicional** — *"a melhor da tela não está entregando"*. ⚠️ **não visto disparando**: ele exige `melhorParada > melhorVeiculando`, e no dev de hoje a melhor entrega (17,59x). Os dois lados estão em `test:gerenciador` |
 | Painel `Distribuição por plataforma` com barra e valor | 🔧 **FORA** — ver abaixo |
-| Paginação `‹ 1 2 3 … 6 ›` + `10 por página ⌄` + `Mostrando 1 a 7 de 40` | ❌ |
-| Conjuntos de colunas nomeados + colunas congeladas | 🔧 nosso, não está na referência — resolve as ~20 colunas ilegíveis |
-| **Selo `não sincronizado` na linha** + fatia condicional no donut | 🔧 **nosso** — o que `UNKNOWN` vira, ver abaixo |
+| Paginação `‹ 1 2 3 … 6 ›` + `10 por página ⌄` + `Mostrando 1 a 7 de 40` | ✅ os três, com `Mostrando 1 a 10 de 10 campanhas`. ⚠️ **a reticência não foi vista** — 10 campanhas dão uma página só; ela tem teste próprio |
+| Conjuntos de colunas nomeados + colunas congeladas | ✅ **medido**, não estimado: 4 conjuntos (`Performance`/`Custo`/`Conversão`/`Tudo`, cada um com uma PERGUNTA de apoio), 19 colunas em `Tudo`, 3 congeladas (`sticky`, `left` 0/40/92), cabeçalho `sticky` no topo, borda por `box-shadow`. **`document.body` não rola na horizontal** — 2290px de conteúdo numa caixa de 1942px |
+| **Selo `não sincronizado` na linha** + fatia condicional no donut | ✅ os dois, e a frase que os liga: *"1 campanha nunca sincronizou — os números da Meta não existem para ela."* |
+| **Barra de seleção FLUTUANTE** | 🔧 **nosso, e nasceu de um bug medido na tela:** no fluxo ela empurrava a tabela 36px e fazia errar a 2ª linha marcada. Hoje é camada `absolute` sobre a tabela. Guarda em `test:gerenciador`, provada pelo lado negativo |
+| Tema claro | ⏳ **não visto** — passada do dono |
+| Largura estreita | ⏳ **não visto** — passada do dono. É a pendência de ambiente que já mentiu duas vezes no `resize_window` |
+| Hover, tooltips e marcador de linha | ⏳ **não visto** — passada do dono |
 
 ### 🔧 `RASCUNHOS` SAI — e `UNKNOWN` **não** vira aba
 

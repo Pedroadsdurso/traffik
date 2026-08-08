@@ -987,7 +987,7 @@ qualquer resize, leia `innerWidth` e compare. `innerWidth === screen.availWidth`
 | DASHBOARD | 29 | — | 9 |
 | INTEGRAÇÕES | 24 | — | 17 |
 | REGRAS | 0 | 21 | — |
-| CAMPANHAS / GERENCIADOR | 0 | 15 | 5 |
+| CAMPANHAS / GERENCIADOR | 16 | 1 | 4 |
 | UTM & SNIPPETS | 0 | 23 | 1 |
 | CRIATIVOS | 0 | 13 | — |
 | LOGIN | 0 | 19 | — |
@@ -2309,10 +2309,23 @@ não roda.
 | **`status`** | o que o usuário CONFIGUROU (`ACTIVE`, `PAUSED`, `ARCHIVED`) | *"o que ele quis?"* |
 | **`effectiveStatus`** | o que a Meta está de fato ENTREGANDO | *"está rodando?"* |
 
-O caso que produziu a regra: `Retargeting 7d` tem **o melhor ROAS da tela
-(11,10x)** com `status: ACTIVE` e `effectiveStatus: CAMPAIGN_PAUSED`. Um painel
-de Insights filtrando por `status === "ACTIVE"` recomendaria **escalar a
-campanha que não entrega** — exatamente a única que ele não deve recomendar.
+O caso que produziu a regra: `Retargeting 7d` tem **11,10x** de ROAS com
+`status: ACTIVE` e `effectiveStatus: CAMPAIGN_PAUSED`. Um painel de Insights
+filtrando por `status === "ACTIVE"` recomendaria **escalar a campanha que não
+entrega** — exatamente a única que ele não deve recomendar.
+
+> ⚠️ **Esta linha dizia "o melhor ROAS da tela" até 08/08/2026, e deixou de ser
+> verdade** quando o `dev:campanhas` trouxe a `Black Friday 24 — Conversão`, que
+> mede **17,59x veiculando**. Medido na tela: hoje a melhor da tela entrega, e
+> por isso o 5º cartão do Insights (*"a melhor da tela não está entregando"*)
+> **não aparece no dev** — corretamente, porque `insights.ts:170` exige
+> `melhorParada > melhorVeiculando`.
+>
+> ⛔ **A regra não depende desse número.** O que a sustenta é as duas colunas
+> discordarem, e elas discordam do mesmo jeito com qualquer ROAS. Corrigido aqui
+> porque documentação que afirma um dado que o banco não diz mais é a família
+> que esta base já pagou nove vezes — e a próxima pessoa iria procurar no dev um
+> estado que não existe.
 
 > ### ⛔ A REGRA
 > **Decisão** (recomendar, alertar, ranquear, agir) → **`effectiveStatus`**.
@@ -3205,6 +3218,7 @@ leva o que foi MEDIDO, para ninguém ter de medir de novo.
 | **`PixelView` com 2 `elapsed()` crus** | linhas 272 e 294. Morre na reescrita daquela tela |
 | **Ramos que o seed do dev nunca percorre** | 6 suspeitas medidas e anotadas na seção 🌗. Nenhuma investigada |
 | **`Sale.platform` NULL nas 35** | o dev só exercita um gateway |
+| **O 5º cartão do Insights nunca foi visto DISPARANDO** | ele exige `melhorParada > melhorVeiculando` (`insights.ts:170`), e no dev a melhor entrega (Black Friday 17,59x × Retargeting 11,10x pausada). ⛔ **Não force com período** — os dois lados estão em `test:gerenciador`, então está provado; falta só a evidência de tela |
 
 ---
 
@@ -3232,16 +3246,66 @@ registrou.
 | `globals.css` | o CSS do Bloco 6 (`.ads-table`, `.ads-aba`, colunas presas) saiu inteiro |
 | `test:gerenciador` | **18 asserções**, e ele entrou no `npm test` no MESMO commit |
 
-## 🔴 O QUE O COMMIT DIZ DE SI MESMO: A TELA NÃO FOI VISTA
+## 👁️ A TELA FOI VISTA — em parte, e o `04` registra QUAL parte
 
-O commit foi feito **como rede**, com a verificação visual declarada pendente na
-própria mensagem. 925 linhas sem commit é o que se perde quando o PC desliga —
-e ele já desligou nesta sessão.
+O commit `c9bcc0e` foi **rede**, com a verificação visual declarada pendente na
+própria mensagem. Depois dele veio a passada no navegador, e ela mudou o `04` de
+**0 ✅ / 15 ❌** para **16 ✅ / 1 ❌ / 4 🔧**.
 
 ⛔ **`tsc` limpo + lint 0 erros + 18 asserções verdes NÃO respondem "como
-ficou".** Foi exatamente esse conjunto que deixou passar 3 dos 4 primitivos da
-Fase 2 com defeito visível. **O `04` não foi preenchido antes de ver** — escrever
-✅ contra evidência inexistente é o defeito que o `04` existe para impedir.
+ficou"** — foi esse conjunto que deixou passar 3 dos 4 primitivos da Fase 2 com
+defeito visível. E de fato: **o único bug real da tela só apareceu clicando.**
+
+> ### 🔎 O `04` DESTA TELA GANHOU UMA CONVENÇÃO — leia antes de preencher outra
+> **✅ = eu vi na tela.** **Linha em branco = construída e NÃO VISTA.** Em branco
+> ela fica FORA da contagem do `docs:estado`, em vez de entrar como feita.
+>
+> Três linhas seguem em branco de propósito — **tema claro, largura estreita,
+> hover/tooltips** —, e são a passada que o dono faz na mão. Outras carregam ⚠️
+> dizendo o que dentro delas não foi exercido (o `Exportar` não foi clicado, o
+> modal de nova campanha não foi aberto, a reticência da paginação não apareceu
+> com 10 campanhas).
+
+## 🐛 O BUG QUE SÓ O CLIQUE MOSTRA: a barra de seleção movia a tabela
+
+A `BarraSelecao` ficava **no fluxo**, acima da tabela. Ao aparecer com a primeira
+marcação ela empurrava tudo abaixo dela **36px — uma altura de linha exata**.
+Quem marcava a linha 1 e mirava o checkbox da linha 2 **acertava a linha 1 de
+novo**, porque a tabela descia no intervalo entre o olho e o clique.
+
+Aconteceu comigo na primeira tentativa, e eu levei um screenshot para entender.
+
+> ### ⛔ RESERVAR A ALTURA SERIA O CONSERTO ERRADO, e vale escrever por quê
+> A barra existe em ~1% das visitas — é o motivo de ela não ser permanente, e
+> está no cabeçalho de `BarraSelecao`. Reservar o vão faria do espaço vazio o
+> estado NORMAL da tela: o mesmo defeito do controle inerte, pago em pixel.
+>
+> Hoje ela é camada `absolute` sobre a região da tabela (`pointer-events: none`
+> na camada, `auto` na barra — senão a própria camada comeria o clique dos
+> checkboxes que a alimentam), com a barra `sticky` para continuar alcançável
+> numa tabela longa. Flutuando, ela troca o tinte translúcido por fundo OPACO,
+> borda e sombra.
+
+### A asserção não mede pixel, e o limite está escrito nela
+
+O que o dono pediu é geométrico: *"com a barra visível, o topo da primeira linha
+está na mesma coordenada de quando ela está oculta"*. **Não há motor de layout
+aqui** — `renderToStaticMarkup` devolve markup, o jsdom não calcula posição.
+
+⛔ E a versão óbvia seria pior que ausente: simular as duas alturas em JS é
+reescrever o componente já consertado sem o defeito, com os dois lados iguais
+**por construção** — a armadilha do `test:blocos-vazios`.
+
+A saída foi a mesma daquele: atacar a CAUSA. Cinco asserções novas, e as duas
+que sustentam a coordenada são *"a barra é irmã DEPOIS da tabela"* e *"a camada
+que a segura é `absolute`"* — que por definição do CSS não desloca irmão.
+**Provado pelo lado negativo:** trocando `absolute` por `relative`, a suíte sai
+com 1 falha, nomeada.
+
+⚠️ E uma das cinco existe por um erro meu: eu escrevi `--tk-surface-raised` e
+`--tk-shadow-pop`, **que não existem**. Os dois compilam, passam no lint e caem
+no fallback — cor errada, sombra nenhuma, nada acusa. **Token é casamento de
+string com o CSS**, e agora tem asserção.
 
 ## ✅ O `docs:estado` PAROU DE FICAR VERMELHO SOZINHO
 

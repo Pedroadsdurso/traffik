@@ -23,6 +23,7 @@
  *   npm run test:gerenciador
  */
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -31,6 +32,7 @@ import { podeAfirmar, precisaDeSelo } from "@/lib/ads/apresentacao";
 
 const { TabelaAds } = await import("../src/components/tk/TabelaAds.tsx");
 const { paginasVisiveis } = await import("../src/components/tk/Paginacao.tsx");
+const { BarraSelecao } = await import("../src/components/tk/BarraSelecao.tsx");
 
 let ok = 0;
 const falhas = [];
@@ -256,6 +258,101 @@ checar("a página atual está SEMPRE na lista", () => {
     for (let atual = 1; atual <= total; atual++) {
       assert.ok(paginasVisiveis(atual, total).includes(atual), `${atual} de ${total}`);
     }
+  }
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   A BARRA DE SELEÇÃO NÃO PODE MOVER A TABELA
+
+   🐛 O caso, medido na tela em 08/08/2026: a barra ficava no fluxo, acima da
+   tabela. Ao aparecer com a primeira marcação ela empurrava tudo abaixo dela
+   36px — uma altura de linha exata —, e quem marcava a linha 1 e mirava o
+   checkbox da linha 2 acertava a linha 1 de novo.
+
+   ## ⚠️ O LIMITE DESTA GUARDA, escrito nela porque ela não mede pixel
+
+   A propriedade que o dono pediu é geométrica: *"com a barra visível, o topo da
+   primeira linha está na mesma coordenada de quando ela está oculta"*. Medir
+   isso exige um motor de LAYOUT, e não há um aqui — `renderToStaticMarkup`
+   devolve markup, e o jsdom não calcula posição.
+
+   ⛔ E a versão "óbvia" seria pior que ausente: simular as duas alturas em JS e
+   compará-las é reescrever o componente já consertado sem o defeito, com os
+   dois lados iguais **por construção**. É a armadilha do `test:blocos-vazios`,
+   e a saída aqui é a mesma — atacar a CAUSA em vez do sintoma.
+
+   A causa tem duas metades, e as duas são verificáveis sem layout:
+
+     1. a barra é irmã DEPOIS da tabela, não antes dela;
+     2. a camada que a segura é `position: absolute`, que por definição do CSS
+        não desloca irmão nenhum.
+
+   Juntas elas implicam a coordenada. Se alguém devolver a barra ao fluxo — que
+   é o único jeito de o bug voltar —, uma das duas cai. */
+const TELA = fs.readFileSync("src/components/dashboard/views/gerenciador/GerenciadorScreen.tsx", "utf8");
+
+checar("a barra vem DEPOIS da tabela, nunca no fluxo acima dela", () => {
+  const barra = TELA.indexOf("<BarraSelecao");
+  const tabela = TELA.indexOf("<TabelaAds");
+  assert.ok(barra !== -1, "não achei <BarraSelecao na tela — o casamento de string envelheceu");
+  assert.ok(tabela !== -1, "não achei <TabelaAds na tela — o casamento de string envelheceu");
+  /* A linha de base afirma: os dois existem e são comparáveis. Sem ela, um
+     `-1 > -1` passaria com o arquivo renomeado. */
+  assert.ok(barra > tabela, "a BarraSelecao voltou para o fluxo ACIMA da tabela — ela empurra as linhas");
+});
+
+checar("a camada da barra é `absolute`, que é o que não desloca irmão", () => {
+  const camada = TELA.indexOf("data-camada-selecao");
+  assert.ok(camada !== -1, "a camada da barra sumiu");
+  /* Só o trecho da camada até a barra — para não casar com um `absolute`
+     qualquer de outro canto do arquivo. */
+  const trecho = TELA.slice(camada, TELA.indexOf("<BarraSelecao"));
+  assert.match(trecho, /position:\s*"absolute"/, "a camada saiu do `absolute` e voltou a ocupar altura");
+  assert.match(trecho, /inset:\s*0/);
+});
+
+checar("a camada NÃO recebe ponteiro — senão come o clique do checkbox", () => {
+  const camada = TELA.indexOf("data-camada-selecao");
+  const trecho = TELA.slice(camada, TELA.indexOf("<BarraSelecao"));
+  /* Ela cobre a tabela inteira. Sem isto, a própria camada bloquearia os
+     checkboxes que a alimentam — e a segunda marcação ficaria impossível, que
+     é um jeito novo de reproduzir o mesmo sintoma. */
+  assert.match(trecho, /pointerEvents:\s*"none"/);
+  assert.match(trecho, /pointerEvents:\s*"auto"/, "a barra dentro da camada precisa voltar a receber clique");
+});
+
+checar("flutuante troca o TINTE translúcido por fundo opaco e sombra", () => {
+  /* Fora do fluxo, o `bg-tint-primary` deixaria as linhas da tabela aparecerem
+     por baixo do texto das ações. É a mesma família do traço da pílula do
+     funil: o elemento existe no DOM e não se lê na tela. */
+  const props = {
+    nivel: "campaign",
+    selecionados: [{ id: "1", nome: "[DEV] Escala Principal" }],
+    ocupado: false,
+    resultado: null,
+    aoExecutar: async () => {},
+    aoLimpar: () => {},
+    aoFixar: () => {},
+    aoCopiarId: () => {},
+    aoAbrirNoFacebook: () => {},
+  };
+  const noFluxo = renderToStaticMarkup(React.createElement(BarraSelecao, props));
+  const flutuando = renderToStaticMarkup(React.createElement(BarraSelecao, { ...props, flutuante: true }));
+
+  // A linha de base AFIRMA, senão os dois `ok` abaixo passariam com markup vazio.
+  assert.ok(noFluxo.includes("bg-tint-primary"), "o modo em fluxo perdeu o tinte — a linha de base não mede mais nada");
+  assert.ok(!flutuando.includes("bg-tint-primary"), "flutuante manteve o tinte translúcido");
+  assert.match(flutuando, /box-shadow/);
+  assert.match(flutuando, /--tk-surface-hover/);
+});
+
+checar("os tokens que a barra flutuante usa EXISTEM no globals.css", () => {
+  /* ⚠️ Eu inventei `--tk-surface-raised` e `--tk-shadow-pop` ao escrever isto.
+     Os dois compilam, passam no lint e caem no fallback — cor errada, sombra
+     nenhuma, e nada acusa. Token é casamento de string com o CSS. */
+  const css = fs.readFileSync("src/app/globals.css", "utf8");
+  for (const t of ["--tk-surface-hover", "--tk-border", "--tk-shadow-overlay"]) {
+    assert.ok(css.includes(`${t}:`), `${t} não está declarado no globals.css`);
   }
 });
 

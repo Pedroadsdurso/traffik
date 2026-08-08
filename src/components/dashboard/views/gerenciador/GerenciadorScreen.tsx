@@ -837,20 +837,8 @@ export function GerenciadorScreen({ v }: { v: TraffikView }) {
               </div>
             </div>
 
-            {/* A barra só existe com seleção — ver o cabeçalho dela. */}
-            {nivelDeAcao && selecionadasAqui.size > 0 && (
-              <BarraSelecao
-                nivel={nivelDeAcao}
-                selecionados={alvos}
-                ocupado={ocupado}
-                resultado={resultado}
-                aoExecutar={executar}
-                aoLimpar={() => setSelecao((s) => ({ ...s, ids: new Set() }))}
-                aoFixar={fixar}
-                aoCopiarId={copiarId}
-                aoAbrirNoFacebook={abrirNoFacebook}
-              />
-            )}
+            {/* ⛔ A BARRA DE SELEÇÃO NÃO MORA AQUI — ver o bloco flutuante
+                depois da tabela, e o comentário lá diz por quê. */}
             {/* Sem seleção, o resultado da última ação continua visível — é onde
                 mora o nome do que falhou. */}
             {resultado && selecionadasAqui.size === 0 && (
@@ -858,7 +846,27 @@ export function GerenciadorScreen({ v }: { v: TraffikView }) {
             )}
           </div>
 
-          <TabelaAds
+          {/* ── A tabela, com a barra de seleção FLUTUANDO por cima ──────────
+              🐛 A barra ficava no fluxo, acima da tabela. Ao aparecer com a
+              primeira marcação ela empurrava tudo abaixo dela **36px** — uma
+              altura de linha exata. Quem marcava a linha 1 e mirava o checkbox
+              da linha 2 acertava a linha 1 de novo, porque a tabela tinha
+              descido no intervalo entre o olho e o clique. Medido na tela em
+              08/08/2026; nenhuma ferramenta desta base pergunta se algo se
+              moveu.
+
+              ⛔ RESERVAR A ALTURA seria o outro conserto, e é pior aqui: a
+              barra existe em ~1% das visitas (é o motivo de ela não ser fixa,
+              ver o cabeçalho de `BarraSelecao`), então o vão vazio seria o
+              estado normal da tela — o mesmo defeito do controle inerte, agora
+              gasto em espaço.
+
+              A camada é `absolute` sobre a região da tabela e não recebe
+              ponteiro; só a barra dentro dela recebe. E a barra é `sticky`
+              para continuar alcançável numa tabela longa: sem isso, marcar uma
+              linha no topo de 50 deixaria as ações fora da tela. */}
+          <div style={{ position: "relative" }}>
+            <TabelaAds
             linhas={daPagina}
             colunas={colunas}
             selecionadas={selecionadasAqui}
@@ -897,6 +905,46 @@ export function GerenciadorScreen({ v }: { v: TraffikView }) {
               />
             </div>
           )}
+
+            {/* A barra só existe com seleção — ver o cabeçalho dela. */}
+            {nivelDeAcao && selecionadasAqui.size > 0 && (
+              <div
+                data-camada-selecao
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  display: "flex",
+                  alignItems: "flex-end",
+                  /* Sem isto a camada engoliria o clique da tabela inteira —
+                     inclusive o dos checkboxes que a alimentam. */
+                  pointerEvents: "none",
+                }}
+              >
+                <div
+                  style={{
+                    position: "sticky",
+                    bottom: 12,
+                    width: "100%",
+                    padding: "0 var(--tk-pad-card) 12px",
+                    pointerEvents: "auto",
+                  }}
+                >
+                  <BarraSelecao
+                    flutuante
+                    nivel={nivelDeAcao}
+                    selecionados={alvos}
+                    ocupado={ocupado}
+                    resultado={resultado}
+                    aoExecutar={executar}
+                    aoLimpar={() => setSelecao((s) => ({ ...s, ids: new Set() }))}
+                    aoFixar={fixar}
+                    aoCopiarId={copiarId}
+                    aoAbrirNoFacebook={abrirNoFacebook}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </Card>
 
         <Card titulo="Insights" descricao="Só campanhas que estão entregando">

@@ -78,6 +78,7 @@ export function BarraSelecao({
   aoFixar,
   aoCopiarId,
   aoAbrirNoFacebook,
+  flutuante = false,
 }: {
   nivel: Nivel;
   selecionados: AlvoSelecionado[];
@@ -88,6 +89,16 @@ export function BarraSelecao({
   aoFixar: () => void;
   aoCopiarId: () => void;
   aoAbrirNoFacebook: () => void;
+  /**
+   * A barra paira sobre a tabela em vez de ocupar uma faixa no fluxo.
+   *
+   * ⚠️ **Não é decoração: é o que torna o conserto possível.** Fora do fluxo, o
+   * tinte translúcido do `bg-tint-primary` deixaria as linhas da tabela
+   * aparecerem por baixo do texto das ações. Flutuante, ela ganha fundo OPACO,
+   * borda e sombra — os três sinais de que está numa camada acima, e não um
+   * pedaço da tabela que mudou de cor.
+   */
+  flutuante?: boolean;
 }) {
   const [menu, setMenu] = React.useState(false);
   const [gatilho, setGatilho] = React.useState<HTMLElement | null>(null);
@@ -143,7 +154,7 @@ export function BarraSelecao({
 
   return (
     <div
-      className="bg-tint-primary"
+      className={flutuante ? undefined : "bg-tint-primary"}
       style={{
         display: "flex",
         alignItems: "center",
@@ -151,6 +162,18 @@ export function BarraSelecao({
         flexWrap: "wrap",
         padding: "8px 12px",
         borderRadius: "var(--tk-radius-card)",
+        ...(flutuante
+          ? {
+              /* Opaco de propósito — ver o comentário da prop `flutuante`.
+                 ⚠️ `--tk-surface-hover` é o tom de camada ACIMA deste sistema
+                 (o comentário do token lista "hover, cabeçalho, input,
+                 overlay"); não há um `surface-raised`, e inventar o nome daria
+                 fallback mudo. */
+              background: "var(--tk-surface-hover)",
+              border: "1px solid var(--tk-border)",
+              boxShadow: "var(--tk-shadow-overlay)",
+            }
+          : null),
       }}
     >
       <span className="text-label text-text">
