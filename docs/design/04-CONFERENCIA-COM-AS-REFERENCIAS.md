@@ -526,9 +526,9 @@ Referência: imagem 4.
 | Conjuntos de colunas nomeados + colunas congeladas | ✅ **medido**, não estimado: 4 conjuntos (`Performance`/`Custo`/`Conversão`/`Tudo`, cada um com uma PERGUNTA de apoio), 19 colunas em `Tudo`, 3 congeladas (`sticky`, `left` 0/40/92), cabeçalho `sticky` no topo, borda por `box-shadow`. **`document.body` não rola na horizontal** — 2290px de conteúdo numa caixa de 1942px |
 | **Selo `não sincronizado` na linha** + fatia condicional no donut | ✅ os dois, e a frase que os liga: *"1 campanha nunca sincronizou — os números da Meta não existem para ela."* |
 | **Barra de seleção FLUTUANTE** | 🔧 **nosso, e nasceu de um bug medido na tela:** no fluxo ela empurrava a tabela 36px e fazia errar a 2ª linha marcada. Hoje é camada `absolute` sobre a tabela. Guarda em `test:gerenciador`, provada pelo lado negativo |
-| Tema claro | ⏳ **não visto** — passada do dono |
-| Largura estreita | ⏳ **não visto** — passada do dono. É a pendência de ambiente que já mentiu duas vezes no `resize_window` |
-| Hover, tooltips e marcador de linha | ⏳ **não visto** — passada do dono |
+| Tema claro | ✅ **medido:** página `rgb(248,250,252)` × card branco. O preenchimento sozinho dá **1,05:1**, e não é defeito — quem separa é **borda 1px + sombra**, e as duas estão aplicadas (o override de `--tk-shadow-card` no claro, que já nasceu morto uma vez por especificidade, segue de pé). Texto da tabela **17,85:1** |
+| Hover de linha + tooltips dos `ⓘ` | ✅ **medido.** Hover: `rgb(240,241,243)` sob o mouse contra `rgb(255,255,255)` na linha vizinha. Tooltips abrem e **declaram a procedência na última linha** — `Gasto` → *"Vem do Facebook"*; `ROAS` → *"Faturamento ÷ Gasto · Calculado a partir dos dois"*. É a regra dos dois instrumentos coluna a coluna |
+| Largura estreita | ⏳ **NÃO VISTO** — e continua em branco de propósito. `resize_window` reportou sucesso e não redimensionou pela **terceira** vez: `innerWidth` ficou em 2560, igual a `screen.availWidth`. Bloqueio de AMBIENTE |
 
 ### 🔧 `RASCUNHOS` SAI — e `UNKNOWN` **não** vira aba
 

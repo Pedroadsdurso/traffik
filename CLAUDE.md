@@ -987,7 +987,7 @@ qualquer resize, leia `innerWidth` e compare. `innerWidth === screen.availWidth`
 | DASHBOARD | 29 | — | 9 |
 | INTEGRAÇÕES | 24 | — | 17 |
 | REGRAS | 0 | 21 | — |
-| CAMPANHAS / GERENCIADOR | 16 | 1 | 4 |
+| CAMPANHAS / GERENCIADOR | 18 | 1 | 4 |
 | UTM & SNIPPETS | 0 | 23 | 1 |
 | CRIATIVOS | 0 | 13 | — |
 | LOGIN | 0 | 19 | — |
@@ -3306,6 +3306,49 @@ com 1 falha, nomeada.
 `--tk-shadow-pop`, **que não existem**. Os dois compilam, passam no lint e caem
 no fallback — cor errada, sombra nenhuma, nada acusa. **Token é casamento de
 string com o CSS**, e agora tem asserção.
+
+## 🌞 A PASSADA VISUAL — tema claro e hover passam; largura estreita, não
+
+Medido em 08/08/2026, e os números foram para o `04`:
+
+| | |
+|---|---|
+| **Tema claro** | página `rgb(248,250,252)` × card branco. **1,05:1** de preenchimento, e quem separa é **borda 1px + sombra** — as duas aplicadas. Texto **17,85:1** |
+| **Hover de linha** | `rgb(240,241,243)` sob o mouse × `rgb(255,255,255)` na vizinha |
+| **Tooltips dos `ⓘ`** | abrem, e a última linha **declara a procedência**: `Vem do Facebook` · `Calculado a partir dos dois` |
+| **Largura estreita** | ⛔ **não verificada.** `resize_window` mentiu pela **terceira** vez |
+
+# 🔬 `getComputedStyle` SEM REPINTURA CONFIRMADA MEDE O QUE ESTAVA, NÃO O QUE ESTÁ
+
+> **Registrado em 08/08/2026 porque quase virou um bug INVENTADO num arquivo
+> correto** — e essa é uma categoria nova nesta base. Todas as outras entradas
+> aqui são sobre defeito que passou despercebido; esta é sobre **defeito
+> relatado onde não havia**.
+
+Eu li duas vezes a linha sob o mouse como **branco puro contra linha branca**,
+contraste **1,000:1**, e ia reportar *"o hover é invisível no tema claro"*.
+Cheguei a rastrear a causa até `color-mix` com `var()` e a montar a teoria de
+que a regra degenerava para o segundo termo.
+
+**Não se sustentou.** Numa releitura com repintura forçada, a mesma célula mediu
+`oklch(0.958558 …)` = `rgb(240,241,243)` — o cinza correto. O branco não
+reproduz.
+
+> ### ⛔ A REGRA
+> **Depois de `hover` (ou qualquer mudança de estado) por ferramenta, force uma
+> repintura e confirme antes de ler.** Dois `requestAnimationFrame` encadeados,
+> ou uma escrita que invalide o estilo. Ler logo depois do evento devolve o
+> valor ANTERIOR com a mesma cara de medição.
+
+⚠️ **O sinal de alerta é a teoria ficar boa cedo demais.** Eu tinha uma
+explicação elegante — `var()` dentro de `color-mix` — e ela estava errada. Numa
+base que registra tudo, uma teoria bem escrita sobre um defeito inexistente
+custa mais que o defeito: ela vira seção, alguém a lê depois e "conserta" código
+que estava certo.
+
+⚠️ E é primo direto do **`resize_window`**: nos dois casos a ferramenta devolve
+algo com aparência de resultado, e a disciplina é a mesma — **medir o efeito
+por um segundo caminho**, não confiar no retorno.
 
 ## ✅ O `docs:estado` PAROU DE FICAR VERMELHO SOZINHO
 
