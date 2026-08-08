@@ -19,4 +19,13 @@ const eslintConfig = defineConfig([
   ]),
 ]);
 
+{
+  rules: {
+    "@typescript-eslint/no-use-before-define": [
+      "error",
+      { functions: false, classes: false, variables: true, enums: true, typedefs: false },
+    ],
+  },
+},
+
 export default eslintConfig;

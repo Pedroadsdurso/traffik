@@ -1994,6 +1994,43 @@ tipo está errado antes de o código estar.
 ⚠️ Ela reaparece onde não se procura. O caso da persistência foi achado por uma
 asserção escrita para outra coisa, num arquivo que não tem gráfico nem métrica.
 
+# 🛡️ "NÃO QUEBRA" NÃO É "NÃO PODE QUEBRAR" — a proteção acidental
+
+> **A lição das 53 violações de `no-use-before-define`**, e ela generaliza para
+> muito além de TDZ. 07/08/2026.
+
+As cinco declarações que a regra acusou (`HERO_PADRAO`, `MAX_FAIXA`,
+`COLUNAS_ANTIGAS`, `mono`, `celula`) estavam **abaixo de quem as consome** — uma
+delas por ~950 linhas. E nenhuma quebrava.
+
+O motivo: o consumo mora **dentro de função**, e função só roda depois de o
+módulo terminar de carregar. A zona morta temporal já acabou quando alguém
+chama.
+
+> ### 🔴 ISSO NÃO É ESTAR CERTO. É ESTAR PROTEGIDO POR ACIDENTE.
+> A propriedade que segurava não era "a declaração vem antes", era "ninguém
+> avalia isto no corpo do módulo" — e **ninguém a escreveu em lugar nenhum**.
+> Ela some no primeiro commit que calcular um valor fora de função.
+>
+> Que é **literalmente o que aconteceu duas vezes no `overview.ts` na mesma
+> sessão**: `campaignObjectiveById` e `medicaoDe`, os dois consumidos num
+> `.map()` no corpo da função, os dois estourando `Cannot access … before
+> initialization`. `tsc` verde nas duas.
+
+| | |
+|---|---|
+| **não quebra** | há um caminho em que dá certo, e é o que se está exercitando |
+| **não pode quebrar** | não existe caminho em que dá errado |
+
+⛔ **Ao encontrar código que "funciona", pergunte QUAL PROPRIEDADE o faz
+funcionar — e se ela está escrita.** Se não estiver, ou você a escreve, ou põe
+uma ferramenta para cobrá-la. Aqui foi a segunda: o lint garante a segunda
+coluna, e não depende de ninguém lembrar.
+
+⚠️ É a mesma família da **cicatriz que virou anatomia** e da **proteção por
+TIMING, não por estrutura** (`elapsed()`). Nas três, o que segura é uma
+circunstância — e circunstância não é contrato.
+
 # 🔒 REGRA QUE DEPENDE DE LEMBRAR VIRA GARANTIA DE TIPO
 
 **Quando uma regra do projeto depende de alguém lembrar dela, procure a forma de
@@ -3055,3 +3092,50 @@ explicitamente marcado como produção não ganha faixa, que é a decisão regis
 
 ⛔ **Se alguém um dia trocar isso por uma flag, a garantia acaba.** A propriedade
 inteira vem de as duas coisas lerem a mesma string.
+
+---
+
+# 🚧 MODO DE TRABALHO ATÉ AS DEZ TELAS EXISTIREM — 07/08/2026
+
+> **Decisão do dono, depois de TRÊS sessões seguidas em que a preparação
+> consumiu a sessão inteira e nenhuma tela nasceu.**
+
+**Cada sessão constrói UMA TELA, do começo ao fim.** Descoberta que aparecer no
+caminho e **não bloquear a tela** vira uma linha em *ACHADOS ADIADOS*, abaixo, e
+o trabalho segue. Não investiga, não mede, não varre.
+
+### ⛔ Só estas três coisas param a tela
+
+| | |
+|---|---|
+| 1 | **defeito que impede a tela de funcionar** |
+| 2 | **dado que não existe** e é preciso para desenhar |
+| 3 | **duas tentativas sem resolver** — aí para e avisa |
+
+> ### 🔴 O QUE ISTO **NÃO** MUDA
+> **A regra de medir antes de afirmar continua inteira.** Nada aqui autoriza
+> reportar como feito o que não foi visto, nem dizer que algo funciona sem
+> exercer. O que muda é o que fazer **depois de medir**: registrar em vez de
+> perseguir.
+>
+> Medir custa minutos; perseguir custa a sessão. Foi perseguir que gastou as
+> três.
+
+⚠️ E a lista abaixo **não é lixo**. Ela é varrida quando as dez telas existirem
+— um item nela é trabalho decidido e adiado, não trabalho esquecido. Cada linha
+leva o que foi MEDIDO, para ninguém ter de medir de novo.
+
+## 📋 ACHADOS ADIADOS
+
+| Achado | O que já se sabe |
+|---|---|
+| **`eslint.config.mjs` com erro de sintaxe** | 🔴 **URGENTE, e não é adiável de verdade:** o bloco da regra foi colado FORA do array `defineConfig([…])`. `npx eslint` morre com `SyntaxError: Unexpected token ':'` em **qualquer** arquivo. O `npm test` não roda lint, então a suíte fica verde com o lint inteiro caído. O hook `config-protection` me impede de consertar — ver o arquivo corrigido no relatório de 07/08 |
+| **Filtro `Ativas` lê o status CONFIGURADO** | `lib/ads/status.ts:32` e `useTraffikState:1172`. Lista campanha que não entrega. É o que o Gerenciador da Meta faz, e é anterior a `4e6aa9e`. ⛔ O Insights escolheu o EFETIVO de propósito — quem unificar os dois reintroduz o defeito onde ele recomenda |
+| **Varredura de comentários que afirmam efeito** | 5 casos documentados, o resto nunca varrido. O `grep` inicial é por verbo no presente descrevendo o que o código faz |
+| **`docs:estado`: seção com 2 tabelas que perde 1** | a guarda só pega quem perde TODAS. Cobrir exigiria saber quantas cada seção deve ter — lista à mão, que envelhece |
+| **Largura mínima / viewport estreito** | o `resize_window` do MCP mentiu duas vezes. Bloqueio de AMBIENTE, não de código |
+| **4 views legadas de Integrações** | `Anuncios` 322 · `Pixel` 1.181 · `UTMs` 397 · `Webhooks` 532. Não auditadas de propósito: vão ser deletadas |
+| **`PixelView` com 2 `elapsed()` crus** | linhas 272 e 294. Morre na reescrita daquela tela |
+| **Ramos que o seed do dev nunca percorre** | 6 suspeitas medidas e anotadas na seção 🌗. Nenhuma investigada |
+| **`Sale.platform` NULL nas 35** | o dev só exercita um gateway |
+

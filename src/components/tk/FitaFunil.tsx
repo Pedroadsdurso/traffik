@@ -315,7 +315,15 @@ export function FitaFunil({
      ficou só no `<rect>`, que é quem degenera. */
   /* Só quem participa da geometria. */
   const etapasDaFita = fluxo.etapas.filter((e) => e.naFita);
-  const inicioDaFita = etapasDaFita[0]?.x ?? 0;
+  /* ⚠️ `inicioDaFita` (o centro da 1ª etapa) VIVEU AQUI e foi DELETADO em
+     07/08/2026 — resto da renomeação que separou "centro da etapa" de "borda da
+     área". Ficou atribuído e sem leitor: o consumidor passou a ser
+     `inicioDaPlotagem`, logo abaixo.
+
+     ⛔ Não o traga de volta "por simetria". Foi a coexistência dos dois nomes
+     para o mesmo conceito que produziu o único bug de AMBIGUIDADE DE NOME desta
+     base — os dois são `number`, os dois são x válido, e a conta errada
+     compilava. */
 
   /**
    * 🔴 A FITA NASCE NA BORDA DA ÁREA DE PLOTAGEM, não no centro de `Sessões`.
