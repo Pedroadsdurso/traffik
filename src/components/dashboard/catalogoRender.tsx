@@ -229,10 +229,55 @@ const PERDA_DE_RASTREAMENTO_AJUDA =
   "abandono: é o rastreamento que não os viu — bloqueador de anúncio, redirect " +
   "que descarta a UTM, ou o snippet ausente na página de destino.";
 
+/**
+ * 🕳️ ETAPA ZERO COM ETAPA POSTERIOR POSITIVA NÃO PODE TER SIDO MEDIDA.
+ *
+ * **Um funil não ganha massa do nada.** Se `ICs = 0` e `Vendas iniciadas = 22`,
+ * as 22 vendas passaram por um checkout que ninguém contou — o zero não é
+ * medição, é ausência dela.
+ *
+ * Sem esta regra a fita desenhava GRAVATA-BORBOLETA: fechava em nada na etapa
+ * zerada e reabria depois, que se lê como "todo mundo sumiu e voltou".
+ *
+ * ⛔ **NÃO CONFUNDA COM A ETAPA QUE CRESCE.** São coisas diferentes e a
+ * distinção é a razão de esta função existir:
+ *
+ * | | |
+ * |---|---|
+ * | etapa MAIOR que a anterior | ✅ pode ser real — são dois instrumentos (`Cliques` da Meta × `Sessões` nossas) |
+ * | etapa ZERO com posterior > 0 | 🔴 impossível — logo, não foi medida |
+ *
+ * A primeira é discordância entre sistemas de medição, e o produto a declara
+ * com a faixa de cobertura. A segunda é buraco, e o produto a declara com o
+ * estado não medido.
+ *
+ * ⚠️ O teste é "alguma POSTERIOR", não "a seguinte": uma etapa pode ser zero
+ * legitimamente se tudo depois dela também for zero — aí o funil apenas
+ * terminou ali, e não há o que declarar.
+ */
+export function ehBuracoImpossivel(valores: number[], i: number): boolean {
+  if (valores[i] !== 0) return false;
+  return valores.slice(i + 1).some((v) => v > 0);
+}
+
+const AVISO_BURACO =
+  "Esta etapa não foi medida. Ela aparece com zero, mas alguma etapa DEPOIS " +
+  "dela tem valor — e um funil não ganha massa do nada. Quem passou por aqui " +
+  "não foi contado: provavelmente o pixel não está instalado na página de " +
+  "checkout.";
+
 const ETAPAS_PARA_FITA = (v: TraffikView): EtapaEntradaFita[] => {
   const etapas = ETAPAS_DO_FUNIL(v);
   const ics = etapas.find((e) => e.chaveInfo === "checkouts");
   const semPixel = ics != null && ics.value > 0 && (ics.doNavegador ?? 0) === 0;
+  /* ⚠️ Só as etapas DA FITA entram na conta do buraco. `Cliques` está fora da
+     geometria (outro instrumento), e incluí-lo faria a etapa 1 contar como
+     "posterior" de si mesma na hora de olhar a forma. */
+  const naFita = etapas.filter((e) => e.chaveInfo !== "cliques");
+  const valoresDaFita = naFita.map((e) => e.value);
+  const buracos = new Set(
+    naFita.filter((_, i) => ehBuracoImpossivel(valoresDaFita, i)).map((e) => e.chaveInfo),
+  );
   return etapas.map((e): EtapaEntradaFita => ({
     label: e.curto,
     valor: e.value,
@@ -246,7 +291,14 @@ const ETAPAS_PARA_FITA = (v: TraffikView): EtapaEntradaFita[] => {
       e.chaveInfo === "checkouts" && (e.doNavegador ?? 0) > 0 && (e.doNavegador ?? 0) < e.value
         ? `${e.value.toLocaleString("pt-BR")} ICs · ${(e.doNavegador ?? 0).toLocaleString("pt-BR")} do navegador`
         : undefined,
-    trechoNaoMedido: e.chaveInfo === "checkouts" && semPixel ? AVISO_SEM_PIXEL : undefined,
+    /* Duas razões diferentes para o MESMO estado, e a ordem importa: o buraco é
+       a afirmação mais forte (a etapa não existe), então ele vence o aviso de
+       pixel (a etapa existe e é derivada). */
+    trechoNaoMedido: buracos.has(e.chaveInfo)
+      ? AVISO_BURACO
+      : e.chaveInfo === "checkouts" && semPixel
+        ? AVISO_SEM_PIXEL
+        : undefined,
     /* 🔴 `Cliques` sai da GEOMETRIA da fita, mas continua sendo etapa: nome em
        cima, número embaixo. A perda dele para `Sessões` é instrumentação, não
        comportamento — quem a mostra é a faixa de cobertura. Ver `CoberturaFita`.

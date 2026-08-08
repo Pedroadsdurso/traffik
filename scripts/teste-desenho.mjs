@@ -25,6 +25,8 @@
 import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { interpolarNaoMedidas } from "@/components/tk/FitaFunil";
+import { ehBuracoImpossivel } from "@/components/dashboard/catalogoRender";
 
 const { DonutChart } = await import("../src/components/tk/DonutChart.tsx");
 const { Sparkline } = await import("../src/components/tk/Sparkline.tsx");
@@ -422,6 +424,63 @@ checar("a pílula de perda mostra só o NÚMERO — não há mais rótulo de per
   assert.ok(html.includes("−375"), "a perda Sessões → Vendas sumiu da pílula");
   assert.ok(!html.includes("sem rastreamento"), "voltou um rótulo de perda na pílula");
 });
+
+/* ── 🕳️ O BURACO IMPOSSÍVEL — etapa ZERO com posterior POSITIVA ──────────────
+
+   🔴 O caso real (07/08/2026): com o seed novo o funil ficou
+   `Cliques 1.962 → Sessões 22 → ICs 0 → Vendas Inic. 22 → Vendas Apr. 22`, e a
+   fita desenhou GRAVATA-BORBOLETA: fechou em nada nos ICs e reabriu. Lê como
+   "todo mundo sumiu e voltou" — e é impossível, porque 22 vendas iniciadas não
+   saem de 0 checkouts. Aquele zero não era medição, era ausência dela.
+
+   ⛔ A distinção que estas asserções protegem, e que é fácil de perder:
+
+     etapa MAIOR que a anterior   → pode ser REAL (dois instrumentos)
+     etapa ZERO com posterior > 0 → IMPOSSÍVEL, logo não medida
+
+   A primeira é o `Cliques → Sessões`; tratá-la como buraco esconderia uma
+   discordância de instrumentos que o produto declara de propósito. */
+
+checar("etapa ZERO com posterior positiva é buraco; a que CRESCE não é", () => {
+  const funil = [1962, 22, 0, 22, 22];
+  assert.equal(ehBuracoImpossivel(funil, 2), true, "o zero do meio não foi marcado");
+  assert.equal(ehBuracoImpossivel(funil, 0), false, "a primeira etapa não é buraco");
+  assert.equal(ehBuracoImpossivel(funil, 1), false, "etapa com valor não é buraco");
+  /* A etapa que CRESCE (dois instrumentos) nunca é buraco — ela tem valor. */
+  assert.equal(ehBuracoImpossivel([10, 90, 5], 1), false, "crescer não é buraco");
+  /* Zero no FIM é legítimo: o funil terminou ali, não há massa depois. */
+  assert.equal(ehBuracoImpossivel([100, 50, 0], 2), false, "zero final não é buraco");
+  assert.equal(ehBuracoImpossivel([100, 0, 0], 1), false, "zero seguido só de zeros não é buraco");
+});
+
+checar("a fita ATRAVESSA o buraco — nenhum ponto de espessura zero no meio", () => {
+  const etapas = [1962, 22, 0, 22, 22].map((valor, i) => ({
+    valor,
+    trechoNaoMedido: i === 2 ? "não medida" : undefined,
+  }));
+  const g = interpolarNaoMedidas(etapas);
+
+  /* A afirmação central: o ponto do meio deixou de ser zero. */
+  assert.ok(g[2] > 0, `a etapa não medida continua com espessura zero: ${JSON.stringify(g)}`);
+  /* E ficou ENTRE os vizinhos medidos, em vez de virar um número inventado. */
+  assert.ok(g[2] >= Math.min(g[1], g[3]) && g[2] <= Math.max(g[1], g[3]),
+    `o valor interpolado saiu do intervalo dos vizinhos: ${JSON.stringify(g)}`);
+  /* ⛔ E as etapas MEDIDAS não podem ter sido tocadas — senão a correção do
+     buraco teria mexido em número que alguém mediu, que é o defeito oposto. */
+  assert.deepEqual([g[0], g[1], g[3], g[4]], [1962, 22, 22, 22], "etapa medida foi alterada");
+});
+
+checar("etapa não medida com valor POSITIVO não é interpolada", () => {
+  /* O caso do `AVISO_SEM_PIXEL`: os ICs vêm todos do gateway, então a conversão
+     não foi medida — mas o NÚMERO é real. Interpolar ali apagaria uma medição. */
+  const etapas = [100, 40, 40].map((valor, i) => ({
+    valor,
+    trechoNaoMedido: i === 1 ? "derivado do gateway" : undefined,
+  }));
+  assert.deepEqual(interpolarNaoMedidas(etapas), [100, 40, 40]);
+});
+
+
 
 console.log(
   falhas.length

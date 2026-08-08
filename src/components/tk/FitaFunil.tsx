@@ -101,6 +101,52 @@ export interface EtapaEntradaFita {
 const pct1 = (t: number) => `${(t * 100).toFixed(1).replace(".", ",")}%`;
 
 /**
+ * 🕳️ A ETAPA NÃO MEDIDA NÃO ESTRANGULA A FITA — ela é INTERPOLADA.
+ *
+ * Com `ICs = 0` entre `Sessões = 22` e `Vendas iniciadas = 22`, a fita fechava
+ * em nada e reabria: **gravata-borboleta**, que se lê como "todo mundo sumiu e
+ * voltou". E é uma leitura impossível — 22 vendas não saem de 0 checkouts.
+ *
+ * Aqui a espessura daquele ponto vem dos vizinhos MEDIDOS mais próximos, então
+ * a fita atravessa o trecho. O que declara a ausência são os três sinais que já
+ * existem e não dependem da geometria: guia tracejada, `*` no rótulo com o
+ * motivo no `title`, e a pílula de taxa de passo SUPRIMIDA.
+ *
+ * ⛔ **O VALOR EXIBIDO NÃO MUDA.** `valorFmt` continua sendo o que se mediu; o
+ * que é interpolado é só a ESPESSURA. Trocar o número exibido por uma
+ * estimativa seria a tela afirmando o que não mediu — o defeito que este bloco
+ * inteiro existe para não cometer.
+ *
+ * ⚠️ Interpolação LINEAR entre os vizinhos medidos, não "copia o anterior": com
+ * dois buracos seguidos, copiar produziria um degrau plano e depois uma queda
+ * brusca — uma forma que ninguém mediu. A reta entre os dois extremos medidos é
+ * a única curva que não inventa inflexão.
+ *
+ * ⚠️ Só interpola quem é não medido **E** vale zero. Uma etapa não medida com
+ * valor positivo (o caso do `AVISO_SEM_PIXEL`: ICs derivados do gateway) tem um
+ * número de verdade, e a geometria dele é legítima.
+ */
+export function interpolarNaoMedidas(
+  etapas: Pick<EtapaEntradaFita, "valor" | "trechoNaoMedido">[],
+): number[] {
+  const brutos = etapas.map((e) => e.valor);
+  const medido = etapas.map((e) => !(e.trechoNaoMedido && e.valor === 0));
+  return brutos.map((v, i) => {
+    if (medido[i]) return v;
+    let a = i - 1;
+    while (a >= 0 && !medido[a]) a--;
+    let b = i + 1;
+    while (b < brutos.length && !medido[b]) b++;
+    /* Sem vizinho medido de um dos lados não há entre o que interpolar: usa o
+       que existe, e sem nenhum, o valor cru. */
+    if (a < 0 && b >= brutos.length) return v;
+    if (a < 0) return brutos[b]!;
+    if (b >= brutos.length) return brutos[a]!;
+    return brutos[a]! + (brutos[b]! - brutos[a]!) * ((i - a) / (b - a));
+  });
+}
+
+/**
  * Uma linha do canto: o que foi TIRADO do cálculo.
  *
  * 🔴 Declarar o que saiu é a disciplina deste projeto, e a referência faz o
@@ -213,15 +259,39 @@ export function FitaFunil({
   const alturaSvg = TOPO + faixaAlt + RODAPE;
   const centroY = TOPO + faixaAlt / 2;
 
+  /**
+   * 🕳️ A ETAPA NÃO MEDIDA NÃO ESTRANGULA A FITA — ela é INTERPOLADA.
+   *
+   * Com `ICs = 0` entre `Sessões = 22` e `Vendas iniciadas = 22`, a fita fechava
+   * em nada e reabria: **gravata-borboleta**, que se lê como "todo mundo sumiu e
+   * voltou". E é uma leitura impossível — 22 vendas não saem de 0 checkouts.
+   *
+   * Aqui a espessura daquele ponto vem dos vizinhos MEDIDOS mais próximos, então
+   * a fita atravessa o trecho. O que declara a ausência são os três sinais que
+   * já existem e não dependem da geometria: guia tracejada, `*` no rótulo com o
+   * motivo no `title`, e a pílula de taxa de passo SUPRIMIDA.
+   *
+   * ⛔ **O VALOR EXIBIDO NÃO MUDA.** `valorFmt` continua sendo o que se mediu; o
+   * que é interpolado é só a ESPESSURA. Trocar o número exibido por uma
+   * estimativa seria a tela afirmando o que não mediu — o defeito que este
+   * bloco inteiro existe para não cometer.
+   *
+   * ⚠️ Interpolação LINEAR entre os vizinhos medidos, não "copia o anterior":
+   * com dois buracos seguidos, copiar produziria um degrau plano e depois uma
+   * queda brusca, que desenha uma forma que ninguém mediu. A reta entre os dois
+   * extremos medidos é a única curva que não inventa inflexão.
+   */
+  const valoresParaGeometria = React.useMemo(() => interpolarNaoMedidas(etapas), [etapas]);
+
   const fluxo = React.useMemo(
     () =>
-      calcularFluxo(etapas.map((e) => e.valor), {
+      calcularFluxo(valoresParaGeometria, {
         largura,
         faixa: faixaAlt,
         margem: MARGEM_X,
         naFita: etapas.map((e) => !e.foraDaFita),
       }),
-    [etapas, largura, faixaAlt],
+    [valoresParaGeometria, etapas, largura, faixaAlt],
   );
 
   if (etapas.length === 0) {

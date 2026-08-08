@@ -167,6 +167,7 @@ async function main() {
   }
 
   const resultado = [];
+  const todasAsCampanhas = [];
 
   for (let i = 0; i < CAMPANHAS.length; i++) {
     const [status, efetivo, objetivo, diaria, vitalicia, exerce] = CAMPANHAS[i];
@@ -247,35 +248,48 @@ async function main() {
         );
       }
 
-      /* 🔴 A LINHA 12 (`UNKNOWN`) FICA SEM MÉTRICA DE PROPÓSITO.
-         Ela é a única que exerce "nunca sincronizou" — e é ela que prova que a
-         célula mostra `—` em vez de `R$ 0,00`. Semear métrica nela apagaria o
-         caso que o script existe para criar. */
-      if (status !== "UNKNOWN") {
-        /* Gasto derivado do índice, não sorteado. Os multiplicadores são
-           desiguais para que ROAS, CPA e CPC não saiam todos parecidos — uma
-           tabela em que toda linha tem o mesmo número não mostra a ordenação
-           nem a barra de proporção. */
-        const gasto = 35 + i * 23;
-        const impressoes = 4000 + i * 1700;
-        const cliques = 90 + i * 37;
-        const { rows: jaM } = await cliente.query(
-          `SELECT id FROM "DailyAdMetric" WHERE "adId" = $1
-             AND date = (now() AT TIME ZONE 'America/Sao_Paulo')::date`, [anuncioId],
+    }
+
+    /* ⛔ A MÉTRICA É SEMEADA A CADA EXECUÇÃO, não só na criação.
+       A primeira versão só semeava no ramo de INSERT, então qualquer coisa que
+       apagasse uma linha (foi o `teste-medicao`, que deletava e não devolvia)
+       deixava a campanha sem métrica para sempre — e o script "idempotente" não
+       consertava. Seed que só cria não repara o estado; seed que reconcilia,
+       sim.
+
+       🔴 A LINHA 12 (`UNKNOWN`) FICA SEM MÉTRICA DE PROPÓSITO.
+       Ela é a única que exerce "nunca sincronizou" — e é ela que prova que a
+       célula mostra `—` em vez de `R$ 0,00`. Semear métrica nela apagaria o
+       caso que o script existe para criar. */
+    const { rows: adsDaCamp } = await cliente.query(
+      `SELECT id FROM "Ad" WHERE "campaignId" = $1 ORDER BY id LIMIT 1`, [campanhaId],
+    );
+    const anuncioAlvo = adsDaCamp[0]?.id;
+    if (status !== "UNKNOWN" && anuncioAlvo) {
+      /* Gasto derivado do índice, não sorteado. Os multiplicadores são
+         desiguais para que ROAS, CPA e CPC não saiam todos parecidos — uma
+         tabela em que toda linha tem o mesmo número não mostra a ordenação
+         nem a barra de proporção. */
+      const gasto = 35 + i * 23;
+      const impressoes = 4000 + i * 1700;
+      const cliques = 90 + i * 37;
+      const { rows: jaM } = await cliente.query(
+        `SELECT id FROM "DailyAdMetric" WHERE "adId" = $1
+           AND date = (now() AT TIME ZONE 'America/Sao_Paulo')::date`, [anuncioAlvo],
+      );
+      if (jaM.length === 0) {
+        /* A data é HOJE no fuso do usuário, não `CURRENT_DATE` (que é UTC no
+           servidor). Um dia adiantado some da janela do dashboard — é a
+           armadilha que já pegou o `teste-pedidos`. */
+        await cliente.query(
+          `INSERT INTO "DailyAdMetric" ("id","adId","date","spend","impressions","clicks","updatedAt")
+           VALUES ($1,$2,(now() AT TIME ZONE 'America/Sao_Paulo')::date,$3,$4,$5,now())`,
+          [id(), anuncioAlvo, gasto, impressoes, cliques],
         );
-        if (jaM.length === 0) {
-          /* A data é HOJE no fuso do usuário, não `CURRENT_DATE` (que é UTC no
-             servidor). Um dia adiantado some da janela do dashboard — é a
-             armadilha que já pegou o `teste-pedidos`. */
-          await cliente.query(
-            `INSERT INTO "DailyAdMetric" ("id","adId","date","spend","impressions","clicks","updatedAt")
-             VALUES ($1,$2,(now() AT TIME ZONE 'America/Sao_Paulo')::date,$3,$4,$5,now())`,
-            [id(), anuncioId, gasto, impressoes, cliques],
-          );
-        }
       }
     }
 
+    todasAsCampanhas.push({ fbCampaignId: existentes[i] ? (await cliente.query('SELECT "fbCampaignId" FROM "Campaign" WHERE id = $1', [campanhaId])).rows[0].fbCampaignId : chaveFb(i), indice: i });
     resultado.push({ nome: NOMES[i], status, veiculacao: efetivo ?? "(nulo)", objetivo: objetivo ?? "(nulo)", exerce });
   }
 
@@ -338,6 +352,69 @@ async function main() {
          `comprador${indice}${n}@exemplo.dev`, "facebook", `${cs[0].name}|${fb}`, String(n + 1)],
       );
     }
+  }
+
+  /* ── 🕳️ CHECKOUT NAS JORNADAS NOVAS — os DOIS ramos, de propósito ─────────
+   *
+   * 🔴 Sem isto o seed reproduz o defeito que ele existe para evitar. As
+   * jornadas criadas acima têm `Click` e `Sale` e **nenhum checkout**, então na
+   * janela de hoje o funil sai:
+   *
+   *     Cliques 1.962 → Sessões 22 → ICs 0 → Vendas Inic. 22 → Vendas Apr. 22
+   *
+   * A fita fechava em nada nos ICs e reabria — gravata-borboleta —, e o meio do
+   * funil ficava impossível de avaliar. Mesma família do `n % 2` que fazia o
+   * BOLETO nunca casar: o gerador produzindo exatamente o estado que impede de
+   * ver o que se ia verificar.
+   *
+   * ⛔ E NÃO BASTA carimbar `checkoutSource`: sem `checkoutAt` não há linha para
+   * carimbar. O que falta é JORNADA COM CHECKOUT, que é o que este bloco cria.
+   *
+   * ### Por que UMA conta medida e outra NÃO
+   *
+   * `Click.checkoutAt` tem dois escritores — o pixel do navegador e o webhook
+   * do gateway — e a tela trata os dois casos de forma diferente:
+   *
+   * | conta | checkout | o que exercita |
+   * |---|---|---|
+   * | a 1ª | `navegador` em ~2/3 | origem MISTA: a composição `N ICs · M do navegador` |
+   * | a 2ª | só `gateway` | o `AVISO_SEM_PIXEL`: etapa derivada, pílula suprimida |
+   *
+   * Com uma só, metade da tela nunca aparece — e ramo nunca visitado em
+   * desenvolvimento é indistinguível de ramo correto.
+   *
+   * ⚠️ A distribuição sai da POSIÇÃO (`n % 3`), não de `random()`: com aleatório
+   * os números da tela mudam a cada execução e ninguém sabe se ela mudou por
+   * causa do código ou do seed. */
+  const { rows: comClique } = await cliente.query(
+    `SELECT cl.id, cl."utmCampaign", row_number() OVER (ORDER BY cl.timestamp, cl.id) AS n
+     FROM "Click" cl WHERE cl."userId" = $1 ORDER BY cl.timestamp, cl.id`,
+    [userId],
+  );
+
+  /* A conta de cada clique sai da campanha no `xcod`. Índice PAR = 1ª conta
+     (mista), ÍMPAR = 2ª (só gateway). Usar a conta, e não o índice do clique,
+     é o que faz o corte ser por CONTA — que é o que a tela compara. */
+  const contaDoFb = new Map(todasAsCampanhas.map((c) => [c.fbCampaignId, c.indice]));
+
+  let checkoutsNavegador = 0;
+  let checkoutsGateway = 0;
+  for (const cl of comClique) {
+    const fb = (cl.utmCampaign ?? "").split("|").pop();
+    const indice = contaDoFb.get(fb);
+    if (indice === undefined) continue;
+    const contaMista = indice % 2 === 0;
+    /* ⚠️ Nem todo clique vira checkout — senão `Sessões === ICs` e o trecho
+       desenha 100%, que é a laje que impede avaliar o meio do funil. */
+    if (Number(cl.n) % 3 === 0) continue;
+    const fonte = contaMista && Number(cl.n) % 3 === 1 ? "navegador" : "gateway";
+    await cliente.query(
+      `UPDATE "Click" SET "checkoutAt" = timestamp + interval '4 minutes', "checkoutSource" = $2
+       WHERE id = $1 AND "userId" = $3`,
+      [cl.id, fonte, userId],
+    );
+    if (fonte === "navegador") checkoutsNavegador++;
+    else checkoutsGateway++;
   }
 
   /* ── AS DUAS ORIGINAIS: O `utmCampaign` DOS CLIQUES SEGUE O NOME NOVO ─────

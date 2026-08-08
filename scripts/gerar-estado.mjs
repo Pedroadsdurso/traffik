@@ -140,7 +140,18 @@ if (semTabela.length > 0) {
 }
 
 /* ── 2. Monta o bloco ────────────────────────────────────────────────────── */
-const hoje = new Date().toISOString().slice(0, 10).split("-").reverse().join("/");
+/* 🕐 O DIA É O DE SÃO PAULO, NÃO O DO PROCESSO.
+ *
+ * `toISOString()` devolve UTC. Às 21:13 em Brasília já é o dia seguinte lá, e o
+ * carimbo mudava sozinho — `--conferir` passava a acusar "desatualizado" e o
+ * `npm test` ficava vermelho sem ninguém ter tocado em nada. Aconteceu em
+ * 07/08/2026, às 21:13.
+ *
+ * É a regra do projeto ("nenhuma agregação usa o dia do PROCESSO") na janela
+ * exata que ela documenta — e vale para gerador de documentação igual: um teste
+ * que só quebra depois das 21h é pior que um que quebra sempre, porque passa no
+ * horário em que se costuma rodar. */
+const hoje = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo" }).format(new Date());
 const corpo = [
   `> ⛔ **GERADO A PARTIR DO \`04\` — NÃO EDITE À MÃO.** Rode \`npm run docs:estado\`.`,
   `> Ele garante que este arquivo e o \`04\` não discordem. **Não** garante que o`,

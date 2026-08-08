@@ -64,6 +64,9 @@ const c = new pg.Client({
    nome nem por `LIKE`. É a regra 4 dos testes que escrevem. */
 const backup = [];
 const metricasCriadas = [];
+/** As que EXISTIAM e o teste apagou. Escopo de módulo porque quem devolve é o
+    `restaurar`, que roda fora do `main` — inclusive no caminho de erro. */
+const apagadas = [];
 
 async function guardarCampanha(id) {
   const { rows } = await c.query(
@@ -95,7 +98,19 @@ async function main() {
   for (const r of camps) await guardarCampanha(r.id);
 
   const hoje = `(now() AT TIME ZONE 'America/Sao_Paulo')::date`;
+  /* ⛔ O QUE ESTE TESTE APAGA, ELE DEVOLVE.
+     A primeira versão só deletava — e comeu a métrica de 3 campanhas do seed,
+     que passaram a mostrar "—" no Gerenciador sem ninguém ter pedido. Um teste
+     que estraga o banco de desenvolvimento é o gerador de estado errado outra
+     vez, agora na camada de verificação: a próxima pessoa olha a tela, vê o
+     estado que o TESTE deixou, e conclui sobre o produto. */
   const limpar = async (adId) => {
+    const { rows } = await c.query(
+      `SELECT id, "adId", date, spend, impressions, clicks FROM "DailyAdMetric"
+       WHERE "adId" = $1 AND date >= ${hoje} - 40`,
+      [adId],
+    );
+    apagadas.push(...rows);
     await c.query(`DELETE FROM "DailyAdMetric" WHERE "adId" = $1 AND date >= ${hoje} - 40`, [adId]);
   };
   const semear = async (adId, diasAtras, spend) => {
@@ -178,6 +193,17 @@ async function main() {
 async function restaurar() {
   for (const id of metricasCriadas) {
     await c.query(`DELETE FROM "DailyAdMetric" WHERE id = $1`, [id]).catch(() => {});
+  }
+  /* Devolve as que existiam, com os MESMOS ids — reinserir com id novo deixaria
+     linha órfã se o teste rodasse duas vezes. */
+  for (const m of apagadas) {
+    await c
+      .query(
+        `INSERT INTO "DailyAdMetric" ("id","adId",date,spend,impressions,clicks,"updatedAt")
+         VALUES ($1,$2,$3,$4,$5,$6,now()) ON CONFLICT (id) DO NOTHING`,
+        [m.id, m.adId, m.date, m.spend, m.impressions, m.clicks],
+      )
+      .catch(() => {});
   }
   for (const b of backup) {
     await c.query(`UPDATE "AdSet" SET "effectiveStatus" =  WHERE "campaignId" = `,
