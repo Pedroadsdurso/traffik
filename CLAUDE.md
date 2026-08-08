@@ -3318,6 +3318,85 @@ Medido em 08/08/2026, e os números foram para o `04`:
 | **Tooltips dos `ⓘ`** | abrem, e a última linha **declara a procedência**: `Vem do Facebook` · `Calculado a partir dos dois` |
 | **Largura estreita** | ⛔ **não verificada.** `resize_window` mentiu pela **terceira** vez |
 
+## 🔒 O ESTADO DO GIT AO FECHAR — conferido, não presumido
+
+| | |
+|---|---|
+| `origin/main` | **`4e6aa9e`** — o ponto de corte de 05/08/2026, intacto |
+| `redesign/dashboard` no remoto | **não existe** (`git ls-remote --heads` devolve vazio) |
+| commits locais à frente da `main` | **75** |
+| árvore de trabalho | limpa |
+
+⛔ **NADA foi para o GitHub.** Os três commits de hoje são `c9bcc0e` (a tela),
+`a2a037e` (a barra flutuante + o `04`) e `bc03b87` (a passada visual). O push é
+decisão do dono, e ele não a tomou.
+
+## ➡️ PRÓXIMO: UTM & SNIPPETS, a sétima — e as DUAS coisas que ela herda
+
+Ordem do dono. Precedência de leitura: **`06` acabamento · `04` conteúdo · `03`
+estrutura**. Referências: a **07** é o UTM Builder, a **08** são os Snippets.
+
+Duas abas — **UTM Builder** (três colunas: formulário · URL gerada com chips por
+parâmetro · histórico + modelos favoritos) e **Snippets** (mestre-detalhe, com
+prévia de código com destaque de sintaxe). A tela é **promovida a área de
+primeiro nível**.
+
+> ### 🔴 A URL PASSA A SER MONTADA POR FUNÇÃO PURA TESTADA
+> Não por concatenação no JSX. Foi assim que nasceu o `[object Object]` que está
+> aberto **desde antes do redesign**.
+
+### 1️⃣ A largura estreita segue devendo — e a sequência que destrava
+
+**O Gerenciador fechou com essa linha EM BRANCO no `04`**, de propósito. O
+`resize_window` mentiu pela **terceira vez** em 08/08: reportou sucesso e deixou
+`innerWidth` em 2560, igual a `screen.availWidth` — o indício de janela
+maximizada.
+
+> ### ⛔ A ORDEM, e ela já custou duas sessões
+> 1. **a aba `299372384` está VIVA** — e precisa continuar viva;
+> 2. o dono **desmaximiza a janela que a contém**;
+> 3. **só então** o `resize_window` passa a valer — e ainda assim se confere o
+>    `innerWidth` por um segundo caminho.
+>
+> ⚠️ **Se aquela aba fechar, o grupo do MCP é auto-removido** e o
+> `tabs_context_mcp{createIfEmpty:true}` da próxima sessão cria um grupo novo
+> **na janela maximizada**. O problema volta inteiro.
+
+⚠️ E a dívida agora é de **duas** telas, não uma: o Gerenciador e o que a sétima
+produzir. Ela não encolhe sozinha.
+
+### 2️⃣ `UtmsView` é a ÚLTIMA legada servindo rota — e o que ela carrega precisa sobreviver
+
+**397 linhas**, e ela **morre nesta tela**. Estado conferido em 08/08:
+
+| Rota | |
+|---|---|
+| `(app)/integracoes/utms/page.tsx` | **renderiza** `<UtmsView workspaceId={v.workspaceAtiva} />` |
+| `dashboard/utm/page.tsx` | só `redirect` — a rota antiga de primeiro nível **já é casca** |
+
+Ou seja: **promover a primeiro nível é trabalho NOVO**, não religar rota que já
+existe.
+
+> ### 🔴 A RESTRIÇÃO QUE NÃO PODE SE PERDER NA REESCRITA
+> O comentário da página de hoje diz por que a prop existe:
+>
+> > *"O script de UTM é POR ÁREA (embute o `WS`). Sem a prop, trocar de área
+> > deixava na tela o script da área anterior — e ele é feito para ser copiado e
+> > instalado, então o erro vira instalação errada, não só número velho."*
+>
+> É a regra **"tela stale que ENTREGA artefato é armadilha"**, e ela vale em
+> dobro aqui: **as duas abas da tela nova entregam texto que vai para o site do
+> cliente** — a URL do Builder e o snippet. Componente que não recebe a área
+> ativa não produz número velho; produz instalação errada, permanente, na
+> página de outra pessoa.
+>
+> ⚠️ A assinatura do defeito está registrada: componente cliente + server action
+> escopada por área + chamada **sem o argumento** + `useEffect` com deps `[]`.
+
+⚠️ As outras três legadas de Integrações (`Anuncios` 322 · `Pixel` 1.181 ·
+`Webhooks` 532) **continuam de pé e não auditadas de propósito** — vão ser
+reescritas, e auditar o que será deletado é trabalho que não sobrevive.
+
 # 🔬 `getComputedStyle` SEM REPINTURA CONFIRMADA MEDE O QUE ESTAVA, NÃO O QUE ESTÁ
 
 > **Registrado em 08/08/2026 porque quase virou um bug INVENTADO num arquivo
