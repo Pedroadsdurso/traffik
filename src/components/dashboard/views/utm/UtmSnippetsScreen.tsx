@@ -242,10 +242,11 @@ function UrlGerada({
     );
 
   return (
-    <Card titulo="URL gerada" acao={selo} preencher>
-      {/* Mesma regra do Gerador: `Salvar como modelo` afunda para o rodapé, e o
-          par de colunas termina alinhado com a coluna da direita. */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 16 }}>
+    <Card titulo="URL gerada" acao={selo}>
+      {/* ⛔ SEM `preencher` e SEM `space-between`, de propósito. Ver o wrapper do
+          `Gerador` na tela: aqui o vão ficaria entre a Visualização e o `Salvar
+          como modelo`, cercado de conteúdo dos dois lados, e leria como se a
+          visualização devesse continuar. Este cartão termina onde acaba. */}
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {montada.url ? (
           <div style={{ position: "relative" }}>
@@ -323,7 +324,6 @@ function UrlGerada({
             </div>
           )}
         </div>
-        </div>
 
         <div style={{ borderTop: "1px solid var(--tk-border)", paddingTop: 14 }}>
           <div className="text-label text-text-secondary" style={{ marginBottom: 8 }}>
@@ -377,7 +377,7 @@ function HistoricoRecente() {
   const itens = armazemUtm.listarHistorico();
 
   return (
-    <Card titulo="Histórico recente" preencher style={{ flex: 1 }}>
+    <Card titulo="Histórico recente">
       {itens.length === 0 ? (
         <EmptyState
           titulo="Nada gerado ainda"
@@ -385,7 +385,12 @@ function HistoricoRecente() {
           compacto
         />
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflowY: "auto" }}>
+        /* ⛔ O TETO É DA LISTA, não da coluna. Ele nasceu de altura herdada do
+           grid, e altura herdada some no dia em que o layout mudar — foi o que
+           aconteceu ao voltar para `alignItems: start`. Rolagem que só existe
+           quando o vizinho é alto é rolagem por acidente. Com `maxHeight` ela
+           dispara pelo próprio conteúdo: o histórico guarda até 12 entradas. */
+        <div style={{ display: "flex", flexDirection: "column", maxHeight: 260, overflowY: "auto" }}>
           {itens.map((h) => (
             <div
               key={h.id}
@@ -422,7 +427,7 @@ function ModelosFavoritos({ aoAplicar }: { aoAplicar: (m: ModeloUtm) => void }) 
   const modelos = armazemUtm.listarModelos();
 
   return (
-    <Card titulo="Modelos favoritos" preencher style={{ flex: 1 }}>
+    <Card titulo="Modelos favoritos">
       {modelos.length === 0 ? (
         <>
           <EmptyState
@@ -434,7 +439,7 @@ function ModelosFavoritos({ aoAplicar }: { aoAplicar: (m: ModeloUtm) => void }) 
         </>
       ) : (
         <>
-        <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflowY: "auto" }}>
+        <div style={{ display: "flex", flexDirection: "column", maxHeight: 260, overflowY: "auto" }}>
           {modelos.map((m) => (
             <div
               key={m.id}
@@ -910,21 +915,35 @@ export function UtmSnippetsScreen({ v }: { v: TraffikView }) {
             display: "grid",
             gridTemplateColumns: "minmax(0, 1.05fr) minmax(0, 1fr) minmax(240px, 0.72fr)",
             gap: "var(--tk-gap-grid)",
-            /* 🎯 `stretch`, não `start`. Com `start` cada coluna terminava na
-               própria altura e a fileira ficava com a borda de baixo serrilhada —
-               ~85px de vão sob as duas primeiras, e o resto da página vazio.
-               Esticando, a fileira toda termina na mesma linha; quem absorve a
-               sobra é a barra de ações de cada cartão (que afunda) e as listas da
-               terceira coluna (que crescem e rolam por dentro). */
-            alignItems: "stretch",
+            /* 🎯 `start`: cada coluna termina onde o conteúdo dela termina, e a
+               borda de baixo da fileira fica IRREGULAR. É o retrato honesto de
+               três conteúdos de tamanhos diferentes.
+
+               ⛔ Isto já foi `stretch` por meio commit, em 11/08/2026, e a
+               reversão tem motivo escrito — ver o bloco `VÃO DENTRO DE CARD` no
+               `CLAUDE.md`. Alinhar a borda empurrava o mesmo vão para DENTRO dos
+               cartões, e vão dentro de card **promete conteúdo**: no `URL gerada`
+               ele caía entre a Visualização e o Salvar como modelo, e lia como se
+               a visualização devesse continuar até ali.
+
+               A exceção é o `Gerador`, e ela está anotada no próprio wrapper. */
+            alignItems: "start",
           }}
         >
+          {/* ⚖️ A ÚNICA COLUNA QUE ESTICA, e a diferença não é gosto.
+              O vão do `Gerador` tem CHÃO: a barra `Limpar campos` / `Gerar URL`
+              fica embaixo dele, e um vão com barra de ação embaixo lê como rodapé
+              de formulário. O do `URL gerada` tinha teto e chão de CONTEÚDO —
+              chips em cima, `Salvar como modelo` embaixo —, e aí ele promete
+              conteúdo que não existe. Mesma quantidade de pixels, duas leituras. */}
+          <div style={{ alignSelf: "stretch", display: "flex", minWidth: 0 }}>
           <GeradorDeUtm
             form={form}
             aoMudar={mudar}
             aoLimpar={() => setForm(FORMULARIO_VAZIO)}
             aoGerar={gerar}
           />
+          </div>
           <UrlGerada
             form={form}
             aoSalvarModelo={(nome) => {
@@ -937,17 +956,9 @@ export function UtmSnippetsScreen({ v }: { v: TraffikView }) {
               armazemUtm.salvarModelo(nome, campos);
             }}
           />
-          {/* ⚠️ Os dois primeiros cartões CRESCEM e rolam por dentro; o `Como
-              usar` fica no tamanho natural. Ele é texto fixo — esticá-lo só
-              produziria vão dentro de um cartão que nunca tem mais conteúdo.
-              Quem tem lista que pode crescer é quem absorve a sobra. */}
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--tk-gap-grid)", minWidth: 0 }}>
-            <div style={{ flex: "1 1 auto", minHeight: 0, display: "flex" }}>
-              <HistoricoRecente />
-            </div>
-            <div style={{ flex: "1 1 auto", minHeight: 0, display: "flex" }}>
-              <ModelosFavoritos aoAplicar={aplicarModelo} />
-            </div>
+            <HistoricoRecente />
+            <ModelosFavoritos aoAplicar={aplicarModelo} />
             <ComoUsar />
           </div>
         </div>

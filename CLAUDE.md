@@ -3620,30 +3620,62 @@ do cliente**. O usuário confere numa, copia da outra, e as duas parecem certas.
 ⚠️ Extração sem mudar o que se calcula **não é conserto de comportamento** — é a
 regra dos DTOs: move, não altera. Por isso ela não fere o congelamento.
 
-### 2 · O vão do Builder — resolvido, e a troca está declarada
+### 2 · O vão do Builder — a decisão foi INVERTIDA na mesma sessão
 
 A tabela de Snippets **não** entra na aba do Builder (decisão do dono): a
 referência a coloca lá porque a tela dela tem duas colunas; a nossa tem três, e
 a tabela traz prévia de código.
 
-O vão foi fechado com `alignItems: stretch` + a barra de ação de cada cartão
-afundando para o rodapé (`space-between` com DOIS filhos — com três ele
-espalharia o miolo do formulário). As listas da terceira coluna crescem e rolam
-por dentro; o `Como usar` fica no tamanho natural, porque é texto fixo.
+⚠️ **Eu fechei o vão com `alignItems: stretch` e o dono mandou reverter, depois
+de olhar o print.** O bloco abaixo é a regra que a reversão produziu, e ela vale
+muito além desta tela. A versão `stretch` NÃO está descrita aqui como opção viva:
+proibição que muda é apagada, não mantida ao lado do que vale hoje.
 
-✅ **Medido na tela:** as três colunas em `bottom: 661`, idênticas.
+> # 🕳️ VÃO DENTRO DE UM CARD PROMETE CONTEÚDO. VÃO FORA NÃO PROMETE NADA.
+> **Formulação do dono, 11/08/2026.** Vale para toda tela, todo layout de
+> fileira. Nasceu no Builder e não é regra do Builder.
 
-> ### ⚠️ NÃO EXISTE ARRANJO COM ZERO VÃO — só existe ESCOLHER ONDE ELE FICA
-> A altura da fileira é a da coluna mais alta, e as três têm conteúdos de
-> tamanhos diferentes. Com `start`, o vão ficava FORA, numa borda de baixo
-> serrilhada. Com `stretch`, ele fica DENTRO, acima da barra de ação — onde se
-> lê como rodapé de formulário, e não como bloco inacabado.
+Não existe arranjo com zero vão: a altura da fileira é a da coluna mais alta, e
+conteúdos de tamanhos diferentes não terminam juntos. **O que se escolhe é onde
+o vão fica** — e as duas escolhas não são equivalentes:
+
+| Onde | Como se lê |
+|---|---|
+| **fora** do card (borda de baixo irregular) | ausência. Não afirma nada — é o retrato de três conteúdos de tamanhos diferentes |
+| **dentro** do card | 🔴 **promessa**. O olho lê "aqui cabia algo que não veio" |
+
+O caso: com `stretch`, os ~130px caíam entre a `Visualização` e o `Salvar como
+modelo`, cercados de conteúdo dos DOIS lados. Lia como se a visualização devesse
+continuar até ali.
+
+> ### ⚖️ A EXCEÇÃO TEM CRITÉRIO, E O CRITÉRIO É O CHÃO
+> O `Gerador` continua esticando (`alignSelf: stretch`), e o vão dele está bom.
+> A diferença não é gosto: o vão dele tem **chão** — a barra `Limpar campos` /
+> `Gerar URL` fica embaixo —, e vão com barra de ação embaixo lê como **rodapé de
+> formulário**. O do `URL gerada` tinha teto e chão de CONTEÚDO.
 >
-> ⛔ Quem for "consertar" o vão interno de novo precisa saber que ele é o preço
-> escolhido, não um resíduo. Devolver `alignItems: start` traz a borda serrilhada
-> de volta.
+> **Mesma quantidade de pixels, duas leituras.** A pergunta não é *quanto vão*,
+> é *o que está embaixo dele*.
+
+✅ **Medido na tela:** alturas `539 / 304 / 539`, fundos `713 / 478 / 713`. O vão
+interno do cartão do meio caiu de ~130px para **16px** — só o `gap`.
+
+⚠️ É a mesma decisão do `alignSelf: start` do bloco vazio do Dashboard, e o
+argumento é o do dono: **alinhamento é estética da linha; espaço morto é a tela
+afirmando que ali cabia algo.**
 
 ### 3 · O aviso de sessão saiu de dentro da área que rola
+
+> ### 🔴 ROLAGEM QUE SÓ EXISTE QUANDO O VIZINHO É ALTO É ROLAGEM POR ACIDENTE
+> A primeira versão tirava a altura do grid (`flex: 1` numa coluna esticada). Ao
+> voltar para `alignItems: start` ela **sumiu em silêncio** — e com ela sumiria a
+> razão de o aviso estar fora da área rolável, deixando a estrutura correta e
+> inerte.
+>
+> Hoje o teto é **da lista** (`maxHeight: 260`), não da coluna: ela dispara pelo
+> próprio conteúdo, e o histórico guarda até 12 entradas. É a família da
+> *proteção por TIMING, não por ESTRUTURA*, na camada de layout — o que segurava
+> era a altura do vizinho, e vizinho não é contrato.
 
 Os modelos passaram a rolar por dentro do cartão, e o `AvisoDeSessao` ficou
 **fora** da rolagem. Se descesse com a lista, o usuário com muitos modelos nunca

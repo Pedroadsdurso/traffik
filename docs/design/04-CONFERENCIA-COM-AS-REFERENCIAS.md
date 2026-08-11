@@ -619,7 +619,7 @@ Referências: imagens 7 e 8. Vira área de primeiro nível — **construída em
 |---|---|
 | Abas `UTM Builder` / `Snippets` | ✅ |
 | A tabela de Snippets DENTRO da aba Builder | 🔧 **separamos porque o nosso Builder é mais denso que o da referência**: três colunas, contra as duas dela. A tabela tem 7 linhas e prévia de código — empilhada sob um Builder de três colunas, ela empurraria o próprio detalhe para fora da tela |
-| As três colunas do Builder terminando juntas | ✅ 🔧 nosso. `alignItems: stretch` + a barra de ação afundando para o rodapé de cada cartão. **Medido:** as três em `bottom: 661`. ⚠️ Troca a borda serrilhada por vão DENTRO dos dois primeiros cartões — ver a nota |
+| Borda de baixo IRREGULAR na fileira do Builder | ✅ 🔧 nosso, e é o INVERSO do que ficou por meio commit. Cada cartão termina onde o conteúdo dele termina. **Medido:** `713 / 478 / 713` |
 | `⤒ Importar` + `+ Novo UTM ⌄` | 🔧 nada a importar (não há persistência) e a página INTEIRA é o "novo UTM" — os dois seriam controles inertes |
 | Formulário: Fonte, Mídia, Campanha, Termo, Conteúdo, ID da campanha | ✅ |
 | Ícone da plataforma dentro do campo Fonte | ✅ ⚠️ só onde temos ARTE (facebook e os 5 gateways). Google e TikTok não têm arquivo, e o monograma do `LogoGateway` pareceria logotipo quebrado |
@@ -661,11 +661,20 @@ Referências: imagens 7 e 8. Vira área de primeiro nível — **construída em
 | Fluxo completo do Builder | ✅ preencher → `Gerar URL` → histórico → `Salvar modelo` → modelos favoritos, exercidos na tela |
 | Largura estreita | |
 
-**Nota sobre o vão do Builder:** não existe arranjo com zero vão — a altura da
-fileira é a da coluna mais alta, e as três têm conteúdos de tamanhos diferentes.
-O que se escolhe é ONDE o vão fica. Com `start` ele ficava FORA, na borda de
-baixo serrilhada; com `stretch` ele fica DENTRO, acima da barra de ação, que é o
-lugar em que ele se lê como rodapé de formulário em vez de bloco inacabado.
+**Nota sobre o vão do Builder — a decisão foi INVERTIDA em 11/08/2026.** Não
+existe arranjo com zero vão: a altura da fileira é a da coluna mais alta. O que
+se escolhe é ONDE ele fica, e a regra do dono decide:
+
+> **Vão DENTRO de um card promete conteúdo. Vão FORA não promete nada.**
+
+Com `stretch`, os ~130px caíam entre a `Visualização` e o `Salvar como modelo`,
+cercados de conteúdo dos dois lados — e liam como se a visualização devesse
+continuar até ali. Com `start`, o mesmo vão vira ausência, que é honesta.
+
+⚖️ **A exceção é o `Gerador`, e ela tem critério, não gosto:** o vão dele tem
+CHÃO — a barra `Limpar campos` / `Gerar URL` fica embaixo —, então lê como rodapé
+de formulário. Ele é o único com `alignSelf: stretch`. Medido: `539 / 304 / 539`,
+e o vão interno do cartão do meio caiu de ~130px para **16px** (só o `gap`).
 
 **Nota:** o inventário de snippets é o REAL — 4 famílias de código **gerado**
 (rastreamento de UTM, back redirect, 3 formatos de parâmetro de URL, 1 por
