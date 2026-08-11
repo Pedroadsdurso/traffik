@@ -988,7 +988,7 @@ qualquer resize, leia `innerWidth` e compare. `innerWidth === screen.availWidth`
 | INTEGRAÇÕES | 24 | — | 17 |
 | REGRAS | 0 | 21 | — |
 | CAMPANHAS / GERENCIADOR | 18 | 1 | 4 |
-| UTM & SNIPPETS | 21 | — | 9 |
+| UTM & SNIPPETS | 22 | — | 10 |
 | CRIATIVOS | 0 | 13 | — |
 | LOGIN | 0 | 19 | — |
 <!-- ESTADO:FIM -->
@@ -3604,3 +3604,50 @@ dez, e a ordem é do dono. `Regras` (21 ❌) segue sendo a maior dívida isolada
 ⚠️ **As três legadas de Integrações continuam de pé e NÃO auditadas de
 propósito**: `Anuncios` 322 · `Pixel` 1.181 · `Webhooks` 532. Elas morrem na
 reescrita delas.
+
+## 🧩 O ACABAMENTO DE FECHAMENTO — 11/08/2026, mesma sessão
+
+Três decisões do dono depois da primeira entrega da tela.
+
+### 1 · `scriptDoPixel()` é FONTE ÚNICA, e está escrito nele
+
+A extração fica. O cabeçalho da função agora é endereçado a **quem for
+reescrever a `PixelView`** — que é a próxima tela — e diz para não reinlinar as
+doze linhas de volta, com o motivo: a divergência ali não produz número errado,
+produz **duas telas mostrando um script diferente do que está instalado no site
+do cliente**. O usuário confere numa, copia da outra, e as duas parecem certas.
+
+⚠️ Extração sem mudar o que se calcula **não é conserto de comportamento** — é a
+regra dos DTOs: move, não altera. Por isso ela não fere o congelamento.
+
+### 2 · O vão do Builder — resolvido, e a troca está declarada
+
+A tabela de Snippets **não** entra na aba do Builder (decisão do dono): a
+referência a coloca lá porque a tela dela tem duas colunas; a nossa tem três, e
+a tabela traz prévia de código.
+
+O vão foi fechado com `alignItems: stretch` + a barra de ação de cada cartão
+afundando para o rodapé (`space-between` com DOIS filhos — com três ele
+espalharia o miolo do formulário). As listas da terceira coluna crescem e rolam
+por dentro; o `Como usar` fica no tamanho natural, porque é texto fixo.
+
+✅ **Medido na tela:** as três colunas em `bottom: 661`, idênticas.
+
+> ### ⚠️ NÃO EXISTE ARRANJO COM ZERO VÃO — só existe ESCOLHER ONDE ELE FICA
+> A altura da fileira é a da coluna mais alta, e as três têm conteúdos de
+> tamanhos diferentes. Com `start`, o vão ficava FORA, numa borda de baixo
+> serrilhada. Com `stretch`, ele fica DENTRO, acima da barra de ação — onde se
+> lê como rodapé de formulário, e não como bloco inacabado.
+>
+> ⛔ Quem for "consertar" o vão interno de novo precisa saber que ele é o preço
+> escolhido, não um resíduo. Devolver `alignItems: start` traz a borda serrilhada
+> de volta.
+
+### 3 · O aviso de sessão saiu de dentro da área que rola
+
+Os modelos passaram a rolar por dentro do cartão, e o `AvisoDeSessao` ficou
+**fora** da rolagem. Se descesse com a lista, o usuário com muitos modelos nunca
+veria a declaração de que nada é guardado — e é exatamente ele quem mais precisa
+dela.
+
+`04`: **22 ✅ / 0 ❌ / 10 🔧**. Validado contra baseline: só a linha de UTM mudou.

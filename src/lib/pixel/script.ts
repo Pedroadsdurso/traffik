@@ -438,15 +438,27 @@ export function pixelScript(cfg: PixelScriptConfig): string {
 /**
  * Monta a `PixelScriptConfig` a partir do DTO da tela.
  *
- * > ### ⛔ ESTA CONVERSÃO EXISTE UMA VEZ SÓ
- * > Ela vivia inline na `PixelView` e passou a ser precisa também na tela de
- * > UTM & Snippets. Duas cópias do mesmo mapeamento é a família que esta base
- * > paga desde `whereDespesasDaArea`: elas divergem sempre, e quando divergem
- * > **os dois lugares mostram um script diferente do que o usuário instalou**.
+ * > ### ⛔ FONTE ÚNICA. NÃO REINLINE ISTO EM TELA NENHUMA.
  * >
- * > ⚠️ Extraída em 11/08/2026 sem mudar uma linha do que ela calcula — a
- * > `PixelView` é código congelado (anterior a `4e6aa9e`) e o redesign não muda
- * > lógica. O que mudou foi de onde as mesmas linhas são chamadas.
+ * > **Escrito para quem for reescrever a `PixelView`.** Este mapeamento vivia
+ * > inline lá dentro, e foi extraído para cá em 11/08/2026 quando a tela de
+ * > UTM & Snippets passou a precisar do MESMO script. Hoje há dois chamadores;
+ * > a reescrita da `PixelView` é o momento em que a tentação de trazer as doze
+ * > linhas de volta para dentro do componente aparece.
+ * >
+ * > **Por que aqui e não em cada tela:** duas cópias divergem — é a família que
+ * > esta base paga desde `whereDespesasDaArea`. Só que aqui a divergência não
+ * > produz número errado: produz **duas telas mostrando um script diferente do
+ * > que está instalado no site do cliente**. O usuário confere numa, copia da
+ * > outra, e as duas parecem certas.
+ * >
+ * > ⚠️ A extração não mudou uma linha do que ela calcula. A `PixelView` é
+ * > código congelado (anterior a `4e6aa9e`) e o redesign não altera lógica —
+ * > isto foi um MOVE, não uma correção. Quem reescrever a tela herda a função
+ * > pronta e não precisa reproduzir o mapeamento.
+ * >
+ * > 🔎 Antes de mexer na forma dos argumentos, `grep scriptDoPixel` — quem
+ * > chama são a `PixelView` e o `lib/utm/inventario.ts`.
  */
 export function scriptDoPixel(
   px: {

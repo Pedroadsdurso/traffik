@@ -146,7 +146,13 @@ function GeradorDeUtm({
     <Card
       titulo="Gerador de UTM"
       descricao="Preencha os campos e gere sua URL com parâmetros de rastreamento."
+      preencher
     >
+      {/* 🎯 A LINHA DE AÇÃO AFUNDA PARA O RODAPÉ quando sobra altura.
+          `space-between` com DOIS filhos — os campos num bloco só, e a barra de
+          botões no outro. Com três filhos ele espalharia o miolo do formulário,
+          que é o oposto do que se quer: campo tem de ficar junto de campo. */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 14 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         <Input
           rotulo="Endereço de destino"
@@ -188,6 +194,7 @@ function GeradorDeUtm({
               }
             />
           ))}
+        </div>
         </div>
 
         <div style={{ display: "flex", gap: 10, justifyContent: "space-between", flexWrap: "wrap" }}>
@@ -235,7 +242,10 @@ function UrlGerada({
     );
 
   return (
-    <Card titulo="URL gerada" acao={selo}>
+    <Card titulo="URL gerada" acao={selo} preencher>
+      {/* Mesma regra do Gerador: `Salvar como modelo` afunda para o rodapé, e o
+          par de colunas termina alinhado com a coluna da direita. */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 16 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
         {montada.url ? (
           <div style={{ position: "relative" }}>
@@ -313,6 +323,7 @@ function UrlGerada({
             </div>
           )}
         </div>
+        </div>
 
         <div style={{ borderTop: "1px solid var(--tk-border)", paddingTop: 14 }}>
           <div className="text-label text-text-secondary" style={{ marginBottom: 8 }}>
@@ -366,7 +377,7 @@ function HistoricoRecente() {
   const itens = armazemUtm.listarHistorico();
 
   return (
-    <Card titulo="Histórico recente">
+    <Card titulo="Histórico recente" preencher style={{ flex: 1 }}>
       {itens.length === 0 ? (
         <EmptyState
           titulo="Nada gerado ainda"
@@ -374,7 +385,7 @@ function HistoricoRecente() {
           compacto
         />
       ) : (
-        <div style={{ display: "flex", flexDirection: "column" }}>
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflowY: "auto" }}>
           {itens.map((h) => (
             <div
               key={h.id}
@@ -411,7 +422,7 @@ function ModelosFavoritos({ aoAplicar }: { aoAplicar: (m: ModeloUtm) => void }) 
   const modelos = armazemUtm.listarModelos();
 
   return (
-    <Card titulo="Modelos favoritos">
+    <Card titulo="Modelos favoritos" preencher style={{ flex: 1 }}>
       {modelos.length === 0 ? (
         <>
           <EmptyState
@@ -422,7 +433,8 @@ function ModelosFavoritos({ aoAplicar }: { aoAplicar: (m: ModeloUtm) => void }) 
           <AvisoDeSessao />
         </>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column" }}>
+        <>
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, overflowY: "auto" }}>
           {modelos.map((m) => (
             <div
               key={m.id}
@@ -475,8 +487,12 @@ function ModelosFavoritos({ aoAplicar }: { aoAplicar: (m: ModeloUtm) => void }) 
               </Button>
             </div>
           ))}
-          <AvisoDeSessao />
         </div>
+        {/* ⛔ O aviso fica FORA da área que rola. Ele é a declaração de que nada
+            é guardado — se descesse com a lista, o usuário com muitos modelos
+            nunca o veria, que é exatamente quem mais precisa da informação. */}
+        <AvisoDeSessao />
+        </>
       )}
     </Card>
   );
@@ -894,7 +910,13 @@ export function UtmSnippetsScreen({ v }: { v: TraffikView }) {
             display: "grid",
             gridTemplateColumns: "minmax(0, 1.05fr) minmax(0, 1fr) minmax(240px, 0.72fr)",
             gap: "var(--tk-gap-grid)",
-            alignItems: "start",
+            /* 🎯 `stretch`, não `start`. Com `start` cada coluna terminava na
+               própria altura e a fileira ficava com a borda de baixo serrilhada —
+               ~85px de vão sob as duas primeiras, e o resto da página vazio.
+               Esticando, a fileira toda termina na mesma linha; quem absorve a
+               sobra é a barra de ações de cada cartão (que afunda) e as listas da
+               terceira coluna (que crescem e rolam por dentro). */
+            alignItems: "stretch",
           }}
         >
           <GeradorDeUtm
@@ -915,9 +937,17 @@ export function UtmSnippetsScreen({ v }: { v: TraffikView }) {
               armazemUtm.salvarModelo(nome, campos);
             }}
           />
+          {/* ⚠️ Os dois primeiros cartões CRESCEM e rolam por dentro; o `Como
+              usar` fica no tamanho natural. Ele é texto fixo — esticá-lo só
+              produziria vão dentro de um cartão que nunca tem mais conteúdo.
+              Quem tem lista que pode crescer é quem absorve a sobra. */}
           <div style={{ display: "flex", flexDirection: "column", gap: "var(--tk-gap-grid)", minWidth: 0 }}>
-            <HistoricoRecente />
-            <ModelosFavoritos aoAplicar={aplicarModelo} />
+            <div style={{ flex: "1 1 auto", minHeight: 0, display: "flex" }}>
+              <HistoricoRecente />
+            </div>
+            <div style={{ flex: "1 1 auto", minHeight: 0, display: "flex" }}>
+              <ModelosFavoritos aoAplicar={aplicarModelo} />
+            </div>
             <ComoUsar />
           </div>
         </div>
