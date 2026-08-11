@@ -1,12 +1,8 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { useTraffik } from "@/components/dashboard/TraffikContext";
-import { UtmsView } from "@/components/dashboard/views/integracoes/UtmsView";
-
-export default function UtmsPage() {
-  // O script de UTM é POR ÁREA (embute o `WS`). Sem a prop, trocar de área
-  // deixava na tela o script da área anterior — e ele é feito para ser copiado
-  // e instalado, então o erro vira instalação errada, não só número velho.
-  const v = useTraffik();
-  return <UtmsView workspaceId={v.workspaceAtiva} />;
+// A tela de UTMs saiu de dentro de Integrações e virou área de primeiro nível
+// (`/dashboard/utm`) em 11/08/2026. A rota antiga fica como redirect: ela está
+// em link salvo e em documentação, e 404 aqui parece recurso removido.
+export default function UtmsAntiga() {
+  redirect("/dashboard/utm");
 }

@@ -1922,3 +1922,35 @@ a {
     .tk-ger-topo { grid-template-columns: minmax(0, 1fr) !important; }
   }
 }
+
+/* ── UTM & Snippets: a ordem em que as três colunas caem ────────────────────
+   A ordem é de IMPORTÂNCIA, e ela é diferente da do Gerenciador porque aqui as
+   duas primeiras colunas são um PAR: o formulário só serve para produzir a URL
+   ao lado dele. Separar as duas antes de tudo custaria uma rolagem entre digitar
+   e ver o resultado.
+
+   Então a primeira a sair é a TERCEIRA coluna (histórico + modelos), que é
+   consulta, não produção. Só depois o par se desfaz.
+
+   ⚠️ `!important` pelo mesmo motivo do `.tk-ger-*`: o grid nasce em `style`
+   inline no componente, e inline vence classe. Ou o valor sai do JSX inteiro, ou
+   a media query precisa disto — e tirar do JSX espalharia a definição do layout
+   em dois arquivos. */
+@layer components {
+  @media (max-width: 1240px) {
+    .tk-utm-colunas {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) !important;
+    }
+    /* A terceira coluna passa a ser uma FAIXA embaixo, com os três cartões lado
+       a lado — empilhá-los daria três blocos de altura num espaço de consulta. */
+    .tk-utm-colunas > :nth-child(3) {
+      grid-column: 1 / -1;
+      display: grid !important;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    }
+  }
+  @media (max-width: 900px) {
+    .tk-utm-colunas { grid-template-columns: minmax(0, 1fr) !important; }
+    .tk-utm-mestre { grid-template-columns: minmax(0, 1fr) !important; }
+  }
+}

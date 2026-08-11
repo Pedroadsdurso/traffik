@@ -17,7 +17,7 @@ import {
   type SnippetCheckDTO,
 } from "@/lib/actions/pixels";
 import { getPublicAppUrl } from "@/lib/appUrl";
-import { pixelScript } from "@/lib/pixel/script";
+import { scriptDoPixel } from "@/lib/pixel/script";
 import { elapsed, plural } from "@/lib/format";
 import { CONFIG } from "@/lib/explicacoes";
 import { sx } from "@/lib/sx";
@@ -522,21 +522,12 @@ export function PixelView({ workspaceId }: { workspaceId: string | null }) {
     setPixels((list) => list.filter((p) => p.id !== id));
   }
 
+  // ⚠️ O mapeamento saiu daqui para `lib/pixel/script.ts` em 11/08/2026, sem
+  // mudar uma linha do que ele calcula: a tela de UTM & Snippets precisa do
+  // MESMO script, e duas cópias divergem — cada tela mostrando um código
+  // diferente do que está instalado no site do cliente.
   function scriptText(px: PixelConfigDTO): string {
-    const ic = px.rules.find((r) => r.eventType === "INITIATE_CHECKOUT");
-    return pixelScript({
-      configId: px.id,
-      eventOwners: px.eventOwners,
-      temPixelNativo: px.preset.temPixelNativo,
-      apiBase: getPublicAppUrl(),
-      lead: px.rules.find((r) => r.eventType === "LEAD")?.enabled ?? false,
-      addToCart: px.rules.find((r) => r.eventType === "ADD_TO_CART")?.enabled ?? false,
-      initiateCheckout: {
-        enabled: ic?.enabled ?? false,
-        type: (ic?.detectionType as DetectionType) ?? undefined,
-        value: ic?.detectionValue ?? undefined,
-      },
-    });
+    return scriptDoPixel(px, getPublicAppUrl());
   }
 
   const primeiro = form.metaPixels[0];

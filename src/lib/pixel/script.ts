@@ -434,3 +434,41 @@ export function pixelScript(cfg: PixelScriptConfig): string {
 })();
 `;
 }
+
+/**
+ * Monta a `PixelScriptConfig` a partir do DTO da tela.
+ *
+ * > ### ⛔ ESTA CONVERSÃO EXISTE UMA VEZ SÓ
+ * > Ela vivia inline na `PixelView` e passou a ser precisa também na tela de
+ * > UTM & Snippets. Duas cópias do mesmo mapeamento é a família que esta base
+ * > paga desde `whereDespesasDaArea`: elas divergem sempre, e quando divergem
+ * > **os dois lugares mostram um script diferente do que o usuário instalou**.
+ * >
+ * > ⚠️ Extraída em 11/08/2026 sem mudar uma linha do que ela calcula — a
+ * > `PixelView` é código congelado (anterior a `4e6aa9e`) e o redesign não muda
+ * > lógica. O que mudou foi de onde as mesmas linhas são chamadas.
+ */
+export function scriptDoPixel(
+  px: {
+    id: string;
+    eventOwners: unknown;
+    preset: { temPixelNativo: boolean };
+    rules: { eventType: string; enabled: boolean; detectionType: string | null; detectionValue: string | null }[];
+  },
+  apiBase: string,
+): string {
+  const ic = px.rules.find((r) => r.eventType === "INITIATE_CHECKOUT");
+  return pixelScript({
+    configId: px.id,
+    eventOwners: px.eventOwners,
+    temPixelNativo: px.preset.temPixelNativo,
+    apiBase,
+    lead: px.rules.find((r) => r.eventType === "LEAD")?.enabled ?? false,
+    addToCart: px.rules.find((r) => r.eventType === "ADD_TO_CART")?.enabled ?? false,
+    initiateCheckout: {
+      enabled: ic?.enabled ?? false,
+      type: (ic?.detectionType as PixelScriptConfig["initiateCheckout"]["type"]) ?? undefined,
+      value: ic?.detectionValue ?? undefined,
+    },
+  });
+}

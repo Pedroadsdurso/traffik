@@ -277,7 +277,7 @@ const TELAS_INTEGRACAO: ItemComando[] = [
   { id: "int-visao", rotulo: "Integrações › Visão geral", icone: "integracoes", href: "/dashboard/integracoes", sinonimos: "saude token plataformas contas status" },
   { id: "int-anuncios", rotulo: "Integrações › Anúncios", icone: "integracoes", href: "/dashboard/integracoes/anuncios", sinonimos: "perfil facebook meta conta" },
   { id: "int-webhooks", rotulo: "Integrações › Webhooks", icone: "integracoes", href: "/dashboard/integracoes/webhooks", sinonimos: "gateway kirvano cakto venda" },
-  { id: "int-utms", rotulo: "Integrações › UTMs", icone: "integracoes", href: "/dashboard/integracoes/utms", sinonimos: "xcod parametros link" },
+  { id: "utm-snippets", rotulo: "UTM & Snippets", icone: "link", href: "/dashboard/utm", sinonimos: "xcod parametros link snippet codigo trecho builder" },
   { id: "int-pixel", rotulo: "Integrações › Pixel/Eventos", icone: "integracoes", href: "/dashboard/integracoes/pixel", sinonimos: "capi evento script" },
 ];
 

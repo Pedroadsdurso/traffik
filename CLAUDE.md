@@ -988,7 +988,7 @@ qualquer resize, leia `innerWidth` e compare. `innerWidth === screen.availWidth`
 | INTEGRAÇÕES | 24 | — | 17 |
 | REGRAS | 0 | 21 | — |
 | CAMPANHAS / GERENCIADOR | 18 | 1 | 4 |
-| UTM & SNIPPETS | 0 | 23 | 1 |
+| UTM & SNIPPETS | 21 | — | 9 |
 | CRIATIVOS | 0 | 13 | — |
 | LOGIN | 0 | 19 | — |
 <!-- ESTADO:FIM -->
@@ -3341,9 +3341,19 @@ parâmetro · histórico + modelos favoritos) e **Snippets** (mestre-detalhe, co
 prévia de código com destaque de sintaxe). A tela é **promovida a área de
 primeiro nível**.
 
-> ### 🔴 A URL PASSA A SER MONTADA POR FUNÇÃO PURA TESTADA
-> Não por concatenação no JSX. Foi assim que nasceu o `[object Object]` que está
-> aberto **desde antes do redesign**.
+> ### ✅ A URL É MONTADA POR FUNÇÃO PURA TESTADA — `lib/utm/construir.ts`
+> Não por concatenação no JSX. Feito em 11/08/2026, com `test:utm-url`.
+>
+> ⚠️ **O `[object Object]` NÃO estava mais aberto**, e este bloco dizia que sim.
+> Conferido por `grep` em `src/` antes de escrever a tela: as três únicas menções
+> eram documentais (este arquivo, o `03` e o `04`). Ele vivia no gerador de link
+> antigo do `useTraffikState`, que saiu na faxina de 05/08 — ou seja, **morreu por
+> acidente, junto do nav morto**, e ninguém registrou.
+>
+> A regra continua inteira porque ela agora **previne** em vez de consertar: o
+> guarda é de RUNTIME (`valorDeTexto`), porque `tsc` não vê o valor atravessar a
+> fronteira do formulário, do modelo salvo ou de um `JSON.parse`. E a asserção
+> dele **passa um objeto de verdade** — senão seria guarda que nunca disparou.
 
 ### 1️⃣ A largura estreita segue devendo — e a sequência que destrava
 
@@ -3454,3 +3464,143 @@ das 21h e deixou a origem em pé — o carimbo passou a virar às 00h em vez das
 regeneração mudou **exatamente uma linha** — a do carimbo. As 8 telas saíram
 idênticas.
 
+
+---
+
+# 📌 ESTADO DA SESSÃO — 11/08/2026 (UTM & Snippets, a sétima tela)
+
+> **A mais nova. Se contradisser qualquer coisa acima, ela vence.**
+>
+> ⛔ **NADA FOI PARA O GITHUB.** `main` intacta em `4e6aa9e`; tudo é commit LOCAL
+> em `redesign/dashboard`. O push é decisão do dono, e ele não a tomou.
+
+## ✅ A SÉTIMA TELA EXISTE — e a ÚLTIMA legada que servia rota morreu
+
+| | |
+|---|---|
+| `views/utm/UtmSnippetsScreen.tsx` | a tela, do zero |
+| `lib/utm/construir.ts` | montagem da URL, **função pura** |
+| `lib/utm/armazem.ts` | `ArmazemUtm` — interface + implementação em memória |
+| `lib/utm/inventario.ts` | o inventário REAL de snippets |
+| `tk/CodigoDestacado.tsx` | tokenizer próprio: JS · HTML · JSON |
+| deletados | `UtmsView` (397 linhas) e `dashboard/utm/page.tsx` |
+| rota | `/dashboard/utm`, **primeiro nível**. `integracoes/utms` virou redirect |
+| testes | `test:utm-url` 14 · `test:destaque` 22 · `test:utm-tela` 21 — **os três no `npm test` no MESMO commit** |
+
+`04`: de **0 ✅ / 23 ❌** para **21 ✅ / 0 ❌ / 9 🔧**. Uma linha em branco (largura
+estreita). Validado contra baseline: as 7 outras telas saíram idênticas.
+
+## 🟡 MODELOS E HISTÓRICO NÃO SÃO GUARDADOS — e a tela DIZ isso
+
+Não existe tabela: conferido nos 24 modelos do `schema.prisma`. Decisão do dono
+(opção **B**): construir contra a interface `ArmazemUtm`, implementação em
+memória, estado vazio honesto — *os modelos funcionam nesta sessão e ainda não
+são guardados*. A migration entra numa **sessão só de schema**, junto do
+`ocorreEm` da despesa única.
+
+⛔ `localStorage` foi RECUSADO, e o motivo é o que decide: modelo favorito é
+configuração que o usuário **acredita** ter salvo. Some na outra máquina sem
+avisar — a tela confirma o salvamento e o produto não guardou.
+
+> ### ⛔ AO LIGAR O BANCO, `persiste` VIRA `true` E A FRASE SOME SOZINHA
+> O aviso é `if (armazemUtm.persiste) return null;`. Escrever a frase à mão a
+> teria transformado em segunda fonte de verdade — e no dia da tabela a tela
+> continuaria dizendo que não guarda. **Documentação que LÊ o valor não
+> envelhece.** Há asserção sobre isso no `test:utm-tela`.
+
+## ⛔ O TOGGLE NÃO É UNIFORME — 3 de 7, e isso é a decisão
+
+Os 3 snippets de pixel têm `PixelConfig.enabled` **e** `togglePixel()`. Os 4 de
+UTM não têm coluna nenhuma: quatro toggles ali seriam controle inerte.
+
+No lugar deles vai selo **medido** por `cliquesComArea`: `Instalado` /
+`Não detectado`. ⚠️ E `não detectado` **não é** `quebrado` — área sem tráfego dá
+o mesmo zero que script mal instalado, e a tooltip escreve a ambiguidade.
+
+## 🧾 O INVENTÁRIO DE SNIPPETS É O NOSSO, NÃO O DA REFERÊNCIA
+
+Sete, em quatro famílias **geradas**: rastreamento de UTM (o único `porArea`),
+back redirect, 3 formatos de parâmetro de URL, 1 por pixel.
+
+Saíram juntos, por dependerem de multiusuário ou de população única:
+`Biblioteca pública`, `Templates`, `Atividade recente` com autor, `Tags`, e o KPI
+`Execuções (30d)` — que somaria `PixelEvent` com `Click`, **dois instrumentos num
+número só**. Ficaram 3 KPIs. Decisão do dono: dois números com o nome do
+instrumento cada, ou nenhum. Foi nenhum.
+
+## 🎨 O TOKENIZER: a saída segura é SEM COR, nunca colorida ERRADO
+
+Sem dependência nova — o código realçado é gerado por nós, o vocabulário é
+fechado. O contrato é uma INVARIANTE, não uma lista de casos:
+
+> **concatenar o texto de todos os tokens devolve a entrada, caractere por caractere.**
+
+✅ **Provado pelo lado negativo:** plantando uma perda de UM caractere nos
+comentários, a suíte sai com **7 falhas** — e o fuzz (300 entradas, semente fixa
+7) nomeia a entrada exata. Restaurado, 22 verdes.
+
+⚠️ O realce vive sobre painel de código, e os `--tk-on-tint-*` foram calibrados
+sobre TINGIMENTO. Por isso o contraste foi **medido na tela**, não presumido.
+
+## 🔬 O QUE FOI MEDIDO, E O QUE NÃO FOI
+
+| | |
+|---|---|
+| Tema claro | ✅ comentário **4,70:1** · palavra-chave **5,58** · número **5,66** · cadeia **5,69** · texto **16,90**, sobre painel `rgb(246,249,252)` |
+| Tema escuro | ✅ **visto** e legível nos cinco papéis — ⚠️ **números não medidos** |
+| Fluxo do Builder | ✅ preencher → `Gerar URL` → histórico → `Salvar modelo` → favoritos |
+| Largura estreita | ⛔ **não verificada** |
+
+### ⚠️ O renderer congelou DUAS vezes no `Runtime.evaluate`
+
+Na medição do escuro, e a segunda com script leve (90 nós, não 642). Regra das
+duas tentativas: encerrei a medição por JS. **Screenshot continuou funcionando** —
+foi por ele que o escuro ficou ✅ como *visto*, e não como *medido*. As duas
+afirmações são diferentes, e o `04` as separa.
+
+### ⚠️ A largura estreita agora deve em TRÊS telas
+
+A aba `299372384` da sessão passada **não existe mais** — o grupo do MCP nasceu
+com a `299375179`. A sequência (aba viva → dono desmaximiza → só então
+`resize_window`) não teve como ser tentada, e eu **não gastei tentativa**.
+
+🔎 **A aba `299375179` ficou ABERTA de propósito**, em `/dashboard/utm`. Se o
+dono desmaximizar a janela que a contém, a próxima sessão destrava as três.
+
+## 🐛 OS DOIS DEFEITOS DESTA SESSÃO — os dois só a tela mostrou
+
+| | |
+|---|---|
+| **placeholders vazios** | 4 dos 6 campos saíram `Ex:` e mais nada. Eu derivava o exemplo da frase de ajuda por fatia de string, e as frases não têm todas a mesma forma. `tsc` e lint verdes |
+| **guarda medindo PROSA** | a asserção sobre o estado de carregamento reprovou pelo **comentário do próprio arquivo**, que cita o nome do símbolo para explicar por que ele não existe |
+
+> ### ⛔ TEXTO DERIVADO DE OUTRO TEXTO POR CIRURGIA DE STRING NÃO É *LER O VALOR*
+> A regra *documentação que LÊ o valor não envelhece* vale para o MESMO valor em
+> dois lugares. Arrancar um pedaço de uma frase escrita para OUTRO fim produz
+> informação **diferente** — e ela falha em silêncio em todo caso que não casa
+> com o formato presumido. Hoje há `EXEMPLO_UTM`, texto próprio.
+
+> ### ⛔ GUARDA POR CASAMENTO DE TEXTO MIRA SINTAXE, NUNCA PALAVRA SOLTA
+> Um arquivo que documenta por que um símbolo NÃO existe contém o nome dele. A
+> guarda passou a mirar a DECLARAÇÃO, e leva junto a linha de base do derivado —
+> senão ela passaria também com os dois ausentes.
+
+## ♻️ UMA EXTRAÇÃO EM CÓDIGO CONGELADO — declarada, não escondida
+
+O mapeamento `PixelConfigDTO → PixelScriptConfig` vivia inline na `PixelView`
+(congelada, anterior a `4e6aa9e`) e passou a ser preciso também aqui. Virou
+`scriptDoPixel()`, em `lib/pixel/script.ts`, **sem mudar uma linha do que ele
+calcula** — a `PixelView` chama a mesma coisa, de outro lugar.
+
+⚠️ Não é conserto de defeito: é a regra dos dois lugares que fazem a mesma conta.
+Duas cópias divergiriam, e a divergência aqui faz **cada tela mostrar um script
+diferente do que está instalado no site do cliente**.
+
+## ➡️ PRÓXIMO
+
+**Criativos** (imagem 9) ou **Login** (imagens 10 e 11) — as duas restantes das
+dez, e a ordem é do dono. `Regras` (21 ❌) segue sendo a maior dívida isolada.
+
+⚠️ **As três legadas de Integrações continuam de pé e NÃO auditadas de
+propósito**: `Anuncios` 322 · `Pixel` 1.181 · `Webhooks` 532. Elas morrem na
+reescrita delas.

@@ -164,7 +164,7 @@ const CAUSA_UTM = (
   </>
 );
 const IR_WEBHOOKS = { texto: "Conferir webhooks", href: "/dashboard/integracoes/webhooks" };
-const IR_UTMS = { texto: "Ver códigos de UTM", href: "/dashboard/integracoes/utms" };
+const IR_UTMS = { texto: "Ver códigos de UTM", href: "/dashboard/utm" };
 const IR_ANUNCIOS = { texto: "Conferir integrações", href: "/dashboard/integracoes/anuncios" };
 
 /* ⛔ `PERDA_DO_FUNIL` foi DELETADA em 07/08/2026, e o motivo é o da regra dos

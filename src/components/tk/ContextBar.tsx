@@ -32,6 +32,7 @@ const TITULOS: [teste: (p: string) => boolean, titulo: string, apoio: string][] 
   [(p) => p.startsWith("/dashboard/notificacoes"), "Notificações", "Alertas de venda e relatórios programados"],
   [(p) => p.startsWith("/dashboard/taxas"), "Taxas e Despesas", "Configure custos para um cálculo de lucro preciso"],
   [(p) => p.startsWith("/dashboard/integracoes"), "Integrações", "Conecte e gerencie todas as plataformas e serviços da sua operação"],
+  [(p) => p.startsWith("/dashboard/utm"), "UTM & Snippets", "Crie, gerencie e reutilize parâmetros UTM e trechos de código para rastrear suas campanhas"],
   [(p) => p.startsWith("/dashboard/areas"), "Áreas de Trabalho", "Separe operações diferentes sem misturar os números"],
 ];
 

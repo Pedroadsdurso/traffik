@@ -336,7 +336,7 @@ export async function analyzeTrackingUrl(rawUrl: string): Promise<TrackingTestDT
     notes.push("Sem utm_campaign nem xcod: a venda não teria como ser ligada a uma campanha.");
   }
   if (url.searchParams.get("xcod") && !user?.xcodSeparator) {
-    notes.push("Há xcod, mas este usuário ainda não tem separador gerado — abra a aba UTMs para gerá-lo.");
+    notes.push("Há xcod, mas este usuário ainda não tem separador gerado — abra UTM & Snippets para gerá-lo.");
   }
   if (url.searchParams.get("fbclid")) notes.push("fbclid presente: dá para deduplicar e enriquecer o evento da CAPI.");
 
@@ -380,7 +380,7 @@ export async function analyzeTrackingUrl(rawUrl: string): Promise<TrackingTestDT
     notes.push(`Anúncio ${parsed.adId} não existe no banco — rode a sincronização na aba Anúncios.`);
   }
   if (campaign?.by === "nome" || ad?.by === "nome") {
-    notes.push("Casou por NOME (frágil: dois anúncios com o mesmo nome ficam ambíguos). Use os códigos da aba UTMs para casar por id.");
+    notes.push("Casou por NOME (frágil: dois anúncios com o mesmo nome ficam ambíguos). Use os códigos de UTM & Snippets para casar por id.");
   }
 
   return { ok: true, params, parsed, match: { campaign, ad }, notes };
@@ -526,10 +526,10 @@ export async function getInstallChecklist(workspaceId?: string | null): Promise<
       detail:
         clicks > 0
           ? `${plural(clicks, "clique já recebido", "cliques já recebidos")} — o script está reportando.`
-          : "Nenhum clique recebido ainda. Copie o script na aba UTMs e instale no <head> do site.",
+          : "Nenhum clique recebido ainda. Copie o script em UTM & Snippets e instale no <head> do site.",
       // ⚠️ Único item que NÃO é por área: o script de UTM é único por conta,
       // por desenho, e um `Click` não tem dono declarado.
-      href: "/dashboard/integracoes/utms",
+      href: "/dashboard/utm",
     },
     {
       key: "pixel",

@@ -67,6 +67,12 @@ type ItemNav = {
  * ⛔ "Testes" saiu de vez: a `TestesView` foi DELETADA na reescrita de
  * Integrações, junto do `TestadorPayloadCard` que só ela importava. Ela estava
  * fora da navegação desde o `03` e o prazo era este passo. Não recrie o link.
+ *
+ * ⚠️ "UTMs" saiu dos FILHOS de Integrações em 11/08/2026 e virou
+ * `UTM & Snippets`, item de primeiro nível — decisão do `03`. A rota antiga
+ * (`/dashboard/integracoes/utms`) segue viva como redirect, mas **não volta ao
+ * menu**: um item que promete uma tela e entrega um salto para outra é a mesma
+ * affordance mentindo que tirou o `redirect` de Integrações da lista.
  */
 function montarNav(naoLidas: number): { grupo: string; itens: ItemNav[] }[] {
   return [
@@ -96,10 +102,10 @@ function montarNav(naoLidas: number): { grupo: string; itens: ItemNav[] }[] {
             { href: "/dashboard/integracoes", label: "Visão geral" },
             { href: "/dashboard/integracoes/anuncios", label: "Anúncios" },
             { href: "/dashboard/integracoes/webhooks", label: "Webhooks" },
-            { href: "/dashboard/integracoes/utms", label: "UTMs" },
             { href: "/dashboard/integracoes/pixel", label: "Pixel/Eventos" },
           ],
         },
+        { href: "/dashboard/utm", label: "UTM & Snippets", icone: "link" },
         { href: "/dashboard/taxas", label: "Taxas e Despesas", icone: "taxas" },
       ],
     },

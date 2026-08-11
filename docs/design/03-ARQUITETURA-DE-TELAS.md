@@ -228,11 +228,11 @@ Hoje o gerador de UTM está enterrado e os snippets que o cliente cola no site n
 └───────────────────┴──────────────────────────┴────────────────────┘
 ```
 
-Cada parâmetro vira um **chip colorido** na visualização — o usuário vê a URL montando peça por peça. Modelos salvos e histórico são entidades reais no banco, não localStorage.
+Cada parâmetro vira um **chip colorido** na visualização — o usuário vê a URL montando peça por peça. Modelos salvos e histórico são entidades reais no banco, não localStorage. ⏳ **Em 11/08/2026 a tela nasceu sem a tabela**, por decisão do dono: memória de sessão atrás de `ArmazemUtm`, com o limite declarado na tela, e a migration numa sessão só de schema — junto do `ocorreEm` da despesa única. `localStorage` foi recusado por sumir na outra máquina **sem avisar**.
 
 **Snippets** — mestre-detalhe: tabela (nome, categoria, tipo, usado em N contas, atualizado, toggle ativo) + painel com **prévia do código com destaque de sintaxe** e botão copiar. Isso substitui a caixa de texto crua de hoje.
 
-E resolve o bug do `[object Object]` na origem: a URL passa a ser montada por uma função pura testada, não por concatenação no JSX.
+A URL é montada por uma função pura testada (`lib/utm/construir.ts`), não por concatenação no JSX. ⚠️ Este parágrafo dizia que isso *resolvia* o bug do `[object Object]`; ele já não existia em 11/08/2026 — morreu na faxina do nav morto, em 05/08. A função **previne**, e o guarda é de runtime.
 
 ---
 

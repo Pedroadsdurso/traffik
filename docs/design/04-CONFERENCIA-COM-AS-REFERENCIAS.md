@@ -603,43 +603,67 @@ coisa é o argumento que matou o globo colorido.
 
 ## UTM & SNIPPETS
 
-Referências: imagens 7 e 8. Vira área de primeiro nível.
+Referências: imagens 7 e 8. Vira área de primeiro nível — **construída em
+11/08/2026**, rota `/dashboard/utm`. A `UtmsView` (397 linhas) foi DELETADA.
+
+> ### 🔎 A CONVENÇÃO DAS LINHAS EM BRANCO VALE AQUI TAMBÉM
+> **✅ = eu vi na tela.** **Linha em branco = construída e NÃO VISTA** — e em
+> branco ela fica FORA da contagem do `docs:estado`, em vez de entrar como feita.
+>
+> Nesta tela sobrou **uma** em branco: a largura estreita. E há um ⚠️ sobre o que
+> dentro de uma linha ✅ não foi exercido.
 
 ### UTM Builder (imagem 7)
 
 | Elemento | Status |
 |---|---|
-| Abas `UTM Builder` / `Snippets` | ❌ |
-| `⤒ Importar` + `+ Novo UTM ⌄` | ❌ |
-| Formulário: Fonte, Mídia, Campanha, Termo, Conteúdo, ID da campanha | ❌ |
-| Ícone da plataforma dentro do campo Fonte | ❌ |
-| `🗑 Limpar campos` + `🔗 Gerar URL` | ❌ |
-| Painel `URL gerada` com badge `● Válida` | ❌ |
-| URL em fonte mono com botão copiar | ❌ |
-| `Visualização` — **um chip colorido por parâmetro** | ❌ |
-| `Salvar como modelo` com campo e botão | ❌ |
-| `Histórico recente` — hora, ícone da plataforma, `fonte / mídia`, campanha | ❌ |
-| `Modelos favoritos` — com marcador de favorito e `⋮` | ❌ |
-| Cartão `Como usar UTMs e Snippets` com `Ver guia completo ↗` | ❌ |
-| Montagem da URL por função pura testada (mata o `[object Object]`) | 🔧 nosso |
+| Abas `UTM Builder` / `Snippets` | ✅ |
+| `⤒ Importar` + `+ Novo UTM ⌄` | 🔧 nada a importar (não há persistência) e a página INTEIRA é o "novo UTM" — os dois seriam controles inertes |
+| Formulário: Fonte, Mídia, Campanha, Termo, Conteúdo, ID da campanha | ✅ |
+| Ícone da plataforma dentro do campo Fonte | ✅ ⚠️ só onde temos ARTE (facebook e os 5 gateways). Google e TikTok não têm arquivo, e o monograma do `LogoGateway` pareceria logotipo quebrado |
+| `🗑 Limpar campos` + `🔗 Gerar URL` | ✅ |
+| Painel `URL gerada` com badge `● Válida` | ✅ vistos `Válida` e `Incompleta` |
+| URL em fonte mono com botão copiar | ✅ ⚠️ o **clique de copiar não foi exercido** |
+| `Visualização` — **um chip colorido por parâmetro** | ✅ 6 chaves, 6 dos 7 pares `--tk-tint-*`/`--tk-on-tint-*`. Nenhum token novo |
+| `Salvar como modelo` com campo e botão | ✅ exercido |
+| `Histórico recente` — hora, ícone da plataforma, `fonte / mídia`, campanha | ✅ exercido. 🔧 sem ícone de plataforma: só temos arte para uma das três da referência |
+| `Modelos favoritos` — com marcador de favorito e `⋮` | ✅ exercido. 🔧 o `⋮` é botão de excluir direto: com **uma** ação, menu é clique a mais para esconder o que cabia |
+| Cartão `Como usar UTMs e Snippets` com `Ver guia completo ↗` | ✅ 🔧 o botão vai para Integrações. **Não existe guia** — link para página inexistente é affordance mentindo |
+| Montagem da URL por função pura testada (mata o `[object Object]`) | ✅ `lib/utm/construir.ts` + `test:utm-url` (14 asserções) |
+| Modelos e histórico com PERSISTÊNCIA | 🔧 memória de sessão atrás de `ArmazemUtm`. Não há tabela — decisão do dono: migration em sessão própria. A tela DECLARA o limite, e a frase deriva de `armazemUtm.persiste` |
 
 ### Snippets (imagem 8)
 
 | Elemento | Status |
 |---|---|
-| Abas `Meus snippets` / `Biblioteca pública` / `Templates` | ❌ ver nota |
-| 4 KPIs com ícone em caixa: total, utilizados em N contas, execuções 30d, atualizados 30d | ❌ |
-| Busca + `Todas as categorias` + `Filtros` | ❌ |
-| Tabela: NOME (com ID) · CATEGORIA · TIPO · USADO EM · ATUALIZADO (com autor) · **toggle ativo** · `⋮` | ❌ |
-| Colunas ordenáveis com indicador | ❌ |
-| Painel de detalhe: cabeçalho com `Editar` / `Duplicar` / `Mais ações ⌄` | ❌ |
-| Painel: `Visão geral` — tipo, categoria, criado, atualizado, usado em, status | ❌ |
-| Painel: **`Prévia do código` com destaque de sintaxe** + `⧉ Copiar` | ❌ |
-| Painel: `Tags` com chips e `+` | ❌ |
-| `Atividade recente` — com nome do autor (`por João Silva`) | ❌ |
-| `Templates populares` com botão `Usar template` | ❌ |
+| Abas `Meus snippets` / `Biblioteca pública` / `Templates` | 🔧 exigem conteúdo compartilhado entre contas, que não existe. Aba única |
+| 4 KPIs com ícone em caixa: total, utilizados em N contas, execuções 30d, atualizados 30d | 🔧 **três**, não quatro. `Execuções (30d)` somaria `PixelEvent` com `Click` — dois instrumentos num número só; `Atualizados (30d)` precisa de data por snippet, e os gerados sob demanda não têm |
+| Busca + `Todas as categorias` + `Filtros` | ✅ busca e categorias. 🔧 `Filtros`: com 7 linhas não há terceiro eixo para filtrar |
+| Tabela: NOME (com ID) · CATEGORIA · TIPO · USADO EM · ATUALIZADO (com autor) · **toggle ativo** · `⋮` | ✅ nome, categoria, tipo, usado em, estado. 🔧 sem ID (nossos snippets não têm id de usuário), sem ATUALIZADO, sem autor (conta única) |
+| **O toggle só onde ele CONTROLA algo** | ✅ 🔧 nosso. Os 3 de pixel têm `enabled` + `togglePixel`; os 4 de UTM não têm coluna — 4 toggles inertes seriam o defeito que esta base remove há dez sessões. No lugar, selo MEDIDO (`instalado` / `não detectado`, por `cliquesComArea`) |
+| Colunas ordenáveis com indicador | 🔧 7 linhas de ordem fixa e significativa (UTM → anúncio → pixel) |
+| Painel de detalhe: cabeçalho com `Editar` / `Duplicar` / `Mais ações ⌄` | 🔧 snippet GERADO não se edita nem se duplica — quem muda o conteúdo é a configuração do pixel, em Integrações. Botão que edita artefato gerado produziria divergência com o instalado |
+| Painel: `Visão geral` — tipo, categoria, criado, atualizado, usado em, status | ✅ 🔧 sem `criado`/`atualizado`, pelo mesmo motivo do KPI |
+| Painel: **`Prévia do código` com destaque de sintaxe** + `⧉ Copiar` | ✅ tokenizer próprio (`CodigoDestacado`), JS/HTML/JSON. ⚠️ o **clique de copiar não foi exercido** |
+| Painel: `Tags` com chips e `+` | 🔧 não há onde guardar tag |
+| `Atividade recente` — com nome do autor (`por João Silva`) | 🔧 conta única e sem log de alteração de snippet |
+| `Templates populares` com botão `Usar template` | 🔧 "popular" exige agregação entre contas |
+| **O aviso da ÁREA no snippet que a embute** | ✅ 🔧 nosso. Só `Rastreamento de visitas` é `porArea`, e ele carrega o aviso do que acontece se for copiado com a área errada |
 
-**Nota:** `Biblioteca pública` e `Templates` implicam conteúdo compartilhado entre contas, que não existe no backend. Construa as abas; se não houver dado, use estado vazio honesto. **Não invente conteúdo.**
+### O que foi MEDIDO na tela
+
+| Elemento | Status |
+|---|---|
+| Tema claro | ✅ contraste do código sobre painel `rgb(246,249,252)`: comentário **4,70:1** · palavra-chave **5,58:1** · número **5,66:1** · cadeia **5,69:1** · texto **16,90:1**. Todos ≥ 4,5:1 |
+| Tema escuro | ✅ visto e legível nos cinco papéis. ⚠️ os **números** não foram medidos: o renderer congelou duas vezes no `Runtime.evaluate`, e a regra das duas tentativas encerrou a medição |
+| Fluxo completo do Builder | ✅ preencher → `Gerar URL` → histórico → `Salvar modelo` → modelos favoritos, exercidos na tela |
+| Largura estreita | |
+
+**Nota:** o inventário de snippets é o REAL — 4 famílias de código **gerado**
+(rastreamento de UTM, back redirect, 3 formatos de parâmetro de URL, 1 por
+pixel). Não existe modelo `Snippet` no `schema.prisma`. Inventar trechos avulsos
+para bater com o print seria conteúdo que ninguém escreveu, sobre snippets que
+não são instalados em lugar nenhum.
 
 ---
 

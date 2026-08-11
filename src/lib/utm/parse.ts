@@ -1,7 +1,7 @@
 /**
  * Parser reverso dos códigos de UTM do Bloco 11.
  *
- * Os links gerados na aba UTMs codificam `nome|id` em cada parâmetro
+ * Os links gerados em UTM & Snippets codificam `nome|id` em cada parâmetro
  * (`utm_campaign={{campaign.name}}|{{campaign.id}}` etc.) e, na Hotmart, também
  * concatenam tudo no `xcod` separado por uma string única por conta. Aqui
  * desmembramos esses formatos para extrair os **ids do Facebook**
