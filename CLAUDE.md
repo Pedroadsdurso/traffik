@@ -1340,6 +1340,46 @@ arquivo local, de propósito.
 
 ---
 
+# 🕳️ VÃO DENTRO DE UM CARD PROMETE CONTEÚDO. VÃO FORA NÃO PROMETE NADA.
+
+> **Formulação do dono, 11/08/2026.** Nasceu no Builder de UTM e **não é regra
+> do Builder** — ela decide qualquer vão que apareça nas telas que faltam.
+
+Não existe arranjo com zero vão numa fileira de cards: a altura da fileira é a
+da coluna mais alta, e conteúdos de tamanhos diferentes não terminam juntos.
+**O que se escolhe é ONDE o vão fica** — e as duas escolhas não são
+equivalentes:
+
+| Onde | Como se lê |
+|---|---|
+| **fora** do card — borda de baixo irregular | **ausência.** Não afirma nada: é o retrato de conteúdos de tamanhos diferentes |
+| **dentro** do card | 🔴 **promessa.** O olho lê *"aqui cabia algo que não veio"* |
+
+### ⚖️ A EXCEÇÃO TEM CRITÉRIO, E O CRITÉRIO É O CHÃO
+
+> ## A pergunta não é QUANTO vão. É O QUE ESTÁ EMBAIXO DELE.
+
+| O que há sob o vão | Leitura |
+|---|---|
+| **barra de ação** (Salvar, Gerar, Aplicar) | ✅ rodapé de formulário — o vão é respiro |
+| **mais conteúdo** | 🔴 promessa não cumprida — parece que faltou carregar |
+| **nada** (fim do card) | ✅ o card acabou |
+
+**Mesma quantidade de pixels, duas leituras.** No caso que produziu a regra, os
+mesmos ~130px liam como rodapé no `Gerador` (que tem `Limpar campos` / `Gerar
+URL` embaixo) e como conteúdo faltando no `URL gerada` (que tinha chips em cima
+e `Salvar como modelo` embaixo).
+
+⚠️ **É a mesma decisão do `alignSelf: start` do bloco vazio do Dashboard**, e o
+argumento é o do dono: *alinhamento é estética da linha; espaço morto é a tela
+AFIRMANDO que ali cabia algo.*
+
+⛔ Esta regra já foi violada uma vez, por mim, em 11/08/2026 — eu fechei a borda
+irregular com `alignItems: stretch` e empurrei o vão para dentro dos cards. Só o
+print resolveu. **Alinhar a borda de baixo não é um objetivo**; é o que se
+sacrifica quando as alternativas são piores.
+
+---
 # 📌 ESTADO DA SESSÃO — 06/08/2026
 
 > Escrito para quem abre contexto limpo amanhã. **Esta seção é tudo que você tem
@@ -3596,10 +3636,63 @@ calcula** — a `PixelView` chama a mesma coisa, de outro lugar.
 Duas cópias divergiriam, e a divergência aqui faz **cada tela mostrar um script
 diferente do que está instalado no site do cliente**.
 
-## ➡️ PRÓXIMO
+## ➡️ PRÓXIMO: Integrações › Pixel/Eventos
 
-**Criativos** (imagem 9) ou **Login** (imagens 10 e 11) — as duas restantes das
-dez, e a ordem é do dono. `Regras` (21 ❌) segue sendo a maior dívida isolada.
+Ordem do dono. `PixelView`, **1.181 linhas** — a maior view legada que resta.
+Ela já herda três coisas desta sessão: `scriptDoPixel()` como fonte única (com o
+cabeçalho pedindo para não reinlinar), o tokenizador de sintaxe, e o prazo dos
+dois `elapsed()` crus das linhas 272 e 294.
+
+### 🔬 A RESTRIÇÃO DO ARTEFATO ALI É **DUPLA**, e as duas metades medem coisas diferentes
+
+> **Medido em 11/08/2026, a pedido do dono, antes de escrever a asserção.** A
+> premissa dele estava certa: o pixel pertence a uma área, e isso muda a conta.
+
+| | O que foi medido |
+|---|---|
+| `PixelConfig.workspaceId` | **existe** (`schema.prisma:1023`). NULO = sem dono, aparece na Principal |
+| `listPixels(workspaceId)` | **recorta por área**, via `escopoDeConfig` |
+| o script embute a ÁREA? | ⛔ **NÃO.** `grep -cE 'var WS\|workspaceId'` em `lib/pixel/script.ts` → **0** |
+| o script embute o quê? | `var CONFIG = "<PixelConfig.id>"` — **1** ocorrência |
+| e o script de UTM, para contraste | embute `var WS` — **1**. Por isso lá a área muda o CONTEÚDO |
+
+**Conclusão: são DUAS asserções, e nenhuma cobre a outra.**
+
+| # | O que provar | Por que a outra não cobre |
+|---|---|---|
+| 1 | trocar de **PIXEL** troca o CONTEÚDO do script | é o `configId` que muda o texto |
+| 2 | trocar de **ÁREA** troca a LISTA de pixels alcançáveis | o conteúdo de um pixel **não** muda com a área — só a visibilidade dele |
+
+> ### 🔴 O MODO DE FALHA AQUI NÃO É O MESMO DO UTM — e é por isso que a asserção muda
+> No UTM, tela stale entrega o script **com a área errada dentro**: conteúdo
+> errado. Aqui, tela stale entrega um script **correto, de um pixel que não
+> pertence à área ativa** — o artefato está certo e o CONTEXTO está errado.
+>
+> O usuário instala o pixel da operação A na página da operação B. Nada no
+> arquivo denuncia, porque o arquivo é válido. Só o Gerenciador de Eventos da
+> Meta mostraria, semanas depois, evento chegando na conta errada.
+
+### ⚠️ A ASSIMETRIA DA PRINCIPAL PODE FAZER A ASSERÇÃO 2 PASSAR POR ACIDENTE
+
+`escopoDeConfig` **não é simétrico** (`areas/escopoConfig.ts`):
+
+```
+Principal (isDefault) → OR [ workspaceId = principal.id , workspaceId = NULL ]   ← catch-all
+área secundária       → workspaceId = <id>                                        ← estrito
+```
+
+Então `Área B → Principal` **acrescenta** os órfãos, e `Principal → Área B` pode
+não tirar nada se não houver órfão. Uma fixture com **um** pixel só faria a
+asserção 2 passar sem exercer o recorte.
+
+⛔ A fixture precisa de **pelo menos três**: um da área A, um da área B e um com
+`workspaceId` NULO — e a asserção compara as listas nas duas direções, não só o
+tamanho de uma delas.
+
+### 🔜 Depois dela
+
+**Criativos** (imagem 9) e **Login** (imagens 10 e 11) fecham as dez. `Regras`
+(21 ❌) segue sendo a maior dívida isolada.
 
 ⚠️ **As três legadas de Integrações continuam de pé e NÃO auditadas de
 propósito**: `Anuncios` 322 · `Pixel` 1.181 · `Webhooks` 532. Elas morrem na
@@ -3631,31 +3724,11 @@ de olhar o print.** O bloco abaixo é a regra que a reversão produziu, e ela va
 muito além desta tela. A versão `stretch` NÃO está descrita aqui como opção viva:
 proibição que muda é apagada, não mantida ao lado do que vale hoje.
 
-> # 🕳️ VÃO DENTRO DE UM CARD PROMETE CONTEÚDO. VÃO FORA NÃO PROMETE NADA.
-> **Formulação do dono, 11/08/2026.** Vale para toda tela, todo layout de
-> fileira. Nasceu no Builder e não é regra do Builder.
-
-Não existe arranjo com zero vão: a altura da fileira é a da coluna mais alta, e
-conteúdos de tamanhos diferentes não terminam juntos. **O que se escolhe é onde
-o vão fica** — e as duas escolhas não são equivalentes:
-
-| Onde | Como se lê |
-|---|---|
-| **fora** do card (borda de baixo irregular) | ausência. Não afirma nada — é o retrato de três conteúdos de tamanhos diferentes |
-| **dentro** do card | 🔴 **promessa**. O olho lê "aqui cabia algo que não veio" |
-
-O caso: com `stretch`, os ~130px caíam entre a `Visualização` e o `Salvar como
-modelo`, cercados de conteúdo dos DOIS lados. Lia como se a visualização devesse
-continuar até ali.
-
-> ### ⚖️ A EXCEÇÃO TEM CRITÉRIO, E O CRITÉRIO É O CHÃO
-> O `Gerador` continua esticando (`alignSelf: stretch`), e o vão dele está bom.
-> A diferença não é gosto: o vão dele tem **chão** — a barra `Limpar campos` /
-> `Gerar URL` fica embaixo —, e vão com barra de ação embaixo lê como **rodapé de
-> formulário**. O do `URL gerada` tinha teto e chão de CONTEÚDO.
->
-> **Mesma quantidade de pixels, duas leituras.** A pergunta não é *quanto vão*,
-> é *o que está embaixo dele*.
+A regra que a reversão produziu virou seção própria — procure por
+**VÃO DENTRO DE UM CARD PROMETE CONTEÚDO**, acima. Ela saiu daqui de propósito:
+ordem do dono, porque decide qualquer vão das cinco telas que faltam, e regra
+transversal presa dentro do relato de uma tela é regra que a próxima pessoa não
+acha.
 
 ✅ **Medido na tela:** alturas `539 / 304 / 539`, fundos `713 / 478 / 713`. O vão
 interno do cartão do meio caiu de ~130px para **16px** — só o `gap`.
