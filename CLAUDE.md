@@ -3804,3 +3804,93 @@ veria a declaração de que nada é guardado — e é exatamente ele quem mais p
 dela.
 
 `04`: **22 ✅ / 0 ❌ / 10 🔧**. Validado contra baseline: só a linha de UTM mudou.
+
+---
+
+# 📌 ESTADO DA SESSÃO — 11/08/2026 (parte 2: a gaveta do Pixel)
+
+> **A mais nova.** ⛔ **NADA FOI PARA O GITHUB.** `main` em `4e6aa9e`, **83
+> commits locais**, branch ausente no remoto.
+
+## 🔴🔴 LEIA ISTO PRIMEIRO: A GAVETA NÃO TEM CONSUMIDOR
+
+`GavetaPixel.tsx` está pronta, com `tsc` limpo, lint 0 e 17 asserções verdes —
+e **nenhum arquivo de produção a importa.** Não existe `PixelScreen`, a rota
+`/integracoes/pixel` ainda serve a `PixelView` antiga, e a gaveta nova **nunca**
+foi aberta num navegador.
+
+Isto é exatamente a família que este arquivo documenta desde sempre: *passa no
+build com a coisa desligada*. Está registrado aqui em vez de descrito como
+entrega porque a diferença importa — **`tsc`, lint e teste não perguntam se
+alguém chama, e nenhum deles responde "como ficou".**
+
+⚠️ **Não conclua que a gaveta está errada.** Conclua que ela está NÃO VERIFICADA
+VISUALMENTE, que é o mesmo estado em que o Gerenciador foi commitado em 08/08 —
+e lá a passada seguinte achou o único bug real da tela.
+
+## ✅ O que ficou pronto
+
+| | |
+|---|---|
+| `04`, seção **PIXEL & EVENTOS** | **31 itens, todos ❌.** Seção nova: o `docs:estado` conta **9 telas**. Baseline validado — as 8 anteriores idênticas |
+| `lib/pixel/formulario.ts` | o preset saiu do componente e virou **redutor puro** |
+| `views/pixel/GavetaPixel.tsx` | a gaveta, com as 3 perguntas + avançado + script |
+| `test:pixel-preset` | **17 asserções**, no `npm test` no mesmo commit |
+
+## 🎯 A DECISÃO ESTRUTURAL — e é o que vale a sessão
+
+O acoplamento mais caro do produto vivia num handler de `.tsx`: `responderPreset`
+reescrevia **o mapa de donos** e **o `temPixelNativo`** na mesma linha, e essa
+simultaneidade é a proteção contra a Meta contar conversão em dobro.
+
+> **Proteção que mora dentro de um componente é proteção que nenhum teste
+> alcança.** Hoje as transições são funções puras em `lib/pixel/formulario.ts`.
+
+⚠️ **MOVE, não correção.** Não muda uma linha do que a `PixelView` calculava.
+
+### A asserção olha o ARTEFATO, não o campo
+
+Comparar `form.temPixelNativo` com `form.donos` provaria só que dois campos do
+mesmo objeto concordam — quase uma tautologia. O que importa é que o **script
+instalado no site** muda junto com o que o servidor vai decidir. Então o lado do
+espelho é lido do texto que `scriptDoPixel` gera (`var NATIVO`).
+
+✅ **Provado pelo lado negativo duas vezes:** mexer no campo à mão produz o par
+divergente (a asserção documenta o estado errado para ele ser reconhecível), e
+plantar `...f, temPixelNativo: false` na gaveta faz a guarda reprovar **nomeando
+a linha**.
+
+> ### ⛔ A GUARDA ERROU NA PRIMEIRA VERSÃO — e o modo de erro é o de sempre
+> Ela proibia `temPixelNativo:\s*(true|false)` e **reprovou a chamada LEGÍTIMA**
+> `responderPreset(f, { temPixelNativo: true })`.
+>
+> **Mirar a sintaxe do ERRADO não basta quando o CERTO a contém.** É a terceira
+> vez nesta sessão que uma guarda por casamento de texto pega o alvo errado (a
+> outra mediu prosa de comentário). Hoje ela verifica **por linha** que toda
+> atribuição está dentro do redutor.
+
+## 🕳️ O QUE FICA DEVENDO — e nada disso é surpresa
+
+| | |
+|---|---|
+| **`PixelScreen`** (mestre + diagnóstico) | ⛔ não começou. É o que dá consumidor à gaveta |
+| **Lista de eventos** | ⛔ não começou. Aprovada, especificada no `04`, **paginada e com janela** |
+| **A `PixelView` (1.181) segue de pé** | ela ainda serve a rota. Morre quando a tela nova existir |
+| Passada visual da gaveta | ⛔ **nunca aberta** |
+| Largura estreita | ⛔ deve em três telas |
+
+## ➡️ PRÓXIMO, na ordem
+
+1. **`PixelScreen`** — mestre com lista de pixels, selo de diagnóstico por pixel
+   (`conferirSnippet` já devolve os 4 estados), e a gaveta ligada. É o que tira a
+   gaveta do estado inerte.
+2. **Lista de eventos** — `PixelEvent` por `pixelConfigId` (conferido: **é
+   escrito**, `api/pixel/event/route.ts:197`). Nasce paginada e com janela, pelo
+   índice `[userId, event, timestamp]`. **A retenção continua devendo** (dívida
+   nº 4) — a lista não pode agravá-la.
+3. Deletar a `PixelView` e os dois `elapsed()` crus (272 e 294) junto.
+
+⚠️ **`trechoUrl` e `checkoutProprio` já foram REUSADOS pela gaveta**, então eles
+não morrem com a view antiga. `checkoutProprio` continua **sem teste** — e a
+asserção que falta é a que o dono pediu: 101 linhas que decidem detecção de IC e
+ninguém verifica.
