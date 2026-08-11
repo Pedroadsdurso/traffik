@@ -989,6 +989,7 @@ qualquer resize, leia `innerWidth` e compare. `innerWidth === screen.availWidth`
 | REGRAS | 0 | 21 | — |
 | CAMPANHAS / GERENCIADOR | 18 | 1 | 4 |
 | UTM & SNIPPETS | 22 | — | 10 |
+| PIXEL & EVENTOS | 0 | 31 | — |
 | CRIATIVOS | 0 | 13 | — |
 | LOGIN | 0 | 19 | — |
 <!-- ESTADO:FIM -->

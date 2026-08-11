@@ -684,6 +684,128 @@ não são instalados em lugar nenhum.
 
 ---
 
+## PIXEL & EVENTOS
+
+> ### ⛔ A PRIMEIRA TELA DO REDESIGN SEM REFERÊNCIA E SEM INVENTÁRIO PRÉVIO
+>
+> **Não há imagem.** A 03, a 05 e a 06 são todas a *Visão geral* de Integrações.
+> Esta seção foi ESCRITA a partir do que a `PixelView` (1.181 linhas) já fazia,
+> mais a lista de eventos aprovada em 11/08/2026 — não conferida contra print.
+>
+> Seção **nova**, e não um apêndice de INTEGRAÇÕES: decisão do dono. Misturar a
+> contagem esconderia o que falta nesta tela, que é o defeito que a convenção da
+> linha em branco existe para evitar. O `docs:estado` passa a contar **9 telas**.
+
+> ### 🔴 ESTA TELA CONFIGURA O QUE É MEDIDO — as outras nove só mostram
+> Um dono de evento errado **conta conversão em dobro**, e a pessoa otimiza
+> campanha em cima disso por semanas. O critério de aceite aqui não é "parece
+> com a referência" (não há), é: **cada controle diz o que MUDA quando ele
+> muda** — não o rótulo do campo, o efeito.
+
+### Mestre — a lista de pixels
+
+| Elemento | Status |
+|---|---|
+| Lista de pixels da área, com nome e `N` pixels da Meta | ❌ |
+| Selo de estado por pixel (`enabled`) + toggle real | ❌ `togglePixel` existe |
+| Selo do DIAGNÓSTICO por pixel (`ok` · `divergente` · `script-antigo` · `sem-dados`) | ❌ `conferirSnippet` já devolve os quatro |
+| `+ Novo pixel` · Editar · Excluir | ❌ as três actions existem |
+| Estado vazio honesto quando a área não tem pixel | ❌ |
+
+### Gaveta · O PRESET — a proteção contra contagem dobrada
+
+> ### ⛔ ISTO NÃO PODE SE PERDER NA REESCRITA, E É O ITEM DE MAIOR RISCO DA TELA
+> As três perguntas de `lib/pixel/preset.ts` substituem **20 decisões** que
+> exigem entender deduplicação da Meta. E elas não são açúcar: a resposta amarra
+> **o dono de cada evento** (lido AO VIVO pelo servidor) **e o espelho no `fbq`**
+> (ASSADO no snippet). Separados, divergem — e a divergência conta conversão em
+> dobro num sentido e produz alarme falso no outro.
+
+| Elemento | Status |
+|---|---|
+| Pergunta 1 — *o código do Facebook está na sua página?* (`temPixelNativo`) | ❌ |
+| Pergunta 2 — *alguém mais já avisa o Facebook da venda?* (`outroEnviaPurchase`) | ❌ |
+| Pergunta 3 — *onde o comprador paga?* (`ondeSePaga`) | ❌ |
+| **Cada pergunta declara O EFEITO, não o rótulo** — quem dispara, e o que acontece se os dois dispararem | ❌ 🔧 nosso, sem modelo em referência |
+| A pergunta 3 NÃO é gravada no `setup` — é derivada da regra de IC | ❌ ⚠️ duas fontes divergiriam no primeiro ajuste pelo avançado |
+| `contem_url` EXIGE o trecho, e a gaveta recusa vazio | ❌ 🔴 vazio faz `indexOf("")` casar sempre: toda visita vira checkout |
+| Analisador do trecho de URL, com exemplos | ❌ reusa `lib/pixel/trechoUrl.ts` (105 linhas, hoje só a view antiga consome) |
+
+### Gaveta · AVANÇADO — quem envia cada evento
+
+| Elemento | Status |
+|---|---|
+| Mapa de donos por evento (5 eventos × `traffik`/`navegador`/`gateway`/`ninguem`) | ❌ `lib/pixel/donos.ts` |
+| Selo `definido pelas suas respostas` × `ajustado à mão` | ❌ `seguePreset()` já decide |
+| `↩ voltar ao padrão` quando foi ajustado à mão | ❌ sem ele, o ajuste manual vira estado do qual não se sai |
+| **O aviso do que o ajuste manual CUSTA**, por combinação | ❌ 🔧 nosso — ver o achado abaixo |
+
+### Gaveta · Envio das vendas e checkout próprio
+
+| Elemento | Status |
+|---|---|
+| `sendMode` · `valueMode` · `fixedValue` · `targetProduct` do Purchase | ❌ |
+| Passos do checkout próprio, para o desenvolvedor | ❌ reusa `lib/pixel/checkoutProprio.ts` (101 linhas, **sem teste**) |
+| N pixels da Meta por pixel nosso (fan-out), com apelido e token | ❌ |
+
+### Script para instalar
+
+| Elemento | Status |
+|---|---|
+| Prévia do código com destaque de sintaxe + copiar | ❌ reusa `tk/CodigoDestacado` |
+| Geração por `scriptDoPixel()` — **fonte única** | ❌ herdado de UTM & Snippets |
+| Onde colar | ❌ |
+
+### Diagnóstico — o script instalado bate com a configuração?
+
+| Elemento | Status |
+|---|---|
+| Os 4 estados, e `sem-dados` **nunca** pintado como `ok` | ❌ |
+| Estado POR EVENTO, não agregado | ❌ 🔴 foi um agregado que escondeu o IC morto por semanas |
+| Carimbo de tempo via `<Desde>` | ❌ ⚠️ **os dois `elapsed()` crus (272 e 294) morrem aqui** — o prazo deles é esta reescrita |
+
+### Lista de EVENTOS — o que a navegação promete e a tela não entregava
+
+> ### ✅ APROVADA em 11/08/2026. O motivo decide:
+> É o único lugar do produto onde o usuário vê se o pixel dele **está
+> disparando**. Hoje ele depende do Gerenciador de Eventos da Meta — **um sistema
+> que não é o nosso** — para saber se a NOSSA ferramenta está funcionando. É a
+> mesma família do artefato de contexto errado: a denúncia vem de fora, tarde.
+
+| Elemento | Status |
+|---|---|
+| Lista de `PixelEvent` do pixel selecionado | ❌ `pixelConfigId` **É escrito** (`api/pixel/event/route.ts:197`) — conferido, não presumido |
+| Colunas: evento · quando · origem · espelho · `eventId` | ❌ todos existem na tabela |
+| **Nasce PAGINADA e com janela de tempo** | ❌ 🔴 lê pelo índice `[userId, event, timestamp]`. Ver a dívida abaixo |
+| Filtro por tipo de evento | ❌ |
+| Estado do espelho por linha (`ok` · `alheio` · `sem-fbq` · `erro`) | ❌ é o que prova a dedup funcionando |
+| Estado vazio distinguindo *sem evento* de *sem pixel instalado* | ❌ ⚠️ ausência de observação ≠ observação de zero |
+
+> ### ⚠️ A DÍVIDA Nº 4 FICA VISÍVEL, E ISSO FOI ACEITO — mas ela não pode AGRAVAR
+> `PixelEvent` tem o mesmo desenho do `WebhookLog`: **sem retenção e sem purga**.
+> Mostrá-la numa tela não cria o problema, mas uma listagem sem paginação e sem
+> janela **transformaria** a dívida em consulta que piora com o tempo.
+>
+> Decisão do dono: **a lista nasce paginada e com janela**. Não é purga — é não
+> agravar. **A retenção continua devendo**, e continua na lista de dívidas.
+
+### 🔎 ACHADO DA PREPARAÇÃO — medido, NÃO consertado
+
+Percorrendo `preset.ts` × `script.ts` para desenhar a gaveta:
+
+O script assa **duas** coisas que vêm de fontes diferentes — `ALHEIOS` (dos
+`eventOwners`) e `NATIVO` (do `setup.temPixelNativo`). O preset produz as duas
+juntas, coerentes por construção. **A seção avançada muda só a primeira.**
+
+Combinação alcançável: `temPixelNativo: true` com `PageView` reatribuído à
+Trackhub à mão. O código-base da Meta dispara `fbq('track','PageView')` **sem
+`event_id`**, a nossa CAPI dispara com — e não há como casar os dois.
+
+⛔ **NÃO consertado**: é comportamento anterior a `4e6aa9e`, e `seguePreset()` já
+marca o estado como *ajustado à mão*. O que a tela nova faz é **dizer o custo
+junto do controle**, que é design e não lógica.
+
+---
 ## CRIATIVOS
 
 Referência: imagem 9.
