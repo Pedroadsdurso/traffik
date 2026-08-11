@@ -1340,6 +1340,53 @@ arquivo local, de propósito.
 
 ---
 
+# 🎭 ARTEFATO VÁLIDO DE CONTEXTO ERRADO É PIOR QUE ARTEFATO INVÁLIDO
+
+> **Formulação do dono, 11/08/2026.** Extensão da regra *tela stale que ENTREGA
+> artefato é armadilha* — e ela generaliza para **Webhooks**, que é a tela
+> depois de Pixel/Eventos.
+
+> ## O inválido quebra na hora. O válido instala e trabalha — e a denúncia vem de um sistema que não é o nosso, semanas depois.
+
+| | Como se descobre |
+|---|---|
+| artefato **inválido** (script truncado, URL sem esquema, token vazio) | na instalação. O site quebra, o gateway recusa, alguém volta |
+| artefato **válido de outro contexto** | 🔴 **não se descobre.** Ele roda, grava, dispara — no lugar errado |
+
+### As duas formas, e elas pedem asserções DIFERENTES
+
+| Forma | Onde já apareceu | O que a asserção prova |
+|---|---|---|
+| **conteúdo errado** — o artefato carrega o contexto errado dentro de si | script de UTM (embute `var WS`) | trocar o contexto muda o TEXTO do artefato |
+| **contexto errado** — o artefato está certo, e é de outro dono | script de pixel (embute só o `PixelConfig.id`) | trocar o contexto muda a LISTA de artefatos alcançáveis |
+
+⛔ **Provar a primeira não prova a segunda.** Um `grep` pelo id do contexto
+dentro do artefato responde à forma 1 e é cego para a forma 2 — porque na forma
+2 o id do contexto **não está lá**, por desenho.
+
+### Por que a segunda é mais cara
+
+Na forma 1 há um valor errado no arquivo: quem for conferir, acha. Na forma 2
+**o arquivo passa em qualquer conferência** — ele é exatamente o que a
+ferramenta deveria gerar, só que para outra operação.
+
+O usuário instala o pixel da operação A na página da operação B. O script roda,
+os eventos chegam, os números aparecem. **Quem denuncia é o Gerenciador de
+Eventos da Meta**, que é de outra empresa, e só quando alguém for procurar.
+
+> ### ⛔ A PERGUNTA, ANTES DE PÔR QUALQUER ARTEFATO NUMA TELA
+> **"Se esta tela estiver desatualizada, o que sai daqui é INVÁLIDO ou é
+> VÁLIDO-DE-OUTRO-DONO?"**
+>
+> Se for o segundo, a asserção não é sobre o conteúdo do artefato — é sobre a
+> LISTA. E a fixture precisa de mais de um dono, senão ela passa sem exercer o
+> recorte.
+
+⚠️ **Vale para tudo que o usuário leva para fora:** script de pixel, script de
+UTM, URL de webhook, chave de API, snippet, parâmetro de anúncio. O que muda de
+um para o outro é só qual das duas formas ele tem.
+
+---
 # 🕳️ VÃO DENTRO DE UM CARD PROMETE CONTEÚDO. VÃO FORA NÃO PROMETE NADA.
 
 > **Formulação do dono, 11/08/2026.** Nasceu no Builder de UTM e **não é regra
