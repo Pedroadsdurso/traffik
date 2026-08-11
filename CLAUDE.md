@@ -1341,6 +1341,53 @@ arquivo local, de propósito.
 
 ---
 
+# 🔤 GUARDA POR TEXTO MIRA O QUE SÓ O ERRADO TEM — o certo costuma conter a mesma sintaxe
+
+> **Três vezes numa sessão só, em 11/08/2026.** Já não é descuido: é padrão, e
+> ele tem uma forma reconhecível.
+
+A intuição diz *"proíba a sintaxe do defeito"*. O problema é que **a chamada
+correta quase sempre contém essa mesma sintaxe** — porque as duas fazem a mesma
+coisa, só que uma passa pelo lugar certo.
+
+| # | A guarda | O que ela pegou |
+|---|---|---|
+| 1 | `replace("<Tooltip conteudo=")` | **1 de 2** — a outra ocorrência era multilinha. O `assert` de contagem salvou |
+| 2 | `!/setCarregando/` no arquivo da tela | o **comentário do próprio arquivo**, que cita o símbolo para explicar por que ele não existe |
+| 3 | `!/temPixelNativo:\s*(true\|false)/` | a chamada **legítima** `responderPreset(f, { temPixelNativo: true })` |
+
+O caso 3 é o mais instrutivo: a guarda existe para proibir atribuição direta, e
+a única forma CERTA de mudar o campo é… uma atribuição, dentro do redutor. A
+sintaxe é idêntica; o que difere é **onde ela está**.
+
+> ### ⛔ AS DUAS SAÍDAS, nesta ordem
+> **1. Confira por LINHA, não por substring.** Toda ocorrência da sintaxe tem de
+> estar numa linha que também contenha o caminho autorizado. É preciso, e a
+> falha reporta **qual linha** — em vez de só afirmar que existe.
+>
+> ```js
+> const ofensoras = fonte.split(/\r?\n/).map((l, i) => [i + 1, l])
+>   .filter(([, l]) => /ALVO/.test(l) && !/CAMINHO_AUTORIZADO/.test(l));
+> assert.deepEqual(ofensoras, []);
+> ```
+>
+> **2. Quando não der para separar por linha, mire o que SÓ O ERRADO TEM.** Não
+> o que os dois compartilham. No caso 2 o alvo virou a DECLARAÇÃO
+> (`const [carregando,`), que a prosa não contém.
+
+### ⚠️ E toda guarda leva a LINHA DE BASE junto
+
+Nos três casos a guarda podia passar sem examinar nada — arquivo vazio, símbolo
+ausente, coleção sem itens. **`=== 0` passa com a coleção vazia.** Por isso a
+guarda do preset afirma duas coisas antes de negar a terceira: que houve
+atribuição para examinar, e que o redutor é de fato usado.
+
+⚠️ Prima direta de *EDIÇÃO POR CASAMENTO DE STRING SE VERIFICA* e de *uma
+asserção precisa poder FALHAR pelo motivo que ela alega medir*. A pergunta é
+sempre a mesma: **que valor o caso ERRADO produziria — e o caso CERTO produz
+outro?** Se os dois produzem o mesmo, a guarda não mede nada.
+
+---
 # 🎭 ARTEFATO VÁLIDO DE CONTEXTO ERRADO É PIOR QUE ARTEFATO INVÁLIDO
 
 > **Formulação do dono, 11/08/2026.** Extensão da regra *tela stale que ENTREGA
@@ -3879,16 +3926,18 @@ a linha**.
 | Passada visual da gaveta | ⛔ **nunca aberta** |
 | Largura estreita | ⛔ deve em três telas |
 
-## ➡️ PRÓXIMO, na ordem
+## ➡️ PRÓXIMO — a ordem é do dono, e o motivo dela está na linha 2
 
-1. **`PixelScreen`** — mestre com lista de pixels, selo de diagnóstico por pixel
-   (`conferirSnippet` já devolve os 4 estados), e a gaveta ligada. É o que tira a
-   gaveta do estado inerte.
-2. **Lista de eventos** — `PixelEvent` por `pixelConfigId` (conferido: **é
-   escrito**, `api/pixel/event/route.ts:197`). Nasce paginada e com janela, pelo
-   índice `[userId, event, timestamp]`. **A retenção continua devendo** (dívida
-   nº 4) — a lista não pode agravá-la.
-3. Deletar a `PixelView` e os dois `elapsed()` crus (272 e 294) junto.
+| # | | |
+|---|---|---|
+| 1 | **`PixelScreen`** | tira a gaveta do estado inerte. Mestre com a lista de pixels, selo de diagnóstico por pixel (`conferirSnippet` já devolve os 4 estados) e a gaveta ligada |
+| 2 | **Passada visual da gaveta** | 🔴 **é onde o defeito vai aparecer.** Enquanto a tela não existir, a gaveta é afirmação sem testemunha |
+| 3 | **Lista de eventos** | `PixelEvent` por `pixelConfigId` (conferido: **é escrito**, `api/pixel/event/route.ts:197`). **Paginada e com janela**, pelo índice `[userId, event, timestamp]` |
+| 4 | **A asserção do `checkoutProprio`** | 101 linhas que decidem detecção de IC, e ninguém verifica |
+| 5 | **A `PixelView` morre** | e os dois `elapsed()` crus (272 e 294) com ela |
+
+⚠️ **A retenção do `PixelEvent` continua devendo** (dívida nº 4). A lista pode
+tornar a dívida visível — não pode agravá-la.
 
 ⚠️ **`trechoUrl` e `checkoutProprio` já foram REUSADOS pela gaveta**, então eles
 não morrem com a view antiga. `checkoutProprio` continua **sem teste** — e a
