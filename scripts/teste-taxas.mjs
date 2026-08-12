@@ -28,8 +28,11 @@ import { readFileSync } from "node:fs";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-const { incidencia, foraDoCalculo, FREQUENCIAS, FREQUENCIA_PADRAO, AVISO_UNICA, GRUPOS } =
-  await import("../src/lib/taxas/apresentacao.ts");
+const {
+  incidencia, foraDoCalculo, FREQUENCIAS, FREQUENCIA_PADRAO, AVISO_UNICA, GRUPOS,
+  MODOS_CALC, CALC_PADRAO, FORMAS_DE_PAGAMENTO, TODAS_AS_FORMAS,
+  aceitaCalc, aceitaFormaDePagamento, formaParaServidor,
+} = await import("../src/lib/taxas/apresentacao.ts");
 /* ⛔ Importa a SEÇÃO, não a tela: `TaxasScreen` puxa server actions que
    carregam o prisma, e importar o prisma lança sem `DATABASE_URL`. A composição
    das duas seções é conferida por guarda de texto, logo abaixo. */
@@ -308,6 +311,100 @@ checar("e a TELA compõe as DUAS seções — a hierarquia que o dono pediu", ()
   const i = TELA.indexOf('titulo="Configuração da conta"');
   assert.ok(i > 0, "linha de base: a seção de configuração não é montada na tela");
   assert.ok(TELA.includes("<SecaoTaxas v={v} />"), "a tela deixou de compor a seção de taxas");
+});
+
+/* ── 5. OS DOIS SELETORES QUE A REESCRITA TINHA REMOVIDO ──────────────────────
+   🔴 A tela ANTIGA oferecia `calc` (em 3 grupos) e `paymentMethod` (no gateway).
+   A primeira versão da tela nova cravou os dois — e o defeito ficou INVISÍVEL
+   porque a LEITURA continuou perfeita: a lista desenhava `R$ 2,50 por venda no
+   Pix` sem que houvesse qualquer forma de criar aquela linha.
+
+   Estas asserções existem para que a remoção não volte em silêncio. */
+
+console.log();
+console.log("5 — a tela CRIA tudo que ela mostra");
+
+checar("o modo de cálculo é oferecido, e o rótulo diz o EFEITO", () => {
+  assert.equal(MODOS_CALC.length, 2);
+  const rotulos = MODOS_CALC.map((m) => m.rotulo);
+  /* ⛔ "%" e "R$" sozinhos são símbolos, e o campo ao lado aceita os dois — é
+     onde alguém cadastra R$ 3,50 achando que são 3,5%. O rótulo tem de dizer
+     sobre o que incide, não como se chama o modo. */
+  assert.ok(rotulos.every((r) => r.length > 10), `rótulo curto demais: ${rotulos.join(" | ")}`);
+  assert.ok(rotulos.some((r) => /sobre o valor da venda/.test(r)), rotulos.join(" | "));
+  assert.ok(rotulos.some((r) => /fixo por venda/.test(r)), rotulos.join(" | "));
+});
+
+checar("o padrão de `calc` é o que o schema e o código já usavam", () => {
+  /* Mesma pergunta do padrão de frequência: *que valor deveria ser IGUAL a
+     este, e é?* Aqui o par é com o `@default` do schema, que é PERCENTUAL. */
+  assert.equal(CALC_PADRAO, "PERCENTUAL");
+  assert.ok(MODOS_CALC.some((m) => m.valor === CALC_PADRAO));
+  const SCHEMA = fonte("../prisma/schema.prisma");
+  assert.ok(
+    /calc\s+ExpenseCalc\s+@default\(PERCENTUAL\)/.test(SCHEMA),
+    "linha de base: o @default de `calc` mudou no schema",
+  );
+});
+
+checar("quem aceita escolher o modo é exatamente quem a tela antiga oferecia", () => {
+  assert.equal(aceitaCalc("TAXA_GATEWAY"), true);
+  assert.equal(aceitaCalc("COPRODUCAO"), true);
+  assert.equal(aceitaCalc("CUSTO_PRODUTO"), true);
+  /* ⛔ Os dois de fora cravam por razão de domínio — acrescentá-los aqui é
+     mudança de comportamento, não conserto. */
+  assert.equal(aceitaCalc("IMPOSTO"), false);
+  assert.equal(aceitaCalc("DESPESA_RECORRENTE"), false);
+});
+
+checar("só a taxa de gateway se restringe a uma forma de pagamento", () => {
+  assert.equal(aceitaFormaDePagamento("TAXA_GATEWAY"), true);
+  for (const t of ["IMPOSTO", "COPRODUCAO", "CUSTO_PRODUTO", "DESPESA_RECORRENTE"]) {
+    assert.equal(aceitaFormaDePagamento(t), false, t);
+  }
+});
+
+checar("🔴 a conversão do sentinela É EXERCIDA — os dois valores", () => {
+  /* Exigência do dono ao aprovar a migração: se `__TODAS__` virar `null` e nada
+     testar isso, ela vira a próxima `segredoInicial` esperando alguém deletar.
+
+     `__TODAS__` só existe na interface. Gravado no banco, ele faria a taxa não
+     casar com forma de pagamento nenhuma — a linha apareceria na tela e não
+     entraria em cálculo algum. */
+  assert.equal(formaParaServidor(TODAS_AS_FORMAS), null, "o sentinela não virou null");
+  assert.equal(formaParaServidor(""), null, "vazio deveria significar todas");
+  assert.equal(formaParaServidor("PIX"), "PIX", "uma forma real não pode ser anulada");
+  assert.equal(formaParaServidor("BOLETO"), "BOLETO");
+  /* E a linha de base: o sentinela tem de ser uma string que NUNCA é um valor
+     válido do enum, senão a conversão anularia uma forma de verdade. */
+  assert.ok(!["PIX", "CARTAO", "BOLETO", "OUTRO"].includes(TODAS_AS_FORMAS), TODAS_AS_FORMAS);
+  assert.ok(FORMAS_DE_PAGAMENTO.some((f) => f.valor === TODAS_AS_FORMAS), "o sentinela sumiu da lista");
+});
+
+checar("o formulário ENVIA os dois campos — não os deixa no estado local", () => {
+  /* O defeito que isto pega é o da primeira versão: o seletor existir na tela e
+     o valor não chegar ao servidor. Conferido por LINHA, com o caminho
+     autorizado na mesma linha. */
+  const i = SECAO.indexOf("await v.criarDespesa({");
+  assert.ok(i > 0, "linha de base: a chamada de criação não existe no CÓDIGO");
+  const chamada = SECAO.slice(i, SECAO.indexOf("});", i));
+  assert.ok(/calc:\s*calcEfetivo/.test(chamada), `o \`calc\` não é enviado: ${chamada}`);
+  assert.ok(
+    /paymentMethod:.*formaParaServidor\(forma\)/.test(chamada),
+    `a forma de pagamento não passa pela conversão: ${chamada}`,
+  );
+});
+
+checar("os dois seletores aparecem no markup, e só onde devem", () => {
+  const html = desenhar([despesa({ type: "TAXA_GATEWAY", calc: "PERCENTUAL", amount: 3.5 })]);
+  const conta = (s) => html.split(s).length - 1;
+  /* Um "Como incide" por grupo que aceita calc — três. Uma "Forma de pagamento"
+     — só o gateway. Contagem, e não presença: presença passaria com o seletor
+     desenhado no grupo errado. */
+  assert.equal(conta("Como incide"), GRUPOS.filter((g) => aceitaCalc(g.tipo)).length);
+  assert.equal(conta("Forma de pagamento"), 1);
+  assert.ok(html.includes("% sobre o valor da venda"), "o rótulo do efeito não chegou à tela");
+  assert.ok(html.includes("Todas as formas"), "o padrão da forma de pagamento não chegou");
 });
 
 /* ── rodapé ──────────────────────────────────────────────────────────────── */

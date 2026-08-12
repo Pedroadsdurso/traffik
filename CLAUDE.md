@@ -993,7 +993,7 @@ qualquer resize, leia `innerWidth` e compare. `innerWidth === screen.availWidth`
 | WEBHOOKS | 18 | — | 6 |
 | CRIATIVOS | 12 | — | 3 |
 | LOGIN | 14 | — | 5 |
-| TAXAS E DESPESAS | 15 | — | 2 |
+| TAXAS E DESPESAS | 17 | — | 2 |
 <!-- ESTADO:FIM -->
 
 # 🚦 ESTADO ATUAL E FILA — 05/08/2026
@@ -5472,7 +5472,8 @@ funcionou sem adaptação.
 | Achado | O que já se sabe |
 |---|---|
 | **Enum tratado no servidor × oferecido na tela** | a varredura de *capacidade sem controle*. Candidatos: `ExpenseCalc`, `PaymentMethod` na taxa de gateway, tipos de `AutomationRule` |
-| **`addDespesa`/`addTax`/`addCoproducao`/`addCustoProduto` do hook ficaram órfãos?** | a tela nova usa `criarDespesa`. ⚠️ **Não varri** — e a regra manda perguntar o que cada um FAZIA antes de apagar, não só se é usado |
+| ~~`addDespesa`/`addTax`/… ficaram órfãos?~~ | ✅ **VARRIDO em 12/08.** Os **cinco** (com `addGateway`) estavam órfãos e foram deletados — mas só DEPOIS de repor os seletores, para a conversão do sentinela `__TODAS__`→`null` migrar em vez de sumir. Saíram junto `newTaxName`/`newTaxPct`/`onNewTaxName`/`onNewTaxPct`, `linhasPercentuais`, `coproducaoExpenses` e `custoProdutoExpenses` |
+| 🔴🔴 **EM QUANTAS OUTRAS TELAS EU REMOVI CAMINHO DE ESCRITA?** | **PRIORIDADE ALTA**, pedido do dono em 12/08. Nove telas reescritas, e a família *"apresenta o que não consegue criar"* é **a única que nenhuma ferramenta desta base pega** — nem o teste do cinza (compara estrutura), nem o `04` (confere o que é EXIBIDO), nem `tsc`/lint/build. ⚠️ O método está escrito na seção própria: `git show` da tela deletada, `grep` pelos `add*`/`set*`/`create*` que ela chamava, e conferir que cada ARGUMENTO tem origem na tela nova. O sinal barato é helper com parâmetro que ninguém mais passa |
 
 ## ➡️ PRÓXIMA
 
@@ -5482,3 +5483,91 @@ largura estreita nas cinco entra logo depois, com estimativa de **uma sessão**.
 
 `Regras` (21 ❌) segue sendo a maior dívida isolada, e `AnunciosView` (322) é a
 última legada de Integrações servindo rota.
+
+---
+
+# 🪞 A TELA NOVA APRESENTA ESTADO QUE ELA NÃO CONSEGUE CRIAR
+
+> **Formulação do dono, 12/08/2026.** É família nova, e é **o inverso do
+> controle inerte**: lá o controle existe e não faz nada; aqui o **efeito existe
+> e não há controle**.
+
+> ## Ao reescrever uma tela, a conferência não é "mostra tudo que a antiga mostrava". É **"cria tudo que a antiga criava"**.
+
+### Por que ela é invisível — e por que o teste do cinza não pega
+
+A regressão não quebra nada. A LEITURA continua perfeita:
+
+| | |
+|---|---|
+| a lista desenha | `R$ 2,50 por venda no Pix` — certo, bonito, e a frase até foi escrita nesta sessão |
+| o formulário cria | só `3,5% sobre toda venda` |
+| o que denuncia | 🔴 **nada.** Nenhum erro, nenhum número errado, nenhum estado vazio |
+
+O teste do cinza compara ESTRUTURA. O `04` confere CONTEÚDO EXIBIDO. As duas
+ferramentas olham o que a tela mostra — e a tela mostra tudo, porque os dados
+antigos continuam lá. **O que sumiu foi o caminho de escrita**, e ele só é
+percebido por quem for cadastrar um caso que não existia no banco.
+
+### O caso que produziu a regra
+
+Na tela de Taxas, a reescrita de 12/08 removeu **dois** seletores que a
+`FeesView` tinha:
+
+| Campo | A tela antiga | A primeira versão da nova |
+|---|---|---|
+| `Expense.calc` (R$ × %) | seletor em 3 dos 5 grupos | ⛔ cravado `PERCENTUAL` |
+| `Expense.paymentMethod` | seletor no gateway (5 opções) | ⛔ nunca enviado → `null` |
+
+⚠️ **A ironia é o que fixa a lição:** eu escrevi, no mesmo commit, a função pura
+que distingue `R$ 2,50 por venda no Pix` de `3,5% sobre toda venda` — e removi as
+duas únicas formas de criar a primeira. Só o seed conseguia produzi-la.
+
+⚠️ E o `TODAS_AS_FORMAS` já documentava a mesma família, no `financeiro.ts`:
+*"O suporte a taxa global sempre existiu — a tela é que não tinha como
+produzi-lo."* A frase estava escrita e não impediu a repetição, porque descrevia
+UM caso em vez de nomear o padrão.
+
+> ### ⛔ A CONFERÊNCIA QUE FICA, ao reescrever qualquer tela
+>
+> **Para cada campo que a tela LÊ, existe caminho para ESCREVÊ-LO?**
+>
+> Ela se responde comparando os dois lados, e o `git show` da tela deletada é o
+> instrumento: `grep` pelos `add*`/`set*`/`create*` que a antiga chamava, e
+> confira que cada argumento que ela passava tem origem na nova.
+>
+> ⚠️ O sinal barato: um helper do hook que recebe um parâmetro **e a tela nova
+> não passa nenhum**. Foi assim que os três `calc` apareceram — os helpers
+> tinham `calc: "PERCENTUAL" | "FIXO" = "PERCENTUAL"` na assinatura, e ninguém
+> mais passava o argumento.
+
+---
+
+# 💀 `@default` DE SCHEMA QUE NENHUM CAMINHO ALCANÇA NÃO É PADRÃO — É DECLARAÇÃO MORTA
+
+> **Dois casos medidos em 12/08/2026, e o dono mandou registrá-los como um só.**
+> Vai junto na sessão de migration, com o `ocorreEm`.
+
+| Coluna | `@default` | O que TODO caminho passa | Concorda? |
+|---|---|---|---|
+| `Expense.recurrence` | `UNICA` | `"MENSAL"` (`??` na ação, fixo no hook) | 🔴 **não** |
+| `Expense.calc` | `PERCENTUAL` | `PERCENTUAL` em 4 grupos, **`FIXO`** em despesa fixa | ⚠️ parcial |
+
+Nenhum dos dois defaults é alcançável pelo app: toda criação passa valor
+explícito. Ou seja, **eles não descrevem comportamento nenhum**.
+
+> ### 🔴 O CUSTO NÃO É TÉCNICO — É DE LEITURA
+> O schema é o primeiro lugar onde alguém vai entender o produto. Um
+> `@default(UNICA)` diz *"despesa sem frequência declarada é única"* — e isso
+> nunca aconteceu com nenhuma linha. Quem lê sai com um modelo mental errado, e
+> **age sobre ele**: foi exatamente o que aconteceu comigo, que reportei "quem
+> só preenche valor cai em UNICA" lendo o schema em vez de seguir os chamadores.
+>
+> ⛔ A correção não é remover o default (a coluna é `NOT NULL`, precisa de um).
+> É **fazê-lo concordar com o caminho real** — ou, onde não houver um único
+> caminho, escrever no `///` do schema que o default é inalcançável e por quê.
+
+⚠️ **A pergunta que generaliza:** para cada `@default` do schema, existe um
+caminho que o exercita? Se todo `create` passa o campo, o default é documentação
+— e documentação que afirma um comportamento inexistente é a família que este
+projeto já pagou nove vezes.

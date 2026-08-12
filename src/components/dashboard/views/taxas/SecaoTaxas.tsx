@@ -5,9 +5,16 @@ import { AlertTriangle, Plus, Trash2 } from "lucide-react";
 
 import {
   AVISO_UNICA,
+  CALC_PADRAO,
+  FORMAS_DE_PAGAMENTO,
   FREQUENCIAS,
   FREQUENCIA_PADRAO,
   GRUPOS,
+  MODOS_CALC,
+  TODAS_AS_FORMAS,
+  aceitaCalc,
+  aceitaFormaDePagamento,
+  formaParaServidor,
   type DespesaLinha,
   type Grupo,
   foraDoCalculo,
@@ -244,14 +251,22 @@ function LinhaDespesa({ d, v }: { d: DespesaLinha; v: TraffikView }) {
  */
 function FormNovaDespesa({ grupo, v }: { grupo: Grupo; v: TraffikView }) {
   const recorrente = grupo.tipo === "DESPESA_RECORRENTE";
+  const escolheCalc = aceitaCalc(grupo.tipo);
+  const escolheForma = aceitaFormaDePagamento(grupo.tipo);
+
   const [nome, setNome] = React.useState("");
   const [valor, setValor] = React.useState("");
+  const [calc, setCalc] = React.useState<string>(CALC_PADRAO);
+  const [forma, setForma] = React.useState<string>(TODAS_AS_FORMAS);
   const [frequencia, setFrequencia] = React.useState<string>(FREQUENCIA_PADRAO);
   const [enviando, setEnviando] = React.useState(false);
 
-  /* Despesa fixa é valor em reais; as outras quatro categorias são percentuais
-     sobre o faturamento. É o que o cálculo já assume. */
-  const calc = recorrente ? "FIXO" : "PERCENTUAL";
+  /* ⛔ Quem NÃO escolhe tem o modo cravado, e os dois cravam por razão de
+     domínio: imposto sobre venda é percentual por natureza, e despesa fixa em %
+     do faturamento não é despesa fixa — ela deixaria de ser o custo que existe
+     mesmo sem vender, que é o que faz dela a base do break-even. É exatamente o
+     que a tela antiga fazia. */
+  const calcEfetivo = (escolheCalc ? calc : recorrente ? "FIXO" : "PERCENTUAL") as DespesaLinha["calc"];
 
   async function enviar(e: React.FormEvent) {
     e.preventDefault();
@@ -262,8 +277,13 @@ function FormNovaDespesa({ grupo, v }: { grupo: Grupo; v: TraffikView }) {
       await v.criarDespesa({
         name: nome,
         type: grupo.tipo,
-        calc,
+        calc: calcEfetivo,
         amount,
+        /* 🔴 O SENTINELA VIRA `null` AQUI, na fronteira com o servidor.
+           `__TODAS__` só existe na interface: no banco, "todas as formas" é
+           `null`. Gravar a string faria a taxa não casar com forma nenhuma — a
+           linha apareceria na tela e não entraria em cálculo algum. */
+        paymentMethod: escolheForma ? formaParaServidor(forma) : undefined,
         recurrence: recorrente ? (frequencia as DespesaLinha["recurrence"]) : undefined,
       });
       setNome("");
@@ -295,10 +315,35 @@ function FormNovaDespesa({ grupo, v }: { grupo: Grupo; v: TraffikView }) {
           value={valor}
           inputMode="decimal"
           onChange={(e) => setValor(e.target.value)}
-          sufixo={calc === "FIXO" ? "R$" : "%"}
-          placeholder={calc === "FIXO" ? "500" : "3,5"}
+          /* ⚠️ O sufixo segue o modo ESCOLHIDO, não o tipo do grupo — senão o
+             campo diria "%" enquanto o servidor grava reais. */
+          sufixo={calcEfetivo === "FIXO" ? "R$" : "%"}
+          placeholder={calcEfetivo === "FIXO" ? "2,50" : "3,5"}
         />
       </div>
+      {escolheCalc && (
+        <div style={{ flex: "1 1 210px", minWidth: 0 }}>
+          {/* ⚠️ O rótulo de cada opção diz o EFEITO, não o nome do modo: `%` e
+              `R$` sozinhos são símbolos, e o campo ao lado aceita os dois — é
+              exatamente ali que alguém cadastra R$ 3,50 achando que são 3,5%. */}
+          <Select
+            rotulo="Como incide"
+            valor={calc}
+            aoEscolher={setCalc}
+            opcoes={MODOS_CALC.map((m) => ({ valor: m.valor as string, rotulo: m.rotulo }))}
+          />
+        </div>
+      )}
+      {escolheForma && (
+        <div style={{ flex: "1 1 180px", minWidth: 0 }}>
+          <Select
+            rotulo="Forma de pagamento"
+            valor={forma}
+            aoEscolher={setForma}
+            opcoes={FORMAS_DE_PAGAMENTO.map((f) => ({ valor: f.valor, rotulo: f.rotulo }))}
+          />
+        </div>
+      )}
       {recorrente && (
         <div style={{ flex: "1 1 150px", minWidth: 0 }}>
           <Select

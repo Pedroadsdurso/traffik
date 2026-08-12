@@ -220,3 +220,94 @@ export const GRUPOS: readonly Grupo[] = [
 export function areaDaNovaDespesa(areaAtiva: string | null | undefined): string | null {
   return areaAtiva ?? null;
 }
+
+/* ── o modo de cálculo, e a forma de pagamento ──────────────────────────────── */
+
+/**
+ * 🔴 OS DOIS SELETORES QUE ESTA TELA PERDEU E RECUPEROU — leia antes de mexer.
+ *
+ * A primeira versão da tela nova (12/08/2026) cravou `calc: "PERCENTUAL"` e não
+ * enviava `paymentMethod` nenhum. A tela ANTIGA oferecia os dois. Ou seja: a
+ * reescrita **removeu caminho de escrita**, e o defeito ficou invisível porque a
+ * LEITURA continuou perfeita — a lista desenhava `R$ 2,50 por venda no Pix` sem
+ * que existisse qualquer forma de criar aquela linha.
+ *
+ * ⛔ AO MEXER AQUI, A PERGUNTA NÃO É "a tela mostra tudo?" — É "a tela CRIA
+ * tudo que ela mostra?". Ver a seção própria no `CLAUDE.md`.
+ */
+
+/**
+ * ⚠️ O RÓTULO DIZ O EFEITO, não o nome do modo.
+ *
+ * `%` e `R$` sozinhos são símbolos, e o campo ao lado aceita os dois — então
+ * **3,5 significa coisas muito diferentes** conforme o modo, e é exatamente ali
+ * que alguém cadastra `R$ 3,50` achando que são `3,5%`. A diferença entre os
+ * dois, numa venda de R$ 300, é de R$ 7,00 por venda.
+ */
+export const MODOS_CALC: readonly { valor: ExpenseCalc; rotulo: string }[] = [
+  { valor: "PERCENTUAL", rotulo: "% sobre o valor da venda" },
+  { valor: "FIXO", rotulo: "R$ fixo por venda" },
+];
+
+/** O padrão de hoje. ⛔ Não mude: é o que todo caminho de criação já usava. */
+export const CALC_PADRAO: ExpenseCalc = "PERCENTUAL";
+
+/**
+ * Quem aceita escolher o modo.
+ *
+ * ⛔ `IMPOSTO` e `DESPESA_RECORRENTE` ficam de fora, e não é omissão — os dois
+ * cravam por razão, e a razão é do domínio:
+ *
+ *   · imposto sobre venda é percentual por natureza;
+ *   · despesa fixa em % do faturamento não é despesa fixa — ela deixaria de ser
+ *     o custo que existe mesmo sem vender, que é o que a define e o que faz
+ *     dela a base do break-even.
+ *
+ * ⚠️ Isto reproduz exatamente o que a tela antiga oferecia. Acrescentar um dos
+ * dois aqui é MUDANÇA DE COMPORTAMENTO, não conserto.
+ */
+export function aceitaCalc(tipo: ExpenseType): boolean {
+  return tipo === "TAXA_GATEWAY" || tipo === "COPRODUCAO" || tipo === "CUSTO_PRODUTO";
+}
+
+/** Só a taxa de gateway se restringe a uma forma de pagamento. */
+export function aceitaFormaDePagamento(tipo: ExpenseType): boolean {
+  return tipo === "TAXA_GATEWAY";
+}
+
+/**
+ * O sentinela de "todas as formas", na INTERFACE.
+ *
+ * ⚠️ Reexportado daqui, e não importado do `financeiro` por cada componente, para
+ * que a conversão e o valor andem juntos — separá-los é como um deles muda sem o
+ * outro.
+ */
+export { TODAS_AS_FORMAS } from "@/lib/financeiro";
+
+export const FORMAS_DE_PAGAMENTO: readonly { valor: string; rotulo: string }[] = [
+  { valor: "__TODAS__", rotulo: "Todas as formas" },
+  { valor: "PIX", rotulo: "Somente Pix" },
+  { valor: "CARTAO", rotulo: "Somente cartão" },
+  { valor: "BOLETO", rotulo: "Somente boleto" },
+  { valor: "OUTRO", rotulo: "Somente outras formas" },
+];
+
+/**
+ * 🔴 A CONVERSÃO DO SENTINELA — e ela é a razão de `addGateway` não ter sido
+ * apagado como órfão comum.
+ *
+ * `__TODAS__` existe SÓ na interface: no banco, "todas as formas" é `null`.
+ * Gravar a string faria a taxa não casar com forma de pagamento nenhuma — a
+ * linha existiria, apareceria na tela, e **não entraria em cálculo nenhum**.
+ *
+ * ⚠️ Ela vivia dentro de `addGateway`, no `useTraffikState`. Ao deletar aquele
+ * helper a conversão teria sumido junto, e o sintoma só apareceria semanas
+ * depois, num lucro alto demais. É a regra *"antes de deletar um órfão,
+ * pergunte o que ele FAZIA"* — e por isso ela mudou de casa em vez de morrer.
+ *
+ * ⛔ `test:taxas` a exercita com os dois valores. Sem isso ela seria a próxima
+ * proteção morta esperando alguém deletar.
+ */
+export function formaParaServidor(valor: string): PaymentMethod | null {
+  return valor === "__TODAS__" || valor === "" ? null : (valor as PaymentMethod);
+}

@@ -13,7 +13,7 @@ import {
 } from "@/lib/actions/facebook";
 import type { PixelConfigDTO } from "@/lib/actions/pixels";
 import type { RuleDTO } from "@/lib/actions/rules";
-import { TODAS_AS_FORMAS, corFinanceira } from "@/lib/financeiro";
+import { corFinanceira } from "@/lib/financeiro";
 import { contarUnicasAtivas } from "@/lib/despesas/rateio";
 // A regra de denominador zero é UMA só nesta base. Ver o comentário do `div`.
 import { div } from "@/lib/ads/metrics";
@@ -864,43 +864,7 @@ export function useTraffikState(
         setS((st) => ({ ...st, expenses: st.expenses.filter((x) => x.id !== e.id) }));
       },
     }));
-  /**
-   * Linhas editáveis de um tipo de despesa percentual.
-   *
-   * ⚠️ Extraído porque a mesma forma se repetia para imposto e ia se repetir para
-   * coprodução e custo de produto — quatro cópias do mesmo `onChange`/`commit`
-   * divergiriam na primeira correção.
-   */
-  const linhasPercentuais = (tipo: string) =>
-    s.expenses
-      .filter((e) => e.type === tipo)
-      .map((e) => ({
-        id: e.id,
-        name: e.name,
-        amountStr: String(e.amount),
-        /**
-         * Unidade REAL da linha, lida do `calc` gravado.
-         *
-         * ⛔ A tela imprimia "%" fixo ao lado do valor. Agora que estes blocos
-         * aceitam valor por venda, um "R$ 10 por venda" apareceria como "10%" —
-         * a tela afirmando uma coisa e a conta fazendo outra, no número que
-         * decide o lucro. O sufixo tem de vir do dado, nunca do template.
-         */
-        unidade: e.calc === "FIXO" ? "R$/venda" : "%",
-        onChange: (ev: React.ChangeEvent<HTMLInputElement>) => {
-          const amount = parseFloat(ev.target.value) || 0;
-          setS((st) => ({ ...st, expenses: st.expenses.map((x) => (x.id === e.id ? { ...x, amount } : x)) }));
-        },
-        commit: (ev: React.FocusEvent<HTMLInputElement>) =>
-          updateExpense(e.id, { amount: parseFloat(ev.target.value) || 0 }).catch(() => {}),
-        remove: async () => {
-          await deleteExpense(e.id);
-          setS((st) => ({ ...st, expenses: st.expenses.filter((x) => x.id !== e.id) }));
-        },
-      }));
 
-  const coproducaoExpenses = linhasPercentuais("COPRODUCAO");
-  const custoProdutoExpenses = linhasPercentuais("CUSTO_PRODUTO");
 
   const taxExpenses = s.expenses
     .filter((e) => e.type === "IMPOSTO")
@@ -1762,8 +1726,6 @@ export function useTraffikState(
 
     gatewayExpenses,
     taxExpenses,
-    coproducaoExpenses,
-    custoProdutoExpenses,
     despesaRows,
     /**
      * As despesas CRUAS — os DTOs sem handlers e sem rótulo pronto.
@@ -1789,113 +1751,19 @@ export function useTraffikState(
     onNewGatewayMethod: (e: React.ChangeEvent<HTMLSelectElement>) => set({ newGatewayMethod: e.target.value }),
     onNewGatewayPct: (e: React.ChangeEvent<HTMLInputElement>) => set({ newGatewayPct: e.target.value }),
     /**
-     * 🐛 Os `add*` passaram a RECEBER os valores em vez de lê-los do estado
-     * global.
-     *
-     * Os campos do formulário de Taxas moravam no `useTraffikState`, que é
-     * provido por contexto ao dashboard inteiro. Cada tecla re-renderizava a
-     * árvore toda (gráficos incluídos), e com input controlado o teclado corria
-     * mais rápido que o re-render: os caracteres se perdiam e o campo aparecia
-     * vazio depois de digitar uma frase.
-     *
-     * Agora o estado dos campos é LOCAL na `FeesView` — mesmo padrão das views
-     * mais novas (`UtmsView`, `PixelView`, `AreasView`, `RulesView`).
-     *
-     * ⚠️ Campo de formulário não deve morar neste hook. O que vem para cá é
-     * dado do servidor e estado compartilhado entre telas, não digitação.
-     */
-    addGateway: async (metodo: string, pct: string, calc: "PERCENTUAL" | "FIXO" = "PERCENTUAL", nome = "") => {
-      const amount = parseFloat(pct) || 0;
-      if (!amount) return;
-      // ⚠️ O sentinela vira `null` AQUI, na fronteira com o servidor. Ele nunca
-      // chega ao banco — lá `null` já significa "todas as formas".
-      const method = metodo === TODAS_AS_FORMAS ? null : (metodo as ExpenseDTO["paymentMethod"]);
-      const label = method ? PAYMENT_LABEL[method] : "todas as formas";
-      // Nome LIVRE: quem tem dois gateways precisa distinguir "Cakto Pix" de
-      // "Kirvano Pix" — com o nome derivado da forma de pagamento, as duas
-      // linhas ficavam idênticas na tela e só o valor as diferenciava.
-      const created = await createExpense({
-        name: nome.trim() || `Taxa ${label}`,
-        type: "TAXA_GATEWAY",
-        calc,
-        amount,
-        paymentMethod: method,
-      });
-      setS((st) => ({ ...st, expenses: [...st.expenses, created] }));
-    },
-    // Novo imposto
-    newTaxName: s.newTaxName,
-    newTaxPct: s.newTaxPct,
-    onNewTaxName: (e: React.ChangeEvent<HTMLInputElement>) => set({ newTaxName: e.target.value }),
-    onNewTaxPct: (e: React.ChangeEvent<HTMLInputElement>) => set({ newTaxPct: e.target.value }),
-    addTax: async (nome: string, pct: string) => {
-      const amount = parseFloat(pct) || 0;
-      if (!amount) return;
-      const created = await createExpense({ name: nome.trim() || "Imposto", type: "IMPOSTO", calc: "PERCENTUAL", amount });
-      setS((st) => ({ ...st, expenses: [...st.expenses, created] }));
-    },
-    /**
-     * Coprodução/afiliado e custo de produto — os dois descontos que faltavam.
-     *
-     * ⚠️ São PERCENTUAIS sobre o faturamento, como o imposto. Sem eles
-     * cadastrados o Faturamento Líquido aparece maior do que é, e o card avisa.
-     */
-    addCoproducao: async (nome: string, pct: string, calc: "PERCENTUAL" | "FIXO" = "PERCENTUAL") => {
-      const amount = parseFloat(pct.replace(",", ".")) || 0;
-      if (!amount) return;
-      const created = await createExpense({
-        name: nome.trim() || "Coprodução",
-        type: "COPRODUCAO",
-        calc,
-        amount,
-      });
-      setS((st) => ({ ...st, expenses: [...st.expenses, created] }));
-    },
-    /**
-     * ⚠️ `calc` deixou de ser fixo em `PERCENTUAL`.
-     *
-     * Custo de produto raramente é percentual: quem vende físico paga um valor
-     * por unidade (impressão, embalagem, frete). Forçar percentual obrigava a
-     * converter na mão e a refazer a conta a cada mudança de preço — e o
-     * resultado ficava errado no instante em que o ticket mudasse.
-     *
-     * O mesmo vale para coprodução: comissão fixa por venda existe.
-     */
-    addCustoProduto: async (nome: string, pct: string, calc: "PERCENTUAL" | "FIXO" = "PERCENTUAL") => {
-      const amount = parseFloat(pct.replace(",", ".")) || 0;
-      if (!amount) return;
-      const created = await createExpense({
-        name: nome.trim() || "Custo de produto",
-        type: "CUSTO_PRODUTO",
-        calc,
-        amount,
-      });
-      setS((st) => ({ ...st, expenses: [...st.expenses, created] }));
-    },
-    // Nova despesa recorrente
-    newDespesaName: s.newDespesaName,
-    newDespesaValue: s.newDespesaValue,
-    onNewDespesaName: (e: React.ChangeEvent<HTMLInputElement>) => set({ newDespesaName: e.target.value }),
-    onNewDespesaValue: (e: React.ChangeEvent<HTMLInputElement>) => set({ newDespesaValue: e.target.value }),
-    addDespesa: async (nome: string, valor: string) => {
-      const amount = parseFloat(valor) || 0;
-      if (!nome.trim() || !amount) return;
-      const created = await createExpense({
-        name: nome.trim(),
-        type: "DESPESA_RECORRENTE",
-        calc: "FIXO",
-        amount,
-        recurrence: "MENSAL",
-        workspaceId: s.workspaceAtiva,
-      });
-      setS((st) => ({ ...st, expenses: [...st.expenses, created] }));
-    },
-    /**
      * O criador COMPLETO — o que a tela nova de Taxas usa nos cinco grupos.
      *
-     * Os quatro `add*` acima fixam `type`/`calc`/`recurrence` no código porque
-     * a tela antiga não deixava escolher nenhum dos três. Este aceita o input
-     * inteiro, e é o que torna o seletor de frequência possível.
+     * ⚠️ ELE SUBSTITUIU CINCO HELPERS que fixavam `type`/`calc`/`recurrence` no
+     * código (`addGateway`, `addTax`, `addCoproducao`, `addCustoProduto`,
+     * `addDespesa`), deletados em 12/08/2026 junto da `FeesView`. Este aceita o
+     * input inteiro, e é o que torna os três seletores da tela possíveis.
+     *
+     * 🔴 A CONVERSÃO DO SENTINELA `__TODAS__` → `null` VEIO DO `addGateway` e
+     * está viva em `lib/taxas/apresentacao.ts` (`formaParaServidor`). Ela NÃO
+     * era código cosmético: gravar a string faria a taxa não casar com forma de
+     * pagamento nenhuma, e a linha existiria sem entrar em cálculo algum. Foi
+     * movida de casa em vez de morrer com o helper, e `test:taxas` a exercita
+     * com os dois valores — senão ela vira a próxima proteção morta.
      *
      * ⛔ `workspaceId: s.workspaceAtiva` NÃO É OPCIONAL AQUI, e é a linha
      * vermelha do `CLAUDE.md`: `Expense.workspaceId` NULO significa **vale para

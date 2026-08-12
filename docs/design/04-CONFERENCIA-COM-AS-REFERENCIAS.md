@@ -1195,6 +1195,8 @@ do `06`, ou de um comportamento que o produto já tinha e a tela antiga escondia
 | **Frase de incidência por linha** — sobre O QUE a taxa incide | ✅ |
 | Estado vazio que diz a CONSEQUÊNCIA, não a ausência | ✅ |
 | **Seletor de frequência** — quatro opções, padrão `Por mês` | ✅ |
+| **Seletor `Como incide`** — R$ × %, em 3 dos 5 grupos | ✅ |
+| **Seletor de forma de pagamento** — no gateway, padrão `Todas as formas` | ✅ |
 | **Aviso de consequência da despesa única** — o quê e o porquê | 🔧 |
 | Marcador `fora do cálculo` na linha, em tom de atenção | ✅ |
 | Ícone em recipiente quadrado neutro de 36px (`06` §13) | ✅ |
