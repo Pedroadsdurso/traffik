@@ -4753,6 +4753,64 @@ OAuth — todos têm a mesma forma. O que decide não é se o valor está certo 
 
 ---
 
+# 🎚️ TESTE QUE CONSTRÓI A PRÓPRIA ENTRADA NÃO VERIFICA O RECORTE QUE O PRODUTO USA
+
+> **Formulação do dono, 12/08/2026, sobre o achado da rodada.** É a família do
+> gerador vista pelo outro lado — e o outro lado é o mais difícil de enxergar,
+> porque **a suíte fica verde e ela tem razão de ficar**.
+
+> ## As 20 asserções estavam certas. Elas simplesmente não olham para o mesmo lugar que a tela.
+
+O caso: `criativos-dev` plantava a queda de CTR como **degrau na metade** dos 14
+dias. A tela abre em **Últimos 7 dias** — a janela inteira caía do mesmo lado do
+degrau. Resultado: **`Em queda 0`** com quatro criativos plantados em queda, e
+`Em queda` é a aba que justifica a tela existir.
+
+| | |
+|---|---|
+| o que a suíte dizia | ✅ **20 verdes**, seis delas sobre a tendência |
+| por que ela não podia pegar | as asserções montam **metades sintéticas** (`metade(10_000, 300)`) e passam direto para a função |
+| o que elas nunca perguntam | *"que janela a TELA pede, e o efeito aparece dentro dela?"* |
+| quem pegou | a **passada visual**, no primeiro screenshot |
+
+### 🔁 É primo do "teste que estraga o banco" — AO CONTRÁRIO
+
+| | |
+|---|---|
+| **teste que estraga o banco** | escreve estado que ninguém liga a ele, e a próxima pessoa conclui sobre o PRODUTO |
+| **teste que constrói a entrada** | 🔴 **não estraga nada.** Ele só não olha para o mesmo lugar |
+
+O primeiro deixa rastro; alguém acaba tropeçando nele. O segundo é
+**perfeitamente limpo e perfeitamente cego** — não há sintoma, não há resíduo,
+não há nada para tropeçar. A cobertura é real para a função e **inexistente para
+o caminho**, e nada na saída distingue as duas.
+
+⚠️ E não é caso de "escrever mais asserções": a fixture sintética é o que torna o
+teste puro, rápido e determinístico. **O defeito não está no teste — está em
+confiar que ele responde uma pergunta que ele não faz.**
+
+> ### ⛔ AS DUAS REGRAS
+>
+> **1. Todo dado sintético com dimensão temporal é exercitável na JANELA PADRÃO
+> da tela que o consome** — e a forma que garante isso é a **rampa**, não o
+> degrau: com variação gradual, qualquer recorte largo o bastante vê a
+> inclinação. Degrau só aparece para quem enquadra exatamente em cima dele.
+>
+> **2. Quando a fixture do teste não é o dado do produto, a verificação do
+> RECORTE é a passada visual** — e ela deixa de ser conferência de acabamento
+> para virar a única testemunha daquele caminho. Não é opcional na tela em que o
+> recorte carrega a informação.
+>
+> A pergunta, ao semear série temporal: *qual período a tela abre — e o efeito
+> que estou plantando aparece DENTRO dele?*
+
+⚠️ Prima do `n % 2` do BOLETO e do `splitPipe` com id não numérico. A diferença é
+que naqueles o estado gerado estava **errado**; aqui ele estava **correto** — só
+invisível pelo enquadramento. Estado errado alguém desconfia; estado certo fora
+de quadro, não.
+
+---
+
 # 🎚️ O SEED PRECISA CONVERSAR COM A JANELA PADRÃO DA TELA
 
 > **12/08/2026, e é uma armadilha NOVA dentro da família do gerador** — o seed
@@ -4864,8 +4922,132 @@ pedaços menores, funcionou. Mesmo sintoma de 11/08.
 
 | Achado | O que já se sabe |
 |---|---|
-| **`c.ctr ? pct(c.ctr) : "—"` tratava CTR ZERO como indefinido** | no mapa de apresentação do `useTraffikState`, deletado com a tela. `0` é falsy, e um criativo com impressão e nenhum clique tem CTR **medido** de 0% — não ausente. ⚠️ **Não é conserto de congelado**: o mapa inteiro saiu na reescrita. Mas o padrão `valor ? fmt : "—"` merece varredura — é a distinção central colapsada por um `?` |
+| 🔎 **`valor ? fmt : "—"` — VARREDURA, ver o bloco abaixo** | achado em `useTraffikState`; **quase certamente há mais** |
 | **A imagem sintética do seed vaza texto para fora do SVG** | cosmético, e é do `criativos-dev`, não da tela. O `<text>` a 34px estoura em nome longo |
+
+> ### 🔎 VARREDURA PENDENTE: `valor ? fmt : "—"` — a distinção central colapsada por um `?`
+>
+> **Achado em 12/08/2026, e registrado como VARREDURA porque um caso não é o
+> problema — o padrão é.**
+>
+> A linha que o denunciou vivia no mapa de apresentação dos criativos, no
+> `useTraffikState`:
+>
+> ```ts
+> ctrLabel: c.ctr ? pct(c.ctr) : "—"
+> ```
+>
+> **`0` é falsy.** Um criativo com impressão e nenhum clique tem CTR **medido**
+> de 0% — e a tela dizia `—`, que nesta base significa *"não foi medido"*. É a
+> distinção central do projeto (`ausência de observação` × `observação de zero`)
+> desfeita por um caractere.
+>
+> | O que o usuário lia | O que era |
+> |---|---|
+> | `—` "não temos esse dado" | **temos**: 12.500 impressões e zero cliques |
+>
+> ⚠️ **Aquela linha específica já morreu** — o mapa inteiro saiu na reescrita da
+> tela, e a `CardCriativo` formata por `=== null`. **Não é conserto de
+> congelado.** Ela está aqui como *evidência de que o padrão existe*, não como
+> pendência daquele arquivo.
+>
+> #### Por que é caro, e por que nenhuma ferramenta pega
+>
+> `tsc`, lint e build passam: o tipo é `number | null`, o ternário é válido, a
+> string sai formatada. O número resultante é **plausível**, e o erro é sempre
+> na direção que **esconde uma medição real** — o oposto do que uma ferramenta
+> de tráfego deve fazer com o único zero que importa (zero clique, zero venda,
+> zero conversão são exatamente os valores que exigem ação).
+>
+> #### Como varrer — e o TAMANHO já está medido
+>
+> ```bash
+> grep -rnE '\? [a-zA-Z_.]+\(' src/ --include=*.ts --include=*.tsx | grep -F ': "—"'
+> grep -rnE '(\|\||\?\?) *"—"' src/ --include=*.ts --include=*.tsx
+> ```
+>
+> Rodado em 12/08/2026: **7 ternários** e **17 `||`/`??`**. ⚠️ Os `??` são
+> seguros por construção (`??` não dispara em `0`) — o alvo real são os `||` e os
+> ternários, e os `||` achados estão todos em `design-system` e `actions/rules`,
+> sobre **string**, onde vazio e ausente são a mesma coisa.
+>
+> > ### 🔑 O DISCRIMINADOR, e ele economiza a varredura inteira
+> >
+> > **Guardar o DENOMINADOR por veracidade está CERTO. Guardar o RESULTADO está
+> > errado.**
+> >
+> > | | |
+> > |---|---|
+> > | `spd ? roasFmt(rev / spd) : "—"` | ✅ gasto zero **é** denominador ausente — o `—` é a resposta correta |
+> > | `c.ctr ? pct(c.ctr) : "—"` | 🔴 o CTR **já é o resultado**, e `0` dele é medição |
+> >
+> > Os três de `useTraffikState:1122-1124` (`ctrLabel`, `cpaLabel`, `roasLabel`)
+> > guardam o denominador e **estão corretos** — conferidos em 12/08. Não os
+> > "conserte".
+>
+> ⛔ O `grep` acha candidatos, não defeitos. A pergunta por ocorrência é uma só:
+> *o que está sendo testado é o denominador ou o valor final?* — e, se for o
+> valor final, *`0` é alcançável e significa medição?*
+>
+> ⚠️ Os primos entram na mesma varredura: `valor && <X/>`, `if (!total)`,
+> `Math.max(0, x) || padrao`. Todos colapsam `0` com ausência pela mesma porta.
+>
+> ⚠️ **A varredura de comentários que afirmam efeito continua na fila também** —
+> são duas varreduras distintas, e esta é mais barata: o `grep` é preciso e a
+> conferência é uma pergunta binária por linha.
+
+## 🧩 O FECHAMENTO — três coisas, por ordem do dono
+
+| | |
+|---|---|
+| **o caso do seed virou seção própria** | *TESTE QUE CONSTRÓI A PRÓPRIA ENTRADA NÃO VERIFICA O RECORTE QUE O PRODUTO USA*, acima. Ela saiu do relato desta tela de propósito: é regra transversal, e regra transversal presa dentro do relato de uma tela é regra que a próxima pessoa não acha |
+| **o `valor ? fmt : "—"` virou VARREDURA** | com o tamanho medido (7 ternários · 17 `\|\|`/`??`) e o **discriminador** que economiza a varredura: guardar o DENOMINADOR por veracidade está certo, guardar o RESULTADO está errado |
+| **"sem imagem é o caso comum" foi para o CÓDIGO** | duas vezes no `PreviaCriativo`: no cabeçalho, como título, e **dentro do ramo do fallback** — que é onde alguém editando seria tentado a encolhê-lo |
+
+> ### ⛔ POR QUE O AVISO DA MINIATURA PRECISOU IR NO RAMO, e não só no cabeçalho
+> Quem abre o arquivo para "melhorar a prévia" lê o JSX, não o bloco de 40 linhas
+> no topo. E a leitura natural de *"a imagem não carregou"* é **caso raro, trate
+> discreto** — encolher o bloco, apagar o selo, pôr um cinza neutro. Cada um
+> desses movimentos parece polimento e é a tela mentindo sobre a própria condição
+> normal: **12 de 13 criativos não têm imagem grande em lugar nenhum.**
+>
+> É a mesma mecânica de *COMENTÁRIO QUE PROÍBE É O MAIS PERIGOSO DE TODOS*, pelo
+> avesso — lá o ⛔ envelhecido autorizava desfazer o conserto; aqui o ⛔ está no
+> ponto exato em que o desfazer começaria.
+
+## 🔴 ESTE ARQUIVO ESTÁ EM 263 KB — 1,75× o limite que ele próprio documenta
+
+**Medido em 12/08/2026, ao fechar a sessão.** Não é observação de arrumação: se
+o limite de 150 KB citado na seção do MAPA ainda valer, **2.244 das 5.024 linhas
+— 45% do arquivo — estão depois do corte**, e o que cai fora inclui:
+
+| |
+|---|
+| `MODO DE TRABALHO ATÉ AS DEZ TELAS EXISTIREM` — o modo de operação desta fase inteira |
+| `ACHADOS ADIADOS` — **inclusive a varredura registrada hoje** |
+| `DENOMINADOR ZERO`, `DESPESA RECORRENTE`, e ~12 regras nomeadas |
+| **todo ESTADO DA SESSÃO de 08/08 em diante — inclusive este** |
+
+> ### ⚠️ O QUE EU NÃO SEI, e não vou fingir que sei
+> **Nesta sessão o conteúdo chegou completo** — eu li até a seção de 11/08 parte
+> 6, que é a última. Ou seja: **ou o limite de 150 KB mudou, ou a frase do MAPA
+> está velha.** Não tenho como distinguir os dois daqui, e afirmar que houve
+> truncamento seria inventar uma medição.
+>
+> O que é **fato medido**: 263 KB, 1,75× o número escrito neste arquivo, e a
+> curva é de crescimento — 05/08 reorganizou vindo de 548 KB, e em uma semana
+> voltou a metade do caminho.
+
+🔴 **A ironia é o que torna isto urgente:** as três coisas que o dono pediu para
+registrar hoje — o caso do seed, a varredura do `? :` e o aviso da miniatura —
+moram **todas** na metade de baixo. Um arquivo de regras que não chega é pior
+que regra não escrita: ele produz a crença de que está registrado.
+
+⛔ **Não reorganizei.** Mover seção é o tipo de mudança que precisa da decisão de
+quem lê o arquivo todo dia, e fazê-la no fim de um commit de tela é exatamente o
+que este arquivo proíbe. **A decisão é do dono**, e o caminho já existe: o MAPA
+manda o que é temático para `docs/`, e os ESTADO DA SESSÃO antigos para
+`docs/historico/`.
 
 ## ➡️ PRÓXIMA
 
@@ -4873,3 +5055,7 @@ Sobram **Login** (imagens 10 e 11), **Taxas**, **Áreas** e **Notificações**.
 `Regras` (21 ❌) segue sendo a maior dívida isolada.
 
 ⚠️ **`AnunciosView` (322) é a ÚLTIMA legada de Integrações servindo rota.**
+
+⚠️ E **antes de qualquer tela nova, decida o tamanho deste arquivo** — ver a
+seção acima. Cada sessão acrescenta ~200 linhas na ponta de baixo, que é
+justamente a metade em risco.

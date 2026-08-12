@@ -1,21 +1,39 @@
 "use client";
 
 /**
- * A pré-visualização de um criativo — e a **ausência** dela, que é o caso comum.
+ * A pré-visualização de um criativo.
  *
- * > ## 🔴 A IMAGEM DA META EXPIRA EM ~4 DIAS, E É 64×64
+ * > # ⛔ "SEM IMAGEM" É O CASO COMUM AQUI. NÃO É BORDA.
  * >
- * > Medido em 12/08/2026 no backup de produção de 01/08, nos **13 de 13**
- * > criativos reais da conta do dono:
+ * > **Leia isto antes de mexer em qualquer coisa neste arquivo.** O estado sem
+ * > imagem é o caminho PRINCIPAL desta tela em produção, não a exceção que se
+ * > esconde num canto — e ele foi desenhado com esse peso de propósito.
+ *
+ * ## 🔴 OS NÚMEROS, medidos — não estimados
+ *
+ * Em 12/08/2026, no backup de produção de 01/08, nos **13 de 13** criativos
+ * reais da conta do dono:
+ *
+ * | | |
+ * |---|---|
+ * | expiração (parâmetro `oe=`) | entre **34h** e **4,5 dias** após o sync |
+ * | **vencidas em 12/08** | **13 de 13** — havia uma semana |
+ * | resolução do `thumbnailUrl` | **`_p64x64` em 13 de 13** — ícone, não miniatura |
+ * | `imageUrl` (a imagem grande) | **1 de 13**; os outros 12 são vídeo e não têm imagem estática |
+ *
+ * Ou seja: **em 12 de 13 criativos não existe imagem grande em lugar nenhum**, e
+ * a única que existe também expira. Não há saída pelo `imageUrl`.
+ *
+ * > ### ⛔ O QUE NÃO FAZER, e por que a tentação é forte
  * >
- * > | | |
- * > |---|---|
- * > | resolução do `thumbnailUrl` | **`_p64x64` em 13 de 13** — ícone, não miniatura |
- * > | expiração (parâmetro `oe=`) | entre **34h** e **4,5 dias** após o sync |
- * > | `imageUrl` (a imagem grande) | existe em **1 de 13** — os outros 12 são vídeo |
+ * > A leitura natural de "a imagem não carregou" é *"caso raro, trate discreto"*
+ * > — encolher o bloco, apagar o selo, deixar um cinza neutro. Cada um desses
+ * > movimentos parece polimento e **é a tela mentindo sobre a própria condição
+ * > normal**: quem abrir a grade vai ver 12 cards discretos e concluir que algo
+ * > está carregando.
  * >
- * > Em 12/08 as treze estavam vencidas havia uma semana. **O estado normal desta
- * > tela em produção é a imagem não carregar.**
+ * > O bloco tipográfico tem o tamanho e o peso que tem porque ele é o que a
+ * > pessoa vai ver na maior parte das vezes. **Ele é o conteúdo, não o buraco.**
  *
  * ## ⛔ POR QUE NÃO EXISTE QUADRADO CINZA AQUI
  *
@@ -144,9 +162,15 @@ export function PreviaCriativo({
           style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
         />
       ) : (
-        /* O bloco tipográfico. `aria-hidden` porque o nome do criativo já está
-           escrito ao lado, em texto de verdade — anunciar as iniciais de novo é
-           ruído para quem usa leitor de tela. */
+        /* ⛔ ESTE É O RAMO COMUM, não o `else` de cortesia.
+           13 de 13 miniaturas de produção estavam vencidas, e 12 de 13 não têm
+           imagem grande nenhuma — ver o cabeçalho. Não encolha, não apague o
+           selo, não troque por cinza neutro: cada um desses "polimentos" faz a
+           tela parecer que está carregando algo que nunca vai chegar.
+
+           `aria-hidden` porque o nome do criativo já está escrito ao lado, em
+           texto de verdade — anunciar as iniciais de novo é ruído para quem usa
+           leitor de tela. */
         <div
           aria-hidden="true"
           style={{
