@@ -4374,6 +4374,149 @@ sobram **Criativos, Login, Taxas, Áreas e Notificações**, as cinco menores.
 
 ---
 
+---
+
+# ⏭️⏮️ SELO DE ESTADO FALA DO FUTURO. CONTADOR FALA DO PASSADO.
+
+> **Formulação do dono, 11/08/2026, sobre o achado mais grave do redesign.**
+> Nasceu em Webhooks e **não é regra de Webhooks** — ela decide todo lugar em
+> que um selo e um número dividem a mesma linha.
+
+| | Responde | Fonte |
+|---|---|---|
+| **selo de estado** | *"vai aceitar a próxima?"* | a CONFIGURAÇÃO de agora |
+| **contador** | *"aceitou quantas?"* | o HISTÓRICO |
+
+> ## Os dois podem discordar sem nenhum estar errado — e **esconder a discordância é o defeito**.
+
+### O caso que produziu a regra
+
+A tela antiga de Webhooks mostrava o selo verde **"Ativado"** num webhook que o
+servidor recusava com **401** em toda venda. Pior: a mensagem do 401
+(`gateways/autenticar.ts:75`) manda o usuário *"editar o webhook na aba
+Integrações › Webhooks"* — **a tela estava contradizendo a mensagem de erro que
+apontava para ela mesma.**
+
+Hoje o mesmo webhook mostra `recusando vendas` **e** `14 vendas recebidas`, lado
+a lado. As duas afirmações são verdadeiras, e é a coexistência delas que informa:
+*já funcionou, e parou de funcionar*.
+
+> ### ⛔ A PERGUNTA, ANTES DE ESCOLHER O QUE O SELO MOSTRA
+> **"Este selo descreve o que aconteceu, ou o que vai acontecer?"**
+>
+> Se ele deriva do histórico (`eventCount > 0` → "ativo"), ele **não é selo de
+> estado** — é o contador com outra roupa, e a redundância custa a única linha
+> em que caberia a informação que falta.
+
+⚠️ **O modo de falha é sempre para o lado tranquilizador**, porque o histórico
+costuma ser bom e a configuração é que quebrou. Um selo derivado do passado
+**nunca** consegue dizer "isto vai falhar" — ele só sabe dizer que já deu certo.
+
+⚠️ **Onde reaparece nesta base:** conta de anúncio (`status` × `effectiveStatus`,
+que é a mesma regra com outros nomes), pixel (`enabled` × eventos recebidos),
+credencial de API (`revoked` × `lastUsedAt`), perfil da Meta (token válido ×
+última sincronização). Em todos, um lado é configuração e o outro é histórico.
+
+---
+
+# 🪦 ANTES DE DELETAR UM ÓRFÃO, PERGUNTE O QUE ELE **FAZIA** — não se é usado
+
+> **Formulação do dono, 11/08/2026, e ela é o CONTRAPESO de dez sessões
+> deletando código morto.** Sem ela, a disciplina de faxina desta base vira uma
+> máquina de apagar comportamento.
+
+> ## Efeito colateral necessário não tem CONSUMIDOR — tem CONSEQUÊNCIA. O lint não distingue os dois.
+
+O caso: `segredoInicial`, no `useTraffikState`. Depois de deletar a
+`WebhooksView`, o lint o apontou como `assigned a value but never used`, junto
+de outros cinco símbolos genuinamente mortos. Ele **gerava a chave de segurança
+da Cakto**.
+
+| Se eu tivesse apagado | |
+|---|---|
+| `tsc`, lint, build, 33 asserções | ✅ todos verdes |
+| o webhook da Cakto | nasceria com `secret` NULO |
+| a Cakto é `exigir: true` | **toda venda voltaria 401** |
+| o sintoma do lado de cá | *"nenhuma venda chegando"* — indistinguível de *"ninguém comprou"* |
+
+### As duas perguntas, e por que a segunda é outra
+
+| Pergunta | O que ela acha |
+|---|---|
+| *"alguém importa isto?"* | o `grep` responde. Acha código **inerte** |
+| **"o que este símbolo FAZIA?"** | só a leitura responde. Acha comportamento **desalojado** |
+
+Código inerte pode ser apagado com segurança porque ninguém dependia dele.
+Comportamento desalojado **tinha um dono que morreu**, e apagá-lo é remover o
+efeito sem remover a necessidade dele.
+
+> ### ⛔ A REGRA
+> **Todo símbolo que o lint marcar como órfão depois de uma deleção passa por
+> uma leitura, não só por um `grep`.** E a saída, quando ele FAZIA alguma coisa,
+> não é mantê-lo onde está — é **mudá-lo de casa junto com o dono novo**.
+>
+> `segredoInicial` não voltou ao hook: virou `precisaGerar` + `geradas` dentro
+> da `GavetaWebhook`, que é quem hoje precisa da chave.
+
+⚠️ **É a irmã da regra da constante de texto** (*"ao remover uma tela, procure
+as constantes dela — alguma descreve comportamento que MUDOU?"*). Aquela protege
+contra reintroduzir o bug; esta protege contra apagar o conserto. As duas se
+respondem lendo, e nenhuma se responde com `grep`.
+
+⚠️ **O sinal de alerta é o símbolo ter um NOME DE AÇÃO** — `gerarX`, `iniciarY`,
+`garantirZ`, `segredoInicial`. Órfão cosmético costuma se chamar `LABEL_X` ou
+`corDoY`. Um órfão cujo nome é um verbo quase sempre fazia alguma coisa.
+
+---
+
+# 🔤 GUARDA QUE CONFERE CÓDIGO MIRA **DECLARAÇÃO OU CHAMADA**, NUNCA TEXTO LIVRE
+
+> **Já é padrão: SEIS ocorrências.** Quatro registradas antes, duas em 11/08.
+> Registrado como regra operacional porque a causa é sempre a mesma.
+
+> ## Comentário e microcópia citam o símbolo **justamente para explicá-lo**. É por isso que a guarda os acha primeiro.
+
+O arquivo que documenta por que algo existe contém o nome daquilo — e costuma
+contê-lo **antes** do código, no cabeçalho. Então `indexOf`, `includes` e
+qualquer `grep` por substring acham a PROSA e param ali.
+
+| # | A guarda | O que ela pegou |
+|---|---|---|
+| 5 | `indexOf("listWebhooks(workspaceId)")` | o **cabeçalho do arquivo**, que cita a chamada para explicar por que ela precisa da área |
+| 6 | filtro por nome de gateway | a **continuação de um bloco de comentário** — linha que não começa com asterisco |
+
+> ### ⛔ AS TRÊS SAÍDAS, nesta ordem
+>
+> | | |
+> |---|---|
+> | 1 | **Leve a SINTAXE junto.** `listWebhooks(workspaceId)\n      .then` — prosa não tem `.then`. `const [carregando,` — prosa não tem a declaração |
+> | 2 | **APAGUE os comentários antes de medir**, preservando as quebras de linha para o número reportado continuar sendo o do arquivo |
+> | 3 | **Confira por LINHA**, exigindo que a linha contenha também o caminho autorizado — e reporte QUAL linha |
+>
+> ⛔ Filtrar linha que "começa com `*`" **não basta**: um bloco `/* … */` de
+> várias linhas tem continuações que não começam com nada. Foi assim que a 6ª
+> caiu.
+
+### ⚠️ E o CRLF fecha a armadilha por baixo
+
+**402 arquivos versionados estão em CRLF**, e a árvore de trabalho continua assim
+de propósito. Toda âncora multilinha com `\n` — inclusive as três saídas acima —
+**falha nesses arquivos, e falha em silêncio**: devolve "não achei" com a mesma
+cara de "está tudo certo".
+
+> ### 🔴 O QUE TRANSFORMOU O SILÊNCIO EM FALHA NOMEADA FOI A LINHA DE BASE
+> ```js
+> const i = TELA.indexOf("listWebhooks(workspaceId)\n      .then");
+> assert.ok(i > 0, "linha de base: a chamada não existe no CÓDIGO");
+> ```
+> Sem essa linha, a guarda seguiria adiante com `i = -1`, mediria uma janela
+> vazia e **passaria**. Ela é o que separa *"conferi e está certo"* de *"não
+> consegui conferir"* — e as duas são o mesmo resultado para quem lê o rodapé.
+>
+> **Normalize a quebra na leitura** (`.replace(/\r\n/g, "\n")`) **e leve a linha
+> de base junto.** As duas coisas, sempre: a primeira evita a falha, a segunda a
+> denuncia quando ela acontecer por outro motivo.
+
 # 🎨 O CANVAS 1×1 PRECISA SER LIMPO — a receita desta base tinha um buraco
 
 > **Registrado em 11/08/2026 porque eu quase reportei um contraste de 1,01:1
@@ -4521,9 +4664,31 @@ desta base não é prova.
 
 | Achado | O que já se sabe |
 |---|---|
-| **`ApiCredential.workspaceId` tem leitores e ZERO escritores** | `listApiCredentials()` não recebe área e `createApiCredential()` não grava nenhuma (`9f9dfa9`, 24/07 — **congelado**). Lido por `areas/atribuicao.ts` e movido por `areas/exclusao.ts:350`. Mesma forma do `Sale.apiCredentialId`: o passo 4 da precedência nunca distingue nada. A tela **declara** o escopo; não corrige |
+| **`ApiCredential.workspaceId` tem leitores e ZERO escritores** | 🔗 **o MESMO defeito do `Sale.apiCredentialId`, uma camada acima — e provavelmente serão resolvidos juntos.** Ver o bloco próprio abaixo |
 | **A `PixelScreen` rolou o próprio interruptor inline** | `PixelScreen:205-225` desenha um botão com `role="switch"` à mão, enquanto `tk/Controles` exporta `Switch`. É a segunda aparência de interruptor da base. A `WebhooksScreen` usa o primitivo |
 | **`.route-progress` continua CSS órfão** | achado na sessão passada, não tocado. Se alguém o religar, nasce invisível: `z-index: 60` sob a faixa (200), e `top: 0` cai debaixo dela |
+
+> ### 🔴 O `ApiCredential.workspaceId` É O `Sale.apiCredentialId` DE NOVO — a
+> ### camada de cima do MESMO buraco
+>
+> **Medido em 11/08/2026. Congelado: os dois arquivos são de `9f9dfa9`, 24/07.**
+>
+> | | `Sale.apiCredentialId` (achado em 05/08) | `ApiCredential.workspaceId` (agora) |
+> |---|---|---|
+> | leitores | **6** (`precedencia`, `metrics`, `overview`, `creatives`, `exclusao`, `notifications`) | **2** (`areas/atribuicao.ts:37`, `areas/exclusao.ts:350`) |
+> | escritores | **0** — corrigido para as próximas | **0** — `createApiCredential()` não grava área nenhuma |
+> | o que nunca dispara | o passo 4 da precedência não sabia QUAL credencial | o passo 4 não sabe DE QUEM ela é |
+>
+> ⚠️ **Consertar só um dos dois não resolve nada.** Com a venda carimbada e a
+> credencial órfã, o passo 4 acha a credencial e ela não reivindica área — o
+> ramo continua caindo na Principal, agora por outro motivo. Foi por isso que
+> este ficou registrado com aquele: **a cadeia só funciona inteira.**
+>
+> ⛔ E há uma pergunta de PRODUTO antes da de código, que é do dono: *a chave de
+> API pertence a uma área, ou à conta?* Hoje o comportamento real é "à conta", e
+> a tela nova **declara** isso. Se a resposta for "à área", a `WebhooksScreen`
+> passa a recortar a lista e a frase sai — mas aí é mudança de comportamento,
+> item a item, e não passagem de commit de tela.
 
 ## ➡️ PRÓXIMA
 
