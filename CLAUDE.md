@@ -106,6 +106,52 @@ ainda não está pronto.
 
 ---
 
+## 🎣 A FORMA DA PERGUNTA DECIDE O QUE A INVESTIGAÇÃO ACHA
+
+> **Terceira ocorrência em uma sessão só, 12/08/2026.** É a meta-regra acima
+> aplicada ao momento ANTERIOR ao registro: à pergunta que se faz ao investigar.
+
+> ## "O X é o único?" convida a CONFIRMAR. "O que mais tem a mesma propriedade?" convida a PROCURAR.
+
+**As duas são a mesma investigação, e acham coisas diferentes:**
+
+| A pergunta | O que ela achou |
+|---|---|
+| *"o `Icone` é o único?"* | **1 arquivo** — e a resposta foi "sim", que é falsa |
+| *"o que mais em `tk/` importa de `dashboard/ui/`?"* | **2 arquivos** — `Icone` (12 consumidores) e `Modal` (3) |
+
+A primeira forma tem um alvo, e a mente vai até ele e para. A segunda tem um
+CRITÉRIO, e o critério varre. É a diferença entre verificar uma hipótese e
+enumerar um conjunto — e só a segunda encontra o que ninguém tinha suspeitado.
+
+### ⚠️ E O CRITÉRIO PRECISA DAS DUAS METADES
+
+O que varreu não foi *"importa do sistema antigo"* — foi **"importa do sistema
+antigo E lê `--color-*`"**. Sem a segunda metade a lista teria **4 itens**, e
+dois deles (`useOverlay`, `useTamanho`) seriam trabalho inútil: são hooks, não
+carregam cor, e migrar não mudaria nada.
+
+| Critério | Itens | Úteis |
+|---|---|---|
+| importa do antigo | 4 | 2 |
+| importa do antigo **E** lê `--color-*` | **2** | **2** |
+
+⛔ **Um critério largo demais não é conservador — ele é caro e desacredita a
+lista.** Quem executa descobre que metade não fazia sentido e passa a duvidar da
+outra metade.
+
+> ### ⛔ A DISCIPLINA, em uma linha
+> **Ao investigar, escreva o CRITÉRIO antes de escrever o `grep`** — e inclua
+> nele a propriedade que faz o item IMPORTAR, não só a que o faz pertencer.
+
+⚠️ **As outras duas ocorrências desta sessão**, pela mesma causa: *"o
+`pixelConfigIds` está órfão?"* escondia *"quantos vínculos paralelos existem para
+esta relação?"* (achou o par partido), e *"o `calc` falta no formulário?"*
+escondia *"quais campos o servidor persiste e a tela não envia?"* (achou o
+`calc` **e** o `paymentMethod`).
+
+---
+
 # Trackhub — guia do projeto
 
 Ferramenta de tracking de tráfego/vendas + Facebook Ads (estilo Utmify).
@@ -6059,3 +6105,58 @@ inicial descrevia um caso, e o `grep` que generaliza achou 60% a mais.
 | 4 | **Regras** (21 ❌) e **Anúncios** (322) | as duas últimas legadas servindo rota |
 | 5 | **Sessão de schema** | `ocorreEm` · os dois `@default` mortos · o **par partido** (`Workspace.accountIds` × `AdAccount.workspaceId`) · `ApiCredential.workspaceId` |
 | 6 | **O `.tk-tema` morre** | só depois de 1 e 4, com `test:contraste` e passada visual antes e depois |
+
+---
+
+# 📌 ESTADO DA SESSÃO — 12/08/2026 (fechamento)
+
+> ⛔ **NADA FOI PARA O GITHUB.** `origin/main` em **`4e6aa9e`**,
+> `redesign/dashboard` **ausente no remoto**, árvore limpa.
+
+## ✅ O QUE ESTA SESSÃO ENTREGOU
+
+| | |
+|---|---|
+| **4 telas** | Login · Taxas · Áreas · Notificações — **as doze existem** |
+| **4 suítes novas** | `test:login` 22 · `test:taxas` 28 · `test:areas-tela` 21 · `test:notificacoes` 12 |
+| **1 regressão corrigida** | os dois seletores que a reescrita de Taxas tinha removido |
+| **1 seed novo** | `dev:taxas`, idempotente |
+| deletados | `AuthShell` · `AuthForm` · `FeesView` · `AreasView` · `ExcluirAreaDialog` · `NotificationsView` + 5 helpers órfãos do hook |
+
+## 🔑 AS TRÊS COISAS QUE SOBREVIVEM A ESTA SESSÃO
+
+Não são as telas — são as ferramentas:
+
+| | |
+|---|---|
+| **A META-REGRA**, no topo | registre o PADRÃO e o sinal barato. O teste é objetivo: grep, pergunta ou medição. Narrativa reprova |
+| **A FORMA DA PERGUNTA** | *"o X é o único?"* confirma; *"o que mais tem a propriedade?"* procura. Três achados desta sessão vieram da segunda forma |
+| **A RECEITA DA CONFERÊNCIA DE ESCRITA** | duas formas, ambas LENDO o servidor. Fecha a única família que nenhuma outra ferramenta desta base pega |
+
+## 🐛 O QUE ESTA SESSÃO ACHOU E NÃO CONSERTOU (congelado)
+
+| | Severidade |
+|---|---|
+| **o par partido** — `Workspace.*Ids` × `<Recurso>.workspaceId` | 🔴 **alta**: a prévia vê a área vazia e o aviso de promoção de escopo não dispara num fluxo IRREVERSÍVEL |
+| **a ponte não pode morrer** — `ui/Icone` (12) e `ui/Modal` (3) | 🔴 remover pintaria de roxo o shell novo |
+| os dois `@default` mortos | ⚠️ mentem para quem lê o schema |
+
+## 🐛 E O QUE ELA ACHOU EM CÓDIGO NOVO, E CONSERTOU
+
+Autofill branco no tema escuro · headline quebrando errado · painel sem altura ·
+rótulo truncado na prévia · `Lembrar de mim` colidindo a 340px · cartões de
+Taxas esticando 1380px · cor gravada fora da paleta · cartões de Notificações
+encolhendo. **Nenhum deles apareceria sem abrir a tela.**
+
+## ⏳ O QUE FICA DEVENDO
+
+- tema escuro de Notificações: **visto, não medido** (renderer congelou 2×)
+- os dois avisos condicionais de Notificações: **não vistos disparando**
+- a exclusão de área: **construída, não exercitada** — por decisão do dono
+- envio real e estado de erro do Login: **não exercidos**
+
+## ➡️ A ORDEM, decidida pelo dono
+
+1. `ui/Icone` + `ui/Modal` → `--tk-*`  2. largura estreita nas cinco
+3. conferência de escrita nas nove     4. Regras + Anúncios
+5. sessão de schema                    6. o `.tk-tema` morre
