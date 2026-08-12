@@ -1519,6 +1519,20 @@ ausente, coleção sem itens. **`=== 0` passa com a coleção vazia.** Por isso 
 guarda do preset afirma duas coisas antes de negar a terceira: que houve
 atribuição para examinar, e que o redutor é de fato usado.
 
+> ### 📌 RECORRÊNCIA — 12/08/2026, superfície NOVA: verificação de DOCUMENTAÇÃO
+> Conferindo se três correções tinham entrado num `.md`, uma das cinco âncoras
+> voltou **0** e eu quase reportei *"não entrou"*. O texto estava lá; a âncora é
+> que não casava.
+>
+> É a mesma família, num lugar onde ninguém a esperava: até aqui ela sempre
+> mordeu guarda de TESTE sobre CÓDIGO. Aqui era um `grep` de conferência sobre
+> prosa que eu mesmo acabara de escrever.
+>
+> ⛔ **A regra não muda, o alcance sim: vale para qualquer verificação por
+> casamento de texto, inclusive a que confere se a edição de um documento
+> pegou.** `0` significa "a âncora não casou" — e só depois de reconferir a
+> âncora ele pode significar "o texto não está lá".
+
 ⚠️ Prima direta de *EDIÇÃO POR CASAMENTO DE STRING SE VERIFICA* e de *uma
 asserção precisa poder FALHAR pelo motivo que ela alega medir*. A pergunta é
 sempre a mesma: **que valor o caso ERRADO produziria — e o caso CERTO produz
