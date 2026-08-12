@@ -3354,7 +3354,6 @@ leva o que foi MEDIDO, para ninguém ter de medir de novo.
 | **Ramos que o seed do dev nunca percorre** | 6 suspeitas medidas e anotadas na seção 🌗. Nenhuma investigada |
 | **`Sale.platform` NULL nas 35** | o dev só exercita um gateway |
 | **O 5º cartão do Insights nunca foi visto DISPARANDO** | ele exige `melhorParada > melhorVeiculando` (`insights.ts:170`), e no dev a melhor entrega (Black Friday 17,59x × Retargeting 11,10x pausada). ⛔ **Não force com período** — os dois lados estão em `test:gerenciador`, então está provado; falta só a evidência de tela |
-| 🔴 **Toda camada flutuante do LEGADO com o título cortado** | `ui/Drawer` e `ui/Modal` são `z-index` 70; a faixa de ambiente é 200. **8 arquivos**, e **dois são telas NOVAS** (`VisaoGeralScreen`, `ModalNovaCampanha`). ⚠️ **NÃO é visível em produção** — `dbEnv.ts:56` (`avisar: !conhecido.producao`) — mas atinge TODO ambiente de desenvolvimento, todo dia. Correção: uma linha por camada, `top: var(--tk-faixa-topo, 0px)` |
 | **`espelho`/`detectores`/`ambiente` NULOS nos 35 `PixelEvent` do dev** | por isso o diagnóstico não sai de `script-antigo` e a coluna de espelho só diz *não informado*. Os estados `ok` e `divergente` exigem script instalado reportando detectores |
 
 ---
@@ -4162,6 +4161,27 @@ ficou?"*, e a resposta era "ficou bem" — estava. O que pega é a pergunta do o
 lado: **"que valor deveria ser igual a este, e é?"**. `26` × `27,8` é uma
 comparação, não uma olhada.
 
+> ### ⛔ A PERGUNTA QUE ELA MUDA — e ela vale nas cinco telas que faltam
+>
+> Fechar uma tela deixou de ser só *"como ficou?"*. A segunda pergunta é:
+>
+> > **"que valor deveria ser IGUAL a este — e é?"**
+>
+> A primeira é uma olhada; a segunda é uma **comparação**, e só ela pega o que
+> não encosta em nada. `26` × `27,8` não tinha como aparecer numa passada visual.
+>
+> O que perguntar, concretamente, antes de fechar qualquer tela:
+>
+> | Onde | A pergunta |
+> |---|---|
+> | número que casa com medida pintada | altura de barra fixa, `top` de sticky, `scroll-margin`, altura de cabeçalho — **alguém mediu, ou alguém escreveu?** |
+> | dois lugares que mostram o mesmo dado | o card e a tabela, o KPI e a soma das linhas — **batem?** |
+> | token citado em dois arquivos | nome de cookie, nome de variável CSS, chave de `Record` — **um LÊ o outro, ou os dois AFIRMAM?** |
+> | constante que espelha o schema | a interface do motor de regras, o `select` do Prisma — **a coluna nova entrou nos dois?** |
+>
+> ⚠️ E o corolário incomoda: **"seis passadas visuais não pegaram" não é
+> evidência de que está certo.** É evidência de que nada encostou ali ainda.
+
 ⚠️ **A regra que sai daqui:** todo número que existe para CASAR com uma medida
 pintada (altura de barra fixa, offset de sticky, `scroll-margin`, altura de
 cabeçalho de tabela) é a mesma família do empurrãozinho de 2px — e a saída é a
@@ -4276,3 +4296,77 @@ dono**. Quando for feita, o `0px` de padrão garante que produção não muda.
 > muda o token dentro da URL (conteúdo), trocar de ÁREA muda a LISTA de webhooks
 > alcançáveis (contexto). `Webhook.workspaceId` existe e NULO = sem dono, então a
 > assimetria da Principal vale igual.
+
+
+---
+
+# 📌 ESTADO DA SESSÃO — 11/08/2026 (parte 5: o conserto do legado e o preparo de Webhooks)
+
+> **A mais nova.** ⛔ **NADA FOI PARA O GITHUB.** `main` em `4e6aa9e`, branch
+> ausente no remoto.
+
+## ✅ AS CAMADAS LEGADAS FORAM CONSERTADAS — e eram DUAS linhas, não oito
+
+O pedido supunha 8 arquivos. **Não é**: os 8 são os CONSUMIDORES. O `top` mora
+na classe, e as classes são duas, no `globals.css`:
+
+| | |
+|---|---|
+| `.drawer-backdrop` (`z-index` 70) | ✅ `top: var(--tk-faixa-topo, 0px)` |
+| `.modal-backdrop` (`z-index` 80) | ✅ idem |
+
+⚠️ **`.dialog-backdrop` ficou de fora de propósito.** Ela é a camada antiga que
+**não porta para o `<body>`**, está documentada como "não usar em código novo", e
+**nenhum `.tsx` a usa**. Consertar CSS morto acrescenta uma linha que ninguém
+executa e faz parecer que há três camadas vivas.
+
+### 👁️ Verificado na tela, nos dois tipos
+
+| | |
+|---|---|
+| **Drawer legado** (`RuleDrawer`, em Regras) | ✅ *"Nova regra"* aparece **inteira**, abaixo da faixa. Era este o caso real: gaveta é de altura cheia e o título fica em `y=0` |
+| **Modal legado** (`ModalNovaCampanha`) | ✅ abre centralizado — ele **nunca** encostava no topo. A linha o protege só quando o painel for mais alto que a viewport e a rolagem levar o topo para lá |
+
+🔎 E a conferência mostrou, de quebra, **a razão de a `tk/Gaveta` existir**: o
+anel de foco do campo dentro do `RuleDrawer` sai **roxo**, e não azul. O portal
+para o `<body>` está fora da ponte `.tk-tema`, então o legado resolve
+`--color-accent` para o valor antigo. É o mesmo diagnóstico, agora com evidência
+visual.
+
+## 🕳️ ACHADO NOVO, de graça: `.route-progress` é CSS ÓRFÃO
+
+Uma barra de progresso de rota, `position: fixed; top: 0; height: 2px;
+z-index: 60` — com **zero consumidores** (`grep` em `src/` só acha o próprio
+`globals.css`). Ela não foi consertada nem removida: é CSS morto, e mexer nele
+agora misturaria faxina com o assunto do commit.
+
+⚠️ Vale registrar por dois motivos: ela é **mais um caso da família "existe e
+ninguém consome"**, e — se um dia alguém a ligar — ela nasce **invisível em
+desenvolvimento**, porque `z-index: 60` está sob a faixa (200) e `top: 0` cai
+exatamente debaixo dela. Quem a religar vai jurar que ela não funciona.
+
+## 🔎 WEBHOOKS — o que já está MEDIDO, para a próxima sessão não remedir
+
+| Pergunta | Resposta, com a linha |
+|---|---|
+| o escopo tem o mesmo catch-all? | ✅ **sim** — `listWebhooks` chama o **mesmo `escopoDeConfig`** (`actions/webhooks.ts:101`), e o comentário da linha 91 já diz *"na Principal a lista inclui os de `workspaceId` NULO"* |
+| então a fixture precisa de três? | ✅ **precisa** — área A, área B e um **órfão**. Com um só, a asserção de área passa sem exercer o recorte, exatamente como no Pixel |
+| o que o artefato carrega dentro? | o **token**: `/api/webhook/sale/<token>`, e a Kirvano tem URL própria (`/api/webhook/kirvano?id=`, `webhooks.ts:49`) — são **duas formas de URL**, e as duas precisam entrar na asserção |
+
+> ### 🔴 WEBHOOKS É A FORMA MAIS CARA DO ARTEFATO DE CONTEXTO ERRADO
+> Pior que o Pixel, e o dono nomeou por quê: **quem cola a URL é uma terceira
+> parte que a gente não vê** — o painel do gateway. A URL de outra área é um
+> endereço perfeitamente funcional: aceita o payload, responde 200, credita a
+> venda **na operação errada**.
+>
+> ⚠️ **E o sintoma não se parece com erro.** Ele aparece como *venda faltando*
+> numa área e *venda a mais* em outra — dois números plausíveis, em telas
+> diferentes, sem nada que os ligue. Não há log, não há alerta, não há 4xx.
+
+## ➡️ PRÓXIMA: Integrações › Webhooks
+
+`WebhooksView`, **532 linhas** — a penúltima legada que serve rota. Depois dela
+sobram **Criativos, Login, Taxas, Áreas e Notificações**, as cinco menores.
+
+⛔ Antes de codificar, as três perguntas de sempre — e mais a nova:
+**"que valor deveria ser IGUAL a este, e é?"**

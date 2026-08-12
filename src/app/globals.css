@@ -667,6 +667,11 @@ a {
 
 .drawer-backdrop {
   position: fixed; inset: 0; z-index: 70;
+  /* A faixa de ambiente (`z-index` 200) cobria os 28px do topo desta camada, e
+     era ali que ficava o TÍTULO. Ver `AppShell`: a altura é MEDIDA, e `0px` é o
+     padrão certo — em produção não existe faixa, então esta linha não muda
+     nada lá. */
+  top: var(--tk-faixa-topo, 0px);
   display: flex; justify-content: flex-end;
   background: color-mix(in srgb, #05060d 55%, transparent);
   backdrop-filter: blur(2px);
@@ -721,6 +726,11 @@ a {
 
 .modal-backdrop {
   position: fixed; inset: 0; z-index: 80;
+  /* A faixa de ambiente (`z-index` 200) cobria os 28px do topo desta camada, e
+     era ali que ficava o TÍTULO. Ver `AppShell`: a altura é MEDIDA, e `0px` é o
+     padrão certo — em produção não existe faixa, então esta linha não muda
+     nada lá. */
+  top: var(--tk-faixa-topo, 0px);
   display: grid; place-items: center;
   padding: var(--space-4);
   background: color-mix(in srgb, #05060d 62%, transparent);
