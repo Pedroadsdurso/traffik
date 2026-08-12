@@ -123,7 +123,7 @@ export function Rail({
   areaAtiva,
   aoTrocarArea,
   naoLidas,
-  deslocamentoTopo = 0,
+  deslocamentoTopo = "0px",
 }: {
   usuario?: UsuarioShell;
   areas: WorkspaceDTO[];
@@ -138,7 +138,8 @@ export function Rail({
    * trabalho e perfil) ficava cortado pela borda de baixo. `tsc`, `lint` e
    * `build` passavam — é layout, e só a tela responde.
    */
-  deslocamentoTopo?: number;
+  /** Espaço ocupado pela faixa de ambiente, como comprimento CSS (`0px` em produção). */
+  deslocamentoTopo?: string;
 }) {
   const { theme } = useTheme();
   const pathname = usePathname();
@@ -181,7 +182,7 @@ export function Rail({
          * aparecia depois de rolar, que é por que passou.
          */
         top: deslocamentoTopo,
-        height: `calc(100vh - ${deslocamentoTopo}px)`,
+        height: `calc(100vh - ${deslocamentoTopo})`,
         transition: "width var(--tk-dur-painel) var(--tk-ease-padrao)",
       }}
     >

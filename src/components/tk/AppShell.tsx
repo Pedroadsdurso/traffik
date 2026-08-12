@@ -44,11 +44,30 @@ type ContratoFiltros = {
 const FiltrosContext = React.createContext<ContratoFiltros | null>(null);
 
 /**
- * Altura da faixa de ambiente. É UMA constante porque dois lugares dependem
- * dela: o `padding-top` do shell e a altura do rail. Dois valores escritos à mão
- * é como o rodapé do rail voltaria a ser cortado sem ninguém notar.
+ * 🔴 A ALTURA DA FAIXA DE AMBIENTE É **MEDIDA**, e vive numa variável CSS.
+ *
+ * Ela era a constante `ALTURA_FAIXA_AMBIENTE = 26`, escrita à mão, e o comentário
+ * de então já nomeava o modo de falha: *"dois valores escritos à mão é como o
+ * rodapé do rail voltaria a ser cortado"*. Foi o que aconteceu, com duas
+ * agravantes achadas em 11/08/2026:
+ *
+ * | | |
+ * |---|---|
+ * | a faixa pinta **27,8px**, não 26 | o conteúdo do shell já ficava 1,8px por baixo dela |
+ * | apareceu um **terceiro** consumidor | toda camada flutuante (`z-index` 70) some sob a faixa (`z-index` 200) — o título da gaveta saía cortado ao meio |
+ *
+ * Um número escrito à mão não sobrevive nem à própria fonte: a faixa quebra em
+ * duas linhas em viewport estreito, e aí NENHUMA constante estaria certa.
+ *
+ * ⛔ Não volte com o número. Quem quiser o espaço da faixa lê
+ * `var(--tk-faixa-topo, 0px)` — **`0px` é o padrão certo**, porque em produção a
+ * faixa não existe.
+ *
+ * ⚠️ O `26px` que sobra como fallback do `padding` é só o PRIMEIRO QUADRO, antes
+ * de a medição acontecer, e só em desenvolvimento. Ele não é uma segunda fonte:
+ * é um palpite que a medida corrige no quadro seguinte.
  */
-const ALTURA_FAIXA_AMBIENTE = 26;
+const PALPITE_INICIAL_DA_FAIXA = "var(--tk-faixa-topo, 26px)";
 
 export function useFaixaDeFiltros(): ContratoFiltros {
   const c = React.useContext(FiltrosContext);
@@ -138,6 +157,37 @@ export function AppShell({
 
   const grupos = useComandos(v);
 
+  /**
+   * ── A altura MEDIDA da faixa de ambiente ────────────────────────────────
+   *
+   * Escreve `--tk-faixa-topo` na raiz do documento, e é ela que qualquer camada
+   * flutuante lê — inclusive as portadas para o `<body>`, que estão fora desta
+   * árvore e não teriam como herdar nada daqui.
+   *
+   * ⚠️ Isto é sincronizar o React com um sistema EXTERNO (o `documentElement`),
+   * que é o uso para o qual o efeito existe. Não há `setState` aqui de
+   * propósito: guardar a altura em estado re-renderizaria o shell inteiro a cada
+   * mudança de tamanho da janela, para mexer em dois `style`.
+   */
+  const faixaRef = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const raiz = document.documentElement;
+    const el = faixaRef.current;
+    if (!el) {
+      // Produção: sem faixa, sem deslocamento. `0px` explícito em vez de apagar
+      // a variável, porque apagar deixaria o fallback do primeiro quadro (26px)
+      // valendo para sempre numa tela que não tem faixa nenhuma.
+      raiz.style.setProperty("--tk-faixa-topo", "0px");
+      return;
+    }
+    const medir = () => raiz.style.setProperty("--tk-faixa-topo", `${el.getBoundingClientRect().height}px`);
+    medir();
+    // A faixa quebra em duas linhas em viewport estreito — e aí a altura dobra.
+    const ro = new ResizeObserver(medir);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [banco?.avisar]);
+
   // ── Contrato da faixa de filtros ───────────────────────────────────────────
   const [temFaixa, setTemFaixa] = React.useState(false);
   const [faixaVisivel, setFaixaVisivel] = React.useState(true);
@@ -161,6 +211,7 @@ export function AppShell({
             pessoa estava. */}
         {banco?.avisar && (
           <div
+            ref={faixaRef}
             role="status"
             style={{
               position: "fixed",
@@ -195,7 +246,7 @@ export function AppShell({
             nova tem costura pior do que o contrário. */}
         <div
           className="tk-tema flex"
-          style={{ minHeight: "100vh", paddingTop: banco?.avisar ? ALTURA_FAIXA_AMBIENTE : undefined }}
+          style={{ minHeight: "100vh", paddingTop: banco?.avisar ? PALPITE_INICIAL_DA_FAIXA : undefined }}
         >
           <Rail
             usuario={user}
@@ -203,7 +254,7 @@ export function AppShell({
             areaAtiva={v.workspaceAtiva}
             aoTrocarArea={v.trocarWorkspace}
             naoLidas={v.notifUnread}
-            deslocamentoTopo={banco?.avisar ? ALTURA_FAIXA_AMBIENTE : 0}
+            deslocamentoTopo={banco?.avisar ? PALPITE_INICIAL_DA_FAIXA : "0px"}
           />
 
           <div

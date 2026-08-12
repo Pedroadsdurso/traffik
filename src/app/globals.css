@@ -1954,3 +1954,49 @@ a {
     .tk-utm-mestre { grid-template-columns: minmax(0, 1fr) !important; }
   }
 }
+
+/* ── `tk/Gaveta`: a camada lateral do sistema novo ──────────────────────────
+   Só o que precisa ser CSS: o painel é portado para o `<body>`, então nada aqui
+   pode depender de herdar do shell.
+
+   ⚠️ O fundo e a borda moram AQUI, e não em utilitário do Tailwind no JSX: esta
+   regra é de classe sem camada, e venceria o utilitário — duas fontes, uma
+   morta. Uma só, e ela é esta. */
+.tk-gaveta-fundo {
+  position: fixed;
+  inset: 0;
+  /* 🔴 A FAIXA DE AMBIENTE FICA POR CIMA DE TUDO (`z-index` 200), e é para ficar:
+     ela existe para dizer que os dados são falsos, e escondê-la justamente
+     enquanto alguém EDITA configuração seria o pior momento possível.
+
+     Então quem se afasta é a camada. Sem esta linha o título da gaveta saía
+     cortado ao meio em desenvolvimento — medido em 11/08/2026.
+
+     ⚠️ `0px` é o padrão CERTO: em produção não há faixa. A variável é escrita
+     pelo `AppShell`, a partir da altura MEDIDA. */
+  top: var(--tk-faixa-topo, 0px);
+  z-index: 70;
+  display: flex;
+  justify-content: flex-end;
+  background: color-mix(in oklch, var(--tk-background) 62%, transparent);
+  backdrop-filter: blur(3px);
+  animation: fade-in var(--tk-dur-rapida) var(--tk-ease-padrao) both;
+}
+.tk-gaveta-painel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 100%;
+  background: var(--tk-surface);
+  border-left: 1px solid var(--tk-border);
+  box-shadow: var(--tk-shadow-overlay);
+  animation: tk-gaveta-entra var(--tk-dur-painel) var(--tk-ease-padrao) both;
+}
+@keyframes tk-gaveta-entra {
+  from { transform: translateX(100%); }
+  to { transform: none; }
+}
+/* Quem pediu menos movimento não recebe o deslize — só a aparição. */
+@media (prefers-reduced-motion: reduce) {
+  .tk-gaveta-painel { animation: fade-in var(--tk-dur-rapida) both; }
+}

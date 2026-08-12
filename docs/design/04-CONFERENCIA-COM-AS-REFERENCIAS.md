@@ -702,15 +702,30 @@ não são instalados em lugar nenhum.
 > com a referência" (não há), é: **cada controle diz o que MUDA quando ele
 > muda** — não o rótulo do campo, o efeito.
 
+> ### ✅ CONSTRUÍDA EM 11/08/2026 — e a convenção da linha em branco vale aqui
+>
+> **✅ = eu vi na tela.** **Linha em branco = construída e NÃO VISTA** (fica FORA
+> da contagem do `docs:estado`, em vez de entrar como feita).
+>
+> A passada visual foi feita no tema ESCURO, com dado real do banco de dev. O
+> tema claro foi **medido** (`body` `rgb(248,250,252)`, card e célula de tabela
+> em branco puro) e **visto** em cartões e na gaveta de exclusão.
+>
+> ⚠️ **O que o dev NÃO consegue mostrar**, e por isso não foi visto: o seed cria
+> `PixelConfig` **sem `MetaPixel` e sem `PixelEventRule`** (medido: 0 e 0). Então
+> todo evento aparece como *desligado* no diagnóstico, o fan-out de N pixels da
+> Meta nunca é grande, e os 35 `PixelEvent` têm `espelho`, `detectores` e
+> `ambiente` **NULOS** — a coluna de espelho só sabe dizer *não informado*.
+
 ### Mestre — a lista de pixels
 
 | Elemento | Status |
 |---|---|
-| Lista de pixels da área, com nome e `N` pixels da Meta | ❌ |
-| Selo de estado por pixel (`enabled`) + toggle real | ❌ `togglePixel` existe |
-| Selo do DIAGNÓSTICO por pixel (`ok` · `divergente` · `script-antigo` · `sem-dados`) | ❌ `conferirSnippet` já devolve os quatro |
-| `+ Novo pixel` · Editar · Excluir | ❌ as três actions existem |
-| Estado vazio honesto quando a área não tem pixel | ❌ |
+| Lista de pixels da área, com nome e `N` pixels da Meta | ✅ |
+| Selo de estado por pixel (`enabled`) + toggle real | ✅ `togglePixel`, exercido |
+| Selo do DIAGNÓSTICO por pixel (`ok` · `divergente` · `script-antigo` · `sem-dados`) | ✅ ⚠️ **2 dos 4 vistos** — `script-antigo` e `sem-dados`; os outros dois exigem script instalado de verdade |
+| `+ Novo pixel` · Editar · Excluir | ✅ os três exercidos, com criação e exclusão indo ao banco |
+| Estado vazio honesto quando a área não tem pixel | ⚠️ construído, **não visto** — o dev sempre teve pixel |
 
 ### Gaveta · O PRESET — a proteção contra contagem dobrada
 
@@ -720,66 +735,82 @@ não são instalados em lugar nenhum.
 > **o dono de cada evento** (lido AO VIVO pelo servidor) **e o espelho no `fbq`**
 > (ASSADO no snippet). Separados, divergem — e a divergência conta conversão em
 > dobro num sentido e produz alarme falso no outro.
+>
+> ✅ **EXERCIDO NA TELA, não só no teste** (11/08/2026): responder *"Não, só a
+> Trackhub vai enviar"* virou `var NATIVO` de `true` para `false` **e**
+> `var ALHEIOS` de `["PageView"]` para `[]` — os dois lados, no artefato, no
+> mesmo clique. Voltar para *"Sim"* devolveu os dois.
 
 | Elemento | Status |
 |---|---|
-| Pergunta 1 — *o código do Facebook está na sua página?* (`temPixelNativo`) | ❌ |
-| Pergunta 2 — *alguém mais já avisa o Facebook da venda?* (`outroEnviaPurchase`) | ❌ |
-| Pergunta 3 — *onde o comprador paga?* (`ondeSePaga`) | ❌ |
-| **Cada pergunta declara O EFEITO, não o rótulo** — quem dispara, e o que acontece se os dois dispararem | ❌ 🔧 nosso, sem modelo em referência |
-| A pergunta 3 NÃO é gravada no `setup` — é derivada da regra de IC | ❌ ⚠️ duas fontes divergiriam no primeiro ajuste pelo avançado |
-| `contem_url` EXIGE o trecho, e a gaveta recusa vazio | ❌ 🔴 vazio faz `indexOf("")` casar sempre: toda visita vira checkout |
-| Analisador do trecho de URL, com exemplos | ❌ reusa `lib/pixel/trechoUrl.ts` (105 linhas, hoje só a view antiga consome) |
+| Pergunta 1 — *o código do Facebook está na sua página?* (`temPixelNativo`) | ✅ |
+| Pergunta 2 — *alguém mais já avisa o Facebook da venda?* (`outroEnviaPurchase`) | ✅ com o aviso citando **o gateway conectado** pelo nome |
+| Pergunta 3 — *onde o comprador paga?* (`ondeSePaga`) | ✅ aparece indentada sob o checkbox que a torna útil |
+| **Cada pergunta declara O EFEITO, não o rótulo** — quem dispara, e o que acontece se os dois dispararem | ✅ |
+| A pergunta 3 NÃO é gravada no `setup` — é derivada da regra de IC | ✅ `presetDoForm` |
+| `contem_url` EXIGE o trecho, e a gaveta recusa vazio | ✅ campo em erro + botão desabilitado + o motivo escrito no rodapé |
+| Analisador do trecho de URL, com exemplos | ✅ 🐛 **e ele mostrava o MESMO aviso duas vezes** com o campo vazio — corrigido na passada |
 
 ### Gaveta · AVANÇADO — quem envia cada evento
 
 | Elemento | Status |
 |---|---|
-| Mapa de donos por evento (5 eventos × `traffik`/`navegador`/`gateway`/`ninguem`) | ❌ `lib/pixel/donos.ts` |
-| Selo `definido pelas suas respostas` × `ajustado à mão` | ❌ `seguePreset()` já decide |
-| `↩ voltar ao padrão` quando foi ajustado à mão | ❌ sem ele, o ajuste manual vira estado do qual não se sai |
-| **O aviso do que o ajuste manual CUSTA**, por combinação | ❌ 🔧 nosso — ver o achado abaixo |
+| Mapa de donos por evento (5 eventos × `traffik`/`navegador`/`gateway`/`ninguem`) | ✅ |
+| Selo `definido pelas suas respostas` × `ajustado à mão` | ✅ vira âmbar no primeiro ajuste |
+| `↩ voltar ao padrão` quando foi ajustado à mão | ✅ aparece junto do selo ⚠️ **não clicado** |
+| **O aviso do que o ajuste manual CUSTA**, por combinação | ✅ 🔴 **visto disparando**: `temPixelNativo` + `PageView` na Trackhub pinta o aviso vermelho de contagem dobrada |
 
 ### Gaveta · Envio das vendas e checkout próprio
 
 | Elemento | Status |
 |---|---|
-| `sendMode` · `valueMode` · `fixedValue` · `targetProduct` do Purchase | ❌ |
-| Passos do checkout próprio, para o desenvolvedor | ❌ reusa `lib/pixel/checkoutProprio.ts` (101 linhas, **sem teste**) |
-| N pixels da Meta por pixel nosso (fan-out), com apelido e token | ❌ |
+| `sendMode` · `valueMode` · `fixedValue` · `targetProduct` do Purchase | ✅ ⚠️ `VALOR_FIXO` não exercido |
+| Passos do checkout próprio, para o desenvolvedor | ✅ e agora **com teste** — `test:checkout-proprio`, 18 asserções |
+| N pixels da Meta por pixel nosso (fan-out), com apelido e token | ✅ ⚠️ exercido com **um**; o dev não tem `MetaPixel` |
 
 ### Script para instalar
 
 | Elemento | Status |
 |---|---|
-| Prévia do código com destaque de sintaxe + copiar | ❌ reusa `tk/CodigoDestacado` |
-| Geração por `scriptDoPixel()` — **fonte única** | ❌ herdado de UTM & Snippets |
-| Onde colar | ❌ |
+| Prévia do código com destaque de sintaxe + copiar | ⚠️ a prévia foi vista; o botão `copiar` nasceu **depois** da passada e **não foi visto** |
+| Geração por `scriptDoPixel()` — **fonte única** | ✅ e o `test:pixel-tela` prova que trocar de pixel troca o CONTEÚDO |
+| Onde colar | ✅ *"antes de `</head>`; recole depois de salvar"* |
 
 ### Diagnóstico — o script instalado bate com a configuração?
 
 | Elemento | Status |
 |---|---|
-| Os 4 estados, e `sem-dados` **nunca** pintado como `ok` | ❌ |
-| Estado POR EVENTO, não agregado | ❌ 🔴 foi um agregado que escondeu o IC morto por semanas |
-| Carimbo de tempo via `<Desde>` | ❌ ⚠️ **os dois `elapsed()` crus (272 e 294) morrem aqui** — o prazo deles é esta reescrita |
+| Os 4 estados, e `sem-dados` **nunca** pintado como `ok` | ✅ com asserção estática sobre o tom |
+| Estado POR EVENTO, não agregado | ✅ e o sinal que importa apareceu: **`configurado e nunca recebido`** em âmbar |
+| Carimbo de tempo via `<Desde>` | ✅ **os dois `elapsed()` crus morreram com a `PixelView`** |
 
 ### Lista de EVENTOS — o que a navegação promete e a tela não entregava
 
-> ### ✅ APROVADA em 11/08/2026. O motivo decide:
-> É o único lugar do produto onde o usuário vê se o pixel dele **está
-> disparando**. Hoje ele depende do Gerenciador de Eventos da Meta — **um sistema
-> que não é o nosso** — para saber se a NOSSA ferramenta está funcionando. É a
-> mesma família do artefato de contexto errado: a denúncia vem de fora, tarde.
-
 | Elemento | Status |
 |---|---|
-| Lista de `PixelEvent` do pixel selecionado | ❌ `pixelConfigId` **É escrito** (`api/pixel/event/route.ts:197`) — conferido, não presumido |
-| Colunas: evento · quando · origem · espelho · `eventId` | ❌ todos existem na tabela |
-| **Nasce PAGINADA e com janela de tempo** | ❌ 🔴 lê pelo índice `[userId, event, timestamp]`. Ver a dívida abaixo |
-| Filtro por tipo de evento | ❌ |
-| Estado do espelho por linha (`ok` · `alheio` · `sem-fbq` · `erro`) | ❌ é o que prova a dedup funcionando |
-| Estado vazio distinguindo *sem evento* de *sem pixel instalado* | ❌ ⚠️ ausência de observação ≠ observação de zero |
+| Lista de `PixelEvent` do pixel selecionado | ✅ 16 linhas reais no dev |
+| Colunas: evento · quando · origem · espelho · `eventId` | 🔧 **`origem` saiu, `Página` entrou** — ver a medição abaixo |
+| **Nasce PAGINADA e com janela de tempo** | ✅ e a janela é validada **no servidor**, contra lista fechada |
+| Filtro por tipo de evento | ✅ desenhado e ligado ⚠️ **não exercido** (o dev só tem `InitiateCheckout`) |
+| Estado do espelho por linha (`ok` · `alheio` · `sem-fbq` · `erro`) | ✅ ⚠️ **só `não informado` no dev** — a coluna é NULA nas 35 linhas |
+| Estado vazio distinguindo *sem evento* de *sem pixel instalado* | ✅ os **três** motivos, com textos diferentes e asserção sobre isso |
+
+> ### 🔧 POR QUE A COLUNA `origem` VIROU `Página` — medido, não decidido no gosto
+>
+> O evento criado pelo webhook do gateway (`webhook/checkoutEvent.ts:151`)
+> **não grava `pixelConfigId`**. Conferido nos dois lados: no código (o `create`
+> não tem o campo) e no banco de dev (**0 linhas** com prefixo `gw:` E
+> configuração). Uma lista POR PIXEL é, portanto, do navegador **por
+> construção**.
+>
+> Uma coluna com um único valor possível não informa — ela ocupa a largura
+> afirmando que há uma distinção. `Página` põe ali o dado que existe e responde
+> *onde* o evento disparou; ele já vinha no DTO e só existia no `title`,
+> invisível para quem não passa o mouse.
+>
+> ⚠️ O campo `origem` **continua no DTO**, derivado do prefixo `gw:`. Se um dia o
+> webhook passar a carimbar o pixel, a coluna volta sem precisar de conta nova —
+> e a tela já desenha o selo `gateway` quando ele aparece.
 
 > ### ⚠️ A DÍVIDA Nº 4 FICA VISÍVEL, E ISSO FOI ACEITO — mas ela não pode AGRAVAR
 > `PixelEvent` tem o mesmo desenho do `WebhookLog`: **sem retenção e sem purga**.
@@ -788,6 +819,10 @@ não são instalados em lugar nenhum.
 >
 > Decisão do dono: **a lista nasce paginada e com janela**. Não é purga — é não
 > agravar. **A retenção continua devendo**, e continua na lista de dívidas.
+>
+> ⚠️ **E não existe índice por `pixelConfigId`** (conferido no `schema.prisma`).
+> A consulta entra pelo `[userId, event, timestamp]` e filtra o pixel dentro do
+> recorte. Criar o índice é migration, e migration não entra em commit de tela.
 
 ### 🔎 ACHADO DA PREPARAÇÃO — medido, NÃO consertado
 

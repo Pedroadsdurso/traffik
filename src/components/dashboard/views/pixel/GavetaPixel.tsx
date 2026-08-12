@@ -27,8 +27,8 @@ import {
 } from "@/lib/pixel/donos";
 import { EXEMPLOS_DE_TRECHO, analisarTrecho } from "@/lib/pixel/trechoUrl";
 import { PASSOS_CHECKOUT_PROPRIO } from "@/lib/pixel/checkoutProprio";
-import { Drawer } from "@/components/dashboard/ui/Drawer";
 import { Icone } from "@/components/dashboard/ui/Icone";
+import { Gaveta } from "@/components/tk/Gaveta";
 import { Badge } from "@/components/tk/Badge";
 import { Button } from "@/components/tk/Button";
 import { CodigoDestacado } from "@/components/tk/CodigoDestacado";
@@ -218,7 +218,7 @@ export function GavetaPixel({
   }
 
   return (
-    <Drawer
+    <Gaveta
       aberta={aberta}
       titulo={pixel ? "Editar pixel" : "Novo pixel"}
       descricao={
@@ -227,7 +227,7 @@ export function GavetaPixel({
           : "Três perguntas definem o essencial. O resto tem padrão bom."
       }
       largura={720}
-      onClose={aoFechar}
+      aoFechar={aoFechar}
       rodape={
         <>
           <Button variante="secundario" onClick={aoFechar} disabled={salvando}>
@@ -435,7 +435,16 @@ export function GavetaPixel({
                     }
                     apoio="Um pedaço que só exista no endereço da página de pagamento."
                   />
-                  {trecho?.aviso && <Aviso tom="warning">{trecho.aviso}</Aviso>}
+                  {/* 🐛 SÓ COM VALOR — visto na tela em 11/08/2026. Com o campo
+                      vazio, o `grau: "vazio"` do analisador dizia a MESMA coisa
+                      que o `erro` do campo logo acima, em duas caixas coladas:
+                      "sem o trecho, toda visita viraria checkout" e "sem um
+                      trecho para comparar, toda visita seria contada como
+                      checkout". Dois avisos idênticos não avisam o dobro — eles
+                      ensinam a pular os dois. */}
+                  {form.ic.value.trim() !== "" && trecho?.aviso && (
+                    <Aviso tom="warning">{trecho.aviso}</Aviso>
+                  )}
                   <div className="text-caption text-text-muted" style={{ lineHeight: 1.6 }}>
                     Exemplos: {EXEMPLOS_DE_TRECHO.slice(0, 3).map((x) => `“${x}”`).join(" · ")}
                   </div>
@@ -528,7 +537,7 @@ export function GavetaPixel({
           titulo="Script para instalar"
           descricao="Cole no cabeçalho do site, antes de </head>. Ele muda conforme as respostas acima — recole depois de salvar."
         >
-          <CodigoDestacado codigo={script} linguagem="js" alturaMaxima={220} />
+          <CodigoDestacado codigo={script} linguagem="js" alturaMaxima={220} copiavel />
         </Secao>
 
         {/* ── 5 · Avançado ────────────────────────────────────────────── */}
@@ -690,6 +699,6 @@ export function GavetaPixel({
           </Aviso>
         )}
       </div>
-    </Drawer>
+    </Gaveta>
   );
 }

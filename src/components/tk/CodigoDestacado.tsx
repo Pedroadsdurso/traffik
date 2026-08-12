@@ -374,15 +374,34 @@ export function CodigoDestacado({
   codigo,
   linguagem,
   alturaMaxima = 340,
+  copiavel = false,
 }: {
   codigo: string;
   linguagem?: Linguagem;
   alturaMaxima?: number;
+  /**
+   * Desenha o botão de copiar sobre o canto do bloco.
+   *
+   * ⚠️ Padrão `false` porque quem já usa este componente (UTM & Snippets) tem o
+   * `Copiar` no cabeçalho do próprio cartão — ligar por padrão daria DOIS botões
+   * para a mesma ação, a 20px um do outro.
+   *
+   * ⛔ Ele existe onde o bloco é o artefato E não há outro botão: na gaveta do
+   * Pixel, o script é feito para ser colado no site do cliente, e um bloco de
+   * código sem copiar obriga a seleção manual — que é como se copia meia linha
+   * e se instala um script truncado.
+   */
+  copiavel?: boolean;
 }) {
   const ling = linguagem ?? adivinharLinguagem(codigo);
   const tokens = React.useMemo(() => destacar(codigo, ling), [codigo, ling]);
+  const [copiado, setCopiado] = React.useState(false);
+  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  React.useEffect(() => () => {
+    if (timer.current) clearTimeout(timer.current);
+  }, []);
 
-  return (
+  const bloco = (
     <pre
       className="bg-background border border-border rounded-controle"
       style={{
@@ -407,5 +426,26 @@ export function CodigoDestacado({
         ))}
       </code>
     </pre>
+  );
+
+  if (!copiavel) return bloco;
+
+  return (
+    <div style={{ position: "relative" }}>
+      {bloco}
+      <button
+        type="button"
+        onClick={() => {
+          void navigator.clipboard?.writeText(codigo);
+          setCopiado(true);
+          if (timer.current) clearTimeout(timer.current);
+          timer.current = setTimeout(() => setCopiado(false), 1600);
+        }}
+        className="bg-surface border border-border rounded-controle text-caption text-text-secondary hover:text-text"
+        style={{ position: "absolute", top: 8, right: 8, padding: "3px 9px", cursor: "pointer" }}
+      >
+        {copiado ? "copiado" : "copiar"}
+      </button>
+    </div>
   );
 }

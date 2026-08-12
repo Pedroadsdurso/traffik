@@ -1,4 +1,9 @@
 import { prisma } from "@/lib/prisma";
+// O `where` mora em arquivo próprio: importar ESTE módulo abre conexão, e a
+// assimetria da Principal precisava ser exercida por teste puro. É um MOVE.
+import { whereDaArea, type WhereDaArea } from "./escopoWhere";
+
+export { whereDaArea, type WhereDaArea };
 
 /**
  * Escopo de CONFIGURAÇÃO por Área de Trabalho.
@@ -26,7 +31,7 @@ export interface EscopoConfig {
   areaId: string;
   ehPrincipal: boolean;
   /** `where` do Prisma para listar o que pertence a esta área. */
-  where: { workspaceId: string } | { OR: [{ workspaceId: string }, { workspaceId: null }] };
+  where: WhereDaArea;
 }
 
 export async function escopoDeConfig(
@@ -49,15 +54,9 @@ export async function escopoDeConfig(
 
   // Sem área nenhuma (usuário no meio da primeira requisição): não filtra, em
   // vez de esconder tudo. `garantirAreaPrincipal` cria a área logo em seguida.
-  if (!w) return { areaId: "", ehPrincipal: true, where: { OR: [{ workspaceId: "" }, { workspaceId: null }] } };
+  if (!w) return { areaId: "", ehPrincipal: true, where: whereDaArea("", true) };
 
-  return {
-    areaId: w.id,
-    ehPrincipal: w.isDefault,
-    where: w.isDefault
-      ? { OR: [{ workspaceId: w.id }, { workspaceId: null }] }
-      : { workspaceId: w.id },
-  };
+  return { areaId: w.id, ehPrincipal: w.isDefault, where: whereDaArea(w.id, w.isDefault) };
 }
 
 /**
