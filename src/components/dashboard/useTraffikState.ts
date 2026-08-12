@@ -1215,19 +1215,23 @@ export function useTraffikState(
     trackingTag: a.tracking ? "tag tag-accent" : "tag tag-neutral",
     trackingLabel: a.tracking ? "Rastreando" : "Pausado",
   }));
-  const creatives = (s.creativesData ?? []).map((c) => ({
-    id: c.id,
-    slotId: "creative-" + c.id,
-    name: c.name,
-    campaign: c.campaign,
-    thumbnailUrl: c.thumbnailUrl,
-    format: c.format,
-    best: c.best,
-    sales: c.sales,
-    spendLabel: brl(c.spend),
-    ctrLabel: c.ctr ? pct(c.ctr) : "—",
-    roasLabel: c.spend ? roasFmt(c.roas) : "—",
-  }));
+  /**
+   * ⚠️ Os `CreativeRow` CRUS, sem modelo de apresentação no meio.
+   *
+   * Aqui havia um `.map()` que já entregava `ctrLabel`/`roasLabel`/`spendLabel`
+   * formatados — e a tela nova precisa dos NÚMEROS: ela ordena, soma para os
+   * KPIs, compara metades da janela e decide abas. Reverter string em real é o
+   * mesmo defeito que o `despesaRows` pagou em 06/08.
+   *
+   * ⛔ E o mapa antigo escondia um bug: `c.ctr ? pct(c.ctr) : "—"` trata **CTR
+   * zero como indefinido**. `0` é falsy, e um criativo com impressão e nenhum
+   * clique tem CTR de 0% medido — não ausente. É a distinção central do projeto
+   * colapsada por um `?`. A tela nova formata por `=== null`.
+   *
+   * A paleta ⌘K (`AppShell`) consome `id`/`name`/`campaign`, que o DTO cru já
+   * tem — por isso ela não muda.
+   */
+  const creatives = s.creativesData ?? [];
 
   const adsTabs = (["campaigns", "adsets", "ads", "accounts"] as const).map((k, i) => ({
     key: k,

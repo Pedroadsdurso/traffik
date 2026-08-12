@@ -991,7 +991,7 @@ qualquer resize, leia `innerWidth` e compare. `innerWidth === screen.availWidth`
 | UTM & SNIPPETS | 22 | — | 10 |
 | PIXEL & EVENTOS | 28 | — | 1 |
 | WEBHOOKS | 18 | — | 6 |
-| CRIATIVOS | 0 | 13 | — |
+| CRIATIVOS | 12 | — | 3 |
 | LOGIN | 0 | 19 | — |
 <!-- ESTADO:FIM -->
 
@@ -4697,3 +4697,179 @@ Sobram **Criativos** (imagem 9), **Login** (10 e 11), **Taxas**, **Áreas** e
 
 ⚠️ **`AnunciosView` (322) é a ÚLTIMA legada de Integrações servindo rota.** Ela
 morre na reescrita dela.
+
+---
+
+# 🖼️ ARTEFATO DE TERCEIRO QUE **EXPIRA** — a quarta forma, e ela não dá erro
+
+> **Medida em 12/08/2026, na tela de Criativos.** As três formas anteriores
+> falam do que NÓS entregamos. Esta fala do que **outro sistema** nos empresta —
+> e o modo de falha é diferente das três.
+
+| Forma | Como falha |
+|---|---|
+| conteúdo errado | o artefato carrega o contexto errado dentro de si |
+| contexto errado | o artefato é válido e é de outro dono |
+| **expira** | 🔴 o artefato **era** válido, e deixou de ser — sem ninguém tocar em nada |
+
+### O caso, e os números
+
+`Creative.thumbnailUrl` é gravado direto do `thumbnail_url` da Graph API, sem
+cópia nossa. Medido no backup de produção de 01/08, nos **13 de 13** criativos
+reais da conta do dono:
+
+| | |
+|---|---|
+| resolução | **`_p64x64` em 13 de 13** — é ícone, não miniatura |
+| expiração (parâmetro `oe=`, hex unix) | de **34h** a **4,5 dias** após o sync |
+| `imageUrl` (a imagem grande) | existe em **1 de 13**; os outros 12 são vídeo |
+| em 12/08 | **as treze vencidas havia uma semana** |
+
+> ## O estado NORMAL desta tela em produção é a imagem não carregar. Não é caso de borda — é o caso comum.
+
+### ⛔ E o `<img>` sem `onError` transforma isso em quadrado vazio MUDO
+
+A tela antiga tinha exatamente isso. Nada no código estava errado; nada no build
+acusava; e a tela ficou assim por tempo indeterminado, porque **ninguém abre a
+tela de Criativos quatro dias depois do último sync com a intenção de conferir
+uma imagem.**
+
+> ### ⛔ AS DUAS REGRAS QUE FICAM
+>
+> **1. Todo `<img>` com URL de terceiro leva `onError`.** Sem ele o fracasso é
+> um buraco que não se explica. E o fallback **não é um retângulo cinza** — um
+> retângulo vazio AFIRMA "carregando", e nada está carregando. Ele desenha
+> conteúdo de verdade e declara a causa.
+>
+> **2. "Tentei e falhou" e "nunca houve URL" são fatos DIFERENTES**, e o selo só
+> aparece no primeiro. É a distinção central deste projeto (`—` × `0`) na camada
+> de imagem: colapsar as duas faz a tela afirmar que a Meta recusou algo que ela
+> nunca mandou.
+
+⚠️ **A pergunta que generaliza:** *este recurso é NOSSO, ou é um empréstimo com
+prazo?* URL assinada, token de terceiro, link pré-assinado de storage, sessão
+OAuth — todos têm a mesma forma. O que decide não é se o valor está certo hoje;
+é se ele continua certo amanhã sem ninguém fazer nada.
+
+---
+
+# 🎚️ O SEED PRECISA CONVERSAR COM A JANELA PADRÃO DA TELA
+
+> **12/08/2026, e é uma armadilha NOVA dentro da família do gerador** — o seed
+> não produziu estado errado nem incompleto. Produziu estado **certo na janela
+> errada**.
+
+`criativos-dev` aplicava a tendência de queda como **degrau na metade** dos 14
+dias: os 7 mais recentes com o fator, os 7 antigos sem. A tela abre em **Últimos
+7 dias**. Ou seja: a janela inteira caía do mesmo lado do degrau, sem contraste
+nenhum dentro dela.
+
+**Resultado na tela: `Em queda 0`**, com quatro criativos plantados em queda — e
+`Em queda` é a aba que justifica a tela existir.
+
+| | |
+|---|---|
+| o que o teste dizia | ✅ 20 asserções verdes, incluindo seis sobre a tendência |
+| por que ele não pegou | as asserções montam **metades sintéticas** e não sabem que janela a tela pede |
+| quem pegou | a **passada visual**, no primeiro screenshot |
+
+> ### ⛔ A REGRA
+> **Todo dado sintético com dimensão temporal precisa ser exercitável na JANELA
+> PADRÃO da tela que o consome** — e a forma que garante isso é a **rampa**, não
+> o degrau: com variação gradual, qualquer recorte suficientemente largo vê a
+> inclinação. Degrau só é visível para quem enquadra exatamente em cima dele.
+>
+> A pergunta, ao semear série temporal: *qual período a tela abre — e o efeito
+> que estou plantando aparece DENTRO dele?*
+
+⚠️ É prima do `n % 2` do BOLETO e do `splitPipe` com id não numérico: nas três, o
+gerador entrega o estado que impede de ver o que se ia verificar. A diferença é
+que aqui o estado estava **correto** — só invisível pelo enquadramento.
+
+---
+
+# 📌 ESTADO DA SESSÃO — 12/08/2026 (CRIATIVOS, a décima tela)
+
+> **A mais nova. Se contradisser qualquer coisa acima, ela vence.**
+>
+> ⛔ **NADA FOI PARA O GITHUB.** `main` em `4e6aa9e`, branch ausente no remoto.
+
+## ✅ A DÉCIMA TELA EXISTE — e a `CreativesView` morreu
+
+| | |
+|---|---|
+| `views/criativos/CriativosScreen.tsx` | a tela: 6 KPIs · 4 abas · alternador grade/tabela · paginação |
+| `lib/ads/criativos.ts` | **puro** — tendência, veiculação, KPIs, abas. Não importa o prisma, de propósito |
+| `tk/PreviaCriativo` · `tk/CardCriativo` · `tk/TabelaCriativos` | os três componentes novos |
+| `lib/ads/creatives.ts` | **+ADITIVO**: `status`, `effectiveStatus`, `impressions`, `clicks`, `cpc`, `conversao`, `anterior`, `recente`. Nenhum campo existente mudou de valor |
+| `scripts/criativos-dev.mjs` (`npm run dev:criativos`) | o seed que faltava |
+| deletados | `CreativesView` (81) e `ImageSlot` |
+| testes | `test:criativos` **20 asserções**, no `npm test` no MESMO commit |
+
+`04`: de **0 ✅ / 13 ❌** para **12 ✅ / 0 ❌ / 3 🔧**. Baseline validado: as 9
+outras telas saíram idênticas.
+
+## 🔴 O DEV NÃO TINHA CRIATIVO NENHUM — e mais duas camadas
+
+Medido antes de escrever uma linha:
+
+| | dev, antes |
+|---|---|
+| `Creative` | **0 linhas** — e `computeCreatives` filtra `creative: { isNot: null }` |
+| `utmContent` (venda e clique) | **NULL nas 47 vendas** → todo ROAS por criativo seria `—` |
+| `DailyAdMetric` | **1 dia por anúncio** → `Em queda` sem duas metades |
+
+Três camadas, e **cada uma sozinha já esvaziava a tela**. `dev:criativos` é
+idempotente (provado em três execuções: 38/19 estável) e planta divergência nos
+cinco eixos — mídia, formato, tendência, medição e atribuição.
+
+⚠️ **O carimbo de UTM não era idempotente na primeira versão**: numerava só os
+`IS NULL`, então cada execução consumia parte dos 19 que ficavam de fora. Em três
+execuções o estado "sem atribuição" desapareceria. Hoje a numeração corre sobre
+a população inteira, e `n % 3` é propriedade fixa do clique.
+
+## 🐛 O QUE SÓ A TELA MOSTROU — três, e o primeiro é grave
+
+| | |
+|---|---|
+| 🔴 **`Em queda 0`** com 4 plantados | o degrau do seed × a janela de 7 dias. Seção própria acima |
+| **título do mundo antigo** | *"Ranking de Criativos · Os anúncios com melhor performance hoje"* — e as duas metades ficaram falsas: não é ranking (o recorte de maior valor é o de PIOR desempenho), e "hoje" contradizia o seletor de período logo abaixo, que abre em 7 dias |
+| coluna `Criativo` engolindo a folga | ~400px de vazio entre o nome e `Estado` a 1568px. As colunas numéricas viraram `fr` com piso |
+
+## 🔬 DUAS VEZES QUASE REPORTEI DEFEITO QUE NÃO EXISTIA — de novo
+
+| O que eu ia reportar | O que era |
+|---|---|
+| *"há DOIS conjuntos de abas no DOM, o segundo zerado"* | marcador de Suspense do **streaming SSR** (`DIV#S:0[hidden]`, 0×0, inerte). **O Gerenciador tem os mesmos 4** — tela fechada em 08/08. Pré-existente do shell |
+| *"o selo de indisponível não aparece"* | ele aparece **7 vezes**, exatamente nos de URL expirada. O screenshot a 1568px o comprime a ponto de sumir |
+
+⚠️ Nos dois, medir o DOM resolveu. **Screenshot desta base não é prova** — é a
+terceira sessão seguida em que isso se confirma.
+
+## 👁️ O que foi VISTO, e o que foi MEDIDO
+
+| | |
+|---|---|
+| fallback da miniatura | ✅ **7 selos** `pré-visualização indisponível`, e 3 imagens carregando ao lado |
+| aba `Em queda` | ✅ card com pílula `↓ 23% CTR`, critério declarado acima da lista |
+| grade e tabela | ✅ as duas, com a MESMA lista filtrada e ordenada |
+| tema claro | ✅ **medido**: card branco puro · nome **17,85:1** · apoio e cabeçalho **4,97:1** · ROAS **5,17:1** |
+| tema escuro | ✅ **visto** — ⚠️ números não medidos |
+| ⛔ largura estreita | **não verificada** — agora deve em **seis** telas |
+
+⚠️ O `Runtime.evaluate` congelou **uma vez** (script de ~25 linhas). Quebrado em
+pedaços menores, funcionou. Mesmo sintoma de 11/08.
+
+## 📋 ACHADOS ADIADOS — dois novos
+
+| Achado | O que já se sabe |
+|---|---|
+| **`c.ctr ? pct(c.ctr) : "—"` tratava CTR ZERO como indefinido** | no mapa de apresentação do `useTraffikState`, deletado com a tela. `0` é falsy, e um criativo com impressão e nenhum clique tem CTR **medido** de 0% — não ausente. ⚠️ **Não é conserto de congelado**: o mapa inteiro saiu na reescrita. Mas o padrão `valor ? fmt : "—"` merece varredura — é a distinção central colapsada por um `?` |
+| **A imagem sintética do seed vaza texto para fora do SVG** | cosmético, e é do `criativos-dev`, não da tela. O `<text>` a 34px estoura em nome longo |
+
+## ➡️ PRÓXIMA
+
+Sobram **Login** (imagens 10 e 11), **Taxas**, **Áreas** e **Notificações**.
+`Regras` (21 ❌) segue sendo a maior dívida isolada.
+
+⚠️ **`AnunciosView` (322) é a ÚLTIMA legada de Integrações servindo rota.**

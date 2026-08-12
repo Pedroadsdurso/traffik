@@ -1010,23 +1010,55 @@ junto do controle**, que é design e não lógica.
 
 Referência: imagem 9.
 
+**✅ FEITA em 12/08/2026.** `CreativesView` (81 linhas) e `ImageSlot` **deletados**.
+Nascem `views/criativos/CriativosScreen.tsx`, `lib/ads/criativos.ts` (puro),
+`tk/PreviaCriativo`, `tk/CardCriativo`, `tk/TabelaCriativos`. `test:criativos`
+(20 asserções) entrou no `npm test` no MESMO commit.
+
+> ### 🔎 CONVENÇÃO DESTA SEÇÃO — a mesma do Gerenciador
+> **✅ = eu vi na tela.** **Linha em branco = construída e NÃO VISTA**, e em
+> branco ela fica FORA da contagem do `docs:estado` em vez de entrar como feita.
+
 | Elemento | Status |
 |---|---|
-| 6 KPIs com ícone em caixa colorida: total, CTR médio, CPC médio, taxa de conversão, ROAS médio, ativos | ❌ |
-| `⤒ Importar` · `📁 Pastas` · `+ Novo criativo ⌄` | ❌ |
-| Busca por nome ou ID com `⌘K` | ❌ |
-| Filtros: Plataforma (com ícone) · Campanha · Formato · Tipo de mídia · Status · `Filtros` | ❌ |
-| **Alternador grade / tabela** | ❌ |
-| Abas com contador: `Todos 1.248` · `Análise` (badge `Novo`) · `Testes A/B 23` · `Top performers` · `Em queda` · `Inativos 936` | ❌ |
-| Carrossel horizontal de miniaturas com seta `›` | ❌ |
-| Card: thumbnail, botão play, badge de plataforma, ponto de status | ❌ |
-| Card: nome + badge de estado + `ROAS / CTR / CPA` no rodapé | ❌ |
-| Tabela `Desempenho dos criativos` com miniatura na primeira coluna | ❌ |
-| Coluna CAMPANHA com prefixo de objetivo (`[CONV]`, `[TRÁFEGO]`) e status | ❌ |
-| `Ordenar por: ROAS (maior) ⌄` + `⤓ Exportar` | ❌ |
-| `Mostrar 20 ⌄` + `1-20 de 1.248` + paginação | ❌ |
+| 6 KPIs com ícone em caixa colorida: total, CTR médio, CPC médio, taxa de conversão, ROAS médio, ativos | ✅ **feito** — 🔧 os seis com o MESMO tom (`primary`), não uma cor cada: §13 do `06` diz que quadrado tingido é decoração e **não classifica**; tingir cada um o faria parecer selo de estado. E "ativos" virou **`Entregando`**, que lê `effectiveStatus` — "ativo" é o configurado, e o configurado mente sobre entrega |
+| `⤒ Importar` · `📁 Pastas` · `+ Novo criativo ⌄` | 🔧 **FORA — nenhum dos três tem backend.** Criativo nasce na Meta e chega pelo sync; não há criação nem importação por aqui. `Pastas`: **zero acertos** no `schema.prisma`. Botão que abre nada é affordance mentindo |
+| Busca por nome ou ID com `⌘K` | ✅ **feito** — campo na faixa de filtros, casando nome do criativo **e** nome da campanha. 🔧 sem `⌘K` próprio: o `⌘K` é a paleta global do shell, e ela já lista criativos. Dois donos para o mesmo atalho é o defeito, não o recurso |
+| Filtros: Plataforma (com ícone) · Campanha · Formato · Tipo de mídia · Status · `Filtros` | ✅ **feito** — Período · Ordenar por · Formato · Busca, na faixa registrada (o botão `Filtros` do header aparece porque a tela REGISTRA a faixa). 🔧 **Plataforma fora**: é um dos CINCO 🔧 de plataforma, com gatilho comum. 🔧 `Campanha` e `Status` fora: a busca já casa campanha, e as abas já recortam por estado — filtro que duplica aba é dois controles para a mesma pergunta |
+| **Alternador grade / tabela** | ✅ **feito** — `Segmented`, porque são duas lentes FIXAS sobre o mesmo dado (§14.1). As duas visões consomem a MESMA lista já filtrada e ordenada |
+| Abas com contador: `Todos` · `Análise` · `Testes A/B` · `Top performers` · `Em queda` · `Inativos` | ✅ **4 das 6 feitas** — 🔧 **`Testes A/B`, `Pastas` e `Análise` FORA**, decisão do dono de 12/08. As duas primeiras **não existem no schema** (medido); `Análise` não tem conteúdo especificado em documento nenhum. Aba com contador que abre vazia é controle inerte com outra roupa. ⚠️ As contagens somam mais que o total **de propósito**: são perguntas, não partição |
+| Carrossel horizontal de miniaturas com seta `›` | 🔧 **virou GRADE que quebra linha**, não faixa que rola. O carrossel esconde item atrás de gesto e a tela tem alternador de visão — quem quer densidade clica em `Tabela`. Rolagem horizontal escondendo criativo em queda é o oposto do que a tela existe para fazer |
+| Card: thumbnail, botão play, badge de plataforma, ponto de status | ✅ **feito** — play sobre vídeo, ponto de status no selo. 🔧 badge de plataforma fora (os cinco de plataforma). ⚠️ **thumbnail: ver o bloco abaixo** |
+| Card: nome + badge de estado + `ROAS / CTR / CPA` no rodapé | ✅ **feito** — e mais a **pílula de tendência** (`↓ 23% CTR`), que a referência não tem e a aba `Em queda` exigia para se explicar |
+| Tabela `Desempenho dos criativos` com miniatura na primeira coluna | ✅ **feito** — miniatura + nome + campanha na MESMA célula (§14.4), 9 colunas, `.tk-linha` sem borda entre linhas, números tabulares à direita, `ⓘ` por coluna declarando a PROCEDÊNCIA |
+| Coluna CAMPANHA com prefixo de objetivo (`[CONV]`, `[TRÁFEGO]`) e status | 🔧 **sem coluna própria** — a campanha é sub-rótulo do criativo (§14.4), que é o mesmo raciocínio de economizar coluna. 🔧 prefixo de objetivo fora: ele qualifica a CAMPANHA, e esta tela é por criativo — repeti-lo em toda linha da mesma campanha é ruído |
+| `Ordenar por: ROAS (maior) ⌄` + `⤓ Exportar` | ✅ **`Ordenar por` feito** (no servidor, para as duas visões). 🔧 **`Exportar` fora**: não existe em nenhuma outra tela desta base, e um exportador que só esta tela tem é inconsistência. Entra quando for decidido para todas |
+| `Mostrar 20 ⌄` + `1-20 de 1.248` + paginação | ✅ **feito** — 🔧 **25 e não 20**: a divergência é do PRIMITIVO `Paginacao` (10/25/50/100), a mesma escada do Gerenciador e do Pixel. Um `20` só aqui faria a mesma lista paginar diferente de tela para tela |
+| Tema claro | ✅ **medido** — card branco puro; nome **17,85:1**, apoio e cabeçalho **4,97:1**, ROAS em destaque **5,17:1**. Todos passam AA |
+| Tema escuro | ✅ **visto** — grade e tabela legíveis. ⚠️ **números não medidos** |
+| Largura estreita | |
 
-`Testes A/B` e `Pastas` provavelmente não existem no backend. Mesma regra: construa, e se não houver dado, estado vazio honesto.
+> ### 🔴 A MINIATURA DA META EXPIRA EM ~4 DIAS E É 64×64 — medido, e muda a tela
+>
+> Medido em 12/08/2026 no backup de produção de 01/08, nos **13 de 13**
+> criativos reais:
+>
+> | | |
+> |---|---|
+> | resolução do `thumbnailUrl` | **`_p64x64` em 13 de 13** — ícone, não miniatura de card |
+> | expiração (`oe=`) | de **34h** a **4,5 dias** após o sync |
+> | `imageUrl` (a imagem grande) | existe em **1 de 13** — os outros 12 são vídeo |
+>
+> Em 12/08 as treze estavam vencidas havia uma semana. **O estado normal desta
+> tela em produção é a imagem não carregar** — não é caso de borda.
+>
+> ✅ **Decisão do dono, 12/08: fallback tipográfico + aviso.** A falha desenha o
+> bloco com as iniciais e um selo `pré-visualização indisponível`; a ausência de
+> URL desenha o bloco **sem** selo, porque não houve tentativa que falhasse.
+> ⛔ **Nunca um retângulo cinza** — ele afirmaria "carregando", e nada está.
+>
+> 🔜 Resolver de verdade exige copiar a imagem para armazenamento nosso no
+> sync — **backend novo**, fora do escopo do redesign.
 
 ---
 
@@ -1076,8 +1108,24 @@ Backend novo, não redesign. **Nenhum destes tem prazo até decisão explícita.
 | `Planos & Cobrança` | imagens 6, 7 |
 | `Métricas` | imagem 5 |
 | Biblioteca pública de snippets | imagem 8 |
-| Testes A/B em criativos | imagem 9 |
-| Pastas de criativos | imagem 9 |
+| **Testes A/B em criativos** | imagem 9 — ⛔ **medido em 12/08:** zero acertos de `folder\|pasta\|abtest\|experiment\|split.?test` no `schema.prisma` |
+| **Pastas de criativos** | imagem 9 — idem |
+
+> ### ⚠️ ESTE DOCUMENTO SE CONTRADIZIA SOBRE OS DOIS ACIMA — resolvido em 12/08
+>
+> A seção CRIATIVOS dizia *"provavelmente não existem no backend. Mesma regra:
+> **construa**, e se não houver dado, estado vazio honesto"* — cinquenta linhas
+> antes desta tabela, que diz *"backend novo, não redesign. **Nenhum destes tem
+> prazo até decisão explícita**"*.
+>
+> **Vale esta tabela.** Decisão do dono, 12/08/2026: as duas ficam 🔧 fora, junto
+> de `Análise`. O "provavelmente" virou medição, e aba com contador que abre
+> vazia é a mesma classe do controle inerte — o produto afirmando ter algo que
+> não tem.
+>
+> ⛔ A frase antiga foi **apagada**, não mantida ao lado da nova: proibição (ou
+> permissão) que muda vira ordem para desfazer. Ver *"COMENTÁRIO QUE PROÍBE É O
+> MAIS PERIGOSO DE TODOS"*, no `CLAUDE.md`.
 
 ---
 

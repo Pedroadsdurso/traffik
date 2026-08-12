@@ -1,8 +1,8 @@
 "use client";
 
 import { useTraffik } from "@/components/dashboard/TraffikContext";
-import { CreativesView } from "@/components/dashboard/views/CreativesView";
+import { CriativosScreen } from "@/components/dashboard/views/criativos/CriativosScreen";
 
 export default function CriativosPage() {
-  return <CreativesView v={useTraffik()} />;
+  return <CriativosScreen v={useTraffik()} />;
 }

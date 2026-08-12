@@ -27,7 +27,11 @@ import { useFaixaDeFiltros } from "./AppShell";
 
 const TITULOS: [teste: (p: string) => boolean, titulo: string, apoio: string][] = [
   [(p) => p.startsWith("/dashboard/gerenciador"), "Gerenciador de Anúncios", "Administre campanhas, conjuntos e anúncios do Facebook Ads"],
-  [(p) => p.startsWith("/dashboard/criativos"), "Ranking de Criativos", "Os anúncios com melhor performance hoje"],
+  /* ⚠️ Era "Ranking de Criativos · Os anúncios com melhor performance hoje", e
+     as duas metades ficaram falsas na reescrita de 12/08: a tela não é um
+     ranking (são quatro recortes, e o de maior valor é o de PIOR desempenho), e
+     "hoje" contradizia o seletor de período logo abaixo, que abre em 7 dias. */
+  [(p) => p.startsWith("/dashboard/criativos"), "Criativos", "Desempenho por criativo, e quem está saturando"],
   [(p) => p.startsWith("/dashboard/regras"), "Regras de Automação", "Automatize pausas, escalas e alertas por condição"],
   [(p) => p.startsWith("/dashboard/notificacoes"), "Notificações", "Alertas de venda e relatórios programados"],
   [(p) => p.startsWith("/dashboard/taxas"), "Taxas e Despesas", "Configure custos para um cálculo de lucro preciso"],

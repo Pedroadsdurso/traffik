@@ -13,6 +13,22 @@ import { CAMPOS_UTM, utmsDaVenda } from "@/lib/vendas/utmsDaVenda";
 export type CreativePeriod = PeriodoNome;
 export type CreativeSort = "roas" | "ctr" | "spend" | "sales";
 
+/**
+ * Metade de janela, para a aba `Em queda`.
+ *
+ * ⚠️ `ctr`/`roas` sao `null` quando o denominador nao existe, e isso NAO e o
+ * mesmo que queda: metade sem gasto nao caiu, ela nao foi medida. Quem decide
+ * o que fazer com o nulo e `lib/ads/criativos.ts`.
+ */
+export interface MetadeDaJanela {
+  spend: number;
+  impressions: number;
+  clicks: number;
+  ctr: number | null;
+  /** Dias com linha de metrica NESTA metade. `0` = metade inteira sem observacao. */
+  dias: number;
+}
+
 export interface CreativeRow {
   id: string;
   name: string;
@@ -27,6 +43,32 @@ export interface CreativeRow {
   sales: number;
   revenue: number;
   best: boolean;
+
+  /* ── Acrescentado em 12/08/2026, na reescrita da tela ─────────────────────
+     ADITIVO: nenhum campo acima mudou de valor nem de contrato. Mesma jogada
+     do `overview.ts` no Gerenciador (08/08) — a regra do congelamento proibe
+     alterar o que a `main` calculava, nao proibe acrescentar ao lado. */
+
+  /** `effective_status` cru da Meta, herdado do anuncio. `null` = nunca sincronizado. */
+  effectiveStatus: string | null;
+  /** O que o usuario CONFIGUROU. ⛔ Decisao ("esta entregando?") le o efetivo. */
+  status: string;
+  impressions: number;
+  clicks: number;
+  /** `null` = sem clique. Custo por clique nao existe sem clique. */
+  cpc: number | null;
+  /**
+   * `null` = sem clique. Vendas por clique — a "taxa de conversao" do `04`.
+   *
+   * ⚠️ Os dois lados vem de INSTRUMENTOS diferentes: `clicks` e da Meta e
+   * `sales` e do gateway. A razao herda a discordancia, como o ROAS. Ver a
+   * secao "DOIS INSTRUMENTOS NAO SE COMPARAM" no `CLAUDE.md`.
+   */
+  conversao: number | null;
+  /** Metade ANTIGA da janela. Ver `MetadeDaJanela`. */
+  anterior: MetadeDaJanela;
+  /** Metade RECENTE da janela. */
+  recente: MetadeDaJanela;
 }
 
 /**
@@ -79,6 +121,8 @@ export async function computeCreatives(
         id: true,
         fbAdId: true,
         name: true,
+        status: true,
+        effectiveStatus: true,
         campaign: { select: { name: true } },
         creative: { select: { name: true, title: true, thumbnailUrl: true, imageUrl: true, videoId: true } },
       },
@@ -88,7 +132,9 @@ export async function computeCreatives(
         date: { gte: keyToDateColumn(startKey), lte: keyToDateColumn(endKey) },
         ad: { adAccount: { userId, ...contaWhere } },
       },
-      select: { adId: true, spend: true, impressions: true, clicks: true },
+      // `date` entrou em 12/08 para partir a janela ao meio (aba `Em queda`).
+      // Os totais continuam somando TODAS as linhas — nada mudou de valor.
+      select: { adId: true, date: true, spend: true, impressions: true, clicks: true },
     }),
     // Vendas aprovadas no período; atribuídas ao anúncio por utm_content → nome.
     prisma.sale.findMany({
@@ -113,6 +159,38 @@ export async function computeCreatives(
     cur.impressions += m.impressions;
     cur.clicks += m.clicks;
     metByAd.set(m.adId, cur);
+  }
+
+  /* ── As duas metades da janela ────────────────────────────────────────────
+     O corte sai das CHAVES de dia (`startKey`/`endKey`), nunca de `Date.now()`
+     nem do dia do processo: as duas pontas ja vieram do fuso do usuario, e
+     recalcular aqui reintroduziria a janela das 21h.
+
+     ⚠️ Janela de 1 dia da metades de 0 e 1 dia. Isso NAO e defeito — e o
+     estado "nao ha o que comparar", e quem o transforma em decisao e
+     `tendenciaDoCriativo`, que exige observacao dos DOIS lados. */
+  const cru = (k: string) => Number(k.replace(/-/g, ""));
+  const diasDaJanela = metrics.length ? [...new Set(metrics.map((m) => dayKeyInTz(m.date, "UTC")))].sort() : [];
+  // A coluna e `@db.Date`: o valor chega a meia-noite UTC, entao a chave sai em
+  // UTC de proposito — converter para o fuso do usuario deslocaria o dia.
+  const corte = diasDaJanela.length ? cru(diasDaJanela[Math.floor(diasDaJanela.length / 2)]) : Infinity;
+
+  const vazia = (): MetadeDaJanela => ({ spend: 0, impressions: 0, clicks: 0, ctr: null, dias: 0 });
+  const metadesByAd = new Map<string, { anterior: MetadeDaJanela; recente: MetadeDaJanela }>();
+  for (const m of metrics) {
+    const par = metadesByAd.get(m.adId) ?? { anterior: vazia(), recente: vazia() };
+    const lado = cru(dayKeyInTz(m.date, "UTC")) >= corte ? par.recente : par.anterior;
+    lado.spend += num(m.spend);
+    lado.impressions += m.impressions;
+    lado.clicks += m.clicks;
+    lado.dias += 1;
+    metadesByAd.set(m.adId, par);
+  }
+  for (const par of metadesByAd.values()) {
+    for (const lado of [par.anterior, par.recente]) {
+      const b = div(lado.clicks, lado.impressions);
+      lado.ctr = b === null ? null : b * 100;
+    }
   }
 
   // Atribuição venda→anúncio: preferimos casar pelo id do Facebook extraído do
@@ -156,6 +234,7 @@ export async function computeCreatives(
     const ctrBruto = div(met.clicks, met.impressions);
     const ctr = ctrBruto === null ? null : ctrBruto * 100;
     const roas = div(attr.revenue, met.spend);
+    const metades = metadesByAd.get(a.id);
     return {
       id: a.id,
       name: a.creative?.title || a.creative?.name || a.name,
@@ -168,6 +247,14 @@ export async function computeCreatives(
       sales: attr.sales,
       revenue: attr.revenue,
       best: false,
+      effectiveStatus: a.effectiveStatus,
+      status: a.status,
+      impressions: met.impressions,
+      clicks: met.clicks,
+      cpc: div(met.spend, met.clicks),
+      conversao: div(attr.sales, met.clicks),
+      anterior: metades?.anterior ?? vazia(),
+      recente: metades?.recente ?? vazia(),
     };
   });
 
