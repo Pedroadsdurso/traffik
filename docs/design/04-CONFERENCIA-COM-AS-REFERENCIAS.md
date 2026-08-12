@@ -1173,6 +1173,144 @@ consertar globalmente mudaria 21 rotas num commit de tela. Ver ACHADOS ADIADOS.
 
 ---
 
+## TAXAS E DESPESAS
+
+⛔ **NÃO HÁ IMAGEM DE REFERÊNCIA** para esta tela. O critério é o mesmo de
+Pixel/Eventos e Webhooks: **`06` para acabamento, o que a tela já faz para
+conteúdo.** Nenhum item aqui foi copiado de mockup — todos saem ou de uma regra
+do `06`, ou de um comportamento que o produto já tinha e a tela antiga escondia.
+
+> ### 🔎 CONVENÇÃO — a mesma de CAMPANHAS e LOGIN
+> **✅ = eu vi na tela.** Linha em branco = construída e NÃO VISTA. Nesta seção
+> não há linha em branco: os itens foram percorridos no navegador em 12/08/2026,
+> nos dois temas, com o `dev:taxas` semeado, e os contrastes foram **MEDIDOS**.
+
+| Elemento | Status |
+|---|---|
+| Duas seções nomeadas: `Configuração da conta` e `Taxas e despesas` | ✅ |
+| Cartão de imposto sobre anúncios, com toggle e alíquota | ✅ |
+| Cartão de fuso horário, com a hora atual como conferência | ✅ |
+| Aviso de divergência entre fuso da conta e do aparelho | 🔧 |
+| Cinco grupos de despesa, cada um com título e apoio | ✅ |
+| **Frase de incidência por linha** — sobre O QUE a taxa incide | ✅ |
+| Estado vazio que diz a CONSEQUÊNCIA, não a ausência | ✅ |
+| **Seletor de frequência** — quatro opções, padrão `Por mês` | ✅ |
+| **Aviso de consequência da despesa única** — o quê e o porquê | 🔧 |
+| Marcador `fora do cálculo` na linha, em tom de atenção | ✅ |
+| Ícone em recipiente quadrado neutro de 36px (`06` §13) | ✅ |
+| Cartão com raio 16, sombra e borda (`06` §1) | ✅ |
+| Hover de linha por `.tk-linha` (`06` §8) | ✅ |
+| Remover despesa por botão de ícone com `aria-label` | ✅ |
+| Largura máxima de leitura no formulário | ✅ |
+| Tema claro e tema escuro | ✅ |
+| Largura estreita | ✅ |
+
+### Os dois 🔧, com o motivo
+
+| Item | Por que diverge |
+|---|---|
+| **Aviso de fuso divergente** | ✅ existe e o comportamento foi **preservado inteiro** (inclusive a dispensa em `localStorage` **por fuso de aparelho** — quem dispensou em Lisboa e abre em São Paulo vê de novo). ⛔ **Não foi VISTO disparando**: exigiria trocar o fuso do sistema operacional da máquina. Está 🔧 e não ✅ porque a convenção desta seção é literal |
+| **Aviso da despesa única** | 🔜 **REVISÍVEL, com gatilho escrito: ele SAI no dia da migration do `ocorreEm`.** Enquanto a despesa única não tiver data de ocorrência, ela não entra em cálculo nenhum, e a frase é verdade. Quando a coluna existir, a frase vira mentira e a linha `UNICA` volta ao seletor. ⚠️ É o único item desta tela com prazo — os outros são decisões, este é uma limitação declarada |
+
+### 🔴 A DESCOBERTA QUE INVERTEU O PEDIDO — o seletor não existia
+
+O pedido original era *"avise no momento em que `Única` for escolhida, e avise
+também se a pessoa não tocar no campo, porque o padrão do banco é `UNICA`"`.
+
+**Medido antes de codificar, e a premissa não se sustenta:**
+
+```
+createExpense()             recurrence: input.recurrence ?? "MENSAL"
+useTraffikState.addDespesa  recurrence: "MENSAL"          ← fixo no código
+```
+
+O `@default(UNICA)` do schema é **inalcançável pelo app** — todo caminho de
+criação passa frequência explícita. E a razão é que **não existia seletor de
+frequência**: `addDespesa(nome, valor)` recebia dois argumentos.
+
+> ## O rateio respeita `DIARIA · SEMANAL · MENSAL · ANUAL` desde 06/08. A capacidade existe inteira no servidor, testada — e a tela nunca deixou escolher.
+
+É o **avesso do controle inerte**: capacidade sem controle. Ninguém usando a tela
+de Taxas conseguia cadastrar uma despesa anual, e a única frequência possível era
+mensal.
+
+**Decisão do dono, 12/08/2026:** o seletor entra com as **quatro que contam**.
+`UNICA` fica fora — oferecer uma opção que a própria tela desaconselha na linha
+seguinte faria do aviso uma placa de "não use isto". O padrão é `MENSAL`, que é
+**exatamente o que o código já fazia**: quem não mexer no seletor tem o mesmo
+resultado de antes, e `test:taxas` prova a igualdade com o fallback da ação.
+
+⚠️ E o aviso **não sumiu com a opção**. Ele aparece na lista quando existe uma
+linha `UNICA` — que é o caso de quem já tem uma no banco, e são justamente as que
+ninguém sabe que não contam.
+
+### 🔴 A LINHA VERMELHA — `Expense.workspaceId` NULO amplia escopo
+
+`NULO` naquela coluna **não é "sem dono": é "vale para TODAS as áreas"**. É uma
+das duas linhas vermelhas da tabela do `CLAUDE.md`. Anular por descuido faz a
+despesa de UMA operação ser descontada do lucro de TODAS — com número plausível
+nas duas pontas, que é o que torna o defeito mudo.
+
+`test:taxas` prova as duas pontas, e as duas são **estruturais**:
+
+| | Como está garantido |
+|---|---|
+| **criar grava a área** | `createExpense` escreve `escopo.areaId \|\| null`, e a tela chama `v.criarDespesa`, que carrega `s.workspaceAtiva`. A guarda também proíbe a tela de chamar `createExpense` direto, o que pularia a área |
+| **editar não zera** | o patch de `updateExpense` é `Pick<ExpenseDTO, "amount" \| "name" \| "active">`, e `ExpenseDTO` **sequer declara** `workspaceId` — não existe valor do tipo certo que carregue a anulação |
+
+> ### ⛔ A GUARDA DE EDIÇÃO PASSOU COM A PORTA ABERTA NA PRIMEIRA VERSÃO
+> Ela procurava o `Pick<...>` — e o `Pick` continua lá quando alguém **anexa**
+> `& { workspaceId?: string \| null }` depois dele. Achado ao provar pelo lado
+> negativo: dos três defeitos plantados, esse foi o único que escapou.
+>
+> Hoje ela afirma **duas** coisas: que o `Pick` é o de três campos, **e** que a
+> assinatura não menciona `workspaceId` de forma nenhuma. A segunda é a que
+> fecha a porta — a primeira sozinha mede a presença do certo, não a ausência do
+> errado. É a sétima vez que uma guarda por texto desta base mira sintaxe que o
+> caso CERTO também contém.
+
+### O que foi MEDIDO na tela
+
+| | Claro | Escuro |
+|---|---|---|
+| aviso sobre o tinte âmbar (composto sobre o fundo real) | **4,95:1** | **6,17:1** |
+| linha `fora do cálculo` | 5,02 | 7,85 |
+| frase de incidência | 4,97 | 5,20 |
+
+⚠️ **A primeira medição saiu 17,85 nos três papéis** — três valores idênticos são
+a assinatura de seletor errado, não de contraste ruim. Os `querySelector` haviam
+pegado wrappers que herdam `text-text`. Refeita mirando as classes, com a
+contagem de elementos achados junto (2 e 6) como linha de base.
+
+### ✅ Largura estreita — a segunda tela a pagar
+
+`.tk-auth`… não: aqui a raiz é a própria tela. Apertada por JS a **360 · 390 ·
+430 · 768px**: **0 de 311** descendentes vazando nas quatro. Método registrado
+no `CLAUDE.md` (encolher o CONTÊINER, não a janela).
+
+### 🌱 O seed, e o erro de medição que ele carregava
+
+`npm run dev:taxas` — idempotente, provado em três execuções.
+
+⚠️ **A primeira versão do cabeçalho dele afirmava "0 linhas em `Expense`", e era
+FALSO.** Eu inferi de uma tela que abriu vazia em vez de consultar o banco.
+Corrigido no mesmo dia, ao ver na tela despesas que o script não havia criado.
+
+O estado real, medido com `SELECT`: **5 despesas, todas `DESPESA_RECORRENTE`,
+todas com `workspaceId` NULO**, cobrindo as cinco frequências — da sessão do
+rateio de 06/08. O que **não existia** era linha nos outros quatro grupos: zero
+taxa de gateway, zero imposto, zero coprodução, zero custo de produto.
+
+🔴 **E é isso que deixava o entregável invisível.** A frase de incidência existe
+para separar uma taxa FIXA restrita a uma forma de pagamento de uma PERCENTUAL
+global — as duas são taxa de gateway, e o dev não tinha **nenhuma**. O conflito
+que motivou a tela não tinha representante no único banco em que dá para olhar.
+
+⚠️ É a forma mais enganosa da família do gerador: o estado existente **parecia
+rico** — cinco linhas, cinco frequências, tudo plausível.
+
+---
+
 ## O QUE ESTÁ NAS REFERÊNCIAS E NÃO EXISTE NO PRODUTO
 
 Backend novo, não redesign. **Nenhum destes tem prazo até decisão explícita.**

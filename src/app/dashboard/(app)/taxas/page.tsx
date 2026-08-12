@@ -1,8 +1,8 @@
 "use client";
 
 import { useTraffik } from "@/components/dashboard/TraffikContext";
-import { FeesView } from "@/components/dashboard/views/FeesView";
+import { TaxasScreen } from "@/components/dashboard/views/taxas/TaxasScreen";
 
 export default function TaxasPage() {
-  return <FeesView v={useTraffik()} />;
+  return <TaxasScreen v={useTraffik()} />;
 }

@@ -1765,6 +1765,22 @@ export function useTraffikState(
     coproducaoExpenses,
     custoProdutoExpenses,
     despesaRows,
+    /**
+     * As despesas CRUAS — os DTOs sem handlers e sem rótulo pronto.
+     *
+     * ⚠️ Terceiro acessor "cru" desta reescrita, depois de `perfisCrus` e do
+     * `notifItems[].timestamp`, e pelo mesmo motivo: os derivados acima são
+     * modelo de TELA (cada um traz `unit`/`unidade`/`methodLabel` já formatado,
+     * e cada um formata de um jeito). A tela nova de Taxas precisa dizer sobre
+     * O QUE cada linha incide, e essa frase depende de `calc`, `paymentMethod` e
+     * `recurrence` JUNTOS — três campos que nenhum derivado expõe ao mesmo
+     * tempo. Quem monta a frase é `lib/taxas/apresentacao.ts`, função pura e
+     * testada; reformatar aqui criaria a sexta formatação da mesma despesa.
+     *
+     * ⛔ Não use isto para desenhar lista onde já existe derivado pronto — o
+     * monolito não precisa de mais um consumidor. Ver o número dele abaixo.
+     */
+    despesasCruas: s.expenses,
     /** Passagem pura — o rodapé do Dashboard conta ativas e em execução. */
     rules: s.rules,
     // Novo gateway
@@ -1873,6 +1889,49 @@ export function useTraffikState(
         workspaceId: s.workspaceAtiva,
       });
       setS((st) => ({ ...st, expenses: [...st.expenses, created] }));
+    },
+    /**
+     * O criador COMPLETO — o que a tela nova de Taxas usa nos cinco grupos.
+     *
+     * Os quatro `add*` acima fixam `type`/`calc`/`recurrence` no código porque
+     * a tela antiga não deixava escolher nenhum dos três. Este aceita o input
+     * inteiro, e é o que torna o seletor de frequência possível.
+     *
+     * ⛔ `workspaceId: s.workspaceAtiva` NÃO É OPCIONAL AQUI, e é a linha
+     * vermelha do `CLAUDE.md`: `Expense.workspaceId` NULO significa **vale para
+     * TODAS as áreas**, não "sem dono". Omitir faria a despesa de uma operação
+     * ser descontada do lucro de todas as outras — com número plausível nas duas
+     * pontas, que é o que torna o defeito mudo. `test:taxas` prova que a chamada
+     * carrega a área.
+     */
+    criarDespesa: async (input: {
+      name: string;
+      type: ExpenseDTO["type"];
+      calc: ExpenseDTO["calc"];
+      amount: number;
+      paymentMethod?: ExpenseDTO["paymentMethod"];
+      recurrence?: ExpenseDTO["recurrence"];
+    }) => {
+      if (!input.name.trim() || !input.amount) return;
+      const created = await createExpense({ ...input, name: input.name.trim(), workspaceId: s.workspaceAtiva });
+      setS((st) => ({ ...st, expenses: [...st.expenses, created] }));
+    },
+    /** Remove por id — o mesmo caminho dos derivados, para a tela nova. */
+    removerDespesa: async (id: string) => {
+      await deleteExpense(id);
+      setS((st) => ({ ...st, expenses: st.expenses.filter((x) => x.id !== id) }));
+    },
+    /**
+     * Edita valor ou nome.
+     *
+     * ⚠️ O patch é `amount | name | active` porque é isso que `updateExpense`
+     * aceita — e a restrição é PROPOSITAL: não existe caminho pelo qual a edição
+     * toque no `workspaceId`. Ampliar este tipo sem ler a nota do `createExpense`
+     * é como a linha vermelha volta.
+     */
+    editarDespesa: async (id: string, patch: { amount?: number; name?: string; active?: boolean }) => {
+      setS((st) => ({ ...st, expenses: st.expenses.map((x) => (x.id === id ? { ...x, ...patch } : x)) }));
+      await updateExpense(id, patch).catch(() => {});
     },
     /**
      * O painel "Cálculo de lucro" da tela de Taxas.

@@ -993,6 +993,7 @@ qualquer resize, leia `innerWidth` e compare. `innerWidth === screen.availWidth`
 | WEBHOOKS | 18 | — | 6 |
 | CRIATIVOS | 12 | — | 3 |
 | LOGIN | 14 | — | 5 |
+| TAXAS E DESPESAS | 15 | — | 2 |
 <!-- ESTADO:FIM -->
 
 # 🚦 ESTADO ATUAL E FILA — 05/08/2026
@@ -5316,3 +5317,168 @@ tentativas.
 > ⚠️ O `test:login` cobre a ESTRUTURA do erro (`role="alert"`, o par
 > `aria-describedby`/`aria-invalid` do `Input`). O que falta é *como ficou*, e
 > isso nenhuma asserção responde.
+
+---
+
+# 🔌 CAPACIDADE SEM CONTROLE — o avesso do controle inerte
+
+> **Achado em 12/08/2026, na tela de Taxas.** Esta base tem dez registros sobre
+> **controle que não controla nada**. Este é o espelho: **capacidade completa,
+> testada, e nenhum controle que a alcance.**
+
+| | O que existe | Como se descobre |
+|---|---|---|
+| **controle inerte** | o botão, e nada atrás dele | usando o produto — o usuário clica e nada acontece |
+| **capacidade sem controle** | a lógica inteira, e nenhum botão | 🔴 **não se descobre.** Ninguém sente falta do que nunca viu |
+
+O caso: `rateio.ts` respeita `DIARIA · SEMANAL · MENSAL · ANUAL` desde 06/08 —
+função pura, com teste, consumida por `financeiro.ts`. E **a tela nunca deixou
+escolher**: `addDespesa(nome, valor)` recebe dois argumentos e passa
+`recurrence: "MENSAL"` fixo no código.
+
+Consequência: ninguém usando o produto conseguia cadastrar uma despesa anual. A
+correção do rateio — que mudou o Lucro em produção e teve mensagem escrita para
+os testadores — entregou quatro frequências das quais **uma só era alcançável**.
+
+> ### 🔴 E O `@default(UNICA)` DO SCHEMA É INALCANÇÁVEL PELO APP
+> Todo caminho de criação passa frequência explícita (`?? "MENSAL"` na ação,
+> `"MENSAL"` fixo no hook). Ou seja: o default do banco descreve um
+> comportamento que **nenhum usuário jamais obteve**.
+>
+> Eu havia reportado o oposto — *"quem só preenche valor e salva cai em UNICA"* —
+> inferindo do schema em vez de seguir os chamadores. O dono repetiu a premissa
+> ao pedir o aviso, e **medir antes de codificar** foi o que impediu a tela de
+> nascer resolvendo um problema que não existe.
+
+> ### ⛔ A PERGUNTA QUE ACHA OS OUTROS CASOS
+> Não é *"todo botão faz alguma coisa?"* — essa acha o inerte. É:
+>
+> > **"Todo ramo que o servidor sabe executar tem alguém que consegue pedir?"**
+>
+> Ela se responde indo da CAPACIDADE para a TELA, e não o contrário. O `grep` que
+> serve é pelos valores de um enum: se o código trata cinco e a tela oferece um,
+> os outros quatro são capacidade sem controle.
+
+⚠️ **Candidatos nesta base, não investigados:** `ExpenseCalc` (`FIXO` só é
+alcançável em alguns grupos), `PaymentMethod` na taxa de gateway, e os tipos de
+`AutomationRule`. Todos são enum tratado no servidor.
+
+---
+
+# 📌 ESTADO DA SESSÃO — 12/08/2026 (parte 3: TAXAS, a décima segunda tela)
+
+> **A mais nova. Se contradisser qualquer coisa acima, ela vence.**
+>
+> ⛔ **NADA FOI PARA O GITHUB.** `main` em `4e6aa9e`, branch ausente no remoto.
+
+## ✅ A TELA EXISTE — e a `FeesView` (723 linhas) morreu
+
+| | |
+|---|---|
+| `lib/taxas/apresentacao.ts` | a LINGUAGEM: incidência, grupos, frequências, o aviso. **Puro** |
+| `views/taxas/SecaoTaxas.tsx` | os cinco grupos + a moldura. ⛔ **sem server action**, e é por isso que o teste renderiza |
+| `views/taxas/TaxasScreen.tsx` | compõe as duas seções; é quem importa as ações |
+| `useTraffikState` | +3 acessores: `despesasCruas`, `criarDespesa`, `removerDespesa`/`editarDespesa` |
+| `scripts/taxas-dev.mjs` (`npm run dev:taxas`) | o seed que faltava |
+| deletados | `FeesView` (723 linhas) |
+| testes | `test:taxas` **21 asserções**, no `npm test` no MESMO commit |
+
+`04`: seção **nova**, **15 ✅ / 0 ❌ / 2 🔧**. O `docs:estado` conta **11 telas**.
+Baseline validado: as 10 anteriores idênticas.
+
+## 🎯 AS TRÊS COISAS QUE O DONO PEDIU, E COMO CADA UMA FICOU
+
+### 1 · A hierarquia — `Configuração da conta` × `Taxas e despesas`
+
+Imposto sobre anúncios e fuso **ficam**, com os dois motivos do dono escritos no
+cabeçalho da tela: o imposto entra no break-even, e o fuso decide o que é "hoje"
+em todo o produto. O que muda é que agora são **duas seções nomeadas**, não seis
+cartões empilhados — que era o motivo de eles parecerem fora de lugar.
+
+### 2 · `calc × paymentMethod` resolvido com LINGUAGEM
+
+Cada linha diz sobre O QUE incide, e a frase é derivada por função pura:
+
+```
+R$ 2,50 por venda no Pix        ← FIXO, restrito a uma forma
+3,5% sobre toda venda           ← PERCENTUAL, global
+R$ 6.000,00 por ano             ← recorrente, com período
+R$ 300,00 — sem período         ← UNICA: a ausência é NOMEADA
+```
+
+⛔ Uma função, não quatro templates no JSX. O `sobre toda venda` não é enfeite —
+é o contraste explícito com o `no Pix`, e sem ele a linha global não afirma nada.
+
+### 3 · O aviso da despesa única — e o pedido teve de ser invertido
+
+> **A premissa do pedido não se sustentava**, e medir antes de codificar foi o
+> que evitou construir contra um problema inexistente. Ver a seção
+> *CAPACIDADE SEM CONTROLE*, acima.
+
+Não havia seletor de frequência **nenhum**. Decisão do dono: entra com as
+**quatro que contam**, `UNICA` fora, padrão `MENSAL` — que é exatamente o que o
+código já fazia, então **nada muda para quem não mexer nele** (`test:taxas` prova
+a igualdade com o fallback de `createExpense`).
+
+O aviso ficou, na lista, e aparece **porque existe linha `UNICA`** — não por
+interação. ✅ Visto na tela, em âmbar, dizendo o quê e o porquê.
+
+🔜 **Marcado 🔧 REVISÍVEL com gatilho: ele SAI no dia da migration do `ocorreEm`.**
+
+## 🔴 A LINHA VERMELHA, e a guarda que passou com a porta aberta
+
+`Expense.workspaceId` NULO = **vale para TODAS as áreas**. As duas asserções que
+o dono exigiu são estruturais e estão em `test:taxas`.
+
+> ### ⛔ NA PRIMEIRA VERSÃO, A GUARDA DE EDIÇÃO NÃO PEGAVA NADA
+> Ela procurava `Pick<ExpenseDTO, "amount" | "name" | "active">` — e o `Pick`
+> continua lá quando alguém **anexa** `& { workspaceId?: string | null }`.
+> Descoberto ao provar pelo lado negativo: **dos três defeitos plantados, esse
+> foi o único que escapou.**
+>
+> Hoje ela afirma duas coisas: que o `Pick` é o de três campos **e** que a
+> assinatura não menciona `workspaceId`. A primeira mede a presença do certo; só
+> a segunda mede a ausência do errado. **Sétima ocorrência** da família.
+
+## 🐛 DOIS ERROS MEUS, os dois de MEDIÇÃO
+
+| | |
+|---|---|
+| **"0 linhas em `Expense`"** no cabeçalho do seed | **FALSO** — inferi de uma tela que abriu vazia em vez de consultar. O real: **5 despesas, todas `DESPESA_RECORRENTE`, todas `workspaceId` NULO**. Corrigido no arquivo |
+| **contraste 17,85 nos três papéis** | assinatura de seletor errado, não de contraste. Os `querySelector` pegaram wrappers que herdam `text-text`. Refeito mirando as classes, com a contagem de achados como linha de base |
+
+⚠️ O primeiro é o mais grave, porque virou **texto afirmativo num cabeçalho de
+arquivo** — a família que este projeto já pagou nove vezes. O que o denunciou foi
+a tela mostrando despesas que o script não havia criado.
+
+## ✅ LARGURA ESTREITA — a segunda tela a pagar
+
+`0 de 311` descendentes vazando a 360 · 390 · 430 · 768px. O método de Login
+funcionou sem adaptação.
+
+## 👁️ O que foi VISTO e o que foi MEDIDO
+
+| | |
+|---|---|
+| os dois temas | ✅ **vistos E medidos** — aviso 4,95 / 6,17 · fora 5,02 / 7,85 · incidência 4,97 / 5,20 |
+| as 8 formas da frase de incidência | ✅ na tela, com o seed |
+| o seletor de frequência | ✅ visto, `Por mês` por padrão |
+| o aviso de `UNICA` | ✅ visto disparando, com duas linhas `UNICA` no banco |
+| ⛔ adicionar/remover pelo clique | **não exercidos** — escreveriam no banco de dev |
+| ⛔ o aviso de fuso divergente | **não visto** — exigiria trocar o fuso do sistema operacional |
+
+## 📋 ACHADOS ADIADOS — dois novos
+
+| Achado | O que já se sabe |
+|---|---|
+| **Enum tratado no servidor × oferecido na tela** | a varredura de *capacidade sem controle*. Candidatos: `ExpenseCalc`, `PaymentMethod` na taxa de gateway, tipos de `AutomationRule` |
+| **`addDespesa`/`addTax`/`addCoproducao`/`addCustoProduto` do hook ficaram órfãos?** | a tela nova usa `criarDespesa`. ⚠️ **Não varri** — e a regra manda perguntar o que cada um FAZIA antes de apagar, não só se é usado |
+
+## ➡️ PRÓXIMA
+
+Sobram **Áreas** (618 linhas, com fluxo destrutivo) e **Notificações** (130).
+Aí as doze telas existem e **o `.tk-tema` pode morrer** — e a varredura de
+largura estreita nas cinco entra logo depois, com estimativa de **uma sessão**.
+
+`Regras` (21 ❌) segue sendo a maior dívida isolada, e `AnunciosView` (322) é a
+última legada de Integrações servindo rota.
