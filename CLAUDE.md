@@ -4371,3 +4371,164 @@ sobram **Criativos, Login, Taxas, Áreas e Notificações**, as cinco menores.
 
 ⛔ Antes de codificar, as três perguntas de sempre — e mais a nova:
 **"que valor deveria ser IGUAL a este, e é?"**
+
+---
+
+# 🎨 O CANVAS 1×1 PRECISA SER LIMPO — a receita desta base tinha um buraco
+
+> **Registrado em 11/08/2026 porque eu quase reportei um contraste de 1,01:1
+> que não existia.** É a segunda entrada da categoria *defeito relatado onde não
+> havia*, e desta vez a culpa é da TÉCNICA, não da leitura.
+
+O `CLAUDE.md` prescreve *"rasterizar num canvas 1×1"* para medir cor, porque
+`getComputedStyle` devolve `lab(...)`/`oklch(...)` neste projeto e comparar
+string de cor não mede nada. A receita está certa e **incompleta**.
+
+Eu pintei os dois valores — texto e fundo — **no mesmo canvas, sem limpar**. O
+fundo era `oklch(… / 0.14)`, ou seja **translúcido**: ele foi composto **sobre a
+cor do texto** que eu tinha acabado de pintar.
+
+| | |
+|---|---|
+| o que eu li | texto `rgb(197,0,18)` sobre fundo `rgb(199,5,20)` → **1,01:1** |
+| o que era | texto `rgb(197,0,18)` sobre `rgb(249,224,224)` → **4,96:1**, passa no AA |
+
+> ### 🔴 O SINAL DE ALERTA É OS DOIS NÚMEROS SEREM QUASE IGUAIS
+> Duas cores de papéis opostos que medem quase a mesma coisa não são um
+> contraste ruim — são a **assinatura de uma composição acidental**. Contraste
+> ruim de verdade vem de tokens distantes com luminância parecida, não de dois
+> valores separados por 2 pontos em cada canal.
+
+> ### ⛔ A RECEITA COMPLETA
+> **Cor translúcida só pode ser medida SOBRE o fundo real que estará por baixo
+> dela.** Pinte o backdrop primeiro, a cor por cima, e leia — e para a cor do
+> TEXTO use um canvas limpo, porque ela não compõe com nada.
+>
+> ```js
+> const rgb = (css, sobre) => {
+>   const c = document.createElement("canvas"); c.width = c.height = 1;
+>   const x = c.getContext("2d");
+>   if (sobre) { x.fillStyle = sobre; x.fillRect(0, 0, 1, 1); }  // o backdrop REAL
+>   x.fillStyle = css; x.fillRect(0, 0, 1, 1);                    // e só então a cor
+>   const d = x.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2]];
+> };
+> ```
+
+⚠️ **E `fillStyle` ACEITA `lab()`/`oklch()`** — conferido. A primeira teoria que
+me ocorreu foi que ele recusava e mantinha o valor anterior; era elegante e
+errada. *O sinal de alerta é a teoria ficar boa cedo demais* — terceira vez.
+
+---
+
+# 📌 ESTADO DA SESSÃO — 11/08/2026 (parte 6: WEBHOOKS, a nona tela)
+
+> **A mais nova. Se contradisser qualquer coisa acima, ela vence.**
+>
+> ⛔ **NADA FOI PARA O GITHUB.** `main` em `4e6aa9e`, branch ausente no remoto.
+
+## ✅ A NONA TELA EXISTE — e a `WebhooksView` (532 linhas) morreu
+
+| | |
+|---|---|
+| `views/webhooks/WebhooksScreen.tsx` · `GavetaWebhook.tsx` | a tela e a gaveta |
+| `lib/webhooks/estado.ts` | os 5 estados e os 2 motivos de vazio, **puro** |
+| `lib/webhooks/retencao.ts` | **MOVE** dos prazos de purga para fora da rota do cron |
+| `tk/CampoCopiavel.tsx` · `tk/useCopiar.ts` | o segundo é MOVE do UTM |
+| `tk/Input` ganhou `mono` | valor comparado caractere a caractere pede fonte mono |
+| `scripts/webhook-dev.mjs` (`npm run dev:webhook`) | o seed parou de produzir estado inválido |
+| testes | `test:webhooks-tela` **33**, no `npm test` no MESMO commit |
+
+`04`: seção **nova**, de **0 ✅ / 24 ❌** para **18 ✅ / 0 ❌ / 6 🔧**. O
+`docs:estado` conta **10 telas**. Baseline validado: as 9 outras idênticas.
+
+## 🐛 O DEFEITO QUE A TELA ANTIGA PINTAVA DE VERDE
+
+`autenticar()` (`gateways/autenticar.ts:75`) recusa com **401** quando o gateway
+exige chave e não há nenhuma — e a mensagem dele manda o usuário *"editar o
+webhook na aba Integrações › Webhooks"*, que é **esta tela**. A `WebhooksView`
+mostrava esse webhook com o selo **"Ativado"**.
+
+**Medido no dev:** os DOIS estavam assim, com **25 `WebhookLog` REJEITADO** de
+KIRVANO provando. ✅ Não é conta nova — `hasSecret` já vinha no DTO e
+`auth.exigir` já está no registro. É apresentação.
+
+⚠️ **O selo fala do FUTURO; o número ao lado, do passado.** O webhook que recusa
+mostra `14 vendas recebidas` **e** `recusando vendas`, os dois verdadeiros.
+
+## 🔑 O QUE QUASE SE PERDEU, e o modo de falha era mudo
+
+`segredoInicial`, no `useTraffikState`, gerava a chave da Cakto. O **lint** o
+marcou como órfão depois da deleção — e ele **não era código morto, era
+comportamento**: sem ele o webhook da Cakto nasce com `secret` NULO, a Cakto é
+`exigir: true`, e **toda venda volta 401**.
+
+> ⛔ É a regra *"ao remover uma tela, procure as constantes dela"* pagando a
+> conta. A pergunta que salvou não foi "isto é usado?" — foi **"o que este
+> símbolo FAZIA?"**.
+
+## 🧹 A faxina que a deleção obrigou — e o `listRules()` de novo
+
+**36 acessores** do hook ficaram órfãos. Saíram, e com eles a
+`listApiCredentials()` que o **layout rodava em todo carregamento de página**
+para alimentar ninguém — o mesmo defeito do `listRules()` de 05/08. **−144
+linhas** no monolito (`useTraffikState`).
+
+## 🔤 QUINTA E SEXTA VEZ: guarda por texto medindo PROSA
+
+| | |
+|---|---|
+| `indexOf("listWebhooks(workspaceId)")` | achou **o comentário do cabeçalho**, que cita a chamada para explicar por que ela precisa da área |
+| filtro de nome de gateway | reprovou pela **continuação de um bloco de comentário**, que não começa com asterisco |
+
+E as âncoras multilinha ainda falhavam por **CRLF** — a armadilha dos 402
+arquivos. **Só a asserção de LINHA DE BASE transformou o silêncio em falha
+nomeada.** Hoje as leituras normalizam a quebra, e o filtro **apaga** comentário
+antes de medir em vez de filtrar por linha.
+
+✅ **Provado pelo lado negativo:** plantando `listWebhooks()` e deps `[versao]`,
+a suíte sai com 2 falhas nomeadas.
+
+## 🌱 `dev:webhook` — o seed produzia estado INCOMPLETO **e INVÁLIDO**
+
+| | antes | agora |
+|---|---|---|
+| `eventCount` / `lastEventAt` | **0 e NULO** nos dois, com 43 e 14 `Sale` apontando | derivados das vendas |
+| `secret` | **NULO nos dois** — na Kirvano, recusa tudo | um com, um **sem, de propósito** |
+| gateways distintos | 1 | 2 |
+
+⚠️ **100% dos webhooks do dev estavam em erro e NENHUM no estado normal.**
+Idempotente, provado rodando duas vezes. A Cakto que ele cria exercita duas
+coisas **nunca vistas**: a segunda forma de URL (`/api/webhook/sale/`) e a
+exibição da chave gerada por nós.
+
+## 👁️ O que foi VISTO, e o que não
+
+| | |
+|---|---|
+| 3 dos 5 estados na mesma tela | `recebendo` · `recusando` · `mudo` |
+| os 2 estados vazios da lista de entregas | `nunca-recebeu` e `purgado` |
+| os 2 fluxos de chave (de 3) | o gerado (Cakto) e o que pede (Kirvano) |
+| não-regeração da chave | **medida na tela**: reclicar e ir-e-voltar devolvem o mesmo UUID |
+| contraste da caixa de alerta | **medido**: 4,96:1 no tema claro |
+| tema escuro | ✅ **visto**, ⚠️ números não medidos |
+| ⛔ largura estreita | **não verificada** — agora deve em **cinco** telas |
+
+⚠️ **Duas vezes o screenshot quase produziu falso positivo** (um "/" que era "7",
+um esqueleto que era carregamento). Nas duas, medir o DOM resolveu. Screenshot
+desta base não é prova.
+
+## 📋 ACHADOS ADIADOS — três novos
+
+| Achado | O que já se sabe |
+|---|---|
+| **`ApiCredential.workspaceId` tem leitores e ZERO escritores** | `listApiCredentials()` não recebe área e `createApiCredential()` não grava nenhuma (`9f9dfa9`, 24/07 — **congelado**). Lido por `areas/atribuicao.ts` e movido por `areas/exclusao.ts:350`. Mesma forma do `Sale.apiCredentialId`: o passo 4 da precedência nunca distingue nada. A tela **declara** o escopo; não corrige |
+| **A `PixelScreen` rolou o próprio interruptor inline** | `PixelScreen:205-225` desenha um botão com `role="switch"` à mão, enquanto `tk/Controles` exporta `Switch`. É a segunda aparência de interruptor da base. A `WebhooksScreen` usa o primitivo |
+| **`.route-progress` continua CSS órfão** | achado na sessão passada, não tocado. Se alguém o religar, nasce invisível: `z-index: 60` sob a faixa (200), e `top: 0` cai debaixo dela |
+
+## ➡️ PRÓXIMA
+
+Sobram **Criativos** (imagem 9), **Login** (10 e 11), **Taxas**, **Áreas** e
+**Notificações**. `Regras` (21 ❌) segue sendo a maior dívida isolada.
+
+⚠️ **`AnunciosView` (322) é a ÚLTIMA legada de Integrações servindo rota.** Ela
+morre na reescrita dela.
