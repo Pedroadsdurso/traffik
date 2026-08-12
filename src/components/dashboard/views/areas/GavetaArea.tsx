@@ -208,11 +208,24 @@ export function GavetaArea({
 }
 
 function Cores({ valor, aoEscolher }: { valor: string | null; aoEscolher: (c: string) => void }) {
+  /* 🐛 A COR GRAVADA ENTRA NA PALETA MESMO FORA DO CATÁLOGO, e é conserto de
+     tela: a área Principal do dev tem `#8B5CF6` (roxo do sistema antigo), que
+     não está entre as sete. Sem isto o seletor abria com NENHUMA selecionada —
+     a tela afirmando que a área não tem cor enquanto o ponto ao lado a
+     desenhava.
+
+     ⚠️ É o MESMO defeito que eu já tinha previsto no seletor de fuso da tela de
+     Taxas ("o fuso GRAVADO entra na lista mesmo fora do catálogo") e não
+     apliquei aqui — o que mostra que a nota de lá descrevia UM caso em vez de
+     nomear o padrão. O padrão é: *seletor de valor fechado precisa admitir o
+     valor que já está gravado, senão ele mente sobre o estado atual.* */
+  const paleta = valor && !CORES_DE_AREA.includes(valor) ? [valor, ...CORES_DE_AREA] : CORES_DE_AREA;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <span className="text-label text-text-secondary">Cor</span>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {CORES_DE_AREA.map((c) => (
+        {paleta.map((c) => (
           <button
             key={c}
             type="button"

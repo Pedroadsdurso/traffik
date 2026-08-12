@@ -1047,7 +1047,7 @@ qualquer resize, leia `innerWidth` e compare. `innerWidth === screen.availWidth`
 | CRIATIVOS | 12 | — | 3 |
 | LOGIN | 14 | — | 5 |
 | TAXAS E DESPESAS | 17 | — | 2 |
-| ÁREAS DE TRABALHO | 0 | — | 1 |
+| ÁREAS DE TRABALHO | 14 | — | 2 |
 <!-- ESTADO:FIM -->
 
 # 🚦 ESTADO ATUAL E FILA — 05/08/2026
@@ -5715,10 +5715,96 @@ que existe.
 precisariam ser exercidos estão listados no `04`, e o primeiro (`regras: "mover"`
 com regra ATIVA) é o único que **volta a agir sozinho** depois do teste.
 
+## ✅ A PASSADA VISUAL FOI FEITA — 14 ✅ / 2 🔧, e três itens EM BRANCO
+
+O dono logou e a tela foi percorrida nos dois temas. Contraste medido: nome
+**17,85 / 16,11**, descrição e resumo **4,97 / 5,20**. Largura estreita: **0 de
+47** vazando a 360 · 390 · 430 · 768px.
+
+✅ **O caminho de escrita foi exercido NA TELA**, não só por asserção: criei
+`Operação Black` pela gaveta com nome, descrição, cor, 1 conta, 1 webhook e 1
+produto, e o cartão voltou dizendo `1 conta · 1 webhook · 1 produto`.
+
+## 🔴 O ACHADO: DOIS MECANISMOS PARA A MESMA RELAÇÃO, E ELES NÃO CONVERSAM
+
+| | Lê / escreve |
+|---|---|
+| `preverExclusaoDaArea` | `AdAccount.workspaceId` · `Webhook.workspaceId` · `PixelConfig.workspaceId` (`exclusao.ts:101-103`) |
+| o formulário de Áreas | `Workspace.accountIds` · `webhookIds` · `pixelConfigIds` |
+
+**Observado na tela:** marquei 1 conta e 1 webhook, o cartão confirma, e o
+diálogo de exclusão **não mostrou seletor de destino nenhum** — para ele, a área
+não tem conta nem webhook.
+
+⛔ **CONGELADO** (anterior a `4e6aa9e`): medido, registrado, não consertado.
+
+🔑 **E isto reenquadra o `pixelConfigIds`:** ele não é coluna órfã solitária — é
+**um lado inteiro de um par**. A pergunta certa deixa de ser "remover o
+controle?" e passa a ser **"qual dos dois lados é a relação de verdade?"**.
+
+⚠️ Por isso três itens do diálogo ficaram EM BRANCO: com a relação partida, a
+área criada não tem regras nem despesas do ponto de vista da prévia, e a
+**promoção de escopo não teve como disparar na tela**. Ela está testada como
+função pura, e **não vista**.
+
+## 🐛 O defeito que só a tela mostrou
+
+**A cor gravada não estava na paleta** — a Principal do dev tem `#8B5CF6`, e o
+seletor abria com nenhuma selecionada. ⚠️ É o MESMO defeito que eu já havia
+previsto no seletor de fuso de Taxas e não apliquei aqui: prova de que aquela
+nota descrevia UM caso em vez de nomear o padrão. Hoje o padrão está escrito:
+**seletor de valor fechado precisa admitir o valor já gravado.**
+
 ## ➡️ PRÓXIMA
 
-**Notificações** (130 linhas, 11 caminhos de escrita) — e a conferência de
-escrita dela na hora, com o mesmo método. Aí as doze telas existem e o
-`.tk-tema` pode morrer.
+**Notificações** (130 linhas, 11 caminhos de escrita) — com a conferência de
+escrita como ASSERÇÃO, no modelo de `test:areas-tela`. Aí as doze telas existem
+e o `.tk-tema` pode morrer.
 
-⚠️ **Antes:** a passada visual de Áreas, que depende de o dono estar logado.
+Depois: a mesma asserção nas nove já feitas, e a varredura de largura estreita
+nas cinco que faltam (estimativa: uma sessão).
+
+---
+
+# 🕳️ NEGAÇÃO SOBRE STRING VAZIA SEMPRE PASSA — e componente que porta some do `renderToStaticMarkup`
+
+> **12/08/2026, na tela de Áreas.** Vai junto do padrão da LINHA DE BASE, porque
+> é a forma dele que mais engana: aqui não havia âncora errada nem CRLF. **O
+> componente simplesmente não existia no markup.**
+
+`tk/Gaveta`, `Drawer`, `Modal` e a paleta ⌘K portam para o `<body>` com
+`createPortal`. Sem DOM, `renderToStaticMarkup` devolve **string vazia** — é a
+mesma "proteção por ESTRUTURA" que impede o `elapsed()` de quebrar a hidratação,
+e ela é boa. O problema é o que acontece com as asserções:
+
+```js
+const html = renderToStaticMarkup(<GavetaExcluir … />);   // ""
+assert.ok(!/para confirmar/.test(html));                   // ✅ PASSA
+```
+
+> ## O teste afirma que o diálogo NÃO tem confirmação por digitação. Ele tem — só não foi desenhado.
+
+| Forma da asserção | Com markup vazio |
+|---|---|
+| `assert.ok(html.includes("X"))` | ❌ falha — **e é a boa** |
+| `assert.ok(!html.includes("X"))` | 🔴 **passa, afirmando o contrário do verdadeiro** |
+| `assert.equal(conta(html, "X"), 0)` | 🔴 passa |
+
+⚠️ Quatro asserções deste arquivo estavam assim, e **o que denunciou foi a linha
+de base** (`assert.ok(html.length > 1200)`). Sem ela, três teriam ficado verdes
+para sempre — e uma delas alegava cobrir a confirmação de um fluxo IRREVERSÍVEL.
+
+> ### ⛔ AS DUAS REGRAS
+>
+> **1. Toda asserção de NEGAÇÃO sobre markup exige a linha de base que prova que
+> houve markup.** É a mesma regra do `=== 0` com coleção vazia, na camada de
+> render.
+>
+> **2. Antes de escrever teste de componente, pergunte se ele PORTA.** O `grep`
+> é por `createPortal` / `useOverlay` na cadeia de imports. Se portar, ele não
+> renderiza em `renderToStaticMarkup`, e o teste tem de mudar de forma —
+> guardas de texto com o limite escrito, ou um DOM de verdade.
+
+⚠️ **O sinal barato:** o comprimento do markup. Meça uma vez, no começo do
+arquivo; ele custa uma linha e responde "houve o que examinar?" para todas as
+asserções que vêm depois.

@@ -1318,38 +1318,83 @@ rico** — cinco linhas, cinco frequências, tudo plausível.
 ⛔ **NÃO HÁ IMAGEM DE REFERÊNCIA.** Critério de Pixel/Eventos, Webhooks e Taxas:
 `06` para acabamento, o que a tela faz para conteúdo.
 
-> ### 🔴 A COLUNA ESTÁ EM BRANCO DE PROPÓSITO — A TELA NÃO FOI VISTA
->
-> **A sessão de dev do navegador expirou** (`Não autenticado` no log do servidor)
-> e a passada visual não foi feita. Pela convenção desta seção, **linha em branco
-> = construída e NÃO VISTA**, e em branco ela fica FORA da contagem do
-> `docs:estado` em vez de entrar como feita.
->
-> ⛔ Não marque ✅ aqui sem abrir a tela. Foi a passada visual que achou o único
-> bug real do Gerenciador, os três de Login e os dois de Taxas — e a metade da
-> lista abaixo é layout, que só a tela responde.
+> ### 🔎 CONVENÇÃO — a mesma de CAMPANHAS, LOGIN e TAXAS
+> **✅ = eu vi na tela.** Linha em branco = construída e NÃO VISTA. Percorrida
+> em 12/08/2026, nos dois temas, com uma segunda área criada **pela própria
+> tela** — o que exercitou o caminho de escrita de ponta a ponta.
 
 | Elemento | Status |
 |---|---|
-| Lista de áreas em cartões, com cor, nome e descrição | |
-| Selo `Principal` e selo `Arquivada` | |
-| **Resumo do recorte** — diz o EFEITO, não a contagem crua | |
-| Botões editar · duplicar · excluir por linha | |
-| ⛔ A Principal NÃO tem botão de excluir | |
-| Gaveta de criar/editar, na `tk/Gaveta` | |
-| Paleta de cor, com anel no selecionado | |
-| Listas de contas · webhooks · pixels, com rolagem | |
-| **Chips livres** de produtos e fontes de tráfego | |
-| Interruptor de arquivar — ausente na Principal | |
-| **Conflito de conta** — a gaveta NÃO fecha, e oferece autorizar a mudança | |
-| Gaveta de exclusão, com destino por grupo | |
+| Lista de áreas em cartões, com cor, nome e descrição | ✅ |
+| Selo `Principal` | ✅ |
+| Selo `Arquivada` | |
+| **Resumo do recorte** — diz o EFEITO, não a contagem crua | ✅ |
+| Botões editar · duplicar · excluir por linha | ✅ |
+| ⛔ A Principal NÃO tem botão de excluir | ✅ |
+| Gaveta de criar/editar, na `tk/Gaveta` | ✅ |
+| Paleta de cor, com anel no selecionado | ✅ |
+| Listas de contas · webhooks · pixels, com rolagem | ✅ |
+| **Chips livres** de produtos e fontes de tráfego | ✅ |
+| Interruptor de arquivar — ausente na Principal | ✅ |
+| **Conflito de conta** — a gaveta NÃO fecha, e oferece autorizar | |
+| Gaveta de exclusão, com destino por grupo | 🔧 |
 | 🔴 **Consequência de PROMOÇÃO de escopo, com contagem real** | |
 | Bloco de PERDA, separado do de promoção | |
-| Confirmação por digitação do nome | |
-| Grupo vazio não desenha seletor | |
-| Tema claro e tema escuro | |
-| Largura estreita | |
+| Confirmação por digitação do nome | ✅ |
+| Grupo vazio não desenha seletor | ✅ |
+| Tema claro e tema escuro | ✅ |
+| Largura estreita | ✅ |
 | `pixelConfigIds` — controle mantido | 🔧 |
+
+### ✅ O CAMINHO DE ESCRITA, EXERCIDO NA TELA — melhor que qualquer asserção
+
+Criei `Operação Black` pela gaveta: nome, descrição, cor, 1 conta, 1 webhook e
+1 produto. O cartão voltou dizendo **`1 conta · 1 webhook · 1 produto`**. Ou
+seja, os campos não só chegam ao servidor — eles voltam.
+
+### 🔴 O ACHADO: SÃO DOIS MECANISMOS PARA A MESMA RELAÇÃO, E ELES NÃO CONVERSAM
+
+**Medido em 12/08/2026, e observado na tela — que é a evidência mais forte.**
+
+| | Lê / escreve |
+|---|---|
+| `preverExclusaoDaArea` | `AdAccount.workspaceId` · `Webhook.workspaceId` · `PixelConfig.workspaceId` (`exclusao.ts:101-103`) |
+| o formulário de Áreas | `Workspace.accountIds` · `webhookIds` · `pixelConfigIds` |
+
+O que aconteceu na tela: marquei 1 conta e 1 webhook, o cartão confirma
+`1 conta · 1 webhook`, e o **diálogo de exclusão não mostrou seletor de destino
+nenhum** — porque, do ponto de vista dele, a área não tem conta nem webhook.
+
+⛔ **Código CONGELADO** (anterior a `4e6aa9e`): medido, registrado, **não
+consertado**. E isto reenquadra o `pixelConfigIds`: ele não é uma coluna órfã
+solitária — é **um lado inteiro de um par**, e a pergunta certa não é "remover o
+controle?", é **"qual dos dois lados é a relação de verdade?"**.
+
+⚠️ Por isso três itens do diálogo ficaram EM BRANCO: com a relação partida, a
+área que criei não tem regras nem despesas do ponto de vista da prévia, então a
+**promoção de escopo não teve como disparar**. Ela está testada em
+`test:areas-tela` (a função pura), e **não vista**.
+
+### 🐛 O defeito que só a tela mostrou
+
+**A cor gravada não estava na paleta.** A Principal do dev tem `#8B5CF6` — roxo
+do sistema antigo —, e o seletor abria com NENHUMA cor selecionada: a tela
+afirmando que a área não tem cor enquanto o ponto ao lado a desenhava.
+
+⚠️ **É o mesmo defeito que eu já havia previsto no seletor de fuso da tela de
+Taxas** (*"o fuso GRAVADO entra na lista mesmo fora do catálogo"*) e não apliquei
+aqui — prova de que aquela nota descrevia UM caso em vez de nomear o padrão. O
+padrão é: **seletor de valor fechado precisa admitir o valor já gravado, senão
+ele mente sobre o estado atual.**
+
+### O que foi MEDIDO
+
+| | Claro | Escuro |
+|---|---|---|
+| nome da área | **17,85:1** | **16,11:1** |
+| descrição · resumo do recorte | 4,97 | 5,20 |
+
+**Largura estreita:** `0 de 47` descendentes vazando a 360 · 390 · 430 · 768px.
 
 ### 🔧 O único item que já tem decisão: `pixelConfigIds`
 
