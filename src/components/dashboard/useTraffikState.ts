@@ -1873,6 +1873,24 @@ export function useTraffikState(
       preview: notifPreview,
     },
     toggleNotifyPending: () => setSetting({ notifyPendingSale: !ns.notifyPendingSale }),
+    /**
+     * O DTO CRU das configurações — os onze campos, com os quatro horários.
+     *
+     * ⚠️ `notif` é modelo de TELA e NÃO tem `report08`…`report23`: eles saem
+     * dele para virar a lista `reports`, com um `toggle` por horário. A tela
+     * nova escreve os onze pelo MESMO caminho, e para isso precisa dos onze
+     * juntos — foi o `tsc` que denunciou a diferença de forma, ao recusar
+     * `notif` onde o DTO era esperado.
+     */
+    notifCru: ns,
+    /**
+     * O caminho ÚNICO de escrita das configurações de notificação.
+     *
+     * ⛔ A tela nova manda os ONZE campos por aqui, e a lista deles é dado em
+     * `lib/notificacoes/apresentacao.ts`. Um acessor por campo seria onze
+     * lugares onde esquecer um — a forma exata da regressão do `calc` em Taxas.
+     */
+    salvarNotificacao: (patch: Partial<NotificationSettingsDTO>) => setSetting(patch),
     toggleNotifyApproved: () => setSetting({ notifyApprovedSale: !ns.notifyApprovedSale }),
     toggleShowValue: () => setSetting({ showValue: !ns.showValue }),
     toggleShowProduct: () => setSetting({ showProductName: !ns.showProductName }),

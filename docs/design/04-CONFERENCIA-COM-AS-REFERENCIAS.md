@@ -1489,6 +1489,78 @@ confirmação por digitação quando ele apenas não havia sido desenhado.
 
 ---
 
+## NOTIFICAÇÕES
+
+⛔ **NÃO HÁ IMAGEM DE REFERÊNCIA.** Critério de Pixel/Eventos, Webhooks, Taxas e
+Áreas: `06` para acabamento, o que a tela faz para conteúdo.
+
+| Elemento | Status |
+|---|---|
+| Duas seções: `Notificações de venda` e `Resumo por horário` | ✅ |
+| Ícone em recipiente quadrado neutro (`06` §13) | ✅ |
+| `Quando avisar` — venda aprovada e pendente | ✅ |
+| ⚠️ `Venda pendente` declara que o dinheiro pode NÃO entrar | ✅ |
+| `O que mostrar` — quatro campos do conteúdo | ✅ |
+| Quatro horários de resumo, em grade | ✅ |
+| Seletor de padrão, com a explicação do escolhido embaixo | ✅ |
+| **Aviso quando nenhum horário está ligado** | |
+| **Aviso quando nenhum alerta de venda está ligado** | |
+| Declaração de que o horário segue o fuso da CONTA | ✅ |
+| Tema claro | ✅ |
+| Tema escuro | ✅ visto, ⚠️ **não medido** |
+| Largura estreita | ✅ |
+
+### ✅ A CONFERÊNCIA DE ESCRITA — os onze campos, cruzados com o DTO
+
+`test:notificacoes` lê os campos do `NotificationSettingsDTO` **do próprio
+arquivo da ação** e exige que o conjunto seja **igual** ao que a tela escreve —
+nem a mais, nem a menos. As duas direções importam:
+
+| | O que aconteceria |
+|---|---|
+| campo no servidor e não na tela | o interruptor some, a leitura continua certa, ninguém nota — a regressão de Taxas |
+| campo na tela e não no servidor | o patch é descartado em silêncio, e a tela mostra o valor que ela mesma inventou |
+
+✅ **Provado pelo lado negativo:** removendo `showValue` da lista da tela, a
+suíte reprova nomeando o campo.
+
+### 🐛 O que o `tsc` achou antes de mim
+
+**`v.notif` não tem os quatro horários.** Ele é modelo de TELA: os `report08…23`
+saem dele para virar a lista `reports`, com um `toggle` por horário, e no lugar
+deles entra um `preview` que o DTO não tem. Ou seja, **`notif` e
+`NotificationSettingsDTO` são formas diferentes**, e eu tratei os dois como o
+mesmo.
+
+Quem denunciou foi o compilador, ao recusar `notif` onde o DTO era esperado. A
+tela passou a consumir `v.notifCru` — o DTO inteiro, com os onze campos.
+
+⚠️ É a mesma classe do `despesasCruas` em Taxas: **derivado de tela não serve
+para escrever**, porque ele foi moldado para o que a tela antiga desenhava.
+
+### O que foi MEDIDO
+
+| | Claro |
+|---|---|
+| título da seção | **17,85:1** |
+| apoio | 4,97 |
+
+**Largura estreita:** `0 de 102` descendentes vazando a 360 · 390 · 430 · 768px.
+
+⚠️ O tema escuro foi **visto** e não medido: o `Runtime.evaluate` congelou o
+renderer duas vezes seguidas, e a regra das duas tentativas manda parar.
+
+### Os dois itens em branco
+
+Os dois avisos condicionais (nenhum horário ligado · nenhum alerta de venda
+ligado) **não foram vistos disparando** — o dev tem `23h` ligado e os dois
+alertas de venda ligados. Estão testados como função pura (`nenhumHorarioLigado`)
+e o texto está afirmado por guarda, mas **como ficam na tela ninguém viu**.
+
+⛔ Ligá-los exigiria desligar as configurações reais do dono no banco de dev.
+
+---
+
 ## O QUE ESTÁ NAS REFERÊNCIAS E NÃO EXISTE NO PRODUTO
 
 Backend novo, não redesign. **Nenhum destes tem prazo até decisão explícita.**

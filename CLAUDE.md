@@ -1048,6 +1048,7 @@ qualquer resize, leia `innerWidth` e compare. `innerWidth === screen.availWidth`
 | LOGIN | 14 | — | 5 |
 | TAXAS E DESPESAS | 17 | — | 2 |
 | ÁREAS DE TRABALHO | 14 | — | 2 |
+| NOTIFICAÇÕES | 11 | — | — |
 <!-- ESTADO:FIM -->
 
 # 🚦 ESTADO ATUAL E FILA — 05/08/2026
@@ -5808,3 +5809,132 @@ para sempre — e uma delas alegava cobrir a confirmação de um fluxo IRREVERS�
 ⚠️ **O sinal barato:** o comprimento do markup. Meça uma vez, no começo do
 arquivo; ele custa uma linha e responde "houve o que examinar?" para todas as
 asserções que vêm depois.
+
+---
+
+# 🔗🔗 DUAS RELAÇÕES PARALELAS PARA A MESMA COISA, SEM CONVERSA ENTRE ELAS
+
+> ## 🔴 PRIORIDADE ALTA — e **não é dívida de modelagem**: é a confirmação de um fluxo IRREVERSÍVEL podendo silenciar.
+
+**Medido e OBSERVADO NA TELA em 12/08/2026**, na reescrita de Áreas. Código
+congelado (anterior a `4e6aa9e`): medido, registrado, **não consertado**.
+
+| | Lê / escreve |
+|---|---|
+| `preverExclusaoDaArea` | `AdAccount.workspaceId` · `Webhook.workspaceId` · `PixelConfig.workspaceId` (`exclusao.ts:101-103`) |
+| o formulário de Áreas | `Workspace.accountIds` · `webhookIds` · `pixelConfigIds` |
+
+**São dois vínculos paralelos para a mesma relação**, e eles não se enxergam.
+Observado: marquei 1 conta e 1 webhook, o cartão confirmou `1 conta · 1 webhook`,
+e o diálogo de exclusão **não mostrou seletor de destino nenhum** — para ele,
+aquela área estava vazia.
+
+### 🔴 A CONSEQUÊNCIA QUE MUDA A SEVERIDADE
+
+O diálogo de exclusão existe para dizer **o que a exclusão PROMOVE**:
+
+> *"Esta área tem N despesas e M regras. Ao excluí-la, elas passam a valer para
+> TODAS as áreas."*
+
+Se a prévia enxerga uma área **vazia**, esse aviso **não dispara**. Numa conta
+real com `Expense.workspaceId` ou `AutomationRule.workspaceId` preenchidos por
+outro caminho, o usuário confirma uma exclusão irreversível **sem ver o único
+aviso que o diálogo existe para dar** — e a regra sobrevivente volta a agir
+sozinha, com dinheiro real.
+
+⛔ **Não é "o `pixelConfigIds` está órfão".** Ele é **um lado inteiro de um par**,
+e a pergunta certa não é *"remover o controle?"* — é:
+
+> **Qual dos dois vínculos é a relação de verdade?**
+
+Um dos dois lados está errado, e escolher sem medir é escolher no escuro.
+
+⚠️ **O que já se sabe, medido:** as duas relações têm consumidores. O lado
+`<Recurso>.workspaceId` alimenta a prévia da exclusão e a precedência de área; o
+lado `Workspace.*Ids` alimenta a tela de Áreas e parte de `actions/workspaces.ts`.
+**Nenhum dos dois é dispensável sem medir quem depende de qual.**
+
+---
+
+# 🌉 O `.tk-tema` NÃO PODE MORRER AINDA — medido, e o bloqueio é o SHELL
+
+> **12/08/2026.** A remoção estava aprovada para o fechamento das doze telas. A
+> medição diz que não dá, e o motivo é maior que as duas telas legadas.
+
+| O que ainda depende | Medido |
+|---|---|
+| `RulesView` + `RuleDrawer` | servem `/dashboard/regras` e consomem `--color-*`. **`Regras` nunca foi reescrita** — 21 ❌ no `04` |
+| `AnunciosView` | serve `/dashboard/integracoes/anuncios` e consome `--color-*` |
+| 🔴 **`dashboard/ui/Icone`** | **10 componentes de `tk/` o importam** — `Rail`, `CommandBar`, `ContextBar`, `HelpMenu`, `NotificationsBell`, `AlertList`, `Paginacao`, `PainelInsights`, `BarraSelecao`, `TabelaAds` |
+
+E o `Icone` lê `--color-accent` e `--color-text-muted` (`Icone.tsx:172-173`).
+
+> ## Ou seja: remover a ponte pintaria de ROXO os ícones do próprio shell novo — o rail, a paleta ⌘K, o sino, a paginação.
+
+⛔ **O bloqueio não é "faltam duas telas legadas".** É que o sistema novo
+**consome um componente do sistema antigo**, e ninguém tinha medido isso.
+
+### 🔜 A ORDEM QUE DESTRAVA, e ela é curta
+
+1. **Migrar o `Icone`** para `--tk-*` (ou criar o equivalente em `tk/`). É UM
+   arquivo, e ele sozinho libera os 10 consumidores novos.
+2. Reescrever **Regras** (a maior dívida isolada) e **Anúncios** (322 linhas).
+3. Só então remover a ponte — com o `test:contraste` e uma passada visual nas
+   rotas legadas antes e depois.
+
+⚠️ **O passo 1 é barato e independente dos outros dois.** Ele não remove a
+ponte, mas tira o shell novo de dentro dela — que é a parte que hoje torna a
+remoção impossível de avaliar.
+
+---
+
+# 📌 ESTADO DA SESSÃO — 12/08/2026 (parte 5: NOTIFICAÇÕES, e as doze existem)
+
+> ⛔ **NADA FOI PARA O GITHUB.** `main` em `4e6aa9e`, branch ausente no remoto.
+
+## ✅ AS DOZE TELAS EXISTEM
+
+`NotificationsView` (130) morreu. `views/notificacoes/NotificacoesScreen.tsx` +
+`lib/notificacoes/apresentacao.ts` (puro) no lugar. `test:notificacoes` com **12
+asserções**, no `npm test` no MESMO commit.
+
+`04`: seção nova, **11 ✅**, dois itens em branco. O `docs:estado` conta **13
+telas**. Baseline validado: as 12 anteriores idênticas.
+
+## 🔑 A CONFERÊNCIA DE ESCRITA, PELA SEGUNDA VEZ COMO ASSERÇÃO
+
+`test:notificacoes` cruza `CAMPOS_ESCRITOS` da tela com o
+`NotificationSettingsDTO` lido do arquivo da ação, e exige **igualdade nos dois
+sentidos**. Provado pelo lado negativo: removendo `showValue`, a suíte nomeia o
+campo.
+
+⚠️ **É o modelo pronto para as nove telas antigas.** Duas telas, duas formas da
+mesma guarda: em Áreas ela lê o `data:` do `update`; aqui ela lê o `interface`
+do DTO. O que as duas têm em comum é **ler o servidor em vez de copiá-lo**.
+
+## 🐛 O `tsc` ACHOU ANTES DE MIM: `notif` ≠ `NotificationSettingsDTO`
+
+`v.notif` é modelo de TELA e **não tem os quatro horários** — eles saem dele para
+virar a lista `reports`, e no lugar entra um `preview` que o DTO não tem. Eu
+tratei os dois como o mesmo, e o compilador recusou.
+
+A tela passou a consumir `v.notifCru`. ⚠️ Mesma classe do `despesasCruas`:
+**derivado de tela não serve para escrever**, porque foi moldado para o que a
+tela ANTIGA desenhava.
+
+## ⏳ O QUE FICA DEVENDO
+
+| | |
+|---|---|
+| tema escuro de Notificações | **visto, não medido** — o `Runtime.evaluate` congelou duas vezes |
+| os dois avisos condicionais | não vistos disparando: ligá-los exigiria desligar as configurações reais do dono no dev |
+| `.tk-tema` | 🔴 **não pode morrer ainda** — ver a seção própria acima |
+
+## ➡️ O QUE SOBRA PARA O PROJETO FECHAR
+
+1. **Migrar o `Icone`** para `--tk-*` — um arquivo, e ele destrava a avaliação da
+   ponte (10 componentes de `tk/` dependem dele hoje).
+2. **Varredura de largura estreita** nas cinco — estimativa de uma sessão.
+3. **Conferência de escrita** nas nove — agora com o modelo pronto.
+4. `Regras` (21 ❌) e `AnunciosView` (322), as duas legadas que restam.
+5. A sessão de **migration**: `ocorreEm` + os dois `@default` mortos.
