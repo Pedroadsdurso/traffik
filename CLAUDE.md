@@ -3859,7 +3859,14 @@ dela.
 > **A mais nova.** ⛔ **NADA FOI PARA O GITHUB.** `main` em `4e6aa9e`, **83
 > commits locais**, branch ausente no remoto.
 
-## 🔴🔴 LEIA ISTO PRIMEIRO: A GAVETA NÃO TEM CONSUMIDOR
+## ✅ RESOLVIDO EM 11/08 (parte 3): a gaveta ganhou consumidor
+
+> ⚠️ **O bloco abaixo descreve o estado do MEIO da sessão de 11/08 e ficou
+> como registro.** A `PixelScreen` existe, serve a rota e foi vista no
+> navegador — ver a seção de **11/08 (parte 3)**, no fim do arquivo. Não leia o
+> que segue como estado atual.
+
+## 🗃️ (registro) A GAVETA NÃO TINHA CONSUMIDOR
 
 `GavetaPixel.tsx` está pronta, com `tsc` limpo, lint 0 e 17 asserções verdes —
 e **nenhum arquivo de produção a importa.** Não existe `PixelScreen`, a rota
@@ -3943,3 +3950,174 @@ tornar a dívida visível — não pode agravá-la.
 não morrem com a view antiga. `checkoutProprio` continua **sem teste** — e a
 asserção que falta é a que o dono pediu: 101 linhas que decidem detecção de IC e
 ninguém verifica.
+
+
+---
+
+# 📌 ESTADO DA SESSÃO — 11/08/2026 (parte 3: PIXEL & EVENTOS, a oitava tela)
+
+> **A mais nova. Se contradisser qualquer coisa acima, ela vence.**
+>
+> ⛔ **NADA FOI PARA O GITHUB.** `main` em `4e6aa9e`, branch ausente no remoto.
+
+## ✅ A GAVETA TEM CONSUMIDOR — e a passada visual achou o que o build não acha
+
+A seção anterior abria com *"a gaveta está pronta e NÃO TEM CONSUMIDOR"*. Deixou
+de ser verdade: existe `PixelScreen`, ela serve a rota, e a `PixelView` (1.181
+linhas) **foi deletada** — com os dois `elapsed()` crus das linhas 272 e 294.
+
+| | |
+|---|---|
+| `views/pixel/PixelScreen.tsx` | mestre · diagnóstico POR EVENTO · lista de eventos |
+| `lib/pixel/eventos.ts` | janela, vocabulário e os **três** motivos de lista vazia |
+| `lib/actions/pixelEvents.ts` | listagem paginada + diagnóstico em lote |
+| `tk/Gaveta.tsx` | a camada lateral do sistema novo |
+| `lib/areas/escopoWhere.ts` | MOVE do `where` da área para fora do módulo que importa o prisma |
+| deletados | `PixelView` (1.181 linhas) |
+| testes | `test:pixel-tela` **25** · `test:checkout-proprio` **18** — os dois no `npm test` no MESMO commit |
+
+`04`: de **0 ✅ / 31 ❌** para **28 ✅ / 0 ❌ / 1 🔧**. Validado contra baseline: as
+8 outras telas saíram idênticas.
+
+## 🐛 O QUE SÓ A TELA MOSTROU — quatro, e o primeiro é do SHELL
+
+| | |
+|---|---|
+| 🔴 **o título da gaveta saía CORTADO AO MEIO** | a faixa de ambiente é `z-index` 200 e toda camada flutuante é 70 |
+| aviso **duplicado** | com o trecho de URL vazio, o `erro` do campo e o `grau: "vazio"` do analisador diziam a mesma coisa, em duas caixas coladas |
+| tabela em **ilhas** | 4 colunas curtas espalhadas por `width:100%`, com vãos de 200px |
+| o script **não tinha COPIAR** | um bloco de código feito para ser colado no site, e sem botão |
+
+### 🩼 A ALTURA DA FAIXA ERA UM NÚMERO ESCRITO À MÃO — e já estava errado
+
+`ALTURA_FAIXA_AMBIENTE = 26`. A faixa pinta **27,8px**. O conteúdo do shell já
+ficava 1,8px por baixo dela, e ninguém tinha visto — o comentário da constante
+**já nomeava o modo de falha** (*"dois valores escritos à mão é como o rodapé do
+rail voltaria a ser cortado"*), e ele aconteceu com um **terceiro** consumidor
+que ninguém previu: as camadas flutuantes.
+
+Hoje a altura é **MEDIDA** (`ResizeObserver` na própria faixa) e vai para
+`--tk-faixa-topo`, que o shell, o rail e a `tk/Gaveta` leem. `0px` é o padrão
+certo: em produção não há faixa.
+
+> ⛔ **Não reponha o número.** Nenhuma constante estaria certa: a faixa quebra em
+> duas linhas em viewport estreito. E quem precisa dela é um portal para o
+> `<body>`, que não herda nada do shell — variável na raiz do documento é o
+> único canal.
+
+⚠️ **`ui/Drawer` e `ui/Modal` continuam com o defeito** — eles também são
+`z-index` 70. Não foram tocados: são anteriores a `4e6aa9e` e morrem à medida que
+as telas são reescritas. Se aparecer gaveta legada com o título cortado em
+desenvolvimento, é isto, e a correção é uma linha
+(`top: var(--tk-faixa-topo, 0px)`).
+
+## ✅ O PRESET FOI EXERCIDO NA TELA, não só no teste
+
+Responder *"Não, só a Trackhub vai enviar"* virou, no artefato, **no mesmo
+clique**:
+
+```
+var NATIVO  = true          →  false
+var ALHEIOS = ["PageView"]  →  []
+```
+
+E voltar para *"Sim"* devolveu os dois. É a proteção contra contagem dobrada
+funcionando de ponta a ponta — do rádio ao texto que vai para o site do cliente.
+
+✅ **O aviso vermelho também foi visto disparando**: `temPixelNativo` com o
+`PageView` reatribuído à Trackhub à mão pinta *"esta combinação conta a visita
+duas vezes"*, e o selo vira `Ajustado à mão`, com o `↩ voltar ao padrão` ao lado.
+
+## 🔧 A COLUNA `origem` SAIU DA TABELA — medido, não decidido no gosto
+
+O evento de checkout criado pelo webhook do gateway
+(`webhook/checkoutEvent.ts:151`) **não grava `pixelConfigId`**. Conferido nos
+dois lados: no código (o `create` não tem o campo) e no banco de dev (**0
+linhas** com prefixo `gw:` e configuração).
+
+Uma lista POR PIXEL é, portanto, **do navegador por construção** — e uma coluna
+com um único valor possível não informa: ela ocupa largura afirmando que existe
+uma distinção. No lugar dela entrou **`Página`**, que responde *onde* o evento
+disparou e já vinha no DTO, invisível dentro de um `title`.
+
+⚠️ O campo `origem` continua no DTO, derivado do prefixo `gw:`. Se o webhook um
+dia carimbar o pixel, a coluna volta sem conta nova.
+
+## 🌗 O QUE O SEED DO DEV NÃO CONSEGUE MOSTRAR — medido, e é um ACHADO
+
+`seed-dev` cria `PixelConfig` **sem `MetaPixel` e sem `PixelEventRule`** (0 e 0,
+medidos). As consequências na tela são todas honestas e todas cegas:
+
+| | |
+|---|---|
+| `0 pixels da Meta` em todo pixel | o fan-out nunca é exercido com N > 1 |
+| **todo evento aparece `desligado`** no diagnóstico | não há regra ligada para ver o estado bom |
+| `espelho`, `detectores` e `ambiente` **NULOS** nas 35 linhas | a coluna de espelho só sabe dizer *não informado* |
+
+⚠️ É a família **"o seed produz estado INCOMPLETO"**: o ramo exercido funciona, e
+o outro nunca foi percorrido.
+
+## 🔬 AS DUAS METADES DA RESTRIÇÃO DO ARTEFATO, provadas separadas
+
+| # | O que o teste prova | Como |
+|---|---|---|
+| 1 | trocar de **PIXEL** troca o CONTEÚDO do script | `var CONFIG` muda — e o mesmo pixel produz o mesmo script, que é o controle negativo |
+| 2 | trocar de **ÁREA** troca a LISTA alcançável | fixture de **três**: área A, área B e um órfão |
+
+A 2 exigiu tirar o `where` de dentro de `escopoDeConfig`: aquele módulo importa o
+`prisma`, e **importar já lança sem `DATABASE_URL`**. `lib/areas/escopoWhere.ts`
+é um MOVE — nem uma vírgula do que era produzido mudou — e agora a assimetria da
+Principal (`OR [id, NULL]`, catch-all) é exercível por teste puro.
+
+> ### ⛔ COM UM PIXEL SÓ, A ASSERÇÃO 2 PASSA SEM EXERCER NADA
+> Indo de uma área secundária para a Principal a lista só **cresce**; no sentido
+> inverso ela pode não encolher se não houver órfão. A asserção compara os dois
+> sentidos e afirma o que cada lista **perdeu**, não o tamanho dela.
+
+## 🔤 QUARTA VEZ: guarda por texto medindo PROSA
+
+A guarda das deps do efeito ancorou em `listPixels(workspaceId)` — e casou com o
+**cabeçalho do próprio arquivo**, que cita a chamada para explicar por que ela
+precisa da área. Dali em diante ela achou a lista de deps do efeito ERRADO (o dos
+eventos) e reprovou por um motivo que não existia.
+
+A âncora virou `Promise.all([listPixels(workspaceId)`, que só o código tem.
+**Provado pelo lado negativo**: com deps `[versao]` a suíte sai com 1 falha,
+nomeada.
+
+## 🔬 DUAS VEZES QUASE REPORTEI DEFEITO QUE NÃO EXISTIA
+
+Vale mais que os defeitos achados, porque esta base já pagou por *teoria boa
+demais*:
+
+| O que eu ia reportar | O que era |
+|---|---|
+| *"criar pixel não atualiza a lista"* | o screenshot foi tirado antes de a busca voltar. O pixel estava lá |
+| *"o tema claro não chega ao conteúdo"* | o **screenshot** mostrava quadro velho. Medido: `body` `rgb(248,250,252)`, card e célula de tabela em **branco puro** |
+
+⚠️ **O segundo custou duas tentativas e um `Runtime.evaluate` congelado.** É o
+primo do `resize_window` e do `getComputedStyle` sem repintura: a ferramenta
+devolve algo com **aparência de resultado**. Screenshot desta base **não é prova
+de cor** — a prova é medir, e é por isso que o `04` separa *visto* de *medido*.
+
+## ⏳ O QUE FICA DEVENDO
+
+| | |
+|---|---|
+| **Largura estreita** | ⛔ segue devendo, agora em **quatro** telas |
+| Estado vazio da lista de pixels | construído, **não visto** — o dev sempre teve pixel |
+| O botão `copiar` do script | nasceu **depois** da passada e não foi visto |
+| `divergente` e `ok` do diagnóstico | 2 dos 4 estados vistos; os outros exigem script instalado de verdade |
+| Filtro por tipo de evento | ligado, **não exercido** — o dev só tem `InitiateCheckout` |
+| Índice por `pixelConfigId` | **não existe**. A consulta entra pelo `[userId, event, timestamp]`. Criar é migration, e migration não entra em commit de tela |
+| **Retenção do `PixelEvent`** | 🔴 continua devendo (dívida nº 4). A tela **não agrava**: janela validada no servidor + paginação |
+
+## ➡️ PRÓXIMO
+
+**Criativos** (imagem 9) e **Login** (imagens 10 e 11) fecham as dez. `Regras`
+(21 ❌) segue sendo a maior dívida isolada.
+
+⚠️ **Duas legadas de Integrações continuam de pé e não auditadas de propósito**:
+`Anuncios` 322 · `Webhooks` 532. Elas morrem na reescrita delas — e a de Webhooks
+herda a regra do **artefato válido de contexto errado** inteira, porque a URL do
+webhook é exatamente isso.
