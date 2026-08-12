@@ -5218,13 +5218,6 @@ efeito**: `/login` volta a cair em `/dashboard`.
 
 ⛔ A alternativa era deslogar a sessão do dono, que este arquivo proíbe.
 
-## 📋 ACHADOS ADIADOS — dois novos
-
-| Achado | O que já se sabe |
-|---|---|
-| **Autofill do Chrome em TODO formulário da base** | corrigido só em `.tk-auth`. O mesmo `-webkit-autofill` branco atinge Taxas, Áreas, Regras, e todo `Input` do sistema novo. Consertar no primitivo é uma regra de CSS — mas muda a aparência de 21 rotas, e isso não entra em commit de tela |
-| **`Input.revelavel` é o segundo controle de senha da base?** | não varri. `grep type="password"` antes de assumir que é o único |
-
 ## ➡️ PRÓXIMA
 
 Sobram **Taxas**, **Áreas** e **Notificações** — as três menores. Aí as doze
@@ -5236,3 +5229,90 @@ telas existem e **o `.tk-tema` pode morrer**.
 ⚠️ **Este arquivo continua crescendo** — ver a seção de 12/08 parte 1, que mediu
 263 KB. Esta sessão acrescentou ~180 linhas na ponta de baixo, que é a metade em
 risco. **A decisão sobre o tamanho é sua e continua aberta.**
+
+---
+
+# 📐 A VARREDURA DE LARGURA ESTREITA NAS CINCO — agendada, com estimativa
+
+> **Decisão do dono, 12/08/2026.** O método nasceu no Login e destrava
+> Gerenciador · UTM · Pixel · Webhooks · Criativos. **Roda DEPOIS de Taxas,
+> Áreas e Notificações** — mas não deixa crescer para dez.
+
+## O método, em duas linhas
+
+**Quando não dá para encolher a janela, encolha o CONTÊINER.**
+
+```js
+raiz.style.width = w + 'px';
+const base = raiz.getBoundingClientRect();
+[...raiz.querySelectorAll('*')].filter(e => {
+  const r = e.getBoundingClientRect();
+  return r.width > 0 && (r.right > base.right + 1 || r.left < base.left - 1);
+});                       // ← e ele NOMEIA quem vazou, não só conta
+```
+
+Para o que depende de `@media`, elevar o limiar temporariamente exercita o ramo
+estreito sem tocar no viewport. ⚠️ Restaure o limiar e confira por `grep`.
+
+⛔ **O que o método NÃO cobre:** `100vw`/`100dvh`, `@container` ancorado em outro
+elemento, e o teclado virtual do telefone.
+
+## ⏱️ ESTIMATIVA: **UMA sessão para as cinco** — e o que a sustenta
+
+Não é chute. Conferido estaticamente em 12/08, **sem rodar a varredura**:
+
+| Evidência | Medida |
+|---|---|
+| `TabelaAds` · `TabelaCampanhas` · `TabelaCriativos` já declaram `overflow-x`/`minWidth` | **5 · 3 · 6** ocorrências |
+| telas com `gridTemplateColumns` em **px fixo** (o que estoura de verdade) | **0** |
+
+Ou seja: a parte que eu esperava ser cara — as ~20 colunas do Gerenciador —
+**provavelmente já rola dentro do próprio contêiner**, que é exatamente o que o
+requisito pede. A varredura deve ser **pesada em medição e leve em conserto**.
+
+⚠️ **Gerenciador é a que pode surpreender**, e é a única. Se ela custar mais que
+as outras quatro somadas, eu paro e aviso em vez de encadear — regra das duas
+tentativas.
+
+> ### ⛔ E A ESTIMATIVA TEM DE PODER FALHAR
+> Ela vale **enquanto as duas linhas da tabela acima continuarem verdadeiras**.
+> Uma tela nova com coluna em px fixo derruba a estimativa, não só o número.
+> Reconfira as duas antes de agendar.
+
+---
+
+# 📌 ACHADOS ADIADOS — acrescentados em 12/08/2026 (LOGIN)
+
+| Achado | O que já se sabe |
+|---|---|
+| 🔴 **O envio real e o estado de ERRO do formulário de login nunca foram exercidos** | ver o bloco próprio abaixo |
+| **Autofill do Chrome em TODO formulário da base** | corrigido só em `.tk-auth`. O mesmo `-webkit-autofill` branco atinge Taxas, Áreas, Regras e todo `Input` do sistema novo. Consertar no primitivo é uma regra de CSS — mas muda a aparência de 21 rotas, e isso não entra em commit de tela |
+| **`Input.revelavel` é o segundo controle de senha da base?** | não varri. `grep type="password"` antes de assumir que é o único |
+
+> ### 🔴 O CAMINHO NÃO EXERCIDO É JUSTAMENTE O DO FRACASSO
+>
+> **Formulação do dono, 12/08/2026, e ela é mais forte que "falta testar".**
+>
+> O que ficou sem exercer no Login não é um caminho qualquer: é **o único que o
+> usuário percorre quando algo dá errado**. Quem acerta a senha vê a tela por
+> dois segundos e vai embora; quem erra fica ali, lendo.
+>
+> | Caminho | Estado |
+> |---|---|
+> | CTA enviando de verdade | ⛔ nunca exercido |
+> | `state.error` desenhado (credencial inválida) | ⛔ nunca visto |
+> | o giro do `carregando` durante o envio | ⛔ nunca visto |
+>
+> ⚠️ **Não exercer foi a decisão CERTA**, e o dono confirmou: exercer exigiria
+> criar conta ou errar senha de propósito **no banco de dev** — escrita em tabela
+> de dado de negócio para testar, que é a regra nº 1 do incidente de 29/07.
+>
+> ⛔ **E a saída NÃO é "testar direto no banco".** É montar a fixture: o
+> `FormularioAuth` recebe a ação por prop, então uma passada visual pode passar
+> uma ação falsa que devolve `{ error: "E-mail ou senha inválidos." }` e desenhar
+> os três estados sem tocar em linha nenhuma. **A prop existe desde o primeiro
+> commit da tela** — falta só usá-la.
+>
+> ⚠️ O `test:login` cobre a ESTRUTURA do erro (`role="alert"`, o par
+> `aria-describedby`/`aria-invalid` do `Input`). O que falta é *como ficou*, e
+> isso nenhuma asserção responde.
