@@ -5865,9 +5865,35 @@ lado `Workspace.*Ids` alimenta a tela de Áreas e parte de `actions/workspaces.t
 |---|---|
 | `RulesView` + `RuleDrawer` | servem `/dashboard/regras` e consomem `--color-*`. **`Regras` nunca foi reescrita** — 21 ❌ no `04` |
 | `AnunciosView` | serve `/dashboard/integracoes/anuncios` e consome `--color-*` |
-| 🔴 **`dashboard/ui/Icone`** | **10 componentes de `tk/` o importam** — `Rail`, `CommandBar`, `ContextBar`, `HelpMenu`, `NotificationsBell`, `AlertList`, `Paginacao`, `PainelInsights`, `BarraSelecao`, `TabelaAds` |
+| 🔴 **o SHELL NOVO importa do sistema ANTIGO** | ver a varredura completa abaixo |
 
-E o `Icone` lê `--color-accent` e `--color-text-muted` (`Icone.tsx:172-173`).
+## 🔎 A VARREDURA COMPLETA — pergunta do dono, e ela mudou o tamanho do trabalho
+
+**Medido em 12/08/2026.** A primeira resposta foi *"é só o `Icone`, 10
+consumidores"*. Contando direito, e incluindo tudo que `tk/` importa de
+`dashboard/`:
+
+| Importado por `tk/` | Consumidores | Carrega `--color-*`? |
+|---|---|---|
+| `ui/Icone` | **12** | 🔴 **sim** (`Icone.tsx:172-173`) |
+| `ui/Modal` | **3** | 🔴 **sim** — `BarraEdicao`, `BarraSelecao`, `ModalNovaCampanha` |
+| `ui/useOverlay` | 2 | ✅ não — é hook, sem cor |
+| `ui/useTamanho` | 1 | ✅ não |
+| `useTraffikState` · `TraffikContext` | 1 cada | ✅ não — é estado |
+
+> ## São DOIS arquivos, não um. E o `Modal` só apareceu porque a pergunta foi "o que mais?", não "o Icone é o único?".
+
+⚠️ **É a meta-regra do topo se provando de novo:** a primeira formulação
+(*"migrar o `Icone` resolve"*) descrevia UM caso. A pergunta que generaliza —
+**"quantos outros componentes de `tk/` importam de `dashboard/ui/`?"** — é uma
+linha de `grep`, e achou 60% a mais de trabalho:
+
+```bash
+grep -rhoE 'from "@/components/dashboard/[a-zA-Z/]+"' src/components/tk/ | sort | uniq -c | sort -rn
+```
+
+⚠️ E os dois hooks NÃO entram: eles não carregam cor. O critério do passo 1 não
+é "importa do antigo", é **"importa do antigo E lê `--color-*`"**.
 
 > ## Ou seja: remover a ponte pintaria de ROXO os ícones do próprio shell novo — o rail, a paleta ⌘K, o sino, a paginação.
 
@@ -5876,8 +5902,8 @@ E o `Icone` lê `--color-accent` e `--color-text-muted` (`Icone.tsx:172-173`).
 
 ### 🔜 A ORDEM QUE DESTRAVA, e ela é curta
 
-1. **Migrar o `Icone`** para `--tk-*` (ou criar o equivalente em `tk/`). É UM
-   arquivo, e ele sozinho libera os 10 consumidores novos.
+1. **Migrar `ui/Icone` E `ui/Modal`** para `--tk-*` (ou criar os equivalentes em
+   `tk/`). São DOIS arquivos, e juntos liberam os 15 consumidores novos.
 2. Reescrever **Regras** (a maior dívida isolada) e **Anúncios** (322 linhas).
 3. Só então remover a ponte — com o `test:contraste` e uma passada visual nas
    rotas legadas antes e depois.
@@ -5932,9 +5958,104 @@ tela ANTIGA desenhava.
 
 ## ➡️ O QUE SOBRA PARA O PROJETO FECHAR
 
-1. **Migrar o `Icone`** para `--tk-*` — um arquivo, e ele destrava a avaliação da
-   ponte (10 componentes de `tk/` dependem dele hoje).
+1. **Migrar `ui/Icone` (12 consumidores) e `ui/Modal` (3)** para `--tk-*` —
+   dois arquivos, e eles tiram o shell novo de dentro da ponte.
 2. **Varredura de largura estreita** nas cinco — estimativa de uma sessão.
 3. **Conferência de escrita** nas nove — agora com o modelo pronto.
 4. `Regras` (21 ❌) e `AnunciosView` (322), as duas legadas que restam.
 5. A sessão de **migration**: `ocorreEm` + os dois `@default` mortos.
+
+---
+
+# 🧾 RECEITA: A CONFERÊNCIA DE ESCRITA COMO ASSERÇÃO
+
+> **Duas formas, mesmo princípio.** Escritas em 12/08/2026, em Áreas e em
+> Notificações. **A próxima tela escolhe a forma pela do arquivo, não
+> reinventa.**
+
+Ela fecha a família *A TELA NOVA APRESENTA ESTADO QUE ELA NÃO CONSEGUE CRIAR* —
+a única que nenhuma outra ferramenta desta base pega: o teste do cinza compara
+ESTRUTURA, o `04` confere o que é EXIBIDO, e `tsc`/lint/build não perguntam se
+existe caminho de escrita.
+
+## O princípio, e é ele que torna a receita reaproveitável
+
+> ## Ela **LÊ O SERVIDOR** em vez de copiá-lo. Uma lista escrita no teste envelhece no primeiro campo novo — em silêncio, que é a própria família que a guarda existe para fechar.
+
+## Forma A — a ação monta um `data:` condicional
+
+Quando o servidor grava campo a campo (`...(input.X !== undefined ? { X } : {})`),
+como em `updateWorkspace`:
+
+```js
+const persistidos = [...ACOES.matchAll(/\.\.\.\(input\.(\w+) !== undefined \?/g)].map((m) => m[1]);
+assert.ok(persistidos.length >= 8, "linha de base: a âncora quebrou");
+
+const envio = EDITOR.slice(EDITOR.indexOf("await aoSalvar({"), …);
+assert.deepEqual(persistidos.filter((c) => !new RegExp(`\b${c}\b`).test(envio)), []);
+```
+
+## Forma B — a ação aceita um `Partial<DTO>`
+
+Quando o patch é o DTO inteiro, como em `updateNotificationSettings`:
+
+```js
+const doDTO = [...corpoDaInterface.matchAll(/^\s{2}(\w+)\??:/gm)].map((m) => m[1]);
+assert.deepEqual(doDTO.filter((c) => !naTela.includes(c)), []);   // some em silêncio
+assert.deepEqual(naTela.filter((c) => !doDTO.includes(c)), []);   // descartado em silêncio
+```
+
+## ⛔ OS DOIS SENTIDOS, e é a parte que importa
+
+| Direção | O que acontece se faltar |
+|---|---|
+| campo no **servidor** e não na tela | o controle some, **a leitura continua certa**, e ninguém nota — é a regressão de Taxas |
+| campo na **tela** e não no servidor | o patch é **descartado em silêncio**, e a tela mostra o valor que ela mesma inventou |
+
+⚠️ A primeira é a que já aconteceu. A segunda é pior de diagnosticar: a tela
+fica coerente consigo mesma e discorda do banco só depois de um recarregamento.
+
+## ⚠️ E o par que decide qual forma usar
+
+Antes de escrever a guarda, abra a ação e veja **como ela recebe o patch**. Se
+for `Partial<DTO>` → forma B. Se montar `data:` campo a campo → forma A. Errar a
+forma faz a âncora não casar, e âncora que não casa **devolve "não achei" com a
+mesma cara de "está tudo certo"** — por isso as duas levam LINHA DE BASE.
+
+⚠️ **Prova as duas pelo lado negativo removendo UM campo da tela.** A suíte tem
+de reprovar **nomeando o campo**; se ela só disser "falhou", a mensagem não serve
+para quem for consertar.
+
+---
+
+# 📌 ESTADO DA SESSÃO — 12/08/2026 (parte 6: encerramento)
+
+> ⛔ **NADA FOI PARA O GITHUB.** Conferido: `origin/main` em **`4e6aa9e`**,
+> `redesign/dashboard` **ausente no remoto**, árvore limpa.
+
+## ✅ AS DOZE TELAS EXISTEM
+
+Dashboard · Shell · Integrações › Visão geral · Gerenciador · UTM & Snippets ·
+Pixel/Eventos · Webhooks · Criativos · Login · Taxas · Áreas · Notificações.
+
+`docs:estado` conta **13 seções** no `04` (as doze mais o SHELL).
+
+## 🔑 O ACHADO DA SESSÃO: o shell novo importa do sistema antigo
+
+E a pergunta que generaliza mudou o tamanho do trabalho: **não é um arquivo, são
+dois** — `ui/Icone` (12 consumidores) e `ui/Modal` (3). O `Modal` só apareceu
+porque a pergunta foi *"o que mais?"*, e não *"o `Icone` é o único?"*.
+
+⚠️ Terceira vez nesta sessão que a meta-regra do topo se prova: a formulação
+inicial descrevia um caso, e o `grep` que generaliza achou 60% a mais.
+
+## ➡️ A ORDEM DO QUE FALTA — decidida pelo dono
+
+| # | | |
+|---|---|---|
+| 1 | **Migrar `ui/Icone` e `ui/Modal`** para `--tk-*` | barato e independente. Tira o shell de dentro da ponte |
+| 2 | **Largura estreita nas cinco** | método do contêiner. Estimativa: **uma sessão**; se virar três, avisar antes |
+| 3 | **Conferência de escrita nas nove** | com a RECEITA acima — a tela escolhe a forma pela da ação |
+| 4 | **Regras** (21 ❌) e **Anúncios** (322) | as duas últimas legadas servindo rota |
+| 5 | **Sessão de schema** | `ocorreEm` · os dois `@default` mortos · o **par partido** (`Workspace.accountIds` × `AdAccount.workspaceId`) · `ApiCredential.workspaceId` |
+| 6 | **O `.tk-tema` morre** | só depois de 1 e 4, com `test:contraste` e passada visual antes e depois |
