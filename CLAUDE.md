@@ -53,6 +53,59 @@ exceção à regra — é o escopo dela.**
 > justamente para que a dúvida não seja resolvida pela conveniência de quem está
 > com o arquivo aberto.
 
+# 🧭 META-REGRA — COMO REGISTRAR UM ACHADO, PARA QUE ELE SIRVA
+
+> **Formulação do dono, 12/08/2026.** Está no topo porque governa todo o resto
+> deste arquivo — inclusive as regras que já estão escritas nele.
+
+> ## Um caso descrito é história. Um padrão nomeado é ferramenta.
+
+Ao registrar um achado, escreva **o PADRÃO e o sinal barato que o denuncia**, não
+só o que aconteceu. **Se o registro não permite procurar pela próxima ocorrência,
+ele não vai impedir nenhuma.**
+
+### 🔬 O TESTE É OBJETIVO — e ele reprova registro bonito
+
+O registro precisa entregar **um `grep`, uma pergunta ou uma medição**. Se
+entregar só uma narrativa, reescreva.
+
+| O registro dá… | Serve? |
+|---|---|
+| um `grep` que acha candidatos | ✅ |
+| uma pergunta binária a fazer em cada candidato | ✅ |
+| uma medição com o valor que o caso ERRADO produziria | ✅ |
+| um relato do que aconteceu, por melhor escrito que seja | ⛔ **não** |
+
+### O caso que produziu a meta-regra
+
+`lib/financeiro.ts` documentava, desde sempre:
+
+> *"O suporte a taxa global sempre existiu (`paymentMethod: null` usa o
+> faturamento inteiro como base) — a tela é que não tinha como produzi-lo."*
+
+A frase está correta, é clara, e **não impediu que exatamente isso se repetisse**
+na reescrita da mesma tela, em 12/08/2026 — desta vez em dois campos. Porque ela
+descrevia **um caso**, e um caso descrito não protege o caso seguinte: ninguém
+consegue procurar por "outros lugares onde isto acontece" a partir dela.
+
+Reescrita como padrão, ela virou *A TELA NOVA APRESENTA ESTADO QUE ELA NÃO
+CONSEGUE CRIAR*, com o `grep` (os `add*`/`set*`/`create*` da tela deletada) e o
+sinal barato (**helper com parâmetro que ninguém mais passa**). Foi só então que
+ela achou dois campos de uma vez.
+
+> ### ⛔ E ISTO EXPLICA POR QUE TANTA COISA SE REPETIU COM TUDO DOCUMENTADO
+> Este arquivo tem centenas de casos registrados, e várias famílias mordem duas,
+> três, **sete vezes**. Não é falta de registro — é registro em forma de
+> história. As famílias que pararam de reincidir são exatamente as que ganharam
+> ferramenta: `no-use-before-define` virou lint, "nada entra sem renderizar"
+> virou tipo, "toda guarda leva linha de base" virou asserção.
+
+⚠️ **Ao escrever "⛔ sempre faça X", pergunte na mesma frase: *como eu acho a
+próxima violação disto?*** Se a resposta for "lendo com atenção", o registro
+ainda não está pronto.
+
+---
+
 # Trackhub — guia do projeto
 
 Ferramenta de tracking de tráfego/vendas + Facebook Ads (estilo Utmify).
@@ -994,6 +1047,7 @@ qualquer resize, leia `innerWidth` e compare. `innerWidth === screen.availWidth`
 | CRIATIVOS | 12 | — | 3 |
 | LOGIN | 14 | — | 5 |
 | TAXAS E DESPESAS | 17 | — | 2 |
+| ÁREAS DE TRABALHO | 0 | — | 1 |
 <!-- ESTADO:FIM -->
 
 # 🚦 ESTADO ATUAL E FILA — 05/08/2026
@@ -1331,8 +1385,42 @@ arquivo local, de propósito.
 - ~~`createCampaign` + `newCampaign*`~~ → ✅ **resolvido em 31/07/2026**: a tela
   passou a existir (`views/ads/NovaCampanhaModal.tsx`). Foi o único caso desta
   base em que a dívida de código inerte **bloqueou trabalho**.
-- **`Workspace.accountIds` / `webhookIds` / `pixelConfigIds` / `products`** —
-  mortos, mantidos pela regra dos dois deploys.
+- 🔴 **`Workspace.*` — ESTA ENTRADA ESTAVA ERRADA E AUTORIZAVA DELETAR CÓDIGO
+  VIVO.** Ela dizia *"`accountIds` / `webhookIds` / `pixelConfigIds` /
+  `products` — mortos, mantidos pela regra dos dois deploys"*. **Medido em
+  12/08/2026**, contando referências fora de `actions/workspaces.ts` e da view
+  que morre:
+
+  | Campo | Referências | Onde |
+  |---|---|---|
+  | `sources` | **21** | inclusive `dashboard/metrics.ts` — é recorte de painel |
+  | `products` | **19** | idem |
+  | `accountIds` | 1 | precedência de área |
+  | `webhookIds` | 1 | precedência de área |
+  | `pixelConfigIds` | **0** | ⚠️ escrito e sem consumidor conhecido |
+
+  Ou seja: **dois deles são centrais ao produto**, e a documentação os declarava
+  mortos. Documentação que envelhece produz confusão; esta produzia **dano** —
+  qualquer faxina que confiasse nela apagaria o recorte por fonte e por produto
+  do Dashboard.
+
+  ⚠️ **Por que ela estava errada:** quase certamente foi escrita quando os quatro
+  eram mesmo inertes, e nunca revisitada quando `sources`/`products` ganharam
+  consumidores. É exatamente a família da **META-REGRA do topo**: o registro
+  descrevia um ESTADO ("estão mortos") em vez de dar a ferramenta que o
+  reconfere. Um estado registrado envelhece sozinho; uma medição, não.
+
+  ⛔ **Ao reencontrar "está morto" neste arquivo, RECONTE antes de agir.** O
+  comando é uma linha, e o custo de não rodá-lo é apagar código vivo:
+  ```bash
+  grep -rn "CAMPO" src/ --include=*.ts --include=*.tsx | grep -v generated/prisma | wc -l
+  ```
+
+  🔜 **O `pixelConfigIds` é o único de fato sem leitor — e o achado não é
+  "remover o controle".** É **descobrir por que gravamos algo que ninguém lê**:
+  um dos dois lados está errado, e remover o controle escolheria um lado sem
+  medir. Decisão do dono, 12/08/2026.
+- **`DashboardLayout.workspaceId` nullable** — o NOT NULL entra num 2º deploy.
 - **`DashboardLayout.workspaceId` nullable** — o NOT NULL entra num 2º deploy.
 - **As ações em massa, o duplicar e o excluir nunca foram exercidos.** O
   **motor de regras** foi: PAUSAR (por acidente) e **AJUSTAR_ORCAMENTO com o
@@ -5571,3 +5659,66 @@ explícito. Ou seja, **eles não descrevem comportamento nenhum**.
 caminho que o exercita? Se todo `create` passa o campo, o default é documentação
 — e documentação que afirma um comportamento inexistente é a família que este
 projeto já pagou nove vezes.
+
+---
+
+# 📌 ESTADO DA SESSÃO — 12/08/2026 (parte 4: ÁREAS, construída e NÃO VISTA)
+
+> ⛔ **NADA FOI PARA O GITHUB.** `main` em `4e6aa9e`, branch ausente no remoto.
+
+## ⚠️ A TELA EXISTE E NÃO FOI VISTA — a sessão de dev expirou
+
+`Não autenticado` no log do servidor. Não há como eu entrar (senha é do dono,
+e digitar senha não é coisa que eu faça). **A seção do `04` está com a coluna em
+BRANCO**, que pela convenção significa *construída e não verificada* — e em
+branco ela fica fora da contagem em vez de entrar como feita.
+
+⛔ **Não marque ✅ sem abrir a tela.** Metade da lista é layout, e foi a passada
+visual que achou o único bug do Gerenciador, os três de Login e os dois de Taxas.
+
+## ✅ O que ficou pronto
+
+| | |
+|---|---|
+| `views/areas/AreasScreen.tsx` · `GavetaArea.tsx` · `GavetaExcluir.tsx` | a tela, com a `tk/Gaveta` no lugar do `ui/Drawer` legado |
+| `lib/areas/consequencia.ts` | **puro** — o que a exclusão PROMOVE, seguindo a opção selecionada |
+| `lib/areas/apresentacao.ts` | paleta, campos de recorte, resumo que diz o EFEITO |
+| deletados | `AreasView` (618) e `ExcluirAreaDialog` |
+| testes | `test:areas-tela` **21 asserções**, no `npm test` no MESMO commit |
+
+## 🔑 A CONFERÊNCIA DE ESCRITA VIROU ASSERÇÃO — e é o que vale a sessão
+
+A família *"a tela nova apresenta o que não consegue criar"* é a única que
+nenhuma ferramenta desta base pega. Agora ela tem uma:
+
+> `test:areas-tela` **lê do próprio `actions/workspaces.ts`** os campos que
+> `updateWorkspace` persiste, e exige que cada um tenha origem no `aoSalvar` do
+> formulário.
+
+⛔ A lista é LIDA, nunca copiada — cópia à mão envelheceria no primeiro campo
+novo, em silêncio, que é a família que a guarda existe para fechar.
+
+✅ **Provado com a regressão EXATA de Taxas:** removendo `pixelConfigIds` do
+envio, a suíte reprova **nomeando o campo**.
+
+⚠️ **Este é o modelo para a varredura das nove telas.** Ela deixou de ser uma
+leitura manual e passou a ser uma asserção por tela — muito mais barata.
+
+## 🔴 A confirmação da exclusão
+
+Contagem real, buscada ANTES de o diálogo abrir. E o texto **segue a escolha**:
+com os padrões (`regras`/`despesas` em `excluir`) **não há promoção nenhuma** e o
+bloco de alarme não aparece — alarme que grita sem motivo envenena o único sinal
+que existe.
+
+⛔ **A exclusão NÃO foi exercitada**, por decisão do dono. Os quatro casos que
+precisariam ser exercidos estão listados no `04`, e o primeiro (`regras: "mover"`
+com regra ATIVA) é o único que **volta a agir sozinho** depois do teste.
+
+## ➡️ PRÓXIMA
+
+**Notificações** (130 linhas, 11 caminhos de escrita) — e a conferência de
+escrita dela na hora, com o mesmo método. Aí as doze telas existem e o
+`.tk-tema` pode morrer.
+
+⚠️ **Antes:** a passada visual de Áreas, que depende de o dono estar logado.

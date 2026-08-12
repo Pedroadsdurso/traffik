@@ -1,4 +1,4 @@
-import { AreasView } from "@/components/dashboard/views/AreasView";
+import { AreasScreen } from "@/components/dashboard/views/areas/AreasScreen";
 
 export const metadata = { title: "Áreas de Trabalho · Trackhub" };
 
@@ -10,5 +10,5 @@ export const metadata = { title: "Áreas de Trabalho · Trackhub" };
  * para o estado compartilhado entre telas.
  */
 export default function AreasPage() {
-  return <AreasView />;
+  return <AreasScreen />;
 }

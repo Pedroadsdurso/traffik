@@ -1313,6 +1313,137 @@ rico** — cinco linhas, cinco frequências, tudo plausível.
 
 ---
 
+## ÁREAS DE TRABALHO
+
+⛔ **NÃO HÁ IMAGEM DE REFERÊNCIA.** Critério de Pixel/Eventos, Webhooks e Taxas:
+`06` para acabamento, o que a tela faz para conteúdo.
+
+> ### 🔴 A COLUNA ESTÁ EM BRANCO DE PROPÓSITO — A TELA NÃO FOI VISTA
+>
+> **A sessão de dev do navegador expirou** (`Não autenticado` no log do servidor)
+> e a passada visual não foi feita. Pela convenção desta seção, **linha em branco
+> = construída e NÃO VISTA**, e em branco ela fica FORA da contagem do
+> `docs:estado` em vez de entrar como feita.
+>
+> ⛔ Não marque ✅ aqui sem abrir a tela. Foi a passada visual que achou o único
+> bug real do Gerenciador, os três de Login e os dois de Taxas — e a metade da
+> lista abaixo é layout, que só a tela responde.
+
+| Elemento | Status |
+|---|---|
+| Lista de áreas em cartões, com cor, nome e descrição | |
+| Selo `Principal` e selo `Arquivada` | |
+| **Resumo do recorte** — diz o EFEITO, não a contagem crua | |
+| Botões editar · duplicar · excluir por linha | |
+| ⛔ A Principal NÃO tem botão de excluir | |
+| Gaveta de criar/editar, na `tk/Gaveta` | |
+| Paleta de cor, com anel no selecionado | |
+| Listas de contas · webhooks · pixels, com rolagem | |
+| **Chips livres** de produtos e fontes de tráfego | |
+| Interruptor de arquivar — ausente na Principal | |
+| **Conflito de conta** — a gaveta NÃO fecha, e oferece autorizar a mudança | |
+| Gaveta de exclusão, com destino por grupo | |
+| 🔴 **Consequência de PROMOÇÃO de escopo, com contagem real** | |
+| Bloco de PERDA, separado do de promoção | |
+| Confirmação por digitação do nome | |
+| Grupo vazio não desenha seletor | |
+| Tema claro e tema escuro | |
+| Largura estreita | |
+| `pixelConfigIds` — controle mantido | 🔧 |
+
+### 🔧 O único item que já tem decisão: `pixelConfigIds`
+
+**NÃO VERIFICADO, e é diferente de ✅.** Mantido porque o campo persiste
+(`updateWorkspace` o grava), **sem consumidor conhecido** — medido em
+12/08/2026: **0 referências** fora de `actions/workspaces.ts`.
+
+⛔ **A decisão do dono foi manter**, e o argumento é o desta mesma sessão:
+remover o controle de um campo que persiste é a regressão que a tela de Taxas
+acabou de cometer, e *"zero leitores hoje"* não é *"ninguém depende"*.
+
+🔜 **E o achado adiado é o inverso do óbvio:** não *"remover o controle"*, e sim
+**descobrir por que gravamos algo que ninguém lê**. Um dos dois lados está
+errado, e remover o controle escolheria um lado sem medir.
+
+### ✅ A CONFERÊNCIA DE ESCRITA — feita na hora, e automatizada
+
+A família *"a tela nova apresenta estado que ela mesma não consegue criar"* é a
+única que nenhuma ferramenta desta base pega. Aqui ela virou asserção:
+`test:areas-tela` **lê do próprio `actions/workspaces.ts`** a lista de campos que
+`updateWorkspace` persiste e exige que cada um tenha origem no `aoSalvar` do
+formulário.
+
+| Campo | Persiste | Tem origem na tela |
+|---|---|---|
+| `name` · `color` · `description` · `archived` | ✅ | ✅ |
+| `accountIds` · `webhookIds` · `pixelConfigIds` | ✅ | ✅ |
+| `products` · `sources` | ✅ | ✅ |
+| `moverContas` | ⚠️ não é coluna — é AUTORIZAÇÃO (`liberarContas`) | ✅ |
+
+⛔ A lista é LIDA do servidor, nunca copiada: uma cópia à mão envelheceria no
+primeiro campo novo, e envelheceria em silêncio — que é exatamente a família que
+esta guarda existe para fechar.
+
+✅ **Provado pelo lado negativo com a regressão EXATA:** removendo
+`pixelConfigIds` do envio, a suíte reprova **nomeando o campo**.
+
+### 🔴 A EXCLUSÃO DIZ O QUE **PROMOVE**, não só o que apaga
+
+`AutomationRule.workspaceId` e `Expense.workspaceId` NULOS significam **GLOBAL**,
+e `onDelete: SetNull` ali não é estado neutro — é promoção de escopo. Foi assim
+que excluir uma área transformou *"pause as campanhas desta operação"* em
+*"pause as de TODAS as contas"*, com a regra ainda ativa.
+
+A contagem é **real**, vinda de `preverExclusaoDaArea`, buscada **antes** de o
+diálogo aparecer:
+
+> **2 regras passam para a área Principal** — elas não estão limitadas a contas
+> específicas, então passam a agir sobre TODAS as campanhas de lá.
+>
+> **1 dessas regras está ATIVA** e volta a rodar sozinha — pausando campanhas ou
+> mexendo em orçamento, com dinheiro real.
+
+⚠️ **E o texto segue a OPÇÃO SELECIONADA.** Os padrões de `OpcoesExclusao` já são
+os seguros (`regras` e `despesas` nascem em `excluir`), então **na configuração
+padrão não há promoção nenhuma e o bloco de alarme não aparece** — alarmar ali
+seria alarme que grita sem motivo, e isso envenena o único sinal que existe.
+
+⚠️ Apagar a conta declara a perda do **histórico de gasto**, não só da conta: o
+cascade derruba `DailyAdMetric`, que é a base de ROAS, ROI e CPA de todos os
+períodos.
+
+### ⛔ A EXCLUSÃO NÃO FOI EXERCITADA — e não deve ser sozinha
+
+Escrita destrutiva em tabela de dado de negócio, irreversível. **Decisão do
+dono:** construir o fluxo e a confirmação; exercitar só junto, numa área
+descartável.
+
+O que precisaria ser exercitado, quando for:
+
+| | |
+|---|---|
+| 1 | `regras: "mover"` numa área com regra ATIVA — e conferir no banco que ela ficou com `workspaceId` NULO **e ativa** |
+| 2 | `contas: "remover"` — e conferir que `DailyAdMetric` foi junto |
+| 3 | `apagarDados: true` — a contagem que o diálogo mostrou bate com o que sumiu? |
+| 4 | nome digitado errado → o servidor recusa com `nome-nao-confere` |
+
+⚠️ O item 1 é o único que **volta a agir sozinho** depois do teste. Ele exige
+desligar a regra antes, ou aceitar que ela rode.
+
+### O limite do teste, escrito nele
+
+A `tk/Gaveta` porta para o `<body>` com `createPortal`, então
+`renderToStaticMarkup` devolve **vazio** — é a mesma "proteção por ESTRUTURA" do
+`Popover`. As asserções sobre o diálogo são guardas de TEXTO, e **não respondem
+"como ficou"**.
+
+⚠️ Descoberto ao escrever o arquivo: quatro asserções mediam markup de zero
+caracteres, e **foi a linha de base que denunciou**. Sem ela,
+`!/para confirmar/.test("")` passaria — o teste afirmando que o diálogo não tem
+confirmação por digitação quando ele apenas não havia sido desenhado.
+
+---
+
 ## O QUE ESTÁ NAS REFERÊNCIAS E NÃO EXISTE NO PRODUTO
 
 Backend novo, não redesign. **Nenhum destes tem prazo até decisão explícita.**
