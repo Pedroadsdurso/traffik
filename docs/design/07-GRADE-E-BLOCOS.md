@@ -267,7 +267,7 @@ Asserção 2 é a mais cara e a que mais paga. Medida por bounding box do conte�
 | fase | o quê | destrava |
 |---|---|---|
 | **F0b** | **MEDIR** a altura renderizada de cada bloco no layout padrão a 12 colunas | a migração e a tabela da §3. ⚠️ **só é possível com a grade ainda em `auto`** |
-| **F0** | **bloco sem dado COLAPSA para `h = 1` fixo** | 🔴 **precondição da F1** — sem isto ela restaura o defeito de 07/08 |
+| ~~F0~~ | **deixou de ser fase — virou CONDIÇÃO de renderização.** Ver abaixo | — |
 | F1 | grade de células: `--tk-row`, `span w/h`, `min-width/min-height: 0`, altura fora do conteúdo | queixas 2, 4, 5 |
 | F2 | mínimos no catálogo + derivação por viewport | queixa 1 (parcial) e responsividade |
 | F3 | container queries por família, na ordem KPI → série → tabela → medidor → funil → mapa | queixa 3 |
@@ -275,7 +275,37 @@ Asserção 2 é a mais cara e a que mais paga. Medida por bounding box do conte�
 | F5 | fim das zonas: um catálogo só, sem teto | queixa 1 |
 | F6 | asserções §7 e varredura de vazio | — |
 
-> ### ⛔ F0 NÃO DEPENDE DE F0b — são grandezas diferentes
+> ### ⛔ F0 NÃO É FASE — é condição, e o colapso é POR BLOCO
+>
+> Decisão do dono, 12/08/2026, depois de a medição reprovar dois limiares fixos
+> (`h = 1` dele, `2 células` meu):
+>
+> ```
+> hVazio = min( h salvo , ceil((altura do estado vazio DAQUELE bloco + 16) / 96) )
+> ```
+>
+> **Nenhum número fixo.** `funil` dá `min(5, 5) = 5` e **não colapsa** — e está
+> correto: o defeito ali é o CONTEÚDO do vazio dele, que entra na fila da F3
+> como item nomeado.
+>
+> ⚠️ **E o escopo dela é menor do que parecia.** Com a guarda `temDado`, bloco
+> sem dado **nunca ganha `h`** e continua em `auto`, igual a hoje. A F0 só atende
+> o bloco que **ganhou `h` com dado e depois ficou sem** — um período vazio
+> depois de já ter sido medido.
+>
+> ### ⛔ A F3 do `EmptyState` vem DEPOIS da F1, não antes
+>
+> A versão compacta do estado vazio só pode ser calibrada **contra um slot**, e
+> slot não existe até a grade existir. Encolher o vazio agora seria mirar um
+> alvo que ainda não tem tamanho.
+>
+> ### 📉 O `minHeight: 120` do `EmptyState` NÃO era vinculante
+>
+> Medido em 12/08: removê-lo dos 11 elementos **não mudou nenhuma altura**. O
+> conteúdo do vazio já passa dele. A afirmação anterior deste documento — de que
+> os 238/256 vinham dessa constante — **estava errada**, e o erro foi de método:
+> constante encontrada na cadeia, tomada como vinculante sem testar qual mínimo
+> estava ativo.
 >
 > Decisão do dono, 12/08/2026. `hMin` é **limite de arrasto de bloco COM dado**;
 > a altura do estado vazio é outra coisa. Amarrar as duas faria a F0 esperar uma

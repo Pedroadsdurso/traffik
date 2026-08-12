@@ -6174,3 +6174,43 @@ encolhendo. **Nenhum deles apareceria sem abrir a tela.**
 1. `ui/Icone` + `ui/Modal` → `--tk-*`  2. largura estreita nas cinco
 3. conferência de escrita nas nove     4. Regras + Anúncios
 5. sessão de schema                    6. o `.tk-tema` morre
+
+---
+
+# 📏 NESTA GRADE, LIMIAR FIXADO ANTES DE MEDIR FOI REPROVADO TRÊS VEZES SEGUIDAS
+
+> **12/08/2026.** Não é caso isolado: são três, no mesmo trabalho, em três
+> camadas diferentes. Três instâncias tornam o padrão inegável.
+
+| # | O limiar | Quem fixou | O que a medição disse |
+|---|---|---|---|
+| 1 | `h = 1` para o bloco vazio | dono | o vazio mede **192–382px** — 3 a 5 células |
+| 2 | a tabela de `hMin` da §3 | dono | `rodape` mede 192 e o `hMin` dele era 1: **cortaria um bloco estrutural** |
+| 3 | `2 células` para o vazio, sem o `minHeight` | **eu** | removê-lo **não mudou nada** — ele nem era vinculante |
+
+> ## ⛔ NENHUM LIMIAR É CONSTANTE LITERAL. Todos derivam de medição do próprio bloco — e todo número no documento diz de QUAL medição saiu.
+
+O que substituiu os três: `hVazio = min(h salvo, ceil((altura do vazio DAQUELE
+bloco + 16) / 96))`. Sem número fixo, e o bloco que não colapsa (`funil`)
+denuncia o conteúdo dele em vez de ser forçado a caber.
+
+### 🔬 E o lado do DIAGNÓSTICO tem a mesma doença
+
+O caso 3 é o mais instrutivo porque o erro não foi fixar — **foi diagnosticar**.
+Eu achei `minHeight: 120px` na cadeia de um bloco de 238px, e concluí que ele
+mandava na altura. Ele não mandava: o conteúdo já passava dele, e removê-lo não
+mudou um pixel.
+
+| | |
+|---|---|
+| o que eu fiz | achei a constante e a tomei como causa **por estar lá** |
+| o que faltou | **testar qual mínimo estava ATIVO** — remover e medir |
+
+⛔ **Constante encontrada na cadeia não é constante vinculante.** Num
+`min-height`/`max-width`/`clamp`, só um dos termos manda em cada instante, e
+qual deles é uma medição — não uma leitura de código.
+
+⚠️ O teste é barato e é sempre o mesmo: **remova o candidato e meça de novo.**
+Se nada mudou, ele não era a causa. Foi assim que este erro caiu, e é a mesma
+disciplina de *provar pelo lado negativo* que a base já usa em teste — aplicada a
+diagnóstico de layout.
