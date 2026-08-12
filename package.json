@@ -8,8 +8,8 @@
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "eslint",
-    "seed:dev": "node scripts/seed-dev.mjs",
-    "seed:dev:limpar": "node scripts/seed-dev.mjs --limpar",
+    "seed:dev": "tsx scripts/seed-dev.mjs",
+    "seed:dev:limpar": "tsx scripts/seed-dev.mjs --limpar",
     "backup": "node scripts/backup-db.mjs",
     "restore": "node scripts/restore-db.mjs",
     "db:onde": "node scripts/onde-estou.mjs",
@@ -102,6 +102,7 @@
     "test:banco": "npm run test:auditoria-metricas && npm run test:checkout-jornada && npm run test:cron-reserva && npm run test:efeitos && npm run test:match && npm run test:medicao && npm run test:metricas-lote && npm run test:pedidos && npm run test:previa-regra && npm run test:receptor && npm run test:taxa-fixa && npm run test:utm-orfa && npm run test:utm-venda && npm run test:veiculacao:e2e",
     "test:altura-controle": "node scripts/teste-altura-controle.mjs",
     "dev:campanhas": "node scripts/campanhas-dev.mjs",
+    "dev:pixel": "tsx scripts/pixel-dev.mjs",
     "test:medicao": "node --experimental-strip-types --import ./scripts/alias-loader.mjs scripts/teste-medicao.mjs"
   },
   "dependencies": {

@@ -711,11 +711,16 @@ não são instalados em lugar nenhum.
 > tema claro foi **medido** (`body` `rgb(248,250,252)`, card e célula de tabela
 > em branco puro) e **visto** em cartões e na gaveta de exclusão.
 >
-> ⚠️ **O que o dev NÃO consegue mostrar**, e por isso não foi visto: o seed cria
-> `PixelConfig` **sem `MetaPixel` e sem `PixelEventRule`** (medido: 0 e 0). Então
-> todo evento aparece como *desligado* no diagnóstico, o fan-out de N pixels da
-> Meta nunca é grande, e os 35 `PixelEvent` têm `espelho`, `detectores` e
-> `ambiente` **NULOS** — a coluna de espelho só sabe dizer *não informado*.
+> ✅ **O SEED FOI CORRIGIDO NA MESMA SESSÃO** — ele criava
+> `PixelConfig` **sem `MetaPixel` e sem `PixelEventRule`** (medido: 0 e 0), e por
+> isso todo evento aparecia como *desligado* e o fan-out nunca passava de zero.
+> Hoje o pixel A tem **2 pixels da Meta** (um com token, outro sem) e o `Lead` do
+> pixel B fica **ligado e nunca recebido** — os quatro estados por evento numa
+> tela só. `npm run dev:pixel`.
+>
+> ⚠️ **O que continua fora de alcance:** os 35 `PixelEvent` têm `espelho`,
+> `detectores` e `ambiente` **NULOS**, então a coluna de espelho só sabe dizer
+> *não informado*, e o diagnóstico não sai de `script-antigo`.
 
 ### Mestre — a lista de pixels
 
@@ -723,7 +728,7 @@ não são instalados em lugar nenhum.
 |---|---|
 | Lista de pixels da área, com nome e `N` pixels da Meta | ✅ |
 | Selo de estado por pixel (`enabled`) + toggle real | ✅ `togglePixel`, exercido |
-| Selo do DIAGNÓSTICO por pixel (`ok` · `divergente` · `script-antigo` · `sem-dados`) | ✅ ⚠️ **2 dos 4 vistos** — `script-antigo` e `sem-dados`; os outros dois exigem script instalado de verdade |
+| Selo do DIAGNÓSTICO por pixel (`ok` · `divergente` · `script-antigo` · `sem-dados`) | ✅ ⚠️ **2 dos 4 vistos** — `script-antigo` e `sem-dados`; os outros dois exigem `detectores` de um script instalado de verdade |
 | `+ Novo pixel` · Editar · Excluir | ✅ os três exercidos, com criação e exclusão indo ao banco |
 | Estado vazio honesto quando a área não tem pixel | ⚠️ construído, **não visto** — o dev sempre teve pixel |
 
@@ -766,7 +771,7 @@ não são instalados em lugar nenhum.
 |---|---|
 | `sendMode` · `valueMode` · `fixedValue` · `targetProduct` do Purchase | ✅ ⚠️ `VALOR_FIXO` não exercido |
 | Passos do checkout próprio, para o desenvolvedor | ✅ e agora **com teste** — `test:checkout-proprio`, 18 asserções |
-| N pixels da Meta por pixel nosso (fan-out), com apelido e token | ✅ ⚠️ exercido com **um**; o dev não tem `MetaPixel` |
+| N pixels da Meta por pixel nosso (fan-out), com apelido e token | ✅ **visto com dois**, e os DOIS estados do campo de token lado a lado: `Já cadastrado — deixe em branco` e `Sem ele, só o navegador envia` |
 
 ### Script para instalar
 
@@ -781,7 +786,7 @@ não são instalados em lugar nenhum.
 | Elemento | Status |
 |---|---|
 | Os 4 estados, e `sem-dados` **nunca** pintado como `ok` | ✅ com asserção estática sobre o tom |
-| Estado POR EVENTO, não agregado | ✅ e o sinal que importa apareceu: **`configurado e nunca recebido`** em âmbar |
+| Estado POR EVENTO, não agregado | ✅ os **quatro** estados vistos juntos: ligado **e recebendo** (`14 · 6 dias atrás`), ligado e **nunca recebido**, `desligado` com `—`, e o `PageView` que não passa por regra |
 | Carimbo de tempo via `<Desde>` | ✅ **os dois `elapsed()` crus morreram com a `PixelView`** |
 
 ### Lista de EVENTOS — o que a navegação promete e a tela não entregava

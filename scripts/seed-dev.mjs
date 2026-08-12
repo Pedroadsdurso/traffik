@@ -20,6 +20,11 @@ import pg from "pg";
 import bcrypt from "bcryptjs";
 
 import { exigirBancoDeDesenvolvimento } from "./guard-db.mjs";
+/* Os pixels da Meta e as regras vêm de `pixel-dev.mjs`, e não daqui.
+   ⛔ Uma segunda cópia divergiria no primeiro ajuste, e aí o banco RECRIADO e o
+   banco COMPLETADO mostrariam telas diferentes — o pior estado possível para um
+   gerador de dado de teste. */
+import { completarPixels, imprimir } from "./pixel-dev.mjs";
 
 exigirBancoDeDesenvolvimento({ script: "seed-dev" });
 
@@ -153,10 +158,18 @@ async function main() {
     }
   }
 
+  /* 🌗 SEM ISTO O SEED PRODUZ ESTADO INCOMPLETO.
+     Até 11/08/2026 ele criava `PixelConfig` e mais nada: zero `MetaPixel` e
+     zero `PixelEventRule`. O fan-out nunca aparecia, e a tela de Pixel &
+     Eventos mostrava TODO evento como "desligado" — o ramo "ligado e recebendo"
+     nunca foi visto no único banco em que dá para olhar. */
+  imprimir(await completarPixels(q, userId));
+
   console.log(
     `\n✓ Banco de desenvolvimento populado.\n` +
       `  Login: ${EMAIL} / ${SENHA}\n` +
-      `  2 contas de anúncio, 2 webhooks, 2 pixels, 8 vendas, 8 eventos de pixel.\n` +
+      `  2 contas de anúncio, 2 webhooks, 2 pixels (com pixels da Meta e regras),\n` +
+      `  8 vendas, 8 eventos de pixel.\n` +
       `  A área Principal é criada sozinha no primeiro carregamento do painel.\n`,
   );
 }

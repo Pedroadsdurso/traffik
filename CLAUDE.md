@@ -3354,6 +3354,8 @@ leva o que foi MEDIDO, para ninguém ter de medir de novo.
 | **Ramos que o seed do dev nunca percorre** | 6 suspeitas medidas e anotadas na seção 🌗. Nenhuma investigada |
 | **`Sale.platform` NULL nas 35** | o dev só exercita um gateway |
 | **O 5º cartão do Insights nunca foi visto DISPARANDO** | ele exige `melhorParada > melhorVeiculando` (`insights.ts:170`), e no dev a melhor entrega (Black Friday 17,59x × Retargeting 11,10x pausada). ⛔ **Não force com período** — os dois lados estão em `test:gerenciador`, então está provado; falta só a evidência de tela |
+| 🔴 **Toda camada flutuante do LEGADO com o título cortado** | `ui/Drawer` e `ui/Modal` são `z-index` 70; a faixa de ambiente é 200. **8 arquivos**, e **dois são telas NOVAS** (`VisaoGeralScreen`, `ModalNovaCampanha`). ⚠️ **NÃO é visível em produção** — `dbEnv.ts:56` (`avisar: !conhecido.producao`) — mas atinge TODO ambiente de desenvolvimento, todo dia. Correção: uma linha por camada, `top: var(--tk-faixa-topo, 0px)` |
+| **`espelho`/`detectores`/`ambiente` NULOS nos 35 `PixelEvent` do dev** | por isso o diagnóstico não sai de `script-antigo` e a coluna de espelho só diz *não informado*. Os estados `ok` e `divergente` exigem script instalado reportando detectores |
 
 ---
 
@@ -4121,3 +4123,156 @@ de cor** — a prova é medir, e é por isso que o `04` separa *visto* de *medid
 `Anuncios` 322 · `Webhooks` 532. Elas morrem na reescrita delas — e a de Webhooks
 herda a regra do **artefato válido de contexto errado** inteira, porque a URL do
 webhook é exatamente isso.
+
+
+---
+
+# 🫥 O DEFEITO ACIDENTALMENTE INVISÍVEL — a "proteção acidental" AO CONTRÁRIO
+
+> **Leitura do dono, 11/08/2026, sobre a faixa de ambiente.** É família nova, e
+> ela explica um tipo de defeito que passada visual nenhuma pega.
+
+O `padding-top` do shell era a constante `ALTURA_FAIXA_AMBIENTE = 26`. A faixa
+pinta **27,8px**. Ou seja: **o conteúdo do painel inteiro ficava 1,8px por baixo
+dela, em TODAS as telas, desde 06/08** — e **seis passadas visuais não pegaram**.
+
+Não pegaram porque não havia o que pegar: nada encostava naquela borda. O
+primeiro elemento de cada tela começa depois de um `padding` generoso, então os
+1,8px caíam em espaço vazio. O defeito existia, era mensurável, e **não tinha
+como se manifestar**.
+
+Ele só apareceu quando uma camada nova chegou ao topo — a `tk/Gaveta`, que
+começa em `y=0` e põe o TÍTULO ali. Aí o mesmo erro de 1,8px virou um título
+cortado ao meio, porque a camada é `z-index` 70 e a faixa é 200.
+
+> ### 🔴 É A "PROTEÇÃO ACIDENTAL", COM O SINAL TROCADO
+>
+> | | |
+> |---|---|
+> | **proteção acidental** | o código está errado e **funciona** por uma circunstância que ninguém escreveu |
+> | **defeito acidentalmente invisível** | o código está errado e **não aparece** por uma circunstância que ninguém escreveu |
+>
+> Nos dois, o que decide é uma propriedade não declarada — e ela some no primeiro
+> commit que não a conhece. A diferença é só quem paga: na primeira, quem escreve
+> o commit seguinte; na segunda, **quem escrever o commit seguinte também**, mas
+> depois de a coisa ter estado errada esse tempo todo sem ninguém saber.
+
+⛔ **Passada visual não pega defeito que não encosta em nada.** Ela responde *"como
+ficou?"*, e a resposta era "ficou bem" — estava. O que pega é a pergunta do outro
+lado: **"que valor deveria ser igual a este, e é?"**. `26` × `27,8` é uma
+comparação, não uma olhada.
+
+⚠️ **A regra que sai daqui:** todo número que existe para CASAR com uma medida
+pintada (altura de barra fixa, offset de sticky, `scroll-margin`, altura de
+cabeçalho de tabela) é a mesma família do empurrãozinho de 2px — e a saída é a
+mesma: **ler o valor, não afirmá-lo**. Hoje a faixa é medida por
+`ResizeObserver` e vive em `--tk-faixa-topo`.
+
+---
+
+# 📌 ESTADO DA SESSÃO — 11/08/2026 (parte 4: o seed do pixel e o fechamento)
+
+> **A mais nova.** ⛔ **NADA FOI PARA O GITHUB.** `main` em `4e6aa9e`, branch
+> ausente no remoto.
+
+## ✅ O SEED PAROU DE PRODUZIR ESTADO INCOMPLETO
+
+`seed-dev` criava `PixelConfig` **e mais nada**: zero `MetaPixel`, zero
+`PixelEventRule`. É a mesma família do `n % 2` do BOLETO — **o gerador entregando
+exatamente o estado que impede de avaliar a tela**.
+
+| | Antes | Agora |
+|---|---|---|
+| pixels da Meta | `0` nos dois | **2** no pixel A (um COM token, outro sem) · 1 no B |
+| regras | nenhuma | 4 em cada, e elas **DIVERGEM** entre os dois pixels |
+| estados por evento visíveis | 1 (`desligado`) | **4** |
+
+`scripts/pixel-dev.mjs` (`npm run dev:pixel`) é **idempotente** (provado rodando
+duas vezes: 2/4/1 e 1/4/0 nos dois casos) e **o `seed-dev` importa a mesma
+função** — uma cópia lá dentro faria o banco RECRIADO e o banco COMPLETADO
+mostrarem telas diferentes.
+
+⚠️ **`seed:dev` passou a rodar com `tsx`**, porque o token é encriptado com o
+`encryptSecret` do app. Valor cru ali seria estado falso que só apareceria no dia
+em que alguém decriptasse — e pareceria bug de criptografia. **Não executei o
+`seed:dev`** (recriar o banco mataria a sessão do dono); o que ficou provado é
+que a cadeia de import roda sob `tsx`, pelo `dev:pixel`.
+
+### 👁️ Os dois estados que faltavam, VISTOS
+
+| | |
+|---|---|
+| **fan-out** | `2 pixels da Meta` no mestre, e na gaveta os DOIS estados do campo de token lado a lado: *"Já cadastrado — deixe em branco"* e *"Sem ele, só o navegador envia"* |
+| **ligado e recebendo** | `InitiateCheckout` sem o `· desligado`, com `21 · 6 dias atrás` |
+| **ligado e NUNCA recebido** | o `Lead` do pixel B, em âmbar — numa regra de verdade, não só no `PageView` |
+| **desligado** | `AddToCart` e `Purchase` do pixel B, esmaecidos, com `—` |
+
+⚠️ **O que continua fora de alcance no dev:** `espelho`, `detectores` e
+`ambiente` são NULOS nas 35 linhas de `PixelEvent`. Por isso o diagnóstico não
+sai de `script-antigo` e a coluna de espelho só sabe dizer *não informado* — os
+estados `ok` e `divergente` exigem um script instalado de verdade reportando
+detectores.
+
+## 🐛 UM DEFEITO NO PRÓPRIO SCRIPT NOVO, e ele era MUDO
+
+A checagem de "fui executado ou fui importado" estava escrita à mão:
+
+```js
+if (import.meta.url === `file://${process.argv[1]?.replace(/\\/g, "/")}`)
+```
+
+No Windows o Node usa `file:///C:/...` — **três barras**. A comparação dava
+falso, e o script **saía sem imprimir nada e com código 0**, que é
+indistinguível de *"rodou e não havia o que fazer"*. Hoje é
+`pathToFileURL(process.argv[1]).href`.
+
+⚠️ Ele só foi percebido porque **o script IMPRIME o que gerou** e a saída veio
+vazia. Um gerador silencioso teria "passado".
+
+## 🔴 ACHADO ADIADO NOVO — e ele NÃO é dívida comum
+
+**Toda camada flutuante do legado está com o título cortado**, hoje:
+`ui/Drawer` e `ui/Modal` são `z-index` 70 e a faixa de ambiente é 200. São **8
+arquivos** que abrem uma dessas duas camadas — e **dois deles são telas NOVAS**
+(`VisaoGeralScreen` e o `ModalNovaCampanha` do Gerenciador), que usam o overlay
+legado.
+
+> ### ⚠️ CORREÇÃO DE SEVERIDADE — medido, não presumido
+> O pedido foi para registrar como **"defeito visível em produção"**. **Ele não
+> é**, e a linha que decide é `dbEnv.ts:56`:
+>
+> ```ts
+> avisar: !conhecido.producao
+> ```
+>
+> A faixa aparece quando o banco **não** é a produção. Em produção ela não
+> existe, `--tk-faixa-topo` fica `0px` e nada é cortado.
+>
+> **O que é verdade:** o defeito atinge **todo ambiente que mostra a faixa** —
+> desenvolvimento, `localhost`, ref desconhecido e URL não identificada. Ou
+> seja: **toda sessão de trabalho, todo dia**, e nenhuma sessão de usuário.
+>
+> ⛔ Registrar "produção" mandaria o próximo a correr atrás de um sintoma que
+> nenhum usuário tem — e, pior, faria a fila inteira ser priorizada por um número
+> errado.
+
+**A correção é de uma linha por camada**, no `globals.css`:
+`top: var(--tk-faixa-topo, 0px)` em `.drawer-backdrop` e `.modal-backdrop`. Não
+foi feita porque as duas são anteriores a `4e6aa9e` — **decisão confirmada pelo
+dono**. Quando for feita, o `0px` de padrão garante que produção não muda.
+
+## ➡️ PRÓXIMA: Integrações › Webhooks
+
+`WebhooksView`, **532 linhas**. Depois dela sobram **Criativos, Login, Taxas,
+Áreas e Notificações** — todas menores que qualquer uma das seis já feitas.
+
+> ### 🔴 WEBHOOKS HERDA A REGRA DO ARTEFATO INTEIRA — e na forma mais cara
+> A URL do webhook é **artefato válido de contexto errado** em estado puro: ela
+> é colada no painel do gateway do cliente. Uma URL de outra área é um endereço
+> perfeitamente funcional, que aceita o payload e credita a venda na operação
+> errada — e nada, em lugar nenhum, dá erro.
+>
+> ⚠️ E ali a fixture precisa das duas formas, como no Pixel: trocar de WEBHOOK
+> muda o token dentro da URL (conteúdo), trocar de ÁREA muda a LISTA de webhooks
+> alcançáveis (contexto). `Webhook.workspaceId` existe e NULO = sem dono, então a
+> assimetria da Principal vale igual.
