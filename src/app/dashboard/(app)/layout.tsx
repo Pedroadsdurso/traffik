@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 
 import { auth } from "@/auth";
 import { AppShell } from "@/components/tk/AppShell";
-import { listApiCredentials } from "@/lib/actions/apiCredentials";
 import { loadDashboardPrefs } from "@/lib/actions/dashboardPrefs";
 import { listExpenses } from "@/lib/actions/expenses";
 import { listAdProfiles } from "@/lib/actions/facebook";
@@ -19,10 +18,9 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const session = await auth();
   // Tudo em paralelo: o layout é o caminho crítico de todo carregamento de
   // página, então nenhuma dessas leituras pode virar uma cadeia sequencial.
-  const [webhooks, apiCredentials, prefs, profiles, pixels, notifSettings, notifications, expenses, timezone, workspaces, lastWorkspaceId, rules] =
+  const [webhooks, prefs, profiles, pixels, notifSettings, notifications, expenses, timezone, workspaces, lastWorkspaceId, rules] =
     await Promise.all([
       listWebhooks(),
-      listApiCredentials(),
       loadDashboardPrefs(),
       listAdProfiles(),
       listPixels(),
@@ -46,7 +44,6 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
       appUrl={getAppUrl()}
       banco={bancoAtual()}
       initialWebhooks={webhooks}
-      initialApiCredentials={apiCredentials}
       dashboardPrefs={prefs}
       initialProfiles={profiles}
       initialPixels={pixels}

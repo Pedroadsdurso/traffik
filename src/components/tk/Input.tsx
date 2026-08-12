@@ -31,10 +31,23 @@ type Props = Omit<React.InputHTMLAttributes<HTMLInputElement>, "className" | "si
   /** Sufixo fixo — "R$", "%", "×". Não é botão. */
   sufixo?: React.ReactNode;
   blocoInteiro?: boolean;
+  /**
+   * Fonte monoespaçada — para valor que a pessoa COMPARA caractere a caractere:
+   * token de webhook, chave de API, id de pixel.
+   *
+   * ⚠️ Não é estética. Em fonte proporcional `O`/`0` e `l`/`1` são quase iguais,
+   * e o erro que isso produz não é um campo feio: é um token quase certo, colado
+   * no painel de outra empresa, que responde 404 semanas depois.
+   *
+   * ⛔ Precisa ser prop e não `style` do chamador porque o `<input>` interno
+   * carrega `.text-body`, que declara `font-family` — herança do contêiner não
+   * alcança.
+   */
+  mono?: boolean;
 };
 
 export const Input = React.forwardRef<HTMLInputElement, Props>(function Input(
-  { rotulo, apoio, erro, iconeInicio, sufixo, blocoInteiro = true, id, disabled, style, ...resto },
+  { rotulo, apoio, erro, iconeInicio, sufixo, blocoInteiro = true, mono = false, id, disabled, style, ...resto },
   ref,
 ) {
   const gerado = React.useId();
@@ -80,7 +93,13 @@ export const Input = React.forwardRef<HTMLInputElement, Props>(function Input(
             "text-body text-text bg-transparent border-0 outline-none w-full min-w-0 " +
             "placeholder:text-text-muted disabled:cursor-not-allowed"
           }
-          style={{ height: "100%", caretColor: "var(--tk-primary)" }}
+          style={{
+            height: "100%",
+            caretColor: "var(--tk-primary)",
+            ...(mono
+              ? { fontFamily: "var(--tk-font-mono)", fontVariantNumeric: "tabular-nums", fontSize: 12.5 }
+              : null),
+          }}
         />
 
         {sufixo && (

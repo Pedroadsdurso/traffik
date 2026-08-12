@@ -9,7 +9,6 @@ import type { AdProfileDTO } from "@/lib/actions/facebook";
 import type { NotificationDTO, NotificationSettingsDTO } from "@/lib/actions/notifications";
 import type { PixelConfigDTO } from "@/lib/actions/pixels";
 import type { RuleDTO } from "@/lib/actions/rules";
-import type { ApiCredentialDTO } from "@/lib/actions/apiCredentials";
 import type { WebhookRowDTO } from "@/lib/actions/webhooks";
 import type { WorkspaceDTO } from "@/lib/actions/workspaces";
 
@@ -97,7 +96,6 @@ export function AppShell({
   appUrl,
   banco,
   initialWebhooks,
-  initialApiCredentials,
   dashboardPrefs,
   initialProfiles,
   initialPixels,
@@ -116,7 +114,6 @@ export function AppShell({
   /** Qual banco o servidor está usando — ver `lib/dbEnv.ts`. */
   banco?: { ref: string | null; rotulo: string; producao: boolean; avisar: boolean };
   initialWebhooks?: WebhookRowDTO[];
-  initialApiCredentials?: ApiCredentialDTO[];
   dashboardPrefs?: DashboardPrefsDTO | null;
   initialProfiles?: AdProfileDTO[];
   initialPixels?: PixelConfigDTO[];
@@ -136,7 +133,6 @@ export function AppShell({
     trackingId,
     appUrl,
     initialWebhooks,
-    initialApiCredentials,
     dashboardPrefs,
     initialProfiles,
     initialPixels,

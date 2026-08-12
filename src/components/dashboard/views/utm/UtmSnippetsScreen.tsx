@@ -29,6 +29,7 @@ import { EmptyState } from "@/components/tk/EmptyState";
 import { Input } from "@/components/tk/Input";
 import { Select } from "@/components/tk/Select";
 import { Tooltip } from "@/components/tk/Tooltip";
+import { useCopiar } from "@/components/tk/useCopiar";
 
 /* ─────────────────────────── Cor de cada parâmetro ───────────────────────────
    Um tingimento por chave, dos sete pares que já existem no `globals.css`. ⛔
@@ -77,24 +78,9 @@ const FORMULARIO_VAZIO: Formulario = {
   utm_id: "",
 };
 
-function useCopiar(): [(texto: string, id: string) => void, string | null] {
-  const [copiado, setCopiado] = React.useState<string | null>(null);
-  const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  React.useEffect(() => () => {
-    if (timer.current) clearTimeout(timer.current);
-  }, []);
-
-  const copiar = React.useCallback((texto: string, id: string) => {
-    if (!texto) return;
-    void navigator.clipboard?.writeText(texto);
-    setCopiado(id);
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => setCopiado(null), 1600);
-  }, []);
-
-  return [copiar, copiado];
-}
+/* ⛔ `useCopiar` MUDOU DE CASA — mora em `tk/useCopiar.ts` desde que a tela de
+   Webhooks passou a precisar do mesmo comportamento. Não reinline: duas telas
+   confirmando a cópia de jeitos diferentes é divergência que ninguém nota. */
 
 /** Reagenda a tela quando o armazém muda. Ele não é estado do React. */
 function useArmazem(): number {

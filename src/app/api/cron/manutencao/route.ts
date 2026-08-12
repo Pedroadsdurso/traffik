@@ -4,22 +4,12 @@ import { cronAutorizado, naoAutorizado } from "@/lib/cronAuth";
 import { registrarExecucao } from "@/lib/cronBatimento";
 import { prisma } from "@/lib/prisma";
 import { RETENCAO_DIAS, anonimizarIp } from "@/lib/geo/anonimizarIp";
+// ⛔ Os prazos NÃO moram mais aqui: a tela de Webhooks explica ao usuário por
+// que uma entrega antiga sumiu da lista, e precisa do MESMO número. Duas cópias
+// divergiriam em silêncio — a purga apagando em 30 dias e a tela prometendo 90.
+import { DIAS_LOG_FALHA, DIAS_LOG_SUCESSO } from "@/lib/webhooks/retencao";
 
 export const maxDuration = 60;
-
-/**
- * Retenção do log de webhooks — DIFERENCIADA por status.
- *
- * ⚠️ Era 90 dias para tudo. O log de SUCESSO é redundante: o payload já está
- * duplicado em `Sale.rawPayload`, então apagá-lo não perde nada. O log de FALHA
- * é a **única cópia** — e é justamente o que se depura quando um gateway "manda
- * e não chega", conversa que com o suporte deles leva semanas.
- *
- * `RECEBIDO` que nunca fechou significa que o processamento estourou no meio:
- * tratado como falha, pelo mesmo motivo.
- */
-const DIAS_LOG_SUCESSO = 30;
-const DIAS_LOG_FALHA = 90;
 
 /** A partir de quantos dias do vencimento do token avisar o usuário. */
 const AVISO_TOKEN_DIAS = 14;

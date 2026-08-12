@@ -846,6 +846,166 @@ marca o estado como *ajustado à mão*. O que a tela nova faz é **dizer o custo
 junto do controle**, que é design e não lógica.
 
 ---
+## WEBHOOKS
+
+> ### ⛔ SEM IMAGEM DE REFERÊNCIA — a segunda tela do redesign nessa situação
+>
+> A 03, a 05 e a 06 são todas a *Visão geral* de Integrações. Esta seção foi
+> ESCRITA a partir do que a `WebhooksView` (532 linhas) já fazia, mais o
+> histórico de entregas — não conferida contra print.
+>
+> Seção **nova**, e não um apêndice de INTEGRAÇÕES: misturar a contagem
+> esconderia o que falta nesta tela. O `docs:estado` passa a contar **10 telas**.
+
+> ### 🔴 O ARTEFATO DAQUI É COLADO POR UMA TERCEIRA PARTE QUE NÃO VEMOS
+>
+> É a forma mais cara do **artefato válido de contexto errado** em toda a
+> ferramenta. A URL do webhook vai para o painel do gateway do cliente, e uma
+> URL da área errada **não dá erro em lugar nenhum**: aceita o payload, responde
+> 200 e credita a venda na operação errada.
+>
+> ⚠️ E o sintoma não se parece com defeito. Ele aparece como **venda faltando
+> numa área e venda a mais em outra** — dois números plausíveis, em telas
+> diferentes, sem log, sem alerta, sem 4xx e sem nada que os ligue.
+
+> ### ✅ CONSTRUÍDA EM 11/08/2026 — e a convenção da linha em branco vale aqui
+>
+> **✅ = eu vi na tela.** **Linha em branco = construída e NÃO VISTA** (fica FORA
+> da contagem do `docs:estado`, em vez de entrar como feita).
+
+### Mestre — a lista de webhooks da área
+
+| Elemento | Status |
+|---|---|
+| Lista dos webhooks da ÁREA ATIVA, com logo, nome e gateway | ✅ |
+| **Selo de estado**, e são CINCO (`recusando` · `desligado` · `esperando` · `mudo` · `recebendo`) | ✅ ⚠️ **3 dos 5 vistos** na mesma tela — `recebendo`, `recusando` e `mudo`. `esperando` foi visto antes do `dev:webhook`; `desligado` não |
+| **`recusando` — o estado que a tela antiga não tinha** | ✅ 🔴 ver abaixo |
+| Total de vendas recebidas AO LADO do selo, não no lugar dele | ✅ **e é o caso que prova a decisão**: o webhook `recusando` mostra `14 vendas recebidas` — passado e futuro verdadeiros ao mesmo tempo |
+| Interruptor real (`toggleWebhook`), pelo primitivo `tk/Controles` | ✅ desenhado nos três; ⚠️ **não clicado** |
+| `Conectar gateway` · Editar · Excluir | ✅ `Conectar gateway` abre a gaveta; ⚠️ Editar e Excluir **não exercidos** |
+| Estado vazio dizendo o que se perde sem webhook (faturamento, ROAS e funil vazios com a campanha rodando) | |
+
+> ### 🔴 `recusando` — 🐛 O DEFEITO QUE A TELA ANTIGA ESCONDIA
+>
+> `autenticar()` (`gateways/autenticar.ts:75`) devolve **401** quando o gateway
+> exige chave e não há nenhuma cadastrada — e a mensagem dele manda o usuário
+> *"editar o webhook na aba Integrações › Webhooks"*, que é **esta tela**. A
+> `WebhooksView` mostrava esse mesmo webhook com o selo verde de **"Ativado"**.
+>
+> **Medido no banco de dev em 11/08/2026:** os **dois** webhooks estão nesse
+> estado (`secret` NULO, Kirvano `exigir: true`), e há **25 `WebhookLog`
+> REJEITADO** de gateway KIRVANO provando que é isso mesmo.
+>
+> ⚠️ O usuário não tem como descobrir sozinho: quem vê o 401 é o painel do
+> gateway, que é de outra empresa. Do lado de cá o sintoma é *nenhuma venda
+> chegando*, indistinguível de *ninguém comprou*.
+>
+> ✅ **Não é conta nova.** `hasSecret` já vinha no DTO e `auth.exigir` já está no
+> registro — a tela deixou de esconder o que o servidor já decide. É
+> apresentação, e por isso não fere o congelamento.
+
+### Detalhe — o endereço
+
+| Elemento | Status |
+|---|---|
+| **O que acontece com a PRÓXIMA venda**, em caixa tingida só quando exige ação | ✅ vermelha no `recusando`, âmbar no `mudo`, texto solto no `recebendo`. Contraste **medido**: 4,96:1 no claro |
+| Endereço copiável, em fonte monoespaçada (`Input mono`) | ✅ ⚠️ o botão `Copiar` **não foi clicado** |
+| A chave aparece **só quando é NOSSA** (`geradoPorNos`) | ✅ **os dois lados**: a Cakto mostra a chave, a Kirvano não |
+| Grade de metadados: Gateway · Chave · Última venda · Criado em | ✅ |
+| `Chave de segurança: Faltando` quando o gateway exige e não há | ✅ |
+| Ícone real do gateway na linha e no detalhe | 🔧 há `LogoGateway`, que é monograma — logotipo de terceiro é decisão de produto |
+
+### Detalhe — as entregas recebidas
+
+| Elemento | Status |
+|---|---|
+| Histórico do `WebhookLog` DAQUELE webhook, com os QUATRO desfechos | |
+| O **motivo** da recusa na linha, em linguagem de usuário | |
+| Código HTTP e tempo relativo (`Desde`) | |
+| Payload cru recolhido, com destaque de sintaxe | |
+| Dois estados vazios distintos: `nunca-recebeu` × `purgado` | ✅ **os dois vistos** — `nunca-recebeu` antes do `dev:webhook`, `purgado` depois. 🔴 ver abaixo |
+| Paginação | 🔧 **fora.** `listWebhookLogs` já é limitada a 100 no servidor, e a retenção é do cron. Uma tela sem janela AGRAVARIA a dívida nº 4; uma paginada sobre 25 linhas não resolve nada que exista |
+
+> ### 🔴 "NENHUMA ENTREGA" ≠ "AS ENTREGAS FORAM APAGADAS"
+>
+> A distinção central deste projeto, na camada de LOG. A purga diária
+> (`api/cron/manutencao`, agendada `0 4 * * *`) apaga log de sucesso em **30
+> dias** e de falha em **90**. Um webhook que recebeu 43 vendas há seis meses
+> mostra a lista vazia — e dizer *"nenhuma entrega ainda"* ali faria a tela
+> afirmar que ele nunca funcionou, **sobre o webhook que mais funcionou**.
+>
+> Quem separa os dois é `eventCount`, que a purga não zera.
+>
+> ✅ **Os prazos são LIDOS, não afirmados**: `lib/webhooks/retencao.ts` é um MOVE
+> das duas constantes para fora da rota do cron, e agora os dois lados leem o
+> mesmo número. Copiá-lo faria a purga apagar em 30 dias com a tela prometendo 90.
+
+### Chaves de API — a outra porta de entrada
+
+| Elemento | Status |
+|---|---|
+| Lista de chaves com estado (ativa / revogada) e último uso | |
+| Gerar · Revelar · Copiar · Revogar · Excluir | |
+| A chave nova é **revelada de imediato** — ela só existe naquela resposta | |
+| **A tela DIZ que as chaves valem para a conta inteira, não para a área** | ✅ 🔴 ver abaixo |
+| Endereço de ingestão + exemplo de envio, **recolhidos** e em linguagem de usuário | |
+| Modal separado para criar credencial | 🔧 **fora.** O único campo era o nome, e um diálogo de um campo para gerar uma chave que aparece na lista logo abaixo é uma etapa sem pergunta |
+
+> ### 🔴 AS DUAS METADES DESTA TELA TÊM ESCOPOS DIFERENTES
+>
+> **Medido em 11/08/2026, NÃO corrigido.** `Webhook.workspaceId` existe e
+> `listWebhooks` recorta por área (com a Principal catch-all).
+> `listApiCredentials()` **não recebe área** e `createApiCredential()` **não
+> grava nenhuma** — então `ApiCredential.workspaceId` tem leitores
+> (`areas/atribuicao.ts`, `areas/exclusao.ts`) e **nenhum escritor** que o
+> preencha com uma área de verdade.
+>
+> É a mesma forma do `Sale.apiCredentialId` (6 leitores, 0 escritores), uma
+> camada acima: o passo 4 da precedência de área nunca distingue nada, porque
+> toda credencial é órfã.
+>
+> ⛔ Os dois arquivos são de **`9f9dfa9`, 24/07/2026** — anteriores ao corte
+> `4e6aa9e`. **Congelados.** O que a tela faz é DECLARAR o escopo de cada
+> metade: postas lado a lado sem a frase, elas sugerem que se recortam do mesmo
+> jeito, e só uma se recorta.
+
+### A gaveta — conectar um gateway
+
+| Elemento | Status |
+|---|---|
+| Grade de gateways do REGISTRO, com "em breve" nos inativos | ✅ Cakto · Kirvano · OnyxPag ativos; Hotmart e Kiwify em `em breve`, desabilitados |
+| **Os TRÊS fluxos de chave**, cada um com a instrução certa | ✅ ⚠️ **2 dos 3 vistos** — o gerado (Cakto) e o que pede a chave (Kirvano). O sem-chave (OnyxPag) não foi aberto |
+| A chave que NÓS geramos aparece para ser copiada | ✅ **e a não-regeração foi MEDIDA na tela**: reclicar no gateway já escolhido, e ir e voltar, devolvem o mesmo UUID. 🔴 ver abaixo |
+| Passos de instalação vindos do `registro.instalacao` | ✅ com os dois passos de `atencao` em âmbar |
+| Em branco na edição **MANTÉM** a chave — e o campo diz isso | ⚠️ construído, **não visto** — a gaveta de edição não foi aberta |
+| Trocar a PLATAFORMA de um webhook existente não é oferecido | |
+| ⛔ Nenhum nome de gateway cravado no código — guarda estática no teste | ✅ **a guarda PEGOU um**: `placeholder="Ex.: Kirvano"`, agora vindo do registro |
+
+> ### 🔑 A GERAÇÃO DA CHAVE QUASE SE PERDEU NA REESCRITA
+>
+> Ela vivia em `segredoInicial`, no `useTraffikState`, e morreria junto da view
+> antiga. Sem ela, um webhook da **Cakto** nasceria com `secret` NULO — e como a
+> Cakto é `exigir: true`, **toda venda voltaria 401**, com o sintoma "nenhuma
+> venda chegando" do lado de cá.
+>
+> ⚠️ Achado ao apagar o que o lint marcou como órfão: `segredoInicial` **não era
+> código morto, era comportamento**. É a regra *"ao remover uma tela, procure as
+> constantes dela e pergunte se alguma descreve comportamento"* pagando a conta.
+>
+> ⛔ **Uma por gateway, nunca regerada por clique.** O bug original está
+> documentado: clicar de novo no gateway já selecionado gerava outra chave, e
+> quem tivesse copiado a primeira levava para o painel do gateway uma chave que
+> a ferramenta não guardaria.
+
+### O que NÃO foi construído, e por quê
+
+| Elemento | Status |
+|---|---|
+| Reenviar um payload recusado | 🔧 **fora.** `reentregaEventos` é capacidade do GATEWAY (a Kirvano reentrega sozinha). Um botão nosso teria de reprocessar o payload guardado, o que muda ingestão — comportamento congelado |
+| Filtro por desfecho na lista de entregas | 🔧 **fora.** Com 25 linhas por webhook o filtro custa mais atenção do que economiza |
+| Testador de payload (a `TestadorPayloadCard` da aba Testes) | 🔧 **fora.** Ela foi DELETADA com a aba Testes; ressuscitá-la aqui é decisão de produto, não de layout |
+
+---
 ## CRIATIVOS
 
 Referência: imagem 9.

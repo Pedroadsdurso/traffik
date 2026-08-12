@@ -25,6 +25,7 @@ import { exigirBancoDeDesenvolvimento } from "./guard-db.mjs";
    banco COMPLETADO mostrariam telas diferentes — o pior estado possível para um
    gerador de dado de teste. */
 import { completarPixels, imprimir } from "./pixel-dev.mjs";
+import { completarWebhooks, imprimir as imprimirWebhooks } from "./webhook-dev.mjs";
 
 exigirBancoDeDesenvolvimento({ script: "seed-dev" });
 
@@ -164,6 +165,13 @@ async function main() {
      Eventos mostrava TODO evento como "desligado" — o ramo "ligado e recebendo"
      nunca foi visto no único banco em que dá para olhar. */
   imprimir(await completarPixels(q, userId));
+
+  /* 🌗 O MESMO defeito, na outra tabela: `Webhook.eventCount` e `lastEventAt`
+     ficavam ZERADOS enquanto dezenas de `Sale` apontavam para o webhook — quem
+     os escreve em produção é `gateways/receber.ts`, e o seed insere venda
+     direto. E os dois nasciam SEM CHAVE, que na Kirvano é uma configuração que
+     recusa toda venda com 401. */
+  imprimirWebhooks(await completarWebhooks(q, userId));
 
   console.log(
     `\n✓ Banco de desenvolvimento populado.\n` +

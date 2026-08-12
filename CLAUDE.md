@@ -990,6 +990,7 @@ qualquer resize, leia `innerWidth` e compare. `innerWidth === screen.availWidth`
 | CAMPANHAS / GERENCIADOR | 18 | 1 | 4 |
 | UTM & SNIPPETS | 22 | — | 10 |
 | PIXEL & EVENTOS | 28 | — | 1 |
+| WEBHOOKS | 18 | — | 6 |
 | CRIATIVOS | 0 | 13 | — |
 | LOGIN | 0 | 19 | — |
 <!-- ESTADO:FIM -->

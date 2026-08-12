@@ -20,14 +20,12 @@ import { div } from "@/lib/ads/metrics";
 import { estadoDaConta, podeRastrear } from "@/lib/facebook/contaStatus";
 import { explicarErroDeConta } from "@/lib/facebook/erroMeta";
 import { rotuloDaEspera } from "@/lib/facebook/backoff";
-import { gatewayPorId, gatewaysParaEscolher, rotuloDoGateway } from "@/lib/gateways/registro";
-
-/** Primeiro gateway ATIVO do registro — nada de nome cravado aqui. */
-const gatewayInicial = () => gatewaysParaEscolher().find((g) => g.ativo)?.id ?? "CUSTOM";
-
-/** Chave gerada por nós, quando o gateway exige (Cakto). Vazio nos demais. */
-const segredoInicial = (g: string) =>
-  gatewayPorId(g)?.campos.some((c) => c.gerado) ? crypto.randomUUID() : "";
+import { rotuloDoGateway } from "@/lib/gateways/registro";
+/* ⛔ `gatewayInicial` e `segredoInicial` SAÍRAM em 11/08/2026, com a gaveta
+   que os usava. ⚠️ O segundo NÃO era cosmético: ele gerava a chave da Cakto,
+   e sem ela o webhook nasce com `secret` nulo e a Cakto recusa toda venda com
+   401. A geração vive hoje em `views/webhooks/GavetaWebhook.tsx`, com o mesmo
+   cuidado de não regerar por clique. */
 import type { PeriodoNome } from "@/lib/periodo";
 import type { NomeIcone } from "./ui/Icone";
 import {
@@ -43,19 +41,9 @@ import {
   type NotificationSettingsDTO,
 } from "@/lib/actions/notifications";
 import {
-  createWebhook,
   deleteWebhook,
-  toggleWebhook,
-  updateWebhook,
   type WebhookRowDTO,
 } from "@/lib/actions/webhooks";
-import {
-  createApiCredential,
-  deleteApiCredential,
-  revealApiCredential,
-  revokeApiCredential,
-  type ApiCredentialDTO,
-} from "@/lib/actions/apiCredentials";
 import type { CreativeRow } from "@/lib/ads/creatives";
 import type { AdsOverview } from "@/lib/ads/overview";
 import type { DashboardData } from "@/lib/dashboard/metrics";
@@ -155,25 +143,13 @@ interface State {
   newTaxName: string;
   newTaxPct: string;
   webhooks: WebhookRowDTO[];
-  webhookBusy: boolean;
-  copiedWebhookId: string | null;
-  // Modal "Adicionar Webhook" (bloco esquerdo)
-  webhookModalOpen: boolean;
-  webhookGatewaySearch: string;
-  webhookGateway: string;
-  webhookEditId: string | null;
-  gatewaySecret: string;
-  gatewayName: string;
-  webhookError: string | null;
-  // Credenciais de API (bloco direito)
-  apiCredentials: ApiCredentialDTO[];
-  credModalOpen: boolean;
-  newCredName: string;
-  credBusy: boolean;
-  createdCredKey: string | null;
-  revealedKeys: Record<string, string>;
-  copiedCredId: string | null;
-  credError: string | null;
+  /* ⛔ O maquinário de MODAL de webhook e as credenciais de API saíram
+     daqui em 11/08/2026, com a `WebhooksView`. A `WebhooksScreen` tem
+     estado próprio e chama as server actions direto — porque o que ela
+     entrega é uma URL que vai para o painel de um gateway, e lista mantida
+     por um hook global não acompanha a troca de área.
+     ⚠️ `webhooks` FICA: a Visão geral de Integrações monta o inventário
+     com ela. */
   notifSettings: NotificationSettingsDTO;
   notifications: NotificationDTO[];
   notifUnread: number;
@@ -204,7 +180,6 @@ function initialState(
   initialNotifSettings: NotificationSettingsDTO = DEFAULT_NOTIF_SETTINGS,
   initialNotifications: NotificationDTO[] = [],
   initialExpenses: ExpenseDTO[] = [],
-  initialApiCredentials: ApiCredentialDTO[] = [],
   initialRules: RuleDTO[] = [],
 ): State {
   const order = prefs?.order?.length
@@ -274,23 +249,6 @@ function initialState(
     newTaxName: "",
     newTaxPct: "",
     webhooks: initialWebhooks,
-    webhookBusy: false,
-    copiedWebhookId: null,
-    webhookModalOpen: false,
-    webhookGatewaySearch: "",
-    webhookGateway: gatewayInicial(),
-    webhookEditId: null,
-    gatewaySecret: "",
-    gatewayName: "",
-    webhookError: null,
-    apiCredentials: initialApiCredentials,
-    credModalOpen: false,
-    newCredName: "",
-    credBusy: false,
-    createdCredKey: null,
-    revealedKeys: {},
-    copiedCredId: null,
-    credError: null,
     notifSettings: initialNotifSettings,
     notifications: initialNotifications,
     notifUnread: initialNotifications.filter((n) => !n.read).length,
@@ -367,7 +325,6 @@ export function useTraffikState(
     initialNotifications?: NotificationDTO[];
     initialExpenses?: ExpenseDTO[];
   initialRules?: RuleDTO[];
-    initialApiCredentials?: ApiCredentialDTO[];
     timezone?: string;
     workspaces?: WorkspaceDTO[];
     lastWorkspaceId?: string | null;
@@ -389,7 +346,7 @@ export function useTraffikState(
   const ultimaArea = opts.lastWorkspaceId ?? null;
 
   const router = useRouter();
-  const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks, opts.dashboardPrefs, opts.initialProfiles, opts.initialPixels, opts.initialNotifSettings, opts.initialNotifications, opts.initialExpenses, opts.initialApiCredentials, opts.initialRules));
+  const [s, setS] = useState<State>(() => initialState(opts.initialWebhooks, opts.dashboardPrefs, opts.initialProfiles, opts.initialPixels, opts.initialNotifSettings, opts.initialNotifications, opts.initialExpenses, opts.initialRules));
 
   // Semeia as áreas vindas do servidor. Só quando MUDAM de verdade: o layout
   // remonta a cada navegação e reescrever o estado igual derrubaria a área
@@ -446,7 +403,6 @@ export function useTraffikState(
       if (mudou(st.adProfiles, opts.initialProfiles)) patch.adProfiles = opts.initialProfiles;
       if (mudou(st.pixels, opts.initialPixels)) patch.pixels = opts.initialPixels;
       if (mudou(st.expenses, opts.initialExpenses)) patch.expenses = opts.initialExpenses;
-      if (mudou(st.apiCredentials, opts.initialApiCredentials)) patch.apiCredentials = opts.initialApiCredentials;
       return Object.keys(patch).length ? { ...st, ...patch } : st;
     });
   }, [
@@ -454,7 +410,6 @@ export function useTraffikState(
     opts.initialProfiles,
     opts.initialPixels,
     opts.initialExpenses,
-    opts.initialApiCredentials,
   ]);
 
   function set(patch: Partial<State>) {
@@ -1789,130 +1744,15 @@ export function useTraffikState(
 
     // ───────────── Webhooks (bloco esquerdo) ─────────────
     webhooks: s.webhooks,
-    webhookBusy: s.webhookBusy,
-    toggleWebhook: async (id: string) => {
-      const updated = await toggleWebhook(id);
-      setS((st) => ({ ...st, webhooks: st.webhooks.map((w) => (w.id === id ? updated : w)) }));
-    },
+    /* ⚠️ `toggleWebhook` saiu: só a `WebhooksView` o chamava, e a tela nova
+       chama a server action direto. `removeWebhook` FICA — a Visão geral de
+       Integrações exclui webhook a partir do painel de detalhe dela. */
     removeWebhook: async (id: string) => {
       await deleteWebhook(id);
       setS((st) => ({ ...st, webhooks: st.webhooks.filter((w) => w.id !== id) }));
     },
-    copiedWebhookId: s.copiedWebhookId,
-    copyWebhookUrl: (id: string, url: string) => {
-      navigator.clipboard.writeText(url);
-      set({ copiedWebhookId: id });
-      setTimeout(() => set({ copiedWebhookId: null }), 1500);
-    },
     webhookPlatformLabel: (p: string) =>
       rotuloDoGateway(p),
-
-    // Modal "Adicionar Webhook" / editar
-    webhookModalOpen: s.webhookModalOpen,
-    webhookGatewaySearch: s.webhookGatewaySearch,
-    webhookGateway: s.webhookGateway,
-    webhookEditId: s.webhookEditId,
-    gatewaySecret: s.gatewaySecret,
-    gatewayName: s.gatewayName,
-    webhookError: s.webhookError,
-    openWebhookModal: () =>
-      set({
-        webhookModalOpen: true, webhookEditId: null, webhookGateway: gatewayInicial(), webhookGatewaySearch: "",
-        // Gateway cuja chave nós geramos já abre com ela pronta para copiar.
-        gatewaySecret: segredoInicial(gatewayInicial()),
-        gatewayName: "", webhookError: null,
-      }),
-    openEditWebhook: (w: WebhookRowDTO) =>
-      set({
-        webhookModalOpen: true, webhookEditId: w.id, webhookGateway: w.platform,
-        // 🔴 Era `""` fixo. Para gateway cuja chave NÓS geramos, o campo é um
-        // bloco de copiar ligado a este estado — vazio, ele não tinha o que
-        // copiar, e a chave ficava inacessível para sempre.
-        gatewaySecret: w.secret ?? "",
-        gatewayName: w.name, webhookError: null,
-      }),
-    closeWebhookModal: () => set({ webhookModalOpen: false }),
-    onWebhookGatewaySearch: (e: React.ChangeEvent<HTMLInputElement>) => set({ webhookGatewaySearch: e.target.value }),
-    // 🐛 Gerava uma chave NOVA a cada clique, inclusive clicando no gateway que
-    // já estava selecionado. Quem copiasse a chave e clicasse de novo antes de
-    // salvar levava para o painel do gateway uma chave que a ferramenta não
-    // guardaria — e as vendas seriam recusadas, sem nada denunciar.
-    //
-    // ⚠️ A chave só é gerada quando o gateway MUDA e ainda não há uma. Regerar
-    // é ação explícita do usuário (botão), nunca efeito colateral de clicar.
-    selectWebhookGateway: (g: string) =>
-      set(
-        s.webhookGateway === g && s.gatewaySecret
-          ? { webhookGateway: g }
-          : { webhookGateway: g, gatewaySecret: segredoInicial(g) },
-      ),
-    onGatewaySecret: (e: React.ChangeEvent<HTMLInputElement>) => set({ gatewaySecret: e.target.value }),
-    onGatewayName: (e: React.ChangeEvent<HTMLInputElement>) => set({ gatewayName: e.target.value }),
-    saveWebhook: async () => {
-      set({ webhookBusy: true, webhookError: null });
-      try {
-        if (s.webhookEditId) {
-          const updated = await updateWebhook({ id: s.webhookEditId, name: s.gatewayName, secret: s.gatewaySecret });
-          setS((st) => ({
-            ...st,
-            webhooks: st.webhooks.map((w) => (w.id === updated.id ? updated : w)),
-            webhookBusy: false,
-            webhookModalOpen: false,
-          }));
-        } else {
-          const created = await createWebhook({ platform: s.webhookGateway, name: s.gatewayName, secret: s.gatewaySecret });
-          setS((st) => ({ ...st, webhooks: [...st.webhooks, created], webhookBusy: false, webhookModalOpen: false }));
-        }
-      } catch {
-        set({ webhookBusy: false, webhookError: "Não foi possível salvar o webhook. Se o problema persistir, saia e entre novamente." });
-      }
-    },
-
-    // ───────────── Credenciais de API (bloco direito) ─────────────
-    apiCredentials: s.apiCredentials,
-    credModalOpen: s.credModalOpen,
-    newCredName: s.newCredName,
-    credBusy: s.credBusy,
-    createdCredKey: s.createdCredKey,
-    revealedKeys: s.revealedKeys,
-    copiedCredId: s.copiedCredId,
-    credError: s.credError,
-    openCredModal: () => set({ credModalOpen: true, newCredName: "", createdCredKey: null, credError: null }),
-    closeCredModal: () => set({ credModalOpen: false, createdCredKey: null }),
-    onNewCredName: (e: React.ChangeEvent<HTMLInputElement>) => set({ newCredName: e.target.value }),
-    createCredential: async () => {
-      set({ credBusy: true, credError: null });
-      try {
-        const created = await createApiCredential(s.newCredName);
-        const { key, ...dto } = created;
-        setS((st) => ({ ...st, apiCredentials: [dto, ...st.apiCredentials], createdCredKey: key, credBusy: false }));
-      } catch {
-        set({ credBusy: false, credError: "Não foi possível gerar a credencial. Se o problema persistir, saia e entre novamente." });
-      }
-    },
-    revealCredential: async (id: string) => {
-      const { key } = await revealApiCredential(id);
-      setS((st) => ({ ...st, revealedKeys: { ...st.revealedKeys, [id]: key } }));
-    },
-    hideCredential: (id: string) =>
-      setS((st) => {
-        const next = { ...st.revealedKeys };
-        delete next[id];
-        return { ...st, revealedKeys: next };
-      }),
-    revokeCredential: async (id: string) => {
-      const updated = await revokeApiCredential(id);
-      setS((st) => ({ ...st, apiCredentials: st.apiCredentials.map((c) => (c.id === id ? updated : c)) }));
-    },
-    deleteCredential: async (id: string) => {
-      await deleteApiCredential(id);
-      setS((st) => ({ ...st, apiCredentials: st.apiCredentials.filter((c) => c.id !== id) }));
-    },
-    copyCredKey: (id: string, key: string) => {
-      navigator.clipboard.writeText(key);
-      set({ copiedCredId: id });
-      setTimeout(() => set({ copiedCredId: null }), 1500);
-    },
 
     // O teste de pixel virou parte da TestesView autocontida (Bloco 13).
 
