@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Eye, EyeOff } from "lucide-react";
 
 /**
  * Input — campo de texto com rótulo, apoio e erro.
@@ -44,16 +45,38 @@ type Props = Omit<React.InputHTMLAttributes<HTMLInputElement>, "className" | "si
    * alcança.
    */
   mono?: boolean;
+  /**
+   * Campo de senha com o olho que REVELA o valor digitado.
+   *
+   * ⛔ É prop, e não um botão que cada chamador põe no `sufixo`, por uma razão
+   * de acessibilidade que é fácil errar sem ninguém ver: o botão precisa dizer
+   * o ESTADO ("mostrar" × "ocultar"), não só existir. Um ícone de olho sem
+   * `aria-label` que muda é, para quem usa leitor de tela, um botão sem nome
+   * que faz algo invisível.
+   *
+   * ⚠️ E `sufixo` não serve mesmo: ele é documentado como "não é botão" e não
+   * recebe foco. Reaproveitá-lo daria um alvo de clique que o Tab não alcança.
+   *
+   * ⚠️ O olho NÃO entra na ordem de tabulação depois do campo por acaso — ele
+   * vem logo em seguida de propósito, para quem digitou a senha errada
+   * alcançá-lo com um Tab.
+   */
+  revelavel?: boolean;
 };
 
 export const Input = React.forwardRef<HTMLInputElement, Props>(function Input(
-  { rotulo, apoio, erro, iconeInicio, sufixo, blocoInteiro = true, mono = false, id, disabled, style, ...resto },
+  { rotulo, apoio, erro, iconeInicio, sufixo, blocoInteiro = true, mono = false, revelavel = false, id, disabled, style, type, ...resto },
   ref,
 ) {
   const gerado = React.useId();
   const idCampo = id ?? gerado;
   const idApoio = `${idCampo}-apoio`;
   const idErro = `${idCampo}-erro`;
+  const [revelado, setRevelado] = React.useState(false);
+
+  /* Com `revelavel`, quem manda no `type` é o estado — senão um `type="password"`
+     do chamador venceria o clique no olho e o botão ficaria inerte. */
+  const tipoEfetivo = revelavel ? (revelado ? "text" : "password") : type;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6, width: blocoInteiro ? "100%" : undefined }}>
@@ -80,6 +103,7 @@ export const Input = React.forwardRef<HTMLInputElement, Props>(function Input(
 
         <input
           {...resto}
+          type={tipoEfetivo}
           ref={ref}
           id={idCampo}
           disabled={disabled}
@@ -107,6 +131,23 @@ export const Input = React.forwardRef<HTMLInputElement, Props>(function Input(
             {sufixo}
           </span>
         )}
+
+        {revelavel && (
+          <button
+            type="button"
+            onClick={() => setRevelado((v) => !v)}
+            disabled={disabled}
+            /* O nome do botão é o que ele VAI FAZER, e o `aria-pressed` é o
+               estado em que ele está. Só o ícone mudar não diz nada a quem não
+               enxerga o ícone. */
+            aria-label={revelado ? "Ocultar senha" : "Mostrar senha"}
+            aria-pressed={revelado}
+            className="text-text-muted hover:text-text focus-visible:outline-2 focus-visible:outline-primary focus-visible:outline-offset-2 rounded-controle cursor-pointer disabled:cursor-not-allowed"
+            style={{ flex: "none", display: "flex", background: "none", border: 0, padding: 2 }}
+          >
+            <Olho aberto={revelado} />
+          </button>
+        )}
       </div>
 
       {apoio && !erro && (
@@ -125,3 +166,9 @@ export const Input = React.forwardRef<HTMLInputElement, Props>(function Input(
     </div>
   );
 });
+
+/** O glifo do olho. `aria-hidden` porque quem nomeia o botão é o `aria-label`. */
+function Olho({ aberto }: { aberto: boolean }) {
+  const Glifo = aberto ? Eye : EyeOff;
+  return <Glifo size={16} strokeWidth={1.75} aria-hidden="true" />;
+}

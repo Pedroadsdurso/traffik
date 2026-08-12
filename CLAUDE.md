@@ -992,7 +992,7 @@ qualquer resize, leia `innerWidth` e compare. `innerWidth === screen.availWidth`
 | PIXEL & EVENTOS | 28 | — | 1 |
 | WEBHOOKS | 18 | — | 6 |
 | CRIATIVOS | 12 | — | 3 |
-| LOGIN | 0 | 19 | — |
+| LOGIN | 14 | — | 5 |
 <!-- ESTADO:FIM -->
 
 # 🚦 ESTADO ATUAL E FILA — 05/08/2026
@@ -5059,3 +5059,180 @@ Sobram **Login** (imagens 10 e 11), **Taxas**, **Áreas** e **Notificações**.
 ⚠️ E **antes de qualquer tela nova, decida o tamanho deste arquivo** — ver a
 seção acima. Cada sessão acrescenta ~200 linhas na ponta de baixo, que é
 justamente a metade em risco.
+
+---
+
+# 🖌️ O QUE O **NAVEGADOR** PINTA NÃO APARECE EM `getComputedStyle` — e é o par que faltava
+
+> **12/08/2026, na tela de entrada.** Esta base repete, com razão, que
+> *screenshot não é prova de cor* — três sessões seguidas quase produziram
+> defeito inventado por ler pixel comprimido. Esta seção é o **contraexemplo que
+> completa o par**, e sem ela a regra anterior vira cegueira.
+
+O autopreenchimento do Chrome pinta o campo de branco. No tema escuro, quem tem
+a senha salva via **dois retângulos brancos dentro do cartão escuro**. E:
+
+| Instrumento | O que respondeu |
+|---|---|
+| `getComputedStyle(input).backgroundColor` | `transparent` — o valor DECLARADO, que está certo |
+| o screenshot | 🔴 o defeito, imediatamente |
+
+O navegador pinta `-internal-light-dark(...)` no pseudo-estado `:-webkit-autofill`
+sem que isso apareça no estilo computado. **Medir o estilo declarado não acha, e
+não vai achar nunca** — não é limitação da técnica do canvas 1×1, é que o valor
+não está no CSSOM.
+
+> ### ⛔ AS DUAS METADES, e cada uma cobre o furo da outra
+>
+> | | Serve para | Falha em |
+> |---|---|---|
+> | **medir o DOM** | cor, contraste, geometria, estado | o que o navegador pinta por conta própria |
+> | **olhar a tela** | o que o navegador pinta por conta própria | ler valor de cor com precisão |
+>
+> A regra não é "screenshot não vale". É: **screenshot LEVANTA a hipótese,
+> medição CONFIRMA — e quando a medição não alcança, diga que não alcança em vez
+> de concluir que não há defeito.**
+
+⚠️ **E o caso é o COMUM, não o de borda.** A tela de entrada é justamente onde o
+gerenciador de senhas age. Uma tela que só fica certa para quem nunca salvou a
+senha está errada para quase todo mundo que volta — mesma leitura de *"sem
+imagem é o caso comum"* nos Criativos.
+
+⚠️ **Outros pseudo-estados com a mesma propriedade**, e nenhum foi varrido:
+`::-webkit-search-cancel-button`, `::-webkit-calendar-picker-indicator`,
+`:-internal-autofill-selected`, o `accent-color` padrão de `checkbox`/`radio`
+nativo, e a barra de rolagem. Todos são pintados pelo agente do usuário.
+
+---
+
+# 📌 ESTADO DA SESSÃO — 12/08/2026 (parte 2: LOGIN, a décima primeira tela)
+
+> **A mais nova. Se contradisser qualquer coisa acima, ela vence.**
+>
+> ⛔ **NADA FOI PARA O GITHUB.** `main` em `4e6aa9e`, branch ausente no remoto.
+
+## ✅ A TELA DE ENTRADA EXISTE — e as duas legadas de auth morreram
+
+| | |
+|---|---|
+| `components/auth/TelaAuth.tsx` | a moldura, e o lugar onde mora a ponte |
+| `components/auth/PainelMarca.tsx` | badge · headline · apoio · três provas · arco · rodapé |
+| `components/auth/PreviaProduto.tsx` | o retrato do painel, com a nav REAL |
+| `components/auth/FormularioAuth.tsx` | o cartão, nos dois modos |
+| `components/auth/MarcaAuth.tsx` | logotipo por tema, pelo MESMO caminho do `Rail` |
+| `lib/auth/conteudo.ts` | o texto como DADO puro — para poder ser conferido |
+| `tk/Input` ganhou `revelavel` | o olho da senha, com `aria-label` que muda e `aria-pressed` |
+| `globals.css` | `.tk-auth` / `.tk-auth-marca`, em `@layer components` |
+| deletados | `AuthShell.tsx` (53) e `AuthForm.tsx` (79) |
+| testes | `test:login` **22 asserções**, no `npm test` no MESMO commit |
+
+`04`: seção de **0 ✅ / 19 ❌** para **14 ✅ / 0 ❌ / 5 🔧**. Baseline validado: as
+9 outras telas saíram idênticas.
+
+## 🔴 A PONTE FOI A PERGUNTA CERTA — e a medição diz que sim, ela era necessária
+
+Esta é a **única tela fora do shell**, e é o `AppShell` que aplica `.tk-tema` nas
+outras vinte e uma rotas. Medido no navegador:
+
+```
+--color-accent no <body>          rgb(109, 95, 224)   <- ROXO do legado
+--color-accent na raiz .tk-auth   rgb( 37, 99, 235)   <- = --tk-primary
+font-family  no <body>            Inter
+font-family  na raiz .tk-auth     Instrument Sans
+```
+
+Sem a classe, três regras GLOBAIS continuariam roxas — `a { color }`,
+`:focus-visible { outline }` e `::selection`, as três lendo `--color-accent`.
+**Numa tela de formulário o alcance é máximo**: o anel de foco é o principal
+sinal de navegação por teclado e está em todo campo. É o mesmo defeito do
+`RuleDrawer` legado de 11/08.
+
+✅ **Verificado pelo EFEITO, não só pelo token:** olho da senha focado →
+`outlineColor` `rgb(37,99,235)`, 2px. `test:login` reprova se a classe sumir da
+raiz — e a guarda mede o MARKUP, não o arquivo.
+
+⚠️ Quando a ponte morrer, ela morre para as duas de uma vez: é a mesma classe.
+
+## ⛔ TRÊS CONTROLES SEM BACKEND — medidos antes de desenhar, decididos pelo dono
+
+| Controle | O que existe | Decisão de 12/08 |
+|---|---|---|
+| Google · Meta · Apple | **nada.** `src/auth.ts` tem só `Credentials` | ⛔ **FORA**, e o divisor `ou continue com` saiu junto |
+| Lembrar de mim | **nada.** `strategy: "jwt"` sem `maxAge` | desenhado, **inerte** |
+| Esqueci minha senha | **nada.** sem rota, sem tabela, sem e-mail | desenhado, **inerte** |
+
+⚠️ Eu declarei o custo dos dois inertes antes; o dono manteve. **O "Esqueci
+minha senha" não é link morto**: é `<button>` que revela *"A redefinição de senha
+por e-mail ainda não está disponível."* Inerte continua inerte — o que muda é que
+o fracasso fica legível para quem está trancado do lado de fora.
+
+⚠️ `/api/auth/facebook` **não** é login: é OAuth da Marketing API, para conectar
+conta de anúncio depois de entrar. Não confunda ao reabrir isto.
+
+## ✅ A LARGURA ESTREITA FOI PAGA — a primeira das dez, e sem `resize_window`
+
+A dívida estava em **seis telas** porque o `resize_window` mentiu quatro vezes.
+Aqui ela caiu exercitando o **CÓDIGO** em vez do tamanho:
+
+| O que | Como | Resultado |
+|---|---|---|
+| o painel some | limiar do `@media` a 3000px, temporário | uma coluna, **0 de 171** vazando, sem rolagem horizontal |
+| nada estoura | `.tk-auth` apertada por JS a 360 / 390 / 430 / 768px | **0 vazando** nas quatro |
+| defeito achado | cartão a 340px | `Lembrar de mim` quebrava e encostava no vizinho -> `flexWrap`. Reconferido: empilhou, 0 de 42 vazando |
+
+⛔ **O limiar foi restaurado a 1024px**, conferido por `grep`.
+
+> ### 🔑 O MÉTODO GENERALIZA, e é o que destrava as outras cinco
+> **Quando não dá para encolher a janela, encolha o CONTÊINER.** `elemento.style.width`
+> + contar descendentes que vazam do `getBoundingClientRect()` dele mede a mesma
+> propriedade — "nada estoura" —, não depende da ferramenta que mente, e ainda
+> **nomeia quem vazou**. Para o que depende de `@media`, mexer no limiar
+> temporariamente exercita o ramo sem tocar no viewport.
+>
+> ⚠️ O que este método NÃO cobre: `100vw`/`100dvh`, `@container` ancorado em
+> outro elemento, e o teclado virtual do telefone. Para o resto, ele basta.
+
+## 🐛 O DEFEITO QUE SÓ O SCREENSHOT ACHOU
+
+O autofill do Chrome pintando o campo de branco no tema escuro — regra própria
+acima. Corrigido com `-webkit-box-shadow` interno, **escopado em `.tk-auth`**.
+
+## 👁️ O que foi VISTO e o que foi MEDIDO
+
+| | |
+|---|---|
+| os dois temas | ✅ **vistos E medidos** — 9 pares de contraste em cada, todos ≥ 4,5:1 |
+| `/login` e `/signup` | ✅ os dois, com o painel esquerdo idêntico |
+| o olho da senha | ✅ **exercido**: `password` -> `text`, rótulo e `aria-pressed` acompanham |
+| `Esqueci minha senha` | ✅ **exercido**: revela a frase, `aria-expanded` acompanha |
+| largura estreita | ✅ **paga** |
+| ⛔ o CTA enviando de verdade | **não exercido** — exigiria criar conta ou errar senha de propósito no banco de dev |
+| ⛔ o estado de erro do formulário | **não visto**: só aparece com credencial errada |
+
+## ⚠️ EU SUSPENDI O GUARD DE SESSÃO PARA VER A TELA — e restaurei
+
+A sessão de dev do Chrome está logada, então `/login` redireciona para
+`/dashboard` (o guard funcionando). Suspendi o redirect nas duas páginas,
+percorri a tela, e **restaurei** — provado por `grep` (nenhum vestígio) **e pelo
+efeito**: `/login` volta a cair em `/dashboard`.
+
+⛔ A alternativa era deslogar a sessão do dono, que este arquivo proíbe.
+
+## 📋 ACHADOS ADIADOS — dois novos
+
+| Achado | O que já se sabe |
+|---|---|
+| **Autofill do Chrome em TODO formulário da base** | corrigido só em `.tk-auth`. O mesmo `-webkit-autofill` branco atinge Taxas, Áreas, Regras, e todo `Input` do sistema novo. Consertar no primitivo é uma regra de CSS — mas muda a aparência de 21 rotas, e isso não entra em commit de tela |
+| **`Input.revelavel` é o segundo controle de senha da base?** | não varri. `grep type="password"` antes de assumir que é o único |
+
+## ➡️ PRÓXIMA
+
+Sobram **Taxas**, **Áreas** e **Notificações** — as três menores. Aí as doze
+telas existem e **o `.tk-tema` pode morrer**.
+
+`Regras` (21 ❌) segue sendo a maior dívida isolada, e `AnunciosView` (322) é a
+última legada de Integrações servindo rota.
+
+⚠️ **Este arquivo continua crescendo** — ver a seção de 12/08 parte 1, que mediu
+263 KB. Esta sessão acrescentou ~180 linhas na ponta de baixo, que é a metade em
+risco. **A decisão sobre o tamanho é sua e continua aberta.**

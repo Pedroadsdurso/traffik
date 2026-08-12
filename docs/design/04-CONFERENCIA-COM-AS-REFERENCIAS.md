@@ -1066,27 +1066,110 @@ Nascem `views/criativos/CriativosScreen.tsx`, `lib/ads/criativos.ts` (puro),
 
 Referências: imagens 10 e 11 (claro e escuro).
 
+> ### 🔎 CONVENÇÃO DESTA SEÇÃO — a mesma de CAMPANHAS
+> **✅ = eu vi na tela.** Linha em branco = construída e NÃO VISTA. Nesta seção
+> **não há linha em branco**: os dezenove itens foram percorridos no navegador em
+> 12/08/2026, nos dois temas, e os contrastes foram MEDIDOS (não presumidos).
+
 | Elemento | Status |
 |---|---|
-| Split-screen, marca à esquerda, formulário à direita | ❌ |
-| Logo grande no topo esquerdo | ❌ |
-| Badge `PLATAFORMA DE TRACKING E GESTÃO` | ❌ |
-| Headline com **segunda linha em cor de destaque** | ❌ |
-| Parágrafo de apoio em duas linhas | ❌ |
-| Três provas com ícone: título + subtítulo | ❌ |
-| **Preview da ferramenta** — mockup do dashboard com KPIs e gráfico | ❌ |
-| Arco decorativo de fundo | ❌ |
-| Rodapé esquerdo: `🔒 Dados criptografados e protegidos…` | ❌ |
-| Cartão do formulário: `Bem-vindo de volta` + subtítulo | ❌ |
-| Campos com ícone dentro (envelope, cadeado) | ❌ |
-| Olho para revelar senha | ❌ |
-| `Lembrar de mim` + `Esqueci minha senha` | ❌ |
-| Botão `Entrar →` em gradiente | ❌ |
-| Divisor `ou continue com` | ❌ |
-| Social: `Google` · `Meta` · `Apple` | ❌ |
-| `Ainda não tem uma conta? Criar conta` | ❌ |
-| Rodapé com copyright | ❌ |
-| Espelhar tudo em `/signup` | ❌ |
+| Split-screen, marca à esquerda, formulário à direita | ✅ |
+| Logo grande no topo esquerdo | ✅ |
+| Badge `PLATAFORMA DE TRACKING E GESTÃO` | ✅ |
+| Headline com **segunda linha em cor de destaque** | ✅ |
+| Parágrafo de apoio em duas linhas | ✅ |
+| Três provas com ícone: título + subtítulo | ✅ |
+| **Preview da ferramenta** — mockup do dashboard com KPIs e gráfico | ✅ |
+| Arco decorativo de fundo | ✅ |
+| Rodapé esquerdo: `🔒 Dados criptografados e protegidos…` | ✅ |
+| Cartão do formulário: `Bem-vindo de volta` + subtítulo | ✅ |
+| Campos com ícone dentro (envelope, cadeado) | ✅ |
+| Olho para revelar senha | ✅ |
+| `Lembrar de mim` + `Esqueci minha senha` | 🔧 |
+| Botão `Entrar →` em gradiente | 🔧 |
+| Divisor `ou continue com` | 🔧 |
+| Social: `Google` · `Meta` · `Apple` | 🔧 |
+| `Ainda não tem uma conta? Criar conta` | ✅ |
+| Rodapé com copyright | 🔧 |
+| Espelhar tudo em `/signup` | ✅ |
+
+### Os cinco 🔧, com o motivo de cada um
+
+| Item | Por que diverge |
+|---|---|
+| **Social: Google · Meta · Apple** | ⛔ **NÃO EXISTE BACKEND.** `src/auth.ts` tem UM provider: `Credentials`. Não há Google, Facebook Login nem Apple, nem no NextAuth nem no `package.json`. (O `/api/auth/facebook` é OAuth da **Marketing API**, para conectar conta de anúncio depois de entrar — não autentica ninguém.) Três botões que não fazem nada na tela de ENTRADA é o pior caso do controle inerte: quem clica em "Google" e não vê nada conclui que o produto está quebrado antes de conhecer o produto. **Decisão do dono, 12/08/2026** |
+| **Divisor `ou continue com`** | sai junto — ele existe só para separar o que não existe |
+| **`Lembrar de mim` + `Esqueci minha senha`** | **desenhados e INERTES, por decisão do dono em 12/08/2026**, com o custo declarado na hora. Medido: `auth.ts` usa `session: { strategy: "jwt" }` **sem `maxAge`** (o padrão vale para todo mundo, marcado ou não), e não há rota, tabela de token nem envio de e-mail para redefinição. Ligar o primeiro exigiria mexer no `auth.ts`, **congelado** (anterior a `4e6aa9e`). ⚠️ O "Esqueci minha senha" **não é link morto**: é `<button>` que revela *"A redefinição de senha por e-mail ainda não está disponível."* — inerte continua inerte, mas o fracasso fica legível para quem está trancado do lado de fora |
+| **Botão `Entrar →` em gradiente** | o gradiente é **ANEL de 1,5px**, não preenchimento. Medido no cabeçalho de `tk/Button`: nenhuma cor de rótulo atravessa o gradiente inteiro — o rótulo claro cai a **1,73:1** no ciano e o escuro a 3,76:1 no azul. **É o mockup que não passa em AA**, não o componente. Medido nesta tela: rótulo do CTA a **5,17:1** (claro) e **4,94:1** (escuro) |
+| **Rodapé com copyright** | **sem ano.** A referência diz `© 2024`. Um ano fixo vira mentira em 1º de janeiro; `new Date().getFullYear()` no servidor é a armadilha do `elapsed()` — na virada do ano o HTML sai com um ano, o cliente hidrata com outro e o React aborta a hidratação da árvore, que aqui é o formulário de login |
+
+### O que foi MEDIDO na tela (não presumido)
+
+| | Claro | Escuro |
+|---|---|---|
+| headline | **16,90:1** | **18,60:1** |
+| parágrafo de apoio | 6,14 | 7,59 |
+| badge (tingido, composto sobre o fundo real) | 4,72 | 6,05 |
+| apoio das provas · rodapé de segurança | 4,70 | 6,00 |
+| título do cartão | 17,85 | 16,11 |
+| subtítulo do cartão | 4,97 | 5,20 |
+| rótulo do CTA | 5,17 | 4,94 |
+| `Esqueci minha senha` | — | 4,58 |
+| cartão × fundo (separado por borda + sombra) | 1,06 | 1,15 |
+
+### 🔴 A PONTE `.tk-tema` — a única tela FORA do shell, e a medição que prova
+
+Esta é a única tela do produto sem `AppShell`, e é o `AppShell` que aplica
+`.tk-tema` nas outras vinte e uma rotas. Medido no navegador em 12/08/2026:
+
+```
+--color-accent no <body>        rgb(109, 95, 224)   ← ROXO do sistema legado
+--color-accent na raiz .tk-auth rgb( 37, 99, 235)   ← = --tk-primary
+font-family no <body>           Inter
+font-family na raiz .tk-auth    Instrument Sans
+```
+
+Sem a classe na raiz, três regras GLOBAIS do `globals.css` continuariam roxas,
+porque as três leem `--color-accent`: `a { color }`, `:focus-visible { outline }`
+e `::selection`. Numa tela de FORMULÁRIO o alcance é máximo — o anel de foco é o
+principal sinal de navegação por teclado, e está em todo campo.
+
+✅ **Verificado pelo efeito, não só pelo token:** com o olho da senha focado,
+`outlineColor` = `rgb(37,99,235)`, 2px. O link `Criar conta` idem.
+
+⚠️ É o mesmo defeito medido em 11/08 no `RuleDrawer` legado, que portava para o
+`<body>` e saía com anel roxo. `test:login` reprova se a classe sumir da raiz.
+
+### ✅ LARGURA ESTREITA — verificada, e é a PRIMEIRA das dez
+
+O `resize_window` mentiu quatro vezes nesta base e a dívida se acumulou em seis
+telas. Aqui ela foi paga **sem redimensionar a janela**, exercitando o CÓDIGO em
+vez do tamanho — a mesma saída registrada para o clamp do popover:
+
+| O que | Como | Resultado |
+|---|---|---|
+| o painel de marca some | limiar do `@media` elevado a 3000px temporariamente | `display: none`, uma coluna, **0 de 171** descendentes vazando, sem rolagem horizontal |
+| nada estoura no telefone | `.tk-auth` apertada por JS a 360 · 390 · 430 · 768px | **0 vazando** nas quatro |
+| 🐛 defeito achado e corrigido | cartão a 340px | `Lembrar de mim` quebrava em duas linhas e encostava no `Esqueci minha senha`. Com `flexWrap`, os dois empilham — reconferido: **empilhou, não colidem, 0 de 42 vazando** |
+
+⚠️ O limiar foi **restaurado a 1024px** e o `grep` confere que não sobrou
+vestígio.
+
+### 🐛 O defeito que só a tela mostrou, e que `getComputedStyle` NÃO acha
+
+**O autopreenchimento do Chrome pinta o campo de branco.** No tema escuro, quem
+tem a senha salva via dois retângulos BRANCOS dentro do cartão escuro. O
+navegador pinta `-internal-light-dark(...)` por cima do `bg-transparent` do
+input, e `getComputedStyle` continua devolvendo `transparent` — **medir o estilo
+declarado não acha isto.** Foi o screenshot que denunciou.
+
+⚠️ E é o caso COMUM, não o de borda: a tela de entrada é justamente onde o
+gerenciador de senhas age. Uma tela que só fica certa para quem nunca salvou a
+senha está errada para quase todo mundo que volta.
+
+Corrigido com `-webkit-box-shadow` interno + `-webkit-text-fill-color`,
+**escopado em `.tk-auth`** — o mesmo defeito existe em todo formulário da base, e
+consertar globalmente mudaria 21 rotas num commit de tela. Ver ACHADOS ADIADOS.
 
 ---
 

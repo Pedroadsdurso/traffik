@@ -2010,3 +2010,78 @@ a {
 @media (prefers-reduced-motion: reduce) {
   .tk-gaveta-painel { animation: fade-in var(--tk-dur-rapida) both; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   `.tk-auth` — a tela de ENTRADA (/login e /signup)
+   ══════════════════════════════════════════════════════════════════════════════
+
+   ⚠️ EM `@layer components`, como o resto do sistema novo. CSS sem camada vence
+   utilitário do Tailwind, e uma regra nua aqui sequestraria a cor ou o display
+   de qualquer componente que caísse dentro — é a regra que custou os 6 de 10
+   links azuis do rail em 06/08/2026.
+
+   ⚠️ O media query é de JANELA e não container: aqui o que decide é a largura da
+   TELA, porque as duas colunas SÃO a tela. É o caso em que `@media` é o certo.
+   ══════════════════════════════════════════════════════════════════════════════ */
+@layer components {
+  .tk-auth {
+    display: grid;
+    /* Uma coluna. A de duas entra no `@media` de baixo — mobile primeiro, para
+       que a janela estreita não dependa de um `override` chegar. */
+    grid-template-columns: 1fr;
+  }
+
+  /* 🐛 O AUTOPREENCHIMENTO DO CHROME PINTA O CAMPO DE BRANCO, e só a tela mostra.
+     ─────────────────────────────────────────────────────────────────────────
+     Achado na passada visual de 12/08/2026, no tema escuro: quem tem a senha
+     salva vê dois retângulos BRANCOS dentro do cartão escuro. O navegador pinta
+     `-internal-light-dark(rgb(232,240,254), …)` por cima do `bg-transparent` do
+     input, e `getComputedStyle` continua devolvendo `transparent` — ou seja,
+     medir o estilo declarado NÃO acha isto. Foi o screenshot que denunciou.
+
+     ⚠️ E é o caso COMUM, não o de borda: a tela de entrada é justamente onde o
+     gerenciador de senhas age. Uma tela que só fica certa para quem nunca
+     salvou a senha está errada para quase todo mundo que volta.
+
+     A cor vem do `box-shadow` interno porque `background` é ignorado neste
+     pseudo-estado; `-webkit-text-fill-color` é o único caminho para o texto.
+
+     ⚠️ ESCOPADO EM `.tk-auth` de propósito. O mesmo defeito existe em todo
+     formulário da base, e consertar globalmente mudaria a aparência de 21 rotas
+     num commit de tela. Está registrado em ACHADOS ADIADOS. */
+  .tk-auth input:-webkit-autofill,
+  .tk-auth input:-webkit-autofill:hover,
+  .tk-auth input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--tk-text);
+    -webkit-box-shadow: 0 0 0 1000px var(--tk-surface-hover) inset;
+    caret-color: var(--tk-primary);
+  }
+
+  /* O painel de marca só existe no largo. `display: none` e não `visibility`:
+     ele carrega a prévia inteira, e um nó invisível continua sendo lido por
+     leitor de tela e continua ocupando o fluxo. */
+  .tk-auth-marca { display: none; }
+
+  @media (min-width: 1024px) {
+    .tk-auth { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); }
+
+    .tk-auth-marca {
+      /* ⚠️ `flex`, e não `block`: com `block` o painel filho fica com a altura
+         do CONTEÚDO, e o `flex: 1` de dentro dele não tem o que esticar. Medido
+         na tela em 12/08 — o terço de baixo da coluna ficava vazio e o rodapé de
+         segurança subia para o meio. */
+      display: flex;
+      /* Lavagem levíssima do destaque, para separar as duas metades sem uma
+         borda dura. No tema claro ela é o que dá a profundidade que a referência
+         tem; no escuro, o que impede a metade esquerda de virar um vazio preto. */
+      background:
+        radial-gradient(
+          120% 90% at 0% 100%,
+          color-mix(in oklch, var(--tk-primary) 7%, transparent),
+          transparent 62%
+        ),
+        var(--tk-background);
+      border-right: 1px solid var(--tk-border);
+    }
+  }
+}
