@@ -143,7 +143,25 @@ CSS:
 `wMin` de 5 no funil vem do achado antigo: abaixo de ~360px a container query esconde a fita.
 Nenhum bloco tem `wMax`. Nenhum bloco tem `hMax`.
 
-> ### 🔴 OS `padrão` DESTA TABELA SÃO ESTIMATIVA — e têm de ser SUBSTITUÍDOS por medição
+> ### ⛔ DOIS NÚMEROS DIFERENTES, e confundi-los é o erro
+>
+> | | O que é | De onde vem |
+> |---|---|---|
+> | **migração** | o `h` de um layout que **já existe** | **medição** — ninguém vê a tela mudar |
+> | **padrão do catálogo** | o `h` de um bloco **novo**, arrastado agora | **decisão** |
+>
+> **A regra que separa é a natureza do conteúdo:**
+>
+> | Conteúdo | `padrão` | Por quê |
+> |---|---|---|
+> | **altura natural** — tabela, lista, feed, rodapé | = a medição | o conteúdo tem um tamanho próprio, e medi-lo mede a necessidade |
+> | **elástico** — série, medidor, rosca, funil, mapa | **decidido** | medir um gráfico mede o tamanho que ele ACEITOU, não o que precisa |
+>
+> ⚠️ Por isso `Receita × Gasto` fica **3 na migração** e **6×4 no catálogo**, e
+> **isso não é contradição**: o layout salvo de quem já tem o bloco não muda; quem
+> arrastar um novo recebe o tamanho em que ele se lê.
+>
+> ### 🔴 OS `padrão` DA TABELA ACIMA SÃO ESTIMATIVA — substituídos conforme a regra
 >
 > Decisão do dono, 12/08/2026. O valor de cada `padrão` passa a ser
 > **`ceil(altura realmente renderizada do bloco hoje, no layout padrão a 12
@@ -342,8 +360,34 @@ não aparece — e é justamente esse que a asserção §7.3 pega depois da migr
 >   produção. A migração mede:
 >
 >   ```
->   h = max(linhas gravado, ceil(altura renderizada do bloco hoje))
+>   h = max( ceil((linhas * 44 + 16) / 96),
+>            ceil((altura renderizada  + 16) / 96) )
 >   ```
+>
+>   🔴 **A CONVERSÃO É A PARTE QUE IMPORTA, e a razão mais que a fórmula.**
+>   `linhas` está em unidade de **44px** (`catalogo.ts:61`, `ALTURA_LINHA`); a
+>   grade nova é de **96px** (80 + 16). Comparar os dois números crus **dobra a
+>   altura**: `linhas: 8` significa 352px hoje, e 8 células significariam 752px.
+>
+>   ⚠️ Sem a razão escrita, a próxima mudança de `ALTURA_LINHA` repete o erro —
+>   a fórmula continuaria "certa" e o resultado, errado.
+>
+> - 🔴 **LEIA `linhas` DO ENVELOPE PERSISTIDO, NUNCA DO `minHeight` RENDERIZADO.**
+>   `celulaDaGrade` (linha 133) só aplica `minHeight` **com dado**, então um bloco
+>   sem dado no período aparece como "sem valor" tendo valor gravado.
+>
+>   Medido em 12/08/2026, no layout de dev: **4 blocos** pela leitura renderizada
+>   × **10 blocos** pelo envelope. A migração pela tela teria perdido a altura
+>   escolhida em **6 de 10** — incluindo `receita-gasto` e `paises`.
+>
+> - **MEÇA EM 1280 E EM 2260, e tome o `max` por bloco.** Para quase todos, 1280
+>   é o piso (a largura mais estreita em que o layout de 12 colunas existe). Mas
+>   `DonutChart` e `MedidorRadial` derivam altura da LARGURA, então a
+>   monotonicidade **se inverte neles**: são mais altos no monitor grande.
+>
+>   Medido: só **dois** blocos mudam — `alertas` 346→262 (mais alto no estreito) e
+>   `heatmap` 352→375 (mais alto no largo, a inversão). Slot pequeno demais corta
+>   em silêncio; grande demais deixa vazio, e vazio é o que a F3 remove.
 >
 >   ⚠️ E a medição só existe ANTES da F1 — ela depende de a grade estar em
 >   `grid-auto-rows: auto`. É dado de ENTRADA (F0b), não saída.
@@ -361,3 +405,52 @@ não aparece — e é justamente esse que a asserção §7.3 pega depois da migr
 > ⛔ **E a F1 não fecha sozinha.** Ela fecha com **a lista dos blocos que passam
 > do slot depois da migração** — essa lista é o escopo da F3, e sem ela a F1
 > entregou slot sem entregar conteúdo que caiba.
+---
+
+## 11. F0b — a medição, executada em 12/08/2026
+
+Grade em `grid-auto-rows: auto`, 12 colunas, gap 16, densidade padrão.
+`linhas` lido do **envelope persistido** (`DashboardLayout.layout.paineis[].linhas`).
+
+`células(px) = ceil((px + 16) / 96)` · `células(linhas) = ceil((linhas × 44 + 16) / 96)`
+
+| bloco | span | `linhas` | → células | h@1280 | h@2260 | → células | **h migrado** |
+|---|---|---|---|---|---|---|---|
+| `funil` | 6 | 5 | 3 | 382 | 382 | 5 | **5** |
+| `heatmap` | 6 | 8 | 4 | 352 | **375** | 5 | **5** |
+| `atividade` | 4 | 8 | 4 | 256 | 256 | 3 | **4** |
+| `paises` | 6 | 8 | 4 | 256 | 256 | 3 | **4** |
+| `alertas` | 4 | 4 | 2 | **346** | 262 | 4 | **4** |
+| `top-campanhas` | 4 | 4 | 2 | 321 | 321 | 4 | **4** |
+| `aprovacao` | 6 | — | — | 256 | 256 | 3 | **3** |
+| `posicionamento` | 4 | — | — | 256 | 256 | 3 | **3** |
+| `lucro-por-hora` | 4 | 4 | 2 | 256 | 256 | 3 | **3** |
+| `vendas-por-dia` | 4 | 4 | 2 | 238 | 238 | 3 | **3** |
+| `vendas-por-hora` | 4 | 4 | 2 | 238 | 238 | 3 | **3** |
+| `receita-gasto` | 8 | 5 | 3 | 238 | 238 | 3 | **3** |
+| `fontes` | 4 | — | — | 238 | 238 | 3 | **3** |
+| `produtos` | 4 | — | — | 238 | 238 | 3 | **3** |
+| `pagamentos` | 4 | — | — | 238 | 238 | 3 | **3** |
+| `rodape` | 12 | — | — | 192 | 192 | 3 | **3** |
+
+**10 de 16** têm `linhas` gravado. Em **4 deles o `linhas` vence** a medição
+(`atividade`, `paises`, e o empate de `alertas`/`top-campanhas`) — são as
+alturas que o usuário escolheu e que a leitura pela tela teria perdido.
+
+### ⚠️ O que esta medição NÃO é
+
+- **Não é o padrão do catálogo** para conteúdo elástico — ver a regra da §3.
+  `receita-gasto` mede 3 e o catálogo decide 6×4.
+- **Não é responsividade.** Só `alertas` e `heatmap` mudam entre 1280 e 2260;
+  os outros 14 têm altura dominada por conteúdo que não reflui nessa faixa.
+  Isso é sintoma da queixa 3, não prova de que está bom.
+- **Não vale para outra densidade.** O gap é 16 no padrão e 20/24 nas outras
+  (`globals.css:1310-1330`). A conversão assume 16.
+
+### 🔴 `rodape` mede 192 e cabe em 3 células — mas a §3 pede `12×1`
+
+`h = 1` são **80px**. O rodapé de estado mede **192**. Ou seja: **o `hMin: 1` da
+§3 corta esse bloco em silêncio**, e ele é estrutural.
+
+⛔ Isto é entrada para a F2, não defeito da medição: ou o `hMin` dele sobe para
+3, ou o conteúdo do rodapé encolhe na F3. **A F1 não pode migrá-lo para 1.**
