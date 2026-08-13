@@ -77,6 +77,7 @@ export function MedidorRadial({
   rotulo,
   texto,
   tamanho = 132,
+  diametro,
 }: {
   /** 0–100, JÁ CALCULADO. Ver a nota do componente. */
   valor: number;
@@ -87,6 +88,21 @@ export function MedidorRadial({
   /** Linha pequena abaixo do número. */
   texto?: string;
   tamanho?: number;
+  /**
+   * 🔴 F3 — O DIÂMETRO CALCULADO POR QUEM SABE QUANTOS MEDIDORES EXISTEM.
+   *
+   * `--tk-b-radial` é `clamp(88px, 26cqw, 168px)`: ele conhece a largura do
+   * bloco e **não conhece `n`**. Com quatro formas de pagamento num bloco de 6
+   * colunas, 26cqw dava 122px cada, os quatro não cabiam na linha, o `flex-wrap`
+   * quebrava em duas fileiras e o bloco estourava **+46px** a 1280.
+   *
+   * §4 do `07`: `diâmetro = min((cw − gaps) / n, ch − rótulo)`. Só o `Aprovacao`
+   * tem `n`, `cw` e `ch` — por isso a conta mora lá e chega aqui pronta.
+   *
+   * ⚠️ Ausente, o componente volta ao `clamp`, que continua certo para uso
+   * avulso (a `/design-system` e o Gerenciador desenham UM medidor).
+   */
+  diametro?: number;
 }) {
   const id = React.useId();
   /* 🔴 PRIMEIRO CONSUMIDOR DO `useTamanho`, que estava ÓRFÃO desde que foi
@@ -131,11 +147,27 @@ export function MedidorRadial({
 
   return (
     /* 🎨 DIÂMETRO CONTÍNUO (`--tk-b-radial`), pelo mesmo motivo do donut:
-       geometria não tem meio-tamanho feio. A prop `tamanho` é o fallback para
-       uso fora de um `.tk-escala`. */
+       geometria não tem meio-tamanho feio.
+
+       🔴 ELE PAROU DE DERIVAR A ALTURA DA LARGURA — F1, 12/08/2026. Era
+       `width: var(--tk-b-radial); aspect-ratio: 1`, e junto com o `DonutChart`
+       eram os dois únicos gráficos da base que IGNORAVAM a altura do slot: os
+       outros seis já eram `height: 100%` e só esperavam um pai com altura
+       definida. Ver a nota inteira no `DonutChart`.
+
+       ⚠️ `min-height` é o piso do `clamp`, para o uso fora de um pai com altura
+       definida. Com pai definido quem decide é o `max-height`. */
     <div
       ref={refMedida}
-      style={{ display: "grid", placeItems: "center", position: "relative", width: `var(--tk-b-radial, ${tamanho}px)`, aspectRatio: "1" }}
+      style={{
+        display: "grid",
+        placeItems: "center",
+        position: "relative",
+        aspectRatio: "1",
+        ...(diametro
+          ? { width: diametro, height: diametro }
+          : { height: "100%", minHeight: 88, maxHeight: `var(--tk-b-radial, ${tamanho}px)` }),
+      }}
     >
       <svg viewBox="0 0 100 100" width="100%" height="100%" aria-hidden="true" style={{ display: "block" }}>
         {Array.from({ length: BARRAS }, (_, i) => {

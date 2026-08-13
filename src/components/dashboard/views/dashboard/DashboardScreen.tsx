@@ -10,7 +10,14 @@ import { EmptyState } from "@/components/tk/EmptyState";
 import { KpiHero, MetricStrip, type DadosKpi } from "@/components/tk/Kpi";
 import { RENDERS, vazioDoBloco } from "../../catalogoRender";
 import { useDadosDosBlocos } from "../../dadosDosBlocos";
-import { ALTURA_LINHA, CATALOGO_META, COLUNAS_GRADE, metaDoBloco, proximoPasso } from "../../catalogo";
+import {
+  ALTURA_CELULA,
+  CATALOGO_META,
+  COLUNAS_GRADE,
+  celulasDePx,
+  metaDoBloco,
+  proximoPasso,
+} from "../../catalogo";
 import { useLayoutDashboard } from "../../layout/useLayoutDashboard";
 import { useArrasto, type Carga } from "../../layout/useArrasto";
 import { avisoDeSobra, linhasDaGrade } from "../../layout/grade";
@@ -77,78 +84,175 @@ import type { TraffikView } from "../../useTraffikState";
    — inteiros exatos. Com doze, um terço daria 4 e a conta ainda fecharia, mas a
    grade aceitaria larguras que o catálogo não oferece, e alguém acabaria usando. */
 /**
- * 🔴 A GRADE — doze colunas, e a ALTURA VEM DO CONTEÚDO.
+ * 🔴 A GRADE — doze colunas, e a ALTURA VEM DO LAYOUT (F1, 12/08/2026).
  *
- * `gridAutoRows: "auto"` é a correção do painel esburacado dos prints de
- * 07/08/2026. Com linha de altura fixa e `grid-row: span N`, um bloco VAZIO
- * reservava as 6 linhas que teria com dado só para escrever "Sem dado neste
- * período" — ao lado de outro de 3. E estado vazio é o que os testadores mais
- * veem.
+ * ⛔ **Este comentário dizia o CONTRÁRIO até hoje** ("a altura vem do conteúdo",
+ * com `gridAutoRows: auto` e `linhas` virando `minHeight`). O sintoma que
+ * motivou aquela decisão era real — um bloco VAZIO reservava as 6 linhas que
+ * teria com dado só para escrever "Sem dado neste período" — mas a conclusão
+ * era errada, e o `minHeight` trocou um problema por três: sem controle
+ * vertical, conteúdo que nunca aprende a caber (o card sempre cedia), e o
+ * `stretch` como terceira mecânica decidindo altura.
  *
- * ⚠️ `alignItems` fica no PADRÃO (`stretch`), de propósito: é ele que faz os
- * blocos de uma mesma linha terminarem na mesma altura, alinhados pelo maior. O
- * menor recebe `distribuir` e centra o conteúdo na sobra, em vez de deixá-la
- * embaixo.
+ * Hoje a linha vale `--tk-row` (80px) e cada bloco declara `h` em células. Quem
+ * responde pelo bloco vazio é a **condição F0**: colapso para
+ * `min(h, células do estado vazio)` na renderização, com o `h` salvo intacto.
+ * O raciocínio inteiro está em `docs/design/07-GRADE-E-BLOCOS.md`, §2 e §9.
+ *
+ * ⚠️ `alignItems` fica no PADRÃO (`stretch`): com `span`, todo item já tem a
+ * altura exata do próprio slot, e o `stretch` é o que faz o card preencher a
+ * célula em vez de flutuar no topo dela.
  *
  * ⛔ E sem `grid-auto-flow: dense`. Ele preenche buracos com blocos de MAIS
  * ADIANTE na lista, e a ordem que o usuário arrastou deixaria de ser a ordem que
- * ele vê. Se sobrar buraco depois da altura por conteúdo, a conversa é outra —
- * mas o buraco de agora não era ele.
+ * ele vê.
  */
 const GRADE: React.CSSProperties = {
   display: "grid",
   gap: "var(--tk-gap-grid)",
   gridTemplateColumns: `repeat(${COLUNAS_GRADE}, minmax(0, 1fr))`,
-  gridAutoRows: "auto",
+  gridAutoRows: "var(--tk-row)",
 };
 
 /**
  * A célula de um painel na grade.
  *
- * ⚠️ `linhas` vira `minHeight`, NÃO `grid-row: span`. A diferença é a que
- * importa: `span` é uma altura FIXA e o conteúdo maior vaza ou é cortado;
- * `minHeight` é um PISO, e o bloco cresce quando precisa. É o que permite ter
- * alça de altura sem voltar a reservar espaço para dado que não existe.
+ * ### 🔴 NÃO EXISTE "grid-row: auto" NUMA GRADE DE LINHA FIXA — medido na tela
  *
- * ⚠️ E ele só vale com DADO — ver o comentário dentro da função.
+ * A primeira versão desta função deixava o bloco NÃO MIGRADO em `grid-row: auto`,
+ * lendo "os dois modos convivem" como dois modos de DESENHO. Na tela, os 16
+ * painéis viraram caixas de 80px com o conteúdo derramando por cima do vizinho:
+ * com `grid-auto-rows: var(--tk-row)`, um item auto-posicionado ocupa **UMA**
+ * linha, não a altura do conteúdo dele. `grid-auto-rows` dimensiona a linha; ele
+ * não descreve o item.
+ *
+ * ⛔ E o conserto não é `minmax(var(--tk-row), auto)`: isso devolveria a altura
+ * ao conteúdo em TODA linha, inclusive nos blocos migrados — a F1 inteira.
+ *
+ * **Os dois modos convivem na PERSISTÊNCIA, não no desenho.** O que distingue
+ * `h: undefined` é *"a altura do usuário ainda não foi convertida"*, e isso
+ * importa para o que se GRAVA. Para desenhar, o bloco não migrado usa o
+ * `hPadrao` — que É a medição F0b, ou seja, a altura que ele tinha em `auto`.
+ * Somada ao colapso do vazio, a renderização é idêntica à de antes da F1.
+ *
+ * ⚠️ O caso que fica diferente: quem tinha `linhas` MAIOR que a medição vê o
+ * bloco no tamanho do catálogo até a migração gravar. É transitório (a migração
+ * roda na mesma abertura, quando todos os blocos têm dado) e nunca perde a
+ * escolha — o `linhas` continua no envelope.
+ *
+ * @param h        altura em CÉLULAS. `undefined` = ainda não migrado.
+ * @param hPadrao  a medição F0b do bloco, usada enquanto não há `h`.
+ * @param hColapso o teto imposto pela condição F0 quando o bloco está vazio.
  */
-function celulaDaGrade(col: number, linhas: number | undefined, temDado: boolean): React.CSSProperties {
-  /* ⚠️ `temDado` continua entrando aqui, e agora é a ÚNICA coisa que o estado
-     vazio muda no layout: a posição e a largura são as que o usuário escolheu.
-     Ver a nota de `BlocoVazio` — colapsar a altura é o comportamento; sumir da
-     grade era o bug. */
+function celulaDaGrade(col: number, h: number | undefined, hPadrao: number, hColapso?: number): React.CSSProperties {
+  /* `min`, e não substituição: um bloco cujo estado vazio precise de MAIS
+     células que o `h` salvo não pode CRESCER — crescer no vazio é a definição do
+     esburacado. O `funil` é o caso: ele mede 5 vazio e tem `h` 5, então
+     `min(5, 5) = 5` e ele **não colapsa** — corretamente. O defeito ali é o
+     CONTEÚDO do vazio dele, e é item nomeado da F3. */
+  const base = h ?? hPadrao;
+  const efetivo = hColapso === undefined ? base : Math.min(base, hColapso);
+
   return {
     gridColumn: `span ${col}`,
+    gridRow: `span ${efetivo}`,
+    /* ⛔ OS DOIS SÃO OBRIGATÓRIOS. Sem `minWidth: 0` o conteúdo empurra a coluna;
+       sem `minHeight: 0` ele empurra a LINHA, e o `span` volta a ser um PISO em
+       vez de altura — que é exatamente o modelo do qual a F1 acabou de sair. */
     minWidth: 0,
-    /* ⚠️ A CÉLULA É O CONTAINER das consultas dos blocos. Sem isto, o
-       `@container` de dentro deles procuraria um ancestral com
-       `container-type` e cairia na raiz — respondendo sobre a JANELA, que é
-       exatamente o que a container query existe para não fazer. */
-    containerType: "inline-size",
-    /* ⛔ O PISO DE ALTURA NÃO VALE NO ESTADO VAZIO. Um bloco que diz "Sem dado
-       neste período" ocupando as 4 linhas que teria COM dado é exatamente o
-       esburacado que a altura por conteúdo veio resolver — e estado vazio é o que
-       os testadores mais veem. A altura escolhida pelo usuário é sobre o BLOCO
-       COM DADO; aplicá-la ao vazio reserva espaço para o que não existe. */
-    ...(linhas && temDado ? { minHeight: linhas * ALTURA_LINHA } : null),
-    /* 🔴 E O `stretch` DA GRADE TAMBÉM NÃO — visto na tela em 07/08/2026, depois
-       de o piso já estar tratado.
+    minHeight: 0,
+    /* 🔴 `size`, e não `inline-size` — é o que habilita `cqh`, as consultas de
+       ALTURA da §4 do `07`.
 
-       Tirar o `minHeight` não bastava: `align-items` é `stretch` por padrão, e
-       todo item de uma linha fica com a altura do MAIOR. Um `Posicionamento`
-       vazio ao lado de um `Taxa de aprovação` de quatro medidores virava uma
-       caixa de ~300px com uma frase de 60px centrada nela. O bloco tinha parado
-       de sumir e continuava reservando espaço para o dado que não existe.
+       `container-type: size` implica `contain: size`: o conteúdo deixa de
+       contribuir para o tamanho do próprio elemento. Isso só é seguro porque
+       TODA célula tem altura definida agora (`span`). Foi uma tentativa de
+       manter células em `auto` que produziu o defeito acima — e ali o `size`
+       teria colapsado o bloco a zero.
 
-       ⚠️ O preço é a linha ficar DESALINHADA embaixo, e é o preço certo: o
-       alinhamento é uma propriedade estética da linha; o espaço morto é a tela
-       afirmando que ali cabia alguma coisa. Entre os dois, some o desalinhamento.
-
-       ⛔ Só no vazio. Com dado, `stretch` continua — é ele que faz os blocos de
-       uma linha terminarem juntos, e o `distribuir` do `Card` centra o conteúdo
-       do menor na sobra. */
-    ...(temDado ? null : { alignSelf: "start" as const }),
+       ⚠️ A CÉLULA é o contêiner das consultas dos blocos. Sem contêiner nenhum,
+       o `@container` de dentro deles cairia na raiz e passaria a responder sobre
+       a JANELA — que é o que a container query existe para não fazer. */
+    containerType: "size",
   };
+}
+
+/**
+ * 🔴 A CONDIÇÃO F0 — bloco sem dado COLAPSA; ele não some e não reescreve nada.
+ *
+ * ```
+ * hVazio = min( h salvo , ceil((altura natural do card vazio + 16) / 96) )
+ * ```
+ *
+ * ⛔ **NENHUM LIMIAR FIXO.** Três já foram reprovados pela medição nesta grade
+ * (`h = 1`, a tabela de `hMin` da §3, e um "2 células" meu) — a seção do
+ * `CLAUDE.md` conta os três. O número sai da medição do PRÓPRIO bloco, sempre.
+ *
+ * ### Como a altura natural é lida com o card já preso a um slot
+ *
+ * O card está esticado pelo `span`, então `card.height` não diz nada. O que diz
+ * é o **cromo**: `card.height − corpo.height`, onde `corpo` é o div `flex: 1`
+ * que absorve toda a folga (`[data-tk-corpo]`). Essa diferença é padding + gap +
+ * cabeçalho, e ela **independe de quanto o card foi esticado**. Somando a altura
+ * intrínseca do estado vazio, sai a altura que o card teria em `auto`.
+ *
+ * ⛔ O `h` SALVO NÃO É TOCADO. Isto é override de RENDERIZAÇÃO. Gravar o colapso
+ * faria um período sem dado reescrever o layout do usuário em silêncio, e o
+ * bloco não recuperaria o tamanho escolhido quando o dado voltasse — a distinção
+ * central deste projeto (ausência de observação ≠ observação de zero), na camada
+ * de persistência de layout.
+ */
+function useColapsoDoVazio() {
+  const [celulas, setCelulas] = React.useState<Record<string, number>>({});
+
+  const medir = React.useCallback((id: string, vazio: HTMLElement | null) => {
+    const corpo = vazio?.closest<HTMLElement>("[data-tk-corpo]");
+    const card = corpo?.parentElement;
+    if (!vazio || !corpo || !card) return;
+
+    const cromo = card.getBoundingClientRect().height - corpo.getBoundingClientRect().height;
+    const n = celulasDePx(cromo + vazio.getBoundingClientRect().height);
+    /* ⚠️ O estado guarda CÉLULAS, não pixels, e é isso que impede o laço: a
+       altura natural não depende do span, mas o observer dispara com frações
+       idênticas — comparar o INTEIRO faz o `setState` acontecer só quando o
+       bloco de fato muda de tamanho. */
+    setCelulas((m) => (m[id] === n ? m : { ...m, [id]: n }));
+  }, []);
+
+  return { celulas, medir };
+}
+
+/**
+ * O estado vazio, MEDIDO. O `ref` fica num wrapper porque o `EmptyState` não
+ * expõe um.
+ *
+ * ⚠️ Ele observa o PRÓPRIO vazio, não o card: a altura do vazio é intrínseca
+ * (ele não cresce — o `distribuir` do card o centra na folga), então a medida é
+ * estável mesmo enquanto o span muda em volta dela. É o que garante que o
+ * colapso não vire um laço de "encolhe, remede, cresce".
+ */
+function VazioMedido({
+  id,
+  medir,
+  children,
+}: {
+  id: string;
+  medir: (id: string, el: HTMLElement | null) => void;
+  children: React.ReactNode;
+}) {
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const remedir = () => medir(id, el);
+    remedir();
+    const obs = new ResizeObserver(remedir);
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [id, medir]);
+
+  return <div ref={ref}>{children}</div>;
 }
 
 /**
@@ -222,6 +326,27 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
   const heros = layout.hero.map(kpi).filter((k): k is DadosKpi => k !== null);
   const faixa = layout.faixa.map(kpi).filter((k): k is DadosKpi => k !== null);
 
+  /* A condição F0 — ver `useColapsoDoVazio`. Só o desenho, nunca o salvo. */
+  const colapso = useColapsoDoVazio();
+
+  /* ── A MIGRAÇÃO DE ALTURA, uma vez, ao abrir ──────────────────────────────
+     🔴 A ELEGIBILIDADE (camada 1) MORA AQUI porque é aqui que "tem dado?" tem
+     resposta: quem sabe é `vazioDoBloco`, que precisa de `v` e de `ctx`. O hook
+     de layout não os tem, e passá-los para lá só para isto faria o layout
+     depender do estado do dashboard inteiro.
+
+     ⛔ **Não migrar enquanto carrega.** Durante o `dashLoading` todo bloco
+     parece vazio, e migrar ali marcaria como "sem dado" a tela inteira — a
+     migração não aconteceria nunca, para ninguém. É o mesmo erro de ler o
+     `minHeight` renderizado em vez do envelope persistido, uma camada acima. */
+  React.useEffect(() => {
+    if (v.dashLoading) return;
+    void ed.migrarAltura((id) => {
+      const r = RENDERS[id as keyof typeof RENDERS];
+      return !!r && vazioDoBloco(r, v, ctx) === null;
+    });
+  }, [ed, v, ctx]);
+
   /* ── ARRASTO ──────────────────────────────────────────────────────────────
      🔴 O DESTINO VÁLIDO ACENDE NO INÍCIO DO GESTO; O INCOMPATÍVEL APAGA.
 
@@ -250,12 +375,16 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
    */
   const paraGrade = React.useCallback((larguraPx: number, alturaPx: number) => {
     const el = gradeRef.current;
-    if (!el) return { col: 1, linhas: 1 };
+    if (!el) return { col: 1, h: 1 };
     const gap = parseFloat(getComputedStyle(el).columnGap || "16") || 16;
     const larguraCol = (el.getBoundingClientRect().width - gap * (COLUNAS_GRADE - 1)) / COLUNAS_GRADE;
     return {
       col: (larguraPx + gap) / (larguraCol + gap),
-      linhas: (alturaPx + gap) / (ALTURA_LINHA + gap),
+      /* ⚠️ O gap do denominador é o MEDIDO, não o 16 da conversão da migração:
+         aqui o número descreve a tela de agora (a densidade pode ser outra), e
+         lá ele descreve a unidade em que o `linhas` foi GRAVADO. São dois 16
+         diferentes, e colapsá-los faria a alça mentir no `comfortable`. */
+      h: (alturaPx + gap) / (ALTURA_CELULA + gap),
     };
   }, []);
 
@@ -582,7 +711,11 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
                 return (
                   <div
                     key={p.id}
-                    style={celulaDaGrade(p.col, p.linhas, vazio === null)}
+                    /* ⚠️ SEM colapso do vazio no modo de edição, e é deliberado:
+                       ali o usuário está DIMENSIONANDO o bloco, e um slot que
+                       encolhe sozinho porque o período não tem dado esconderia
+                       dele o tamanho que ele acabou de escolher. */
+                    style={celulaDaGrade(p.col, p.h, meta.hPadrao)}
                   >
                     <ItemEdicao
                       titulo={meta.titulo}
@@ -606,7 +739,7 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
                       redimensionar={{
                         aoArrastar: (larguraPx, alturaPx) => {
                           const g = paraGrade(larguraPx, alturaPx);
-                          ed.redimensionar(p.id, g.col, g.linhas);
+                          ed.redimensionar(p.id, g.col, g.h);
                         },
                         /* O teclado anda em PASSO, não em pixel: é o que ele sabe
                            expressar. O encaixe do hook recebe `col + dCol` e
@@ -620,15 +753,21 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
                            `tsc`/`lint`/`build` verdes. O teclado anda por ÍNDICE
                            na lista de passos do bloco; a alça anda em pixel. As
                            duas entradas falam línguas diferentes. */
+                        /* 🔴 AS SETAS VERTICAIS DEIXARAM DE SER INERTES PARA A
+                           MAIORIA DOS BLOCOS. Antes, `encaixarLinhas` devolvia
+                           `undefined` para quem não fosse `alturaAjustavel` — 6
+                           dos 16 —, e ↑/↓ na alça daqueles blocos não fazia
+                           nada. Todo bloco tem altura agora.
+
+                           ⚠️ O `?? meta.hPadrao` cobre o bloco ainda não
+                           migrado: sem `h`, a primeira seta parte do padrão em
+                           vez de partir de `0` e ser puxada para o `hMin` — o
+                           que faria a seta para BAIXO aumentar o bloco. */
                         aoTeclado: (dCol, dLinhas) =>
                           ed.redimensionar(
                             p.id,
                             dCol ? proximoPasso(meta, p.col, dCol) : p.col,
-                            /* ⚠️ Bloco sem `alturaAjustavel` ignora `dLinhas` —
-                               `encaixarLinhas` devolve `undefined` para ele. A
-                               seta não faz nada ali, e é honesto: aquele bloco
-                               tem a altura do conteúdo, por decisão. */
-                            dLinhas ? (p.linhas ?? 0) + dLinhas : p.linhas,
+                            (p.h ?? meta.hPadrao) + dLinhas,
                           ),
                       }}
                     >
@@ -715,7 +854,10 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
                    ali os blocos entram e saem a cada arrasto, e reanimar cada
                    mudança transformaria a edição num piscar constante. */
                 className="tk-bloco-entra"
-                style={{ ...celulaDaGrade(p.col, p.linhas, vazio === null), ["--tk-i" as string]: i }}
+                style={{
+                  ...celulaDaGrade(p.col, p.h, meta.hPadrao, vazio ? colapso.celulas[p.id] : undefined),
+                  ["--tk-i" as string]: i,
+                }}
               >
                 {/* `preencher` + `distribuir`: os blocos de uma linha esticam
                     até a altura do MAIOR (é o `stretch` do grid), e o menor
@@ -735,7 +877,13 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
                      vazio; sem ele o usuário vê uma caixa anônima. */
                   acao={vazio === null ? r.acao?.(v, ctx) : undefined}
                 >
-                  {vazio ? <EmptyState {...vazio} /> : r.render(v, ctx)}
+                  {vazio ? (
+                    <VazioMedido id={p.id} medir={colapso.medir}>
+                      <EmptyState {...vazio} />
+                    </VazioMedido>
+                  ) : (
+                    r.render(v, ctx)
+                  )}
                 </Card>
               </div>
             );

@@ -250,6 +250,54 @@ const w2 = clamp(Math.ceil(w * C / 12), Math.min(wMin, C), C)
 
 Asserção 2 é a mais cara e a que mais paga. Medida por bounding box do conteúdo contra o retângulo interno do card, não por inspeção visual.
 
+> ### 🔴 A §7.3 NÃO É ASSERÇÃO DO `npm test` — jsdom não tem motor de layout
+>
+> **Registrado em 12/08/2026, ao fechar a F3.** A §7.3 pergunta
+> `scrollHeight ≤ clientHeight`, que é uma pergunta de LAYOUT. O `jsdom` — o que
+> roda em `renderToStaticMarkup` e em toda suíte desta base — **não calcula
+> posição nem tamanho**: ele devolve `0` para as duas medidas, e `0 ≤ 0` passa.
+>
+> ⛔ **Teste verde de vazamento em jsdom não é evidência de nada.** É a forma
+> mais convincente da *asserção que não pode falhar*, porque o número que ela
+> imprime tem cara de medição — os dois desfechos possíveis produzem o mesmo
+> valor observado, que é exatamente o que esta base define como asserção que não
+> mede.
+>
+> A §7.3 é, portanto, um **procedimento de navegador**: `scripts/vazamento-na-tela.js`,
+> colado no console com o Dashboard aberto e um período COM DADO.
+>
+> ```js
+> await naTela(1280)
+> await naTela(2260)
+> ```
+>
+> ⚠️ Ele encolhe o **contêiner**, não a janela — o `resize_window` do MCP mentiu
+> cinco vezes até aqui. E o `teste-grade.mjs` diz isto no lugar em que a asserção
+> caberia, para o verde de lá não ser lido como "não há vazamento".
+>
+> ⚠️ **Período vazio não exercita nada**: bloco sem dado colapsa (condição F0), e
+> um vazamento medido sobre o estado vazio é medição do estado errado.
+
+---
+
+## 7b. Dívidas registradas aqui para não voltarem a interromper a fase
+
+Três linhas, escritas em 12/08/2026 por ordem do dono. **Não são F1** e não
+devem ser mencionadas de novo até a fase fechar.
+
+- **`loadDashboardPrefs`** roda no `Promise.all` do `(app)/layout.tsx` em todo
+  pageview e alimenta `order`/`visible` do `useTraffikState`; `saveDashboardPrefs`
+  tem **zero chamadores** — a preferência é lida e o usuário não tem como
+  escrevê-la. Medir os dois lados antes de decidir: é o mesmo par leitor/escritor
+  do `Sale.apiCredentialId`.
+- **O move do `listRules`** — ele volta ao layout em todo pageview para um único
+  consumidor (o rodapé de estado do Dashboard). O lugar dele é onde é consumido,
+  não no caminho crítico de todas as 22 rotas.
+- **Os três registros do `CLAUDE.md`** desta fase (F0b como dado de ENTRADA, F0
+  como condição de renderização por bloco, e o limiar fixado antes de medir)
+  vivem só neste documento; só o terceiro chegou ao `CLAUDE.md`. Consolidar
+  quando a F1 fechar.
+
 ---
 
 ## 8. Conteúdo que falta (depois da geometria)
@@ -311,11 +359,13 @@ Asserção 2 é a mais cara e a que mais paga. Medida por bounding box do conte�
 > a altura do estado vazio é outra coisa. Amarrar as duas faria a F0 esperar uma
 > medição que ela não usa.
 >
-> **Bloco sem dado colapsa para `h = 1`, fixo** — medido pelo que o estado vazio
-> precisa: **título e uma linha**. Nada mais.
->
 > ⚠️ Por isso `hMin` **saiu da F0 e foi para a F2**, que é onde ele é usado pela
 > primeira vez (limite de arrasto).
+>
+> ⛔ **Havia aqui um "bloco sem dado colapsa para `h = 1`, fixo".** Ele era o
+> terceiro limiar reprovado pela medição (ver a seção do `CLAUDE.md`) e foi
+> APAGADO, não anotado ao lado: número fixo escrito em ⛔ é exatamente o que faz
+> a próxima pessoa reverter o `min()` acima achando que está consertando.
 >
 > ### 🔴 O COLAPSO É OVERRIDE DE RENDERIZAÇÃO, NUNCA ESCRITA
 >
@@ -331,6 +381,52 @@ Asserção 2 é a mais cara e a que mais paga. Medida por bounding box do conte�
 > zero) na camada de persistência de layout.
 
 F1 sem F3 piora a tela: os blocos passam a ter slot e o conteúdo ainda não sabe preenchê-lo. As duas fases andam juntas ou a verificação intermediária é feita com um bloco só.
+
+## ✅ F3 — executada em 12/08/2026, e a tabela de vazamento está ZERADA
+
+Sete blocos, na ordem do estouro medido. `npm run test:grade` verde (30),
+`npm test` sai 0, e a medição de tela (`naTela`) dá **0 estouros nos dois eixos**
+a 1280 e a 2260, com 16 blocos examinados e `rolagemDaPagina: 0`.
+
+| bloco | antes (2260 / 1280) | a causa |
+|---|---|---|
+| `receita-gasto` | **+186 / +126** | `--tk-b-plot`: a altura da plotagem vinha de `cqw`. O `viewBox` passou a valer a caixa MEDIDA, e os ticks derivam de `cw`/`ch` |
+| `produtos` | +49 / +25 | caiu junto — era a mesma cadeia de altura de linha |
+| `atividade` | +36 / +36 | `limite = 12` fixo → `floor(ch / altura da linha)`, com `+N` no rodapé |
+| `aprovacao` | — / +89 | o diâmetro do medidor não conhecia `n`: quatro arcos não cabiam e o `flex-wrap` dobrava a altura |
+| `fontes` | — / +80 | `minHeight: 132` na rosca, com a legenda descendo por baixo dela |
+| `alertas` | — / +24 | `limite = 3` fixo, com título quebrando em duas linhas |
+| `vendas-por-dia` · `vendas-por-hora` · `lucro-por-hora` | +9 cada / — | `--tk-b-barras`: a altura das barras vinha de `cqw` |
+
+### 🔴 O PADRÃO ÚNICO POR TRÁS DE 5 DOS 7: altura decidida pela LARGURA
+
+`--tk-b-plot`, `--tk-b-barras`, `--tk-b-donut` e `--tk-b-radial` são todos
+`clamp`/degrau sobre `cqw`. Enquanto a altura vinha do conteúdo, isso funcionava
+— o card cedia. Com o slot mandando (F1), **um monitor mais largo passou a pedir
+mais altura**, que é a inversão de monotonicidade que a F0b já tinha medido no
+`heatmap` e que ninguém tinha generalizado.
+
+⛔ **`--tk-b-plot` e `--tk-b-barras` foram REMOVIDOS do `globals.css`.** Os dois de
+geometria (`donut`, `radial`) viraram conta em JS, porque a fórmula do §4 precisa
+de `n` — e `n` é um número que CSS não conhece.
+
+> ### ⛔ A PERGUNTA QUE FICA, antes de criar qualquer token `--tk-b-*`
+> **"Este token decide ALTURA a partir de `cqw`?"** Se decide, ele é a família
+> inteira desta fase. Altura sai de `cqh` ou de medição; largura sai de `cqw`.
+
+### ⚠️ Dois falsos positivos, e os dois ensinaram sobre o INSTRUMENTO
+
+1. O `<rect>` invisível de captura do `LineChart` passava 12px do eixo. Clipado
+   pelo `viewBox`, invisível — e contado como fuga. Grampeado.
+2. A varredura horizontal por `getBoundingClientRect()` deu **13 fugas no Funil**
+   que o print desmentia: o retângulo de um elemento clipado por um ancestral
+   reporta a geometria NÃO clipada. O instrumento virou
+   `scrollWidth − clientWidth`, que respeita o clip como o `scrollHeight` já
+   respeitava — os dois eixos passaram a medir a mesma coisa.
+
+⚠️ O segundo é o caro: ele mediu "defeito" por duas leituras seguidas, então a
+regra das duas leituras **não o teria pego**. O que o pegou foi o print
+contradizendo o número.
 
 ## 🔎 O INVENTÁRIO — medido em 12/08/2026, e ele MUDOU a ordem
 
@@ -463,9 +559,23 @@ Grade em `grid-auto-rows: auto`, 12 colunas, gap 16, densidade padrão.
 | `pagamentos` | 4 | — | — | 238 | 238 | 3 | **3** |
 | `rodape` | 12 | — | — | 192 | 192 | 3 | **3** |
 
-**10 de 16** têm `linhas` gravado. Em **4 deles o `linhas` vence** a medição
-(`atividade`, `paises`, e o empate de `alertas`/`top-campanhas`) — são as
-alturas que o usuário escolheu e que a leitura pela tela teria perdido.
+**10 de 16** têm `linhas` gravado.
+
+> ### ⛔ ESTA LINHA DIZIA QUE O `linhas` VENCIA EM 4 BLOCOS. **Ele não vence em
+> ### nenhum** — corrigido em 12/08/2026, pela asserção da F1.
+>
+> Conferido bloco a bloco em `npm run test:grade`: os `linhas` gravados no dev
+> dão 2, 3 ou 4 células, e a medição dá o mesmo ou mais nos 16. Há **empate** em
+> três (`atividade`, `paises`, `receita-gasto`) e a medição domina no resto.
+>
+> ⚠️ **Isso não torna o `linhas` dispensável, e a distinção importa:** um
+> `linhas` MAIOR que a medição — que qualquer testador pode ter — passa a
+> mandar, e é aí que a leitura pela TELA perderia a escolha do usuário. O
+> fixture do dev não exercita esse caso; a asserção exercita.
+>
+> A frase antiga foi apagada, não anotada ao lado: um número errado sobre a
+> própria migração é o tipo de registro que a próxima pessoa usa para "conferir"
+> o resultado e conclui que o código está errado.
 
 ### ⚠️ O que esta medição NÃO é
 

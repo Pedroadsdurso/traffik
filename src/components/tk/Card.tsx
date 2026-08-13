@@ -128,6 +128,17 @@ export function Card({
       )}
       {preencher ? (
         <div
+          /* 🔎 MARCA DE MEDIÇÃO, e ela tem um consumidor: o colapso do bloco
+             vazio no Dashboard precisa da altura NATURAL do card, e este div é
+             o único que absorve toda a folga (`flex: 1`). Então
+             `card.height − corpo.height` dá o cromo (padding + gap + cabeçalho)
+             **independente de quanto o card foi esticado** — que é a única forma
+             de ler a altura natural de um card que já está preso a um slot.
+
+             ⛔ Não remova o atributo achando que é resíduo de teste. Sem ele o
+             colapso volta a depender de uma constante escrita à mão, que é
+             exatamente o que a medição da F0b reprovou três vezes. */
+          data-tk-corpo=""
           style={{
             flex: 1,
             minHeight: 0,

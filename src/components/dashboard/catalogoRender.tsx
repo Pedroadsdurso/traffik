@@ -444,10 +444,10 @@ export const RENDERS: Record<IdBloco, RenderBloco> = {
         formatar={brl0}
         tema={c.tema}
         visao={c.visaoPais}
-        /* ⚠️ 420 continua sendo a altura do GLOBO, não do bloco. Abaixo de 640px
+        /* ⚠️ 420 é o TETO do diâmetro do globo, não a altura do bloco. Abaixo de 640px
            úteis a container query o esconde e a altura some junto — ver a nota
            dentro do `CountryPanel`. */
-        altura={420}
+        diametroMax={420}
       />
     ),
   },

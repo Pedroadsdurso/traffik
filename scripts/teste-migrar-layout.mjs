@@ -252,7 +252,7 @@ console.log("A grade de 12: encaixe, piso e o grid antigo");
      catálogo qual bloco NÃO tem alça, a asserção continua medindo o que promete
      medir depois de qualquer mudança de produto. */
   const semAlca = metaDoBloco("fontes");
-  eq("o bloco de referência realmente não tem alça de altura", !!semAlca.alturaAjustavel, false);
+  eq("o bloco de referência existe no catálogo", !!semAlca, true);
 
   /* 🔴 TODAS AS COLUNAS INTEIRAS EXISTEM. A lista curada `[3,4,6,8,12]` foi
      recusada pelo dono: cinco presets nao dao liberdade, dao formulario de cinco
@@ -298,20 +298,25 @@ console.log("A grade de 12: encaixe, piso e o grid antigo");
      `react-grid-layout` valia ~30px e a de hoje vale 44. Um gráfico de `h: 8`
      tem de chegar com 6 linhas — a mesma altura na tela. 1:1 dobraria todo
      bloco de gráfico, e o usuário veria um layout que não é o dele. */
-  /* 🔴 A ALTURA VEM DO CONTEUDO, e e a correcao do painel esburacado: um bloco
-     VAZIO reservava as linhas que teria COM dado. So quem declara
-     `alturaAjustavel` tem altura no layout; para o resto, `undefined` -- que nao
-     e "nao sei", e "a altura e a do conteudo". */
-  /* ⚠️ O BLOCO DE REFERÊNCIA MUDOU: o `funil` GANHOU alça de altura em
-     07/08/2026 (a fita cresce e ganha resolução vertical), então ele deixou de
-     poder exercer esta guarda. `fontes` é tabela curta — altura extra ali é ar,
-     e é por isso que ele não tem alça. */
-  eq("bloco SEM alca de altura nao recebe linhas", linhasDoGridAntigo(8, semAlca), undefined);
-  eq("  ...nem pelo padrao do produto",
-     layoutPadrao().paineis.find((p) => p.id === semAlca.id).linhas, undefined);
-  const feed = metaDoBloco("atividade"); // alturaAjustavel
-  eq("bloco COM alca: h=8 do grid antigo -> 6 linhas", linhasDoGridAntigo(8, feed), 6);
-  eq("  ...e nunca abaixo do piso dele", linhasDoGridAntigo(1, feed), feed.linhasMin);
+  /* 🔴 A F1 INVERTEU O MODELO: a altura deixou de vir do conteudo e passou a vir
+     do LAYOUT. `alturaAjustavel` e `linhasMin` sairam do catalogo, e TODO bloco
+     declara `hMin`/`hPadrao` em CELULAS de 96px.
+
+     ⚠️ `linhasDoGridAntigo` para em `linhas` de 44px DE PROPOSITO -- e a mesma
+     unidade do v3, para o grid antigo e o v3 entrarem no MESMO ponto de
+     conversao (`alturaMigrada`). Duas rotas ate a mesma altura divergiriam, e a
+     divergencia seria muda: dois usuarios com o mesmo arranjo veriam alturas
+     diferentes conforme a versao em que salvaram.
+
+     A conversao 44 -> 96 tem arquivo proprio: `npm run test:grade`. */
+  eq("h=8 do grid antigo -> 6 linhas de 44px", linhasDoGridAntigo(8), 6);
+  eq("  ...e nunca abaixo de 1", linhasDoGridAntigo(0), 1);
+  eq("o padrao do produto ja nasce MIGRADO (altura em celulas)",
+     layoutPadrao().paineis.find((p) => p.id === semAlca.id).h, semAlca.hPadrao);
+  eq("  ...e nenhum painel do padrao fica sem h",
+     layoutPadrao().paineis.every((p) => typeof p.h === "number"), true);
+  eq("  ...e havia paineis para examinar (senao o every e vacuo)",
+     layoutPadrao().paineis.length > 0, true);
 }
 
 
@@ -398,8 +403,11 @@ console.log("\n[1mO envelope v2[0m");
   eq("v2 'um-terco' nunca entra abaixo do minimo do bloco",
      v2({ paineis: [{ id: "vendas-por-dia", largura: "um-terco" }] }).paineis[0].col,
      Math.max(4, metaDoBloco("vendas-por-dia").colMin));
-  eq("v2 nao trazia altura -- e o bloco sem alca continua sem",
-     v2({ paineis: [{ id: "fontes", largura: "metade" }] }).paineis[0].linhas, undefined);
+  /* ⚠️ `undefined` aqui significa "AINDA NAO MIGRADO", nao "sem altura": o v2
+     nunca teve altura nenhuma, entao o painel entra em `auto` e o efeito de
+     migracao o preenche quando o bloco tiver dado. */
+  eq("v2 nao trazia altura -- o painel entra NAO MIGRADO",
+     v2({ paineis: [{ id: "fontes", largura: "metade" }] }).paineis[0].h, undefined);
 
   /* GUARDA: faixa acima do teto e duplicata entre hero e faixa. */
   eq("v2 respeita o teto da faixa",

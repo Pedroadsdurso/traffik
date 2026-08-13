@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { useTamanho } from "@/components/dashboard/ui/useTamanho";
 import { caminhoSuave, fecharArea } from "@/lib/grafico/curva";
 
 /**
@@ -62,20 +63,41 @@ export function LineChart({
    * O pixel real do cursor não tem esse problema e não precisa saber a escala.
    */
   const [alvo, setAlvo] = React.useState<{ i: number; px: number } | null>(null);
-  const plotRef = React.useRef<HTMLDivElement>(null);
+  /**
+   * 🔴 F3 — A ÁREA DE PLOTAGEM É MEDIDA, E O `viewBox` É ELA EM PIXELS.
+   *
+   * Antes: `viewBox="0 0 760 260"` fixo, `width="100%"` e
+   * `height: var(--tk-b-plot, 260px)`. As duas metades estavam erradas pelo mesmo
+   * motivo, e é o mesmo do `DonutChart`: **`--tk-b-plot` é derivado da LARGURA**
+   * (190 → 350px por faixa de `cqw`), então num bloco largo o gráfico pedia 350px
+   * de altura dentro de um slot de 272 — medido, `receita-gasto` estourava
+   * **+186px** a 2260 e +126 a 1280, o maior vazamento da tela.
+   *
+   * ⛔ E "esticar o viewBox" (`preserveAspectRatio="none"`) não é a saída: o SVG
+   * tem `<text>` de eixo, e esticar DISTORCE a tipografia — era o que este
+   * arquivo já avisava. A saída é o viewBox VALER a caixa: com `0 0 cw ch`, uma
+   * unidade de SVG é um pixel, o texto sai em 11px de verdade em qualquer
+   * tamanho, e os ticks passam a poder ser derivados de `cw`/`ch` (§4 do `07`).
+   */
+  const { ref: plotRef, no: plotNo, largura: cw, altura: ch } = useTamanho<HTMLDivElement>();
   const id = React.useId();
 
-  const mirar = React.useCallback((i: number, clientX: number) => {
-    const r = plotRef.current?.getBoundingClientRect();
-    if (!r) return;
-    // Grampeada para a pílula não vazar pela borda do card. Nos extremos ela
-    // desencosta do ponto, e não há ambiguidade: quem marca a posição é a alça.
-    const meia = 78;
-    setAlvo({ i, px: Math.min(r.width - meia, Math.max(meia, clientX - r.left)) });
-  }, []);
+  const mirar = React.useCallback(
+    (i: number, clientX: number) => {
+      const r = plotNo?.getBoundingClientRect();
+      if (!r) return;
+      // Grampeada para a pílula não vazar pela borda do card. Nos extremos ela
+      // desencosta do ponto, e não há ambiguidade: quem marca a posição é a alça.
+      const meia = 78;
+      setAlvo({ i, px: Math.min(r.width - meia, Math.max(meia, clientX - r.left)) });
+    },
+    [plotNo],
+  );
 
-  const L = 760;
-  const A = 260;
+  /* Antes da primeira medida, os números antigos — a passagem do servidor não
+     tem caixa, e um viewBox de zero produziria `NaN` em toda coordenada. */
+  const L = cw > 0 ? cw : 760;
+  const A = ch > 0 ? ch : altura;
   const PAD = { t: 14, r: 12, b: 26, l: 56 };
   const larg = L - PAD.l - PAD.r;
   const alt = A - PAD.t - PAD.b;
@@ -99,7 +121,31 @@ export function LineChart({
   const area = fecharArea(caminho("a"), x(0), x(pontos.length - 1), base);
   const areaGasto = fecharArea(caminho("b"), x(0), x(pontos.length - 1), base);
 
-  const linhas = [0, 0.25, 0.5, 0.75, 1].map((f) => max * f);
+  /**
+   * §4 do `07` — OS TICKS SÃO DERIVADOS DA CAIXA, não uma lista de cinco frações.
+   *
+   * ```
+   * ticks em y = floor(ch / 56), mínimo 2 quando ch ≥ 160
+   * ticks em x = floor(cw / 110), mínimo 2
+   * ```
+   *
+   * Era `[0, 0.25, 0.5, 0.75, 1]` — cinco linhas de grade e cinco rótulos de
+   * valor, sempre. Num slot de 3 células (168px úteis) cinco rótulos de eixo se
+   * tocam e a grade vira listra; num de 6, cinco é pouco.
+   *
+   * ⚠️ O `mínimo 2` não é folga: com um tick só não há ESCALA — uma linha
+   * horizontal sozinha não diz o intervalo, e o gráfico passa a mostrar forma sem
+   * grandeza. Abaixo de 160px de altura ficam **só os extremos**, que é o mínimo
+   * que ainda informa.
+   */
+  const nY = ch >= 160 ? Math.max(2, Math.floor(alt / 56)) : 2;
+  const linhas = Array.from({ length: nY + 1 }, (_, i) => (max * i) / nY);
+
+  /* Quantos rótulos de data cabem. 110px é a largura de `dd/MM` com folga para
+     não encostar no vizinho — abaixo disso eles se tocam, que é o C2 do `07`. */
+  const nX = Math.max(2, Math.floor(larg / 110));
+  /* O passo em ÍNDICES. O `-1` porque N rótulos precisam de N-1 intervalos. */
+  const passoX = Math.max(1, Math.ceil((pontos.length - 1) / Math.max(1, nX - 1)));
 
   /** `06` §3 — acima disto o ponto vira ruído e a linha já mostra a densidade. */
   const mostrarPontos = pontos.length <= 15;
@@ -174,16 +220,22 @@ export function LineChart({
         style={{ position: "relative", flex: 1, minHeight: 0, display: "flex" }}
         onMouseLeave={() => setAlvo(null)}
       >
-      {/* 🎨 A ALTURA VEM DA ESCALA DO BLOCO (`--tk-b-plot`, 4 faixas), com a
-          prop como piso para quem usar o gráfico fora de um `.tk-escala`.
+      {/* 🎨 F3 — A ALTURA VEM DO SLOT. `100%` dos dois lados, e o `viewBox` vale a
+          caixa medida (ver a nota de `plotRef`).
 
-          ⛔ Não é `height="100%"` com proporção do `viewBox`: aí a altura
-          seguiria a LARGURA e um bloco de 12 colunas ficaria com 400px de
-          gráfico e uma tela de rolagem. Degrau desacopla as duas. */}
+          ⛔ Este comentário dizia o oposto — que a altura vinha de `--tk-b-plot`,
+          "4 faixas", e que `height="100%"` faria a altura seguir a LARGURA. A
+          segunda metade era o erro: `100%` de um pai com altura definida segue a
+          ALTURA, e é o degrau por `cqw` que seguia a largura. Com o slot mandando
+          (F1), o pai tem altura definida e o problema que a nota temia não existe.
+
+          ⚠️ `--tk-b-plot` deixou de ter consumidor por causa disto. Ele saiu do
+          `globals.css` no mesmo commit — token derivado de largura para decidir
+          ALTURA é a família inteira que a F3 está fechando. */}
       <svg
         viewBox={`0 0 ${L} ${A}`}
         width="100%"
-        height={`var(--tk-b-plot, ${altura}px)`}
+        height="100%"
         role="img"
         aria-label={`${rotuloA} contra ${rotuloB} ao longo do período`}
         style={{ display: "block", flex: 1, minHeight: 0 }}
@@ -276,16 +328,28 @@ export function LineChart({
                 `onMouseMove` além do `enter`: dentro de uma faixa larga o cursor
                 anda bastante, e sem o `move` a pílula ficava parada na borda em
                 que se entrou — o oposto do "segue o cursor" do `06` §3. */}
+            {/* ⚠️ A FAIXA É GRAMPEADA À ÁREA DE PLOTAGEM. Sem o clamp, a do
+                último ponto passava meia faixa (12px) do eixo direito. O SVG
+                recorta no `viewBox`, então nada aparecia — mas o retângulo EXISTE
+                com aquela geometria, e a varredura de vazamento horizontal da
+                §7.3 o contava como fuga. Um medidor que aponta defeito onde não
+                há custa tanto quanto um que não aponta onde há. */}
             <rect
-              x={x(i) - larg / Math.max(pontos.length, 1) / 2}
+              x={Math.max(PAD.l, x(i) - larg / Math.max(pontos.length, 1) / 2)}
               y={PAD.t}
-              width={larg / Math.max(pontos.length, 1)}
+              width={Math.min(
+                larg / Math.max(pontos.length, 1),
+                L - PAD.r - Math.max(PAD.l, x(i) - larg / Math.max(pontos.length, 1) / 2),
+              )}
               height={alt}
               fill="transparent"
               onMouseEnter={(e) => mirar(i, e.clientX)}
               onMouseMove={(e) => mirar(i, e.clientX)}
             />
-            {(i === 0 || i === pontos.length - 1 || i % Math.ceil(pontos.length / 7) === 0) && (
+            {/* §4 — a densidade de rótulos sai de `cw`, não de um `/7` fixo. O
+                primeiro e o último sempre ficam: são eles que dizem o INTERVALO
+                do período, e sem um deles o eixo mostra ordem sem âncora. */}
+            {(i === 0 || i === pontos.length - 1 || i % passoX === 0) && (
               <text x={x(i)} y={A - 8} textAnchor="middle" fill="var(--tk-text-muted)" style={{ fontSize: 11 }}>
                 {p.rotulo}
               </text>

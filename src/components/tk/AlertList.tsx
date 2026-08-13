@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { useTamanho } from "@/components/dashboard/ui/useTamanho";
+
 import { Icone } from "@/components/dashboard/ui/Icone";
 
 /**
@@ -59,11 +61,36 @@ export function AlertList({
   limite?: number;
 }) {
   const [expandido, setExpandido] = React.useState(false);
+  /**
+   * 🔴 F3 — QUANTOS ALERTAS CABEM É MEDIDO (§4 do `07`).
+   *
+   * `limite = 3` era fixo. Num bloco de 4 colunas a 1280 o título de cada alerta
+   * quebra em duas linhas, três alertas passam do slot e o bloco estourava **+24px**.
+   *
+   * ⚠️ **A derivação só é possível porque a LINHA tem altura fixa**, e é por isso
+   * que o título ganhou `line-clamp: 2` no mesmo commit. Com linhas de altura
+   * variável não existe "quantas cabem" calculável sem medir cada uma — e medir
+   * cada uma realimenta, porque esconder linha muda o que há para medir.
+   *
+   * ⛔ O texto inteiro não se perde: ele fica no `title`, e o alerta continua
+   * clicável para a tela que o resolve.
+   */
+  const { ref: raizLista, altura: ch } = useTamanho<HTMLDivElement>();
+  const [hLinha, setHLinha] = React.useState(0);
+  const medirLinha = React.useCallback((el: HTMLElement | null) => {
+    if (!el) return;
+    const h = el.getBoundingClientRect().height;
+    setHLinha((a) => (Math.abs(a - h) < 0.5 ? a : h));
+  }, []);
   const ordenados = React.useMemo(
     () => [...alertas].sort((a, b) => PESO[a.severidade] - PESO[b.severidade]),
     [alertas],
   );
-  const visiveis = expandido ? ordenados : ordenados.slice(0, limite);
+  /* 8 é o `gap` da coluna; o rodapé do `+ N` mede ~26. Os dois entram na conta
+     porque ocupam a mesma altura que uma linha disputaria. */
+  const cabem = ch > 0 && hLinha > 0 ? Math.max(1, Math.floor((ch + 8) / (hLinha + 8))) : limite;
+  const comRodape = ordenados.length > cabem ? Math.max(1, Math.floor((ch + 8 - 26) / (hLinha + 8))) : cabem;
+  const visiveis = expandido ? ordenados : ordenados.slice(0, Math.min(limite, comRodape));
   const restantes = ordenados.length - visiveis.length;
 
   if (alertas.length === 0) {
@@ -85,8 +112,8 @@ export function AlertList({
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minHeight: 0 }}>
-      {visiveis.map((a) => {
+    <div ref={raizLista} style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minHeight: 0, overflow: "hidden" }}>
+      {visiveis.map((a, i) => {
         const t = TOM[a.severidade];
         const Conteudo = (
           <>
@@ -98,13 +125,25 @@ export function AlertList({
               {t.glifo}
             </span>
             <span style={{ minWidth: 0, flex: 1 }}>
-              <span className="text-label text-text" style={{ display: "block" }}>
+              {/* `line-clamp: 2` — ver a nota de `cabem`: é ele que torna a linha
+                  de altura FIXA, e sem altura fixa não há "quantas cabem". */}
+              <span
+                className="text-label text-text"
+                style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+              >
                 {/* A severidade também vira TEXTO para leitor de tela: cor e
                     ícone sozinhos não comunicam gravidade (WCAG 1.4.1). */}
                 <span className="sr-only">{t.rotulo}: </span>
                 {a.titulo}
               </span>
-              {a.detalhe && <span className="text-caption text-text-muted" style={{ display: "block" }}>{a.detalhe}</span>}
+              {a.detalhe && (
+                <span
+                  className="text-caption text-text-muted"
+                  style={{ display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                >
+                  {a.detalhe}
+                </span>
+              )}
             </span>
           </>
         );
@@ -113,12 +152,15 @@ export function AlertList({
           display: "flex", gap: 10, alignItems: "flex-start",
           padding: "8px 10px", borderRadius: "var(--tk-radius-controle)",
           background: "var(--tk-surface-hover)", textDecoration: "none",
+          flex: "none",
         };
 
+        /* A PRIMEIRA linha é a medida — com o clamp, todas têm a mesma altura. */
+        const medir = i === 0 ? medirLinha : undefined;
         return a.href ? (
-          <a key={a.id} href={a.href} style={estilo} className="transition-[background-color]">{Conteudo}</a>
+          <a key={a.id} ref={medir} href={a.href} title={a.titulo} style={estilo} className="transition-[background-color]">{Conteudo}</a>
         ) : (
-          <div key={a.id} style={estilo}>{Conteudo}</div>
+          <div key={a.id} ref={medir} title={a.titulo} style={estilo}>{Conteudo}</div>
         );
       })}
 
