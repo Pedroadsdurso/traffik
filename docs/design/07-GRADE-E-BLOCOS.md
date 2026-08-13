@@ -19,6 +19,20 @@ Queixas medidas na tela em 12/08, na versão que está em produção:
 
 As seis têm **duas** causas, não seis.
 
+> ### ✅ AS SEIS ESTÃO ZERADAS — 13/08/2026, com a F4 fechada
+>
+> | # | queixa | quem fechou | conferido |
+> |---|---|---|---|
+> | 1 | 11 métricas para 8 vagas | **F5** — um catálogo só, sem teto (31 blocos) | 12 métricas na tela, nenhuma vaga reservada |
+> | 2 | não dá para diminuir bloco | **F1** — `w × h` em células, alça nos dois eixos | slot de 176px medido, alça em 12 colunas |
+> | 3 | conteúdo reposiciona, não escala | **F3** + **F2** | 0 vazamentos a 1280 e 2260; deriva 12→8→4→1 |
+> | 4 | Vendas por país muda ao alternar | **F1** — a altura é do slot, não do conteúdo | §7.1 |
+> | 5 | vazio dentro do card e buraco entre eles | **F3** + **C6** | vão com `+N` = 0; vão sem `+N` é altura escolhida |
+> | 6 | os gráficos parecem amadores | **F4** (C1–C8) | eixo Y nos quatro gráficos, rótulos inteiros, número que não trunca |
+>
+> ⚠️ **O que NÃO está fechado:** a §7.2 (varredura de vazio em 5×3 faixas) e a
+> §7.6 continuam na **F6**. E o shell em viewport estreito é frente própria.
+
 ---
 
 ## 2. Diagnóstico
