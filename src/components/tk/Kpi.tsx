@@ -266,6 +266,13 @@ export function BlocoMetrica({ dados, carregando = false }: { dados: DadosKpi; c
          `--tk-b-kpi` que o padding e o número leem é derivado do `--tk-b-metrica`
          que a escala publica aqui. */
       className="bg-surface border border-border tk-escala tk-kpi"
+      /* 🔎 O GANCHO QUE O INSTRUMENTO DE VAZIO PROCURA — `naTela` e a §7.2 acham
+         o corpo do card por `[data-tk-corpo]`, e o `Card` do sistema já o tem.
+         O KPI desenha a PRÓPRIA superfície, então ficava de fora: o detector
+         examinava **16 de 28** blocos e declarava um veredito como se fossem 28.
+         É a família *a medição não acertou o alvo* na forma do DENOMINADOR —
+         ver o `CLAUDE.md`. Aqui o card e o corpo são o mesmo nó. */
+      data-tk-corpo=""
       style={{
         borderRadius: "var(--tk-radius-card)",
         /* ⚠️ Padding e gap vêm de variável, não de literal: em um slot de uma

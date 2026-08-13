@@ -4003,6 +4003,77 @@ existe.
 `Webhooks` 532) **continuam de pé e não auditadas de propósito** — vão ser
 reescritas, e auditar o que será deletado é trabalho que não sobrevive.
 
+# 🎯 A MEDIÇÃO NÃO ACERTOU O ALVO — a família, com TRÊS casos numa sessão só
+
+> **Formulação do dono, 13/08/2026, depois de a mesma mecânica morder três vezes
+> na mesma sessão, em três camadas diferentes.** Três instâncias tornam o padrão
+> inegável — e as três produziram número **plausível**.
+
+> ## Saída plausível não é evidência de que o instrumento mediu o ALVO.
+
+Esta base já tem muita regra sobre instrumento que MENTE (`resize_window`,
+`getComputedStyle` sem repintura, `getBoundingClientRect` clipado). Esta é
+outra: o instrumento funciona perfeitamente — **e está apontado para outra
+coisa**. Ele não erra o valor; erra o objeto.
+
+### Os três casos de 13/08/2026
+
+| # | O que eu medi | O que eu concluí | O sinal que estava na saída |
+|---|---|---|---|
+| 1 | o **`LineChart`** (`receita-gasto`) | *"o C2 não reproduz"* — e quase apaguei um defeito real do **`SerieTemporal`** | **`larguraCard: 1432`** num bloco que mede **369** |
+| 2 | envelopes com `versao: 4` — o campo é **`v`** | ia reportar a migração como robusta | **cinco entradas diferentes, saída IDÊNTICA** (27 blocos, mesmos ids) |
+| 3 | folhas com `!e.children.length` — **`<svg>` tem filhos** | 9 blocos reprovando a §7.2 | `Funil` **99px** e `Receita vs. gasto` **221px** de "vazio" em cima de um gráfico |
+
+> ### 🔴 SAÍDA IDÊNTICA PARA ENTRADAS DIFERENTES É SINAL DE INSTRUMENTO, NUNCA DE ROBUSTEZ
+>
+> E as duas **se parecem igual de fora**. No caso 2, "v4, v3, corrompido e lixo
+> todos viram um layout válido de 27 blocos" é exatamente o que se esperaria de
+> uma migração que sanea bem — foi a leitura que eu ia dar. A migração de
+> verdade devolve **15 / 13 / 10 / 27 / 27**, e o corrompido preserva os 10
+> blocos válidos em vez de descartar tudo.
+>
+> ⛔ **Ao ver entradas distintas convergirem, a primeira hipótese é o
+> instrumento**, não a qualidade do código. Robustez real produz saídas
+> DIFERENTES: ela preserva o que dá para preservar em cada caso.
+
+### 🔴 O QUE TORNA ESTA FAMÍLIA PIOR QUE A DO INSTRUMENTO QUE MENTE
+
+| | |
+|---|---|
+| instrumento que **mente** | devolve valor errado sobre o alvo certo — e o valor costuma ser absurdo |
+| instrumento **fora do alvo** | devolve valor **certo** sobre o objeto **errado** — e ele é plausível por construção |
+
+E ela ataca dos dois lados: no caso 1 **apagou** um defeito real com atestado de
+saúde; no caso 3 **inventou** dois defeitos que não existiam. Uma lista riscada
+por medição fora do alvo é tão cara quanto a lista que só cresce — as duas
+falham pela mesma porta.
+
+> ### ⛔ A GUARDA, e ela é uma linha
+>
+> **A medição IMPRIME o alvo — largura, classe, texto, contagem de elementos
+> examinados — e alguém confere que é o alvo ANTES de a conclusão valer.**
+>
+> Não é "prestar atenção": é acrescentar campos à saída. `larguraCard: 1432`
+> **já estava impresso** e passou; o que faltou foi a pergunta *"1432 é a
+> largura do bloco que eu quero?"*.
+>
+> ⚠️ E a contagem de examinados é a metade mais esquecida: um detector que olha
+> **16 de 28** e declara *"7 reprovam"* tem a mesma forma dos três acima. O
+> denominador vai na saída, sempre.
+
+⚠️ **Os três só apareceram porque algum número ficou estranho demais.** Não
+havia guarda nenhuma — foi sorte, e sorte três vezes na mesma sessão é o
+argumento de que a guarda precisa existir. As duas primeiras vieram de PEDIDO
+do dono feito sobre a minha conclusão, sem perguntar em qual componente a
+medição tinha sido feita: **a guarda vale para quem mede e para quem manda
+agir sobre a medição.**
+
+⚠️ Prima direta de *PRINT × MEDIÇÃO* e de *uma asserção precisa poder FALHAR
+pelo motivo que ela alega medir*. A diferença é que aqui a asserção pode falhar
+— ela só está falhando sobre outra coisa.
+
+---
+
 # 🔬 `getComputedStyle` SEM REPINTURA CONFIRMADA MEDE O QUE ESTAVA, NÃO O QUE ESTÁ
 
 > **Registrado em 08/08/2026 porque quase virou um bug INVENTADO num arquivo
