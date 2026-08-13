@@ -43,6 +43,56 @@ uma branch que ninguém via. Ela continua valendo — mas o custo de errar mudou
 ⛔ **Não conclua daí que a regra ficou mais rígida ou mais frouxa.** Ela é a
 mesma; o que mudou é que "MEDE · REGISTRA · AVISA" agora tem prazo.
 
+## 🔴🔴 O REDESIGN ENTROU EM PRODUÇÃO SEM DECISÃO DE NINGUÉM
+
+**12/08/2026, 16:35.** Cinco minutos depois do primeiro push de
+`redesign/dashboard` (16:30), a `main` foi avançada de `4e6aa9e` para o **mesmo
+commit**. A produção segue a `main`. As doze telas foram ao ar nesse instante.
+
+Não houve um "vamos lançar": houve um push de branch e um fast-forward. O
+segundo passo é o que publicou, e ele não se parece com publicar.
+
+> ### ⛔ A REGRA QUE SAI DISSO
+>
+> ## "A branch é segura porque ninguém vê" é uma AFIRMAÇÃO SOBRE O REMOTO — e tem de ser MEDIDA antes de virar premissa de fase.
+>
+> Ela foi premissa de **três semanas** de trabalho (05/08 a 12/08), aparece em
+> ~17 lugares deste arquivo, e **estava errada nas últimas seis horas** sem que
+> nada aqui mudasse. O arquivo não tinha como saber: ele registra o que era
+> verdade quando alguém escreveu.
+>
+> ⚠️ **O que torna esta família traiçoeira** é que a premissa é reforçada por
+> repetição. Cada sessão copiava o "⛔ NADA FOI PARA O GITHUB" da anterior, e a
+> repetição parecia confirmação — quando era a mesma medição de 05/08, citada
+> dezessete vezes.
+>
+> ### 🔎 A MEDIÇÃO, e ela é barata
+> ```bash
+> git ls-remote --heads origin | grep <branch>   # ela existe no remoto?
+> git reflog show origin/main --date=iso | head -3
+> ```
+> ⛔ **Rode antes de escrever "isto não afeta ninguém" em qualquer plano.** É a
+> mesma disciplina de *migration que eu não vi aplicada é migration PENDENTE*:
+> toda afirmação sobre o remoto feita a partir de arquivo local é inferência.
+
+### 🕸️ E o custo concreto que ela quase produziu, no mesmo dia
+
+A F1 introduziu uma migração de altura que roda **sozinha ao abrir o Dashboard**
+e é **irreversível** (`h = max(células(linhas), hMin)` — do `max` não se recupera
+o operando). Eu a projetei descartando o campo original, e documentei o descarte
+como decisão certa em três arquivos.
+
+Sob a premissa "ninguém vê", isso era uma escolha de limpeza. Sob o estado real,
+era **perder o layout de cada testador na primeira abertura, sem volta**.
+
+✅ O dono pediu a conferência antes do push, o campo **não** estava preservado, e
+a rede entrou (`3417c03`). Medido: `492dcdb` — o que a produção serve — tem
+**zero** referência a `migrarAlturaDoLayout`, então a migração nunca rodou lá.
+
+⚠️ **No banco de dev ela já rodou e o `linhas` daquela linha se perdeu.** É a
+demonstração do que a rede evita, e é por isso que ela fica registrada aqui em
+vez de só no código.
+
 ---
 
 # ⛔⛔ O REDESIGN NÃO MUDA FUNCIONALIDADE, CONTAS NEM LÓGICA
