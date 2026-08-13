@@ -889,6 +889,69 @@ checar("a base do KPI sai no slot de 2 células, e o limiar é a própria grade"
   assert.doesNotMatch(decl.slice(0, fim), /textOverflow|text-overflow/);
 });
 
+/* 🔴 C2 e C3 — O EIXO É UMA FONTE SÓ, e os dois limiares são DERIVADOS.
+   ────────────────────────────────────────────────────────────────────────────
+   Até 13/08 o `LineChart` tinha eixo Y e o `SerieTemporal` não, e os números
+   (`56`, `160`) eram literais dentro do `LineChart`. Copiá-los para o segundo
+   gráfico teria criado a segunda fonte da mesma conta — a família que esta base
+   já pagou com `whereDespesasDaArea`.
+
+   ⛔ Esta asserção não conhece nenhum dos números. Ela exige que os dois
+   gráficos IMPORTEM a mesma função e que cada limiar continue sendo o produto
+   das constantes que o justificam. */
+checar("o eixo dos gráficos é uma fonte só, e os limiares são derivados", () => {
+  const eixo = ler("../src/lib/grafico/eixo.ts");
+  const serie = ler("../src/components/tk/SerieTemporal.tsx");
+  const linha = ler("../src/components/tk/LineChart.tsx");
+
+  /* Linha de base: os dois consumidores existem e importam do módulo comum. */
+  assert.match(serie, /from "@\/lib\/grafico\/eixo"/, "o SerieTemporal não lê o módulo do eixo");
+  assert.match(linha, /from "@\/lib\/grafico\/eixo"/, "o LineChart não lê o módulo do eixo");
+
+  /* ⛔ E NENHUM DOS DOIS pode voltar a ter a conta do eixo Y própria.
+     ⚠️ A PRIMEIRA VERSÃO DESTA GUARDA MIROU `Math.max(2, Math.floor(` e reprovou
+     o eixo **X** do `LineChart` (`floor(larg / 110)`), que é legítimo e outra
+     conta. Sétima vez nesta base que uma guarda por texto pega o que o certo
+     também tem. Hoje ela mira o que SÓ o errado tem: a divisão pela altura de
+     tick, com o número LIDO do módulo — se ele mudar lá, a guarda acompanha. */
+  const alturaTick = Number(eixo.match(/export const ALTURA_POR_TICK = (\d+);/)?.[1]);
+  assert.ok(alturaTick > 0, "linha de base: não achei ALTURA_POR_TICK no módulo do eixo");
+  for (const [nome, fonte] of [["SerieTemporal", serie], ["LineChart", linha]]) {
+    const ofensoras = semComentarios(fonte)
+      .split("\n")
+      .map((l, i) => [i + 1, l.trim()])
+      .filter(([, l]) => new RegExp(`Math\\.floor\\([^)]*\\/\\s*${alturaTick}\\s*\\)`).test(l));
+    assert.deepEqual(ofensoras, [], `${nome} recriou a conta do eixo Y em vez de importá-la`);
+  }
+
+  /* 🔬 C3 — o piso do eixo Y são DUAS ALTURAS DE RÓTULO. Medido: 3 rótulos
+     centrados em 0/50/100% da plotagem ficam a `plot/2` um do outro, então
+     colidem quando `plot < 2 × altura do rótulo`. Confirmado na tela: 36px → 0
+     colisões, 20px → 2 colisões. */
+  assert.match(
+    eixo,
+    /export const CH_MINIMO_EIXO = ALTURA_ROTULO \* 2;/,
+    "o piso do eixo Y virou número cravado — ele tem de sair de ALTURA_ROTULO",
+  );
+
+  /* ⛔ E o `160` da §4 não pode voltar: ele escondia o eixo no tamanho PADRÃO do
+     catálogo (plotagem de 132px num slot de 3 células), que é o C3 de volta. */
+  assert.doesNotMatch(eixo, /CH_MINIMO_EIXO = 160/);
+
+  /* 🔬 C2 — o passo do rótulo de x sai da largura MEDIDA, não de "8 rótulos".
+     A causa não era densidade: um rótulo de 36px não cabe numa célula de 7px por
+     menos rótulos que se desenhe. */
+  assert.match(eixo, /LARGURA_ROTULO_X \+ folga\) \/ celula/);
+  assert.match(serie, /passoDoRotuloX\(cwPlot, pontos\.length\)/);
+  assert.doesNotMatch(semComentarios(serie), /pontos\.length \/ 8/, "voltou o '8 rótulos' fixo");
+
+  /* A célula do rótulo NÃO pode cortar — é a outra metade do C2, e sozinha a
+     primeira não resolve. */
+  const fileira = serie.slice(serie.indexOf("i % passoX === 0") - 900, serie.indexOf("i % passoX === 0"));
+  assert.ok(fileira.length > 100, "linha de base: não achei a fileira de rótulos de x");
+  assert.match(fileira, /overflow: "visible"/);
+});
+
 console.log(
   falhas.length === 0
     ? `\n\x1b[1m\x1b[32m${ok} asserções passaram, 0 falharam.\x1b[0m\n`

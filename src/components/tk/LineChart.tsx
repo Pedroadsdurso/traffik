@@ -4,6 +4,7 @@ import * as React from "react";
 
 import { useTamanho } from "@/components/dashboard/ui/useTamanho";
 import { caminhoSuave, fecharArea } from "@/lib/grafico/curva";
+import { intervalosDoEixoY } from "@/lib/grafico/eixo";
 
 /**
  * LineChart — duas séries com pontos e a LINHA DE BREAK-EVEN.
@@ -122,24 +123,25 @@ export function LineChart({
   const areaGasto = fecharArea(caminho("b"), x(0), x(pontos.length - 1), base);
 
   /**
-   * §4 do `07` — OS TICKS SÃO DERIVADOS DA CAIXA, não uma lista de cinco frações.
+   * OS TICKS SÃO DERIVADOS DA CAIXA, não uma lista de cinco frações.
    *
-   * ```
-   * ticks em y = floor(ch / 56), mínimo 2 quando ch ≥ 160
-   * ticks em x = floor(cw / 110), mínimo 2
-   * ```
+   * 🔴 **C3, 13/08/2026 — A CONTA E OS NÚMEROS SAÍRAM DAQUI** e foram para
+   * `lib/grafico/eixo.ts`, porque o `SerieTemporal` passou a ter eixo Y também.
+   * Copiá-los para lá teria criado a segunda fonte da mesma conta, e duas
+   * implementações da mesma conta divergem sempre. O *porquê* de cada limiar
+   * está lá; aqui fica só a chamada, de propósito — repetir a explicação seria
+   * repetir o valor.
    *
-   * Era `[0, 0.25, 0.5, 0.75, 1]` — cinco linhas de grade e cinco rótulos de
-   * valor, sempre. Num slot de 3 células (168px úteis) cinco rótulos de eixo se
-   * tocam e a grade vira listra; num de 6, cinco é pouco.
-   *
-   * ⚠️ O `mínimo 2` não é folga: com um tick só não há ESCALA — uma linha
-   * horizontal sozinha não diz o intervalo, e o gráfico passa a mostrar forma sem
-   * grandeza. Abaixo de 160px de altura ficam **só os extremos**, que é o mínimo
-   * que ainda informa.
+   * ⚠️ **Uma mudança de comportamento veio junto, e é deliberada:** abaixo de
+   * `CH_MINIMO_EIXO` este gráfico desenhava 2 ticks e agora não desenha nenhum,
+   * como o `SerieTemporal`. O menor slot do `receita-gasto` (3 células) tem
+   * plotagem bem acima do limiar — o ramo não é alcançado no catálogo de hoje.
    */
-  const nY = ch >= 160 ? Math.max(2, Math.floor(alt / 56)) : 2;
-  const linhas = Array.from({ length: nY + 1 }, (_, i) => (max * i) / nY);
+  const nY = intervalosDoEixoY(ch, alt);
+  /* ⚠️ `nY = 0` significa "sem eixo", e sem esta guarda o `(max * i) / nY` sairia
+     `NaN` — uma linha de grade em coordenada inválida, que o SVG desenha como
+     nada e o `tsc` não vê. É a família do denominador zero, na geometria. */
+  const linhas = nY > 0 ? Array.from({ length: nY + 1 }, (_, i) => (max * i) / nY) : [];
 
   /* Quantos rótulos de data cabem. 110px é a largura de `dd/MM` com folga para
      não encostar no vizinho — abaixo disso eles se tocam, que é o C2 do `07`. */
