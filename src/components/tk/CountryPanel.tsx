@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import dynamic from "next/dynamic";
+import { useTamanho } from "@/components/dashboard/ui/useTamanho";
 import { Segmented } from "./Segmented";
 import { EmptyState } from "./EmptyState";
 import type { PontoPais } from "./GlobeView";
@@ -81,18 +82,43 @@ export function CountryPanel({
   semPais,
   formatar,
   tema,
-  altura = 300,
+  diametroMax = 300,
   visao,
 }: {
   linhas: LinhaPais[];
   semPais: number;
   formatar: (n: number) => string;
   tema: "dark" | "light";
-  altura?: number;
+  /**
+   * 🔴 TETO do diâmetro do globo — **não a altura dele**. Chamava-se `altura` e
+   * era exatamente isso: uma altura fixa, aplicada como `minHeight`. Trocar de
+   * Ranking para Globo mudava a altura do card (queixa 4 do `07`), porque a
+   * variante decidia o tamanho do bloco em vez de caber nele.
+   *
+   * ⚠️ O nome mudou junto com o significado, de propósito. `altura` continuar
+   * existindo querendo dizer "teto" é a armadilha do `inicioDaFita`: o
+   * identificador antigo sobrevive com a semântica nova e todo chamador passa a
+   * apostar numa das duas leituras sem dizer qual.
+   */
+  diametroMax?: number;
   /** Controlado por quem chama: o alternador mora no CABEÇALHO do card. */
   visao: VisaoPais;
 }) {
   const efetiva = visao;
+
+  /* 🔴 §7.1 DO `07`: A ALTURA DO CARD É IDÊNTICA NAS DUAS VARIANTES.
+     O globo precisa de um número em px (o three.js dimensiona um canvas, não um
+     `%`), e esse número passou a ser MEDIDO da faixa em vez de escrito na
+     chamada. É a mesma disciplina da altura da faixa de ambiente: ler o valor,
+     não afirmá-lo — um número escrito aqui volta a ser a variante decidindo o
+     tamanho do bloco.
+
+     ⚠️ Medir a FAIXA e dimensionar o filho dela não realimenta: a altura da
+     faixa vem do `flex: 1` sobre o slot, e o filho é `flex: none`. */
+  const { ref: refFaixa, altura: alturaFaixa } = useTamanho<HTMLDivElement>();
+  /* Antes da primeira medida, o teto — é o que o componente sempre usou, então
+     a primeira pintura não muda de tamanho para quem já conhecia a tela. */
+  const diametro = alturaFaixa > 0 ? Math.max(140, Math.min(alturaFaixa, diametroMax)) : diametroMax;
 
   const pontos: PontoPais[] = React.useMemo(
     () =>
@@ -122,7 +148,9 @@ export function CountryPanel({
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, minHeight: 0 }}>
+    /* `height: 100%` — a altura vem do SLOT (F1). Antes o painel tinha altura de
+       conteúdo, e o conteúdo do globo era 420px cravados. */
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, height: "100%", minHeight: 0 }}>
       {efetiva === "globo" ? (
         /* 🔴 GLOBO + RANKING LADO A LADO. O three.js dimensiona a esfera pela
            MENOR dimensão do canvas, então num bloco largo e baixo o globo fica
@@ -146,14 +174,21 @@ export function CountryPanel({
 
            É a mesma família do piso de altura que não vale no estado vazio
            (`celulaDaGrade`): reservar espaço para o que não existe. */
-        <div className="tk-paises" style={{ display: "flex", gap: "var(--tk-gap-grid)", alignItems: "stretch" }}>
-          <div className="tk-paises-globo" style={{ flex: `0 0 ${altura}px`, minHeight: altura, maxWidth: "100%" }}>
-            <GloboCarregado pontos={pontos} altura={altura} tema={tema} formatar={formatar} linhas={linhas} />
+        <div
+          ref={refFaixa}
+          className="tk-paises"
+          style={{ display: "flex", gap: "var(--tk-gap-grid)", alignItems: "stretch", flex: 1, minHeight: 0 }}
+        >
+          {/* ⛔ O `minHeight: altura` SAIU daqui. Era ele que empurrava o card
+              para 420px na variante Globo — a altura do desenho virando altura
+              do bloco. Hoje a caixa é quadrada pelo diâmetro MEDIDO. */}
+          <div className="tk-paises-globo" style={{ flex: `0 0 ${diametro}px`, maxWidth: "100%", minHeight: 0 }}>
+            <GloboCarregado pontos={pontos} altura={diametro} tema={tema} formatar={formatar} linhas={linhas} />
           </div>
-          {/* `overflowY: auto` — a lista rola dentro da altura do globo em vez de
-              esticar o bloco. Sem isto, dez países fariam o card crescer e o
-              globo ficaria com uma faixa de vazio embaixo. */}
-          <div style={{ flex: "1 1 0", minWidth: 0, overflowY: "auto", display: "flex", flexDirection: "column", justifyContent: "center" }}>
+          {/* A lista rola dentro da altura da faixa em vez de esticar o bloco.
+              Sem isto, dez países fariam o card crescer e o globo ficaria com uma
+              faixa de vazio embaixo. */}
+          <div style={{ flex: "1 1 0", minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
             <Ranking linhas={linhas} formatar={formatar} />
           </div>
         </div>
@@ -221,7 +256,10 @@ function GloboCarregado(props: {
 function Ranking({ linhas, formatar }: { linhas: LinhaPais[]; formatar: (n: number) => string }) {
   const max = Math.max(...linhas.map((l) => l.receita), 1);
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 340, overflowY: "auto" }}>
+    /* ⛔ `maxHeight: 340` SAIU — F1. Um teto em px dentro do card é a altura
+       voltando a ser decidida pelo conteúdo: com o slot mandando, quem limita a
+       lista é a célula, e o que sobra rola. */
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1, minHeight: 0, overflowY: "auto" }}>
       {linhas.map((l) => (
         <div key={l.code} style={{ display: "flex", alignItems: "center", gap: 10, position: "relative", padding: "5px 8px" }}>
           {/* Barra de proporção ATRÁS do conteúdo: compara a olho sem gastar uma

@@ -1,5 +1,100 @@
 @AGENTS.md
 
+# 🔴🔴 O ESTADO DO GIT DESTE ARQUIVO ESTAVA ERRADO — E O REDESIGN ESTÁ EM PRODUÇÃO
+
+> **Medido em 12/08/2026, 22h. Esta seção vence as ~17 linhas
+> "⛔ NADA FOI PARA O GITHUB" que aparecem nos ESTADO DA SESSÃO abaixo.**
+
+| | Medido |
+|---|---|
+| `origin/main` | **`492dcdb`** — avançada de `4e6aa9e` em **12/08/2026 16:35** |
+| `origin/redesign/dashboard` | **existe**, primeiro push em **12/08/2026 16:30** |
+| produção (`https://342dd-virid.vercel.app/login`) | serve `tk-auth` e `tk-auth-marca` |
+
+`tk-auth` **não existe** em `4e6aa9e` (0 ocorrências) e existe em `492dcdb` (3).
+Ou seja: **as doze telas do redesign estão no ar para os testadores desde
+12/08/2026 16:35.**
+
+> ### ⛔ AS LINHAS "NADA FOI PARA O GITHUB" ABAIXO NÃO SÃO MENTIRA — SÃO HISTÓRIA
+>
+> Cada uma era **verdadeira quando foi escrita**: até 12/08 16:30 a branch de
+> fato não existia no remoto. Elas não foram apagadas porque apagá-las
+> reescreveria o registro de sessões que aconteceram.
+>
+> ⚠️ **O que elas não podem mais ser é lidas como estado atual.** Uma delas diz
+> "75 commits locais"; hoje são 0 à frente do remoto. Estado registrado envelhece
+> sozinho — foi exatamente por isso que a META-REGRA do topo pede PADRÃO e
+> MEDIÇÃO em vez de fotografia.
+>
+> ### 🔎 A MEDIÇÃO, e ela custa 10 segundos
+> ```bash
+> git ls-remote --heads origin            # o que existe no remoto, agora
+> git reflog show origin/main --date=iso | head -3   # quando main andou
+> curl -s https://342dd-virid.vercel.app/login | grep -c tk-auth   # o que a produção serve
+> ```
+> ⛔ **Nunca afirme o estado do remoto a partir deste arquivo.** Rode as três.
+
+### ⚠️ A CONSEQUÊNCIA QUE MUDA DECISÃO, não só o registro
+
+A regra do congelamento (a seção logo abaixo) foi escrita quando o redesign era
+uma branch que ninguém via. Ela continua valendo — mas o custo de errar mudou de
+"o dono vê no dev" para **"o testador vê em produção"**.
+
+⛔ **Não conclua daí que a regra ficou mais rígida ou mais frouxa.** Ela é a
+mesma; o que mudou é que "MEDE · REGISTRA · AVISA" agora tem prazo.
+
+## 🔴🔴 O REDESIGN ENTROU EM PRODUÇÃO SEM DECISÃO DE NINGUÉM
+
+**12/08/2026, 16:35.** Cinco minutos depois do primeiro push de
+`redesign/dashboard` (16:30), a `main` foi avançada de `4e6aa9e` para o **mesmo
+commit**. A produção segue a `main`. As doze telas foram ao ar nesse instante.
+
+Não houve um "vamos lançar": houve um push de branch e um fast-forward. O
+segundo passo é o que publicou, e ele não se parece com publicar.
+
+> ### ⛔ A REGRA QUE SAI DISSO
+>
+> ## "A branch é segura porque ninguém vê" é uma AFIRMAÇÃO SOBRE O REMOTO — e tem de ser MEDIDA antes de virar premissa de fase.
+>
+> Ela foi premissa de **três semanas** de trabalho (05/08 a 12/08), aparece em
+> ~17 lugares deste arquivo, e **estava errada nas últimas seis horas** sem que
+> nada aqui mudasse. O arquivo não tinha como saber: ele registra o que era
+> verdade quando alguém escreveu.
+>
+> ⚠️ **O que torna esta família traiçoeira** é que a premissa é reforçada por
+> repetição. Cada sessão copiava o "⛔ NADA FOI PARA O GITHUB" da anterior, e a
+> repetição parecia confirmação — quando era a mesma medição de 05/08, citada
+> dezessete vezes.
+>
+> ### 🔎 A MEDIÇÃO, e ela é barata
+> ```bash
+> git ls-remote --heads origin | grep <branch>   # ela existe no remoto?
+> git reflog show origin/main --date=iso | head -3
+> ```
+> ⛔ **Rode antes de escrever "isto não afeta ninguém" em qualquer plano.** É a
+> mesma disciplina de *migration que eu não vi aplicada é migration PENDENTE*:
+> toda afirmação sobre o remoto feita a partir de arquivo local é inferência.
+
+### 🕸️ E o custo concreto que ela quase produziu, no mesmo dia
+
+A F1 introduziu uma migração de altura que roda **sozinha ao abrir o Dashboard**
+e é **irreversível** (`h = max(células(linhas), hMin)` — do `max` não se recupera
+o operando). Eu a projetei descartando o campo original, e documentei o descarte
+como decisão certa em três arquivos.
+
+Sob a premissa "ninguém vê", isso era uma escolha de limpeza. Sob o estado real,
+era **perder o layout de cada testador na primeira abertura, sem volta**.
+
+✅ O dono pediu a conferência antes do push, o campo **não** estava preservado, e
+a rede entrou (`3417c03`). Medido: `492dcdb` — o que a produção serve — tem
+**zero** referência a `migrarAlturaDoLayout`, então a migração nunca rodou lá.
+
+⚠️ **No banco de dev ela já rodou e o `linhas` daquela linha se perdeu.** É a
+demonstração do que a rede evita, e é por isso que ela fica registrada aqui em
+vez de só no código.
+
+---
+
 # ⛔⛔ O REDESIGN NÃO MUDA FUNCIONALIDADE, CONTAS NEM LÓGICA
 
 > **Regra do dono, 07/08/2026. Vale daqui até o fim do redesign, e vence
@@ -1518,6 +1613,20 @@ Nos três casos a guarda podia passar sem examinar nada — arquivo vazio, símb
 ausente, coleção sem itens. **`=== 0` passa com a coleção vazia.** Por isso a
 guarda do preset afirma duas coisas antes de negar a terceira: que houve
 atribuição para examinar, e que o redutor é de fato usado.
+
+> ### 📌 RECORRÊNCIA — 12/08/2026, superfície NOVA: verificação de DOCUMENTAÇÃO
+> Conferindo se três correções tinham entrado num `.md`, uma das cinco âncoras
+> voltou **0** e eu quase reportei *"não entrou"*. O texto estava lá; a âncora é
+> que não casava.
+>
+> É a mesma família, num lugar onde ninguém a esperava: até aqui ela sempre
+> mordeu guarda de TESTE sobre CÓDIGO. Aqui era um `grep` de conferência sobre
+> prosa que eu mesmo acabara de escrever.
+>
+> ⛔ **A regra não muda, o alcance sim: vale para qualquer verificação por
+> casamento de texto, inclusive a que confere se a edição de um documento
+> pegou.** `0` significa "a âncora não casou" — e só depois de reconferir a
+> âncora ele pode significar "o texto não está lá".
 
 ⚠️ Prima direta de *EDIÇÃO POR CASAMENTO DE STRING SE VERIFICA* e de *uma
 asserção precisa poder FALHAR pelo motivo que ela alega medir*. A pergunta é
@@ -5241,6 +5350,56 @@ nativo, e a barra de rolagem. Todos são pintados pelo agente do usuário.
 
 ---
 
+# ⚖️ PRINT × MEDIÇÃO — QUANDO OS DOIS DISCORDAM, A RESPOSTA NÃO É ESCOLHER O DE SEMPRE
+
+> **Formulação do dono, 12/08/2026, depois de o par falhar nas DUAS direções na
+> mesma semana.** Ela fecha a regra anterior, que ficou meia: *"screenshot
+> levanta a hipótese, medição confirma"* descreve um dos dois casos e **inverte o
+> outro**.
+
+## Os dois casos, e eles apontam para lados opostos
+
+| | O que aconteceu | Quem estava certo |
+|---|---|---|
+| **autofill do Chrome** | `getComputedStyle` dizia `transparent`; o print mostrava dois retângulos brancos no tema escuro | 🖼️ **o PRINT** — o valor pintado não estava no CSSOM |
+| **`getBoundingClientRect()` clipado** | a varredura acusava **13 fugas** no Funil, em **duas leituras seguidas**; o print mostrava o bloco inteiro dentro do card | 🔬 **o PRINT** — o retângulo de elemento clipado reporta geometria NÃO clipada |
+
+> ## No primeiro o print ACHOU o que a medição não via. No segundo o print DESMENTIU o que a medição afirmava. A ferramenta que errou foi a mesma nos dois.
+
+### 🔴 E o segundo derruba a defesa que esta base tinha
+
+A regra das **duas leituras** nasceu de uma medição transitória (ler antes da
+repintura). Ela não teria pego este caso: as duas leituras deram 13, com minutos
+de intervalo, porque o valor **estava estável e errado**. Repetir uma medição só
+elimina ruído — não elimina **instrumento medindo a propriedade errada**.
+
+> ### ⛔ A DISCIPLINA, e ela é uma pergunta, não uma preferência
+>
+> Quando print e medição discordam, **nenhum dos dois vence por ser o de
+> sempre**. A pergunta é:
+>
+> > **"Que propriedade cada um está medindo — e qual delas é a que eu quero?"**
+>
+> | O que se quer saber | Quem responde |
+> |---|---|
+> | cor/contraste com precisão | 🔬 medição (canvas 1×1, sobre o fundo REAL) |
+> | o que o **navegador** pinta sozinho (autofill, `accent-color`, scrollbar) | 🖼️ print — não está no CSSOM |
+> | "cabe no slot?" | 🔬 `scrollHeight`/`scrollWidth` — eles **respeitam o clip** |
+> | "vaza para fora?" | ⛔ **NÃO** `getBoundingClientRect()` de descendente: ele ignora o clip do ancestral |
+>
+> ⚠️ E há um terceiro desfecho, que é o mais barato e o mais esquecido:
+> **conserte o INSTRUMENTO.** Nos dois casos a saída não foi "confiar no print" —
+> foi trocar a medida por uma que mede a propriedade certa
+> (`scrollWidth − clientWidth`) ou aceitar que aquela propriedade não é
+> mensurável por CSSOM e dizer isso.
+
+⚠️ **O sinal barato:** os dois discordarem **em magnitude absurda**. 465px de
+fuga num card de 470px não é "quase certo" — é o instrumento respondendo outra
+pergunta. Discordância pequena costuma ser repintura; discordância grotesca é
+quase sempre unidade ou referencial errado.
+
+---
+
 # 📌 ESTADO DA SESSÃO — 12/08/2026 (parte 2: LOGIN, a décima primeira tela)
 
 > **A mais nova. Se contradisser qualquer coisa acima, ela vence.**
@@ -6160,3 +6319,43 @@ encolhendo. **Nenhum deles apareceria sem abrir a tela.**
 1. `ui/Icone` + `ui/Modal` → `--tk-*`  2. largura estreita nas cinco
 3. conferência de escrita nas nove     4. Regras + Anúncios
 5. sessão de schema                    6. o `.tk-tema` morre
+
+---
+
+# 📏 NESTA GRADE, LIMIAR FIXADO ANTES DE MEDIR FOI REPROVADO TRÊS VEZES SEGUIDAS
+
+> **12/08/2026.** Não é caso isolado: são três, no mesmo trabalho, em três
+> camadas diferentes. Três instâncias tornam o padrão inegável.
+
+| # | O limiar | Quem fixou | O que a medição disse |
+|---|---|---|---|
+| 1 | `h = 1` para o bloco vazio | dono | o vazio mede **192–382px** — 3 a 5 células |
+| 2 | a tabela de `hMin` da §3 | dono | `rodape` mede 192 e o `hMin` dele era 1: **cortaria um bloco estrutural** |
+| 3 | `2 células` para o vazio, sem o `minHeight` | **eu** | removê-lo **não mudou nada** — ele nem era vinculante |
+
+> ## ⛔ NENHUM LIMIAR É CONSTANTE LITERAL. Todos derivam de medição do próprio bloco — e todo número no documento diz de QUAL medição saiu.
+
+O que substituiu os três: `hVazio = min(h salvo, ceil((altura do vazio DAQUELE
+bloco + 16) / 96))`. Sem número fixo, e o bloco que não colapsa (`funil`)
+denuncia o conteúdo dele em vez de ser forçado a caber.
+
+### 🔬 E o lado do DIAGNÓSTICO tem a mesma doença
+
+O caso 3 é o mais instrutivo porque o erro não foi fixar — **foi diagnosticar**.
+Eu achei `minHeight: 120px` na cadeia de um bloco de 238px, e concluí que ele
+mandava na altura. Ele não mandava: o conteúdo já passava dele, e removê-lo não
+mudou um pixel.
+
+| | |
+|---|---|
+| o que eu fiz | achei a constante e a tomei como causa **por estar lá** |
+| o que faltou | **testar qual mínimo estava ATIVO** — remover e medir |
+
+⛔ **Constante encontrada na cadeia não é constante vinculante.** Num
+`min-height`/`max-width`/`clamp`, só um dos termos manda em cada instante, e
+qual deles é uma medição — não uma leitura de código.
+
+⚠️ O teste é barato e é sempre o mesmo: **remova o candidato e meça de novo.**
+Se nada mudou, ele não era a causa. Foi assim que este erro caiu, e é a mesma
+disciplina de *provar pelo lado negativo* que a base já usa em teste — aplicada a
+diagnóstico de layout.

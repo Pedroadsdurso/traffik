@@ -1,9 +1,46 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { loadLayoutZonas, resetDashboardLayout, saveLayoutZonas } from "@/lib/actions/dashboardLayout";
-import { MAX_FAIXA, layoutPadrao, migrarLayout, type LayoutZonas } from "./migrar";
-import { CATALOGO_META, encaixarColunas, encaixarLinhas, metaDoBloco } from "../catalogo";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  loadLayoutZonas,
+  migrarAlturaDoLayout,
+  resetDashboardLayout,
+  saveLayoutZonas,
+  type LayoutSalvo,
+} from "@/lib/actions/dashboardLayout";
+import {
+  MAX_FAIXA,
+  layoutPadrao,
+  migrarAlturas,
+  migrarLayout,
+  precisaMigrarAltura,
+  type LayoutZonas,
+} from "./migrar";
+import { CATALOGO_META, encaixarAltura, encaixarColunas, metaDoBloco } from "../catalogo";
+
+/**
+ * O que vai para o banco.
+ *
+ * 🔴 **`linhasLegado` ENTRA, como `linhas`.** Este comentário dizia o contrário
+ * — que regravá-lo faria o v4 carregar duas unidades de altura ao mesmo tempo, e
+ * que a versão do envelope existe para matar essa ambiguidade.
+ *
+ * A ambiguidade que o `v` mata é sobre **qual campo desenha**, e ela continua
+ * morta: quem desenha é `h`, sempre; `linhas` não é lido por nada de layout. O
+ * que a versão anterior fazia era outra coisa — jogar fora a única cópia do que
+ * o usuário tinha escolhido, numa conversão que **não tem volta** (`h` é o
+ * `max()` da conta com a medição F0b) e que roda **sozinha, em produção**.
+ *
+ * ⚠️ Ele é preservado inclusive quando o usuário redimensiona à mão: a rede não
+ * fica menos útil por ele ter mexido no bloco depois. Uma regra, não duas.
+ */
+function paraSalvar(l: LayoutZonas): LayoutSalvo {
+  return {
+    hero: l.hero,
+    faixa: l.faixa,
+    paineis: l.paineis.map((p) => ({ id: p.id, col: p.col, h: p.h, linhas: p.linhasLegado })),
+  };
+}
 
 /**
  * Lê o layout salvo e o entrega já MIGRADO para as três zonas.
@@ -100,7 +137,7 @@ export function useLayoutDashboard(workspaceId?: string | null) {
   const salvar = useCallback(async () => {
     setSalvando(true);
     try {
-      await saveLayoutZonas(layout, workspaceId);
+      await saveLayoutZonas(paraSalvar(layout), workspaceId);
       setSnapshot(null);
     } finally {
       setSalvando(false);
@@ -117,6 +154,46 @@ export function useLayoutDashboard(workspaceId?: string | null) {
       setSalvando(false);
     }
   }, [workspaceId]);
+
+  /* ── A MIGRAÇÃO DE ALTURA — as três camadas, na ordem ─────────────────────
+     🔴 ELA GRAVA AO ABRIR O DASHBOARD, UMA VEZ, SEM CLIQUE. É migração: o
+     contrato do envelope mudou (`linhas` de 44px → `h` em células de 96), e o
+     campo antigo não é regravado. Deixá-la para o próximo Salvar faria o layout
+     do usuário depender de ele voltar ao modo de edição — e até lá cada abertura
+     reinterpretaria o salvo, que é como arranjo gravado vira arranjo diferente.
+
+     ⚠️ Decisão do dono, 12/08/2026: o contrato muda e está declarado. */
+  /* Uma tentativa por montagem. ⛔ `ref` e não estado: ele não desenha nada, e
+     como estado provocaria um render a mais no caminho crítico da tela. */
+  const tentouMigrar = useRef(false);
+
+  const migrarAltura = useCallback(
+    async (temDado: (id: string) => boolean) => {
+      /* Não migrar durante a edição: o `layout` daqui é o estado sujo, e gravá-lo
+         sem o Salvar quebraria a promessa do Cancelar. */
+      if (tentouMigrar.current || carregando || snapshot !== null) return;
+      if (!precisaMigrarAltura(layout)) return;
+
+      /* Camadas 1 e 2, puras. `completo: false` sai em silêncio e SEM marcar a
+         tentativa — o bloco pode ganhar dado na próxima troca de período, e aí a
+         migração acontece. É o que faz "bloco que nunca tem dado" ficar em
+         `auto` por tempo indeterminado em vez de travar a migração dos outros
+         num estado meio-gravado. */
+      const r = migrarAlturas(layout, temDado);
+      if (!r.completo) return;
+
+      tentouMigrar.current = true;
+      const migrado = { ...layout, paineis: r.paineis };
+      /* A tela adota o resultado mesmo se a RESERVA perder: a conversão é
+         determinística (só depende de `linhasLegado` e do `hMin` do catálogo),
+         então quem venceu gravou exatamente isto. */
+      setLayout(migrado);
+      /* Camada 3, no banco. Perder aqui não é erro — é outra instância ter
+         gravado o mesmo. */
+      await migrarAlturaDoLayout(paraSalvar(migrado), workspaceId).catch(() => {});
+    },
+    [carregando, layout, snapshot, workspaceId],
+  );
 
   /* ── As operações das três zonas ───────────────────────────────────────────
      ⛔ Cada uma aplica a REGRA DA ZONA, e é por isso que elas moram aqui e não
@@ -193,7 +270,9 @@ export function useLayoutDashboard(workspaceId?: string | null) {
     setLayout((l) => {
       const meta = CATALOGO_META.find((b) => b.id === id);
       if (!meta || l.paineis.some((p) => p.id === id)) return l;
-      const novo = { id, col: meta.colPadrao, linhas: encaixarLinhas(undefined, meta) };
+      /* ⚠️ Bloco arrastado agora nasce com `hPadrao` — ele nunca teve altura
+         salva, então não há migração pendente para esperar. */
+      const novo = { id, col: meta.colPadrao, h: meta.hPadrao };
       const lista = [...l.paineis];
       lista.splice(indice ?? lista.length, 0, novo);
       return { ...l, paineis: lista };
@@ -229,15 +308,24 @@ export function useLayoutDashboard(workspaceId?: string | null) {
    * do ponteiro. Encaixar só ao soltar faria o usuário arrastar às cegas e
    * descobrir o resultado depois — o mesmo defeito da rejeição pós-soltura.
    */
-  const redimensionar = useCallback((id: string, colBruta: number, linhasBrutas: number | undefined) => {
+  const redimensionar = useCallback((id: string, colBruta: number, alturaBruta: number | undefined) => {
     setLayout((l) => {
       const meta = metaDoBloco(id);
       if (!meta) return l;
       const col = encaixarColunas(colBruta, meta);
-      const linhas = encaixarLinhas(linhasBrutas, meta);
+      /* 🔴 A ALÇA REDIMENSIONA NOS DOIS EIXOS AGORA, e para TODO bloco. Antes,
+         `encaixarLinhas` devolvia `undefined` para quem não fosse
+         `alturaAjustavel`, e a alça vertical daqueles blocos era um controle
+         inerte — arrastava e nada acontecia. */
+      const h = encaixarAltura(alturaBruta, meta);
       const atual = l.paineis.find((p) => p.id === id);
-      if (!atual || (atual.col === col && atual.linhas === linhas)) return l; // nada mudou
-      return { ...l, paineis: l.paineis.map((p) => (p.id === id ? { ...p, col, linhas } : p)) };
+      if (!atual || (atual.col === col && atual.h === h)) return l; // nada mudou
+      /* ⚠️ O `linhasLegado` SOBREVIVE ao redimensionamento — o `...p` o carrega.
+         Aqui dizia que ele "tem de ser descartado", e o argumento (duas alturas
+         em unidades diferentes) confundia CARREGAR com DESENHAR: quem desenha é
+         `h`, e só. Descartar era perder a rede da conversão irreversível no
+         primeiro arrasto. */
+      return { ...l, paineis: l.paineis.map((p) => (p.id === id ? { ...p, col, h } : p)) };
     });
   }, []);
 
@@ -248,6 +336,7 @@ export function useLayoutDashboard(workspaceId?: string | null) {
     salvando,
     faixaCheia,
     abrirEdicao,
+    migrarAltura,
     cancelar,
     salvar,
     redefinir,

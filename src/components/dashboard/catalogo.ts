@@ -52,13 +52,48 @@ export type Zona = "hero" | "faixa" | "paineis";
 export const COLUNAS_GRADE = 12;
 
 /**
- * Altura de UMA linha da grade, em px.
+ * 🔴 A CÉLULA DA GRADE — 80px de altura, 16px de gap, passo de 96.
  *
- * ⚠️ Ela não é o `--tk-gap-grid`: o gap separa blocos, esta é a unidade em que a
- * altura deles é medida. 44px dá passos perceptíveis sem exigir dez arrastos
- * para dobrar um bloco de tamanho.
+ * A F1 (`docs/design/07`) inverteu de onde vem a altura: ela era do CONTEÚDO
+ * (`linhas` virava `minHeight`, um PISO) e passou a ser do LAYOUT (`h` vira
+ * `grid-row: span h`, uma altura EXATA). O `--tk-row` do `globals.css` tem de
+ * valer `ALTURA_CELULA` — são o mesmo número em dois arquivos, e é a única cópia
+ * que sobrou. Há asserção sobre isso em `npm run test:grade`.
  */
-export const ALTURA_LINHA = 44;
+export const ALTURA_CELULA = 80;
+export const GAP_GRADE = 16;
+/** Célula + gap. É o divisor de TODA conversão px → células. */
+export const PASSO_CELULA = ALTURA_CELULA + GAP_GRADE;
+/** Teto de altura, em células. 12 × 96 já passa de qualquer viewport útil. */
+export const ALTURA_MAX = 12;
+
+/**
+ * 🔴 A UNIDADE ANTIGA, e ela existe SÓ para a migração ler o campo `linhas`.
+ *
+ * ⛔ Não use isto para desenhar nada. `linhas` está gravado em unidade de 44px e
+ * a grade nova é de 96 — **comparar os dois números crus dobra a altura**:
+ * `linhas: 8` significa 352px hoje, e 8 células significariam 752px. É a parte
+ * da migração que importa, e o motivo importa mais que a fórmula: sem ele, a
+ * próxima mudança desta constante repete o erro com a fórmula ainda "certa".
+ */
+export const ALTURA_LINHA_ANTIGA = 44;
+
+/** Altura em px de um slot de `h` células, com os gaps internos. */
+export function pxDeCelulas(h: number): number {
+  return h * ALTURA_CELULA + (h - 1) * GAP_GRADE;
+}
+
+/**
+ * Quantas células cobrem uma altura em px.
+ *
+ * ⚠️ O `+ GAP_GRADE` no numerador não é folga: uma altura de `n` células mede
+ * `n × 80 + (n−1) × 16`, e somar um gap ao medido é o que faz a divisão por 96
+ * fechar exata. Sem ele, 192px (3 células menos os gaps) daria 2.
+ */
+export function celulasDePx(px: number): number {
+  if (!Number.isFinite(px) || px <= 0) return 1;
+  return Math.max(1, Math.ceil((px + GAP_GRADE) / PASSO_CELULA));
+}
 
 export interface MetaBloco {
   id: string;
@@ -129,22 +164,38 @@ export interface MetaBloco {
   colMin: number;
   colPadrao: number;
   /**
-   * 🔴 A ALTURA VEM DO CONTEÚDO. Só os blocos marcados aqui ganham alça de
-   * altura, e mesmo eles têm o conteúdo como piso.
+   * 🔴 A ALTURA PASSOU A SER PROPRIEDADE DO LAYOUT — F1, 12/08/2026.
    *
-   * Altura declarada por bloco foi a causa do painel esburacado: um bloco vazio
-   * reservava as 6 linhas que teria COM dado só para escrever "Sem dado neste
-   * período", ao lado de outro de 3 — e os testadores veem estado vazio o tempo
-   * todo. Reservar espaço para um dado que não existe é a versão de layout de
-   * afirmar o que não se mediu.
+   * ⛔ **`alturaAjustavel` e `linhasMin` SAÍRAM, e não foram renomeados.** Eles
+   * diziam que só alguns blocos tinham altura e que o conteúdo era o piso dela.
+   * As duas afirmações deixaram de valer: **todo** bloco declara `h` em células,
+   * e é o slot que manda. Manter os nomes antigos ao lado dos novos deixaria
+   * legível a regra que caiu — que é como uma proibição envelhecida vira ordem
+   * de reverter.
    *
-   * ⚠️ É `true` só onde a altura MUDA a leitura: série temporal ganha resolução
-   * vertical, lista rolável mostra mais linhas. Tabela de três linhas não ganha
-   * nada — ali a altura extra é ar.
+   * O argumento que sustentava o piso ("um bloco VAZIO reservava as 6 linhas que
+   * teria com dado") continua valendo, e quem responde por ele agora é a
+   * **condição F0**: bloco sem dado colapsa para
+   * `min(h, celulasDePx(altura do vazio DAQUELE bloco))`, na renderização, sem
+   * tocar no `h` salvo.
+   *
+   * ### ⚠️ `hMin` E `hPadrao` SÃO IGUAIS HOJE, DE PROPÓSITO — e isso tem preço
+   *
+   * Os dois saem da **medição F0b** (§11 do `07`): a altura que o bloco de fato
+   * ocupava na grade em `auto`, no maior entre 1280 e 2260. Decisão do dono:
+   * *"`hMin` provisório = h migrado, e só baixa com a F3 do bloco"*.
+   *
+   * O preço é real e fica escrito: **enquanto forem iguais, o bloco não encolhe
+   * abaixo do padrão** — a alça só cresce. Isso é honesto agora (o conteúdo não
+   * cabe em menos) e deixa de ser no dia em que a F3 daquele bloco entregar a
+   * versão compacta. **Baixar `hMin` sem a F3 é prometer uma largura em que o
+   * bloco não se lê**, que é o mesmo defeito do `colMin` sem container query.
+   *
+   * ⛔ Não derive um do outro nem colapse os dois num campo só: eles vão divergir
+   * bloco a bloco, e o commit que baixa um sem o outro precisa ser visível.
    */
-  alturaAjustavel?: boolean;
-  /** Piso em linhas, só para os ajustáveis. O conteúdo ainda pode passar dele. */
-  linhasMin?: number;
+  hMin: number;
+  hPadrao: number;
 }
 
 /* ⚠️ Hero e faixa NÃO estão aqui: são listas de MÉTRICA, não de bloco, e o
@@ -157,8 +208,8 @@ export const CATALOGO_META = [
      categoria: o que os separa é uma string a mais (`estrutural`). */
   {
     id: "receita-gasto",
-    alturaAjustavel: true,
-    linhasMin: 5,
+    hMin: 3,
+    hPadrao: 3,
     titulo: "Receita vs. gasto",
     descricao: "As duas séries no tempo, com a linha de break-even",
     zona: "paineis",
@@ -171,8 +222,8 @@ export const CATALOGO_META = [
   },
   {
     id: "alertas",
-    alturaAjustavel: true,
-    linhasMin: 4,
+    hMin: 4,
+    hPadrao: 4,
     titulo: "Alertas",
     descricao: "O que exige ação agora",
     zona: "paineis",
@@ -185,8 +236,8 @@ export const CATALOGO_META = [
   },
   {
     id: "paises",
-    alturaAjustavel: true,
-    linhasMin: 5,
+    hMin: 4,
+    hPadrao: 4,
     titulo: "Vendas por país",
     descricao: "De onde vem o faturamento",
     zona: "paineis",
@@ -203,6 +254,8 @@ export const CATALOGO_META = [
   },
   {
     id: "rodape",
+    hMin: 3,
+    hPadrao: 3,
     titulo: "Estado do sistema",
     descricao: "Integrações, regras, taxas e última atualização",
     zona: "paineis",
@@ -216,8 +269,8 @@ export const CATALOGO_META = [
   /* ── OS OPCIONAIS ─────────────────────────────────────────────────────── */
   {
     id: "funil",
-    alturaAjustavel: true,
-    linhasMin: 4,
+    hMin: 5,
+    hPadrao: 5,
     titulo: "Funil",
     /* ⚠️ O subtítulo LISTA as etapas, então ele envelhece junto com elas. Ele
        omitia `Sessões` desde que a etapa entrou — dois textos vizinhos
@@ -236,6 +289,8 @@ export const CATALOGO_META = [
   },
   {
     id: "fontes",
+    hMin: 3,
+    hPadrao: 3,
     titulo: "Origem do faturamento",
     /* 🔴 ABSORVEU O BLOCO "CANAIS" (07/08/2026). Os dois liam `v.sources` — o
        MESMO array, a mesma dimensão (`utm_source` do clique) — e desenhavam
@@ -251,6 +306,8 @@ export const CATALOGO_META = [
   },
   {
     id: "produtos",
+    hMin: 3,
+    hPadrao: 3,
     titulo: "Produtos",
     descricao: "Quais produtos faturaram mais",
     zona: "paineis",
@@ -262,6 +319,8 @@ export const CATALOGO_META = [
   },
   {
     id: "pagamentos",
+    hMin: 3,
+    hPadrao: 3,
     titulo: "Formas de pagamento",
     descricao: "Como os compradores pagaram",
     zona: "paineis",
@@ -270,6 +329,8 @@ export const CATALOGO_META = [
   },
   {
     id: "posicionamento",
+    hMin: 3,
+    hPadrao: 3,
     titulo: "Vendas por posicionamento",
     /* 🔴 ELE EXISTIA NO `blocks.ts` ANTIGO e não entrou no catálogo novo. O dado
        nunca sumiu: `computeDashboard` devolve `byPlacement` e o hook o expõe
@@ -282,8 +343,8 @@ export const CATALOGO_META = [
   },
   {
     id: "vendas-por-dia",
-    alturaAjustavel: true,
-    linhasMin: 4,
+    hMin: 3,
+    hPadrao: 3,
     titulo: "Vendas por dia",
     descricao: "Quantas vendas e quanto faturou em cada dia",
     zona: "paineis",
@@ -295,8 +356,8 @@ export const CATALOGO_META = [
   },
   {
     id: "vendas-por-hora",
-    alturaAjustavel: true,
-    linhasMin: 4,
+    hMin: 3,
+    hPadrao: 3,
     titulo: "Vendas por horário",
     descricao: "As 24 horas do período filtrado",
     zona: "paineis",
@@ -305,8 +366,8 @@ export const CATALOGO_META = [
   },
   {
     id: "lucro-por-hora",
-    alturaAjustavel: true,
-    linhasMin: 4,
+    hMin: 3,
+    hPadrao: 3,
     titulo: "Lucro por horário",
     descricao: "Receita menos a fatia de custo daquela hora",
     zona: "paineis",
@@ -315,6 +376,8 @@ export const CATALOGO_META = [
   },
   {
     id: "aprovacao",
+    hMin: 3,
+    hPadrao: 3,
     titulo: "Taxa de aprovação",
     descricao: "Quanto de cada forma de pagamento é aprovado",
     zona: "paineis",
@@ -326,8 +389,8 @@ export const CATALOGO_META = [
   },
   {
     id: "atividade",
-    alturaAjustavel: true,
-    linhasMin: 4,
+    hMin: 4,
+    hPadrao: 4,
     titulo: "Atividade recente",
     descricao: "Os últimos eventos de venda e rastreamento",
     zona: "paineis",
@@ -337,8 +400,8 @@ export const CATALOGO_META = [
   },
   {
     id: "top-campanhas",
-    alturaAjustavel: true,
-    linhasMin: 4,
+    hMin: 4,
+    hPadrao: 4,
     titulo: "Top campanhas",
     descricao: "As que mais faturaram no período",
     zona: "paineis",
@@ -354,8 +417,8 @@ export const CATALOGO_META = [
   },
   {
     id: "heatmap",
-    alturaAjustavel: true,
-    linhasMin: 4,
+    hMin: 5,
+    hPadrao: 5,
     titulo: "Quando compram",
     descricao: "Média por hora, por dia da semana",
     zona: "paineis",
@@ -420,17 +483,20 @@ export function proximoPasso(meta: MetaBloco, col: number, direcao: number): num
 
 
 /**
- * Altura em linhas, para os blocos que declaram alça de altura.
+ * Encaixa uma altura CRUA (a que o arrasto produziu) em células inteiras, entre
+ * o `hMin` do bloco e o teto.
  *
- * ⛔ Bloco sem `alturaAjustavel` devolve `undefined`: ele NÃO tem altura no
- * layout, e gravar uma seria dado morto que o próximo leitor aplicaria por
- * engano. `undefined` é o que faz a grade usar a altura do conteúdo.
+ * ⛔ **Devolve SEMPRE um número.** A versão anterior (`encaixarLinhas`) devolvia
+ * `undefined` para a maioria dos blocos, e esse `undefined` era o que fazia a
+ * grade cair na altura do conteúdo. Isso acabou: todo bloco tem altura.
+ *
+ * ⚠️ `undefined` continua existindo no LAYOUT, e significa outra coisa agora:
+ * *"este bloco ainda não foi migrado"* — ver `PainelGrade.h`. É estado de
+ * transição, não a ausência de alça.
  */
-export function encaixarLinhas(bruto: number | undefined, meta: MetaBloco): number | undefined {
-  if (!meta.alturaAjustavel) return undefined;
-  const piso = meta.linhasMin ?? 3;
-  if (bruto === undefined || !Number.isFinite(bruto)) return piso;
-  return Math.max(piso, Math.min(24, Math.round(bruto)));
+export function encaixarAltura(bruto: number | undefined, meta: MetaBloco): number {
+  if (bruto === undefined || !Number.isFinite(bruto)) return meta.hPadrao;
+  return Math.max(meta.hMin, Math.min(ALTURA_MAX, Math.round(bruto)));
 }
 
 /**
@@ -465,11 +531,13 @@ export const ESTRUTURAIS = (CATALOGO_META as readonly MetaBloco[]).filter((b) =>
  * posição "certa" exigiria adivinhar uma intenção que o salvo não tem, e mudaria
  * de lugar os blocos que o usuário arrastou.
  */
-export function reporEstruturais(paineis: readonly { id: string; col: number; linhas?: number }[]) {
+export function reporEstruturais(paineis: readonly { id: string; col: number; h?: number }[]) {
   const lista = [...paineis];
   for (const b of ESTRUTURAIS) {
     if (lista.some((p) => p.id === b.id)) continue;
-    lista.push({ id: b.id, col: b.colPadrao, linhas: encaixarLinhas(undefined, b) });
+    /* ⚠️ O reposto nasce com `hPadrao` — ele nunca existiu no salvo, então não
+       há altura de usuário para preservar nem migração pendente para esperar. */
+    lista.push({ id: b.id, col: b.colPadrao, h: b.hPadrao });
   }
   return lista;
 }

@@ -61,18 +61,25 @@ export function SerieTemporal({
   const zeroPct = permitirNegativo ? ((max - 0) / amplitude) * 100 : 100;
 
   return (
-    <div className="tk-serie" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+    <div className="tk-serie" style={{ display: "flex", flexDirection: "column", gap: 6, height: "100%", minHeight: 0, overflow: "hidden" }}>
       {/* ⛔ `gap: 0` AQUI DE PROPÓSITO. A folga entre barras é 40% do PASSO
           (`06` §4), e ela é feita por dentro do slot — `left/right: 20%` na
           barra. Com `gap` no contêiner a folga seria fixa em pixels: com 7 dias
           as barras ficariam gordas e a folga sumiria, com 90 dias o contrário.
           A proporção só se mantém se a folga escalar junto com o passo. */}
-      {/* 🎨 A ALTURA ESCALA EM DEGRAUS (`--tk-b-barras`, 4 faixas). Era 120px
-          cravados: num bloco de 12 colunas as barras ficavam baixas e largas,
-          com metade do card vazia embaixo. ⚠️ Degrau, não `cqh`: a altura da
-          barra é o que carrega a comparação entre horas, e um valor
-          intermediário muda a inclinação percebida sem que o dado tenha mudado. */}
-      <div style={{ position: "relative", height: "var(--tk-b-barras, 120px)", display: "flex", alignItems: "flex-end", gap: 0 }}>
+      {/* 🔴 F3 — A ALTURA DA ÁREA DE BARRAS VEM DO SLOT.
+
+          Era `height: var(--tk-b-barras, 120px)` — quatro degraus derivados da
+          LARGURA (`cqw`). O comentário defendia o degrau com um argumento que
+          continua correto sobre outra coisa: *"um valor intermediário muda a
+          inclinação percebida sem que o dado tenha mudado"*. Isso vale para
+          comparar DOIS MOMENTOS do mesmo gráfico — e a altura muda igual quando
+          o degrau muda. O que ele não podia defender é a altura da PLOTAGEM ser
+          decidida pela largura do bloco: medido, `vendas-por-dia`,
+          `vendas-por-hora` e `lucro-por-hora` estouravam **+9px** cada a 2260.
+
+          ⚠️ `--tk-b-barras` deixou de ter consumidor e saiu do `globals.css`. */}
+      <div style={{ position: "relative", flex: 1, minHeight: 0, display: "flex", alignItems: "flex-end", gap: 0 }}>
         {permitirNegativo && (
           /* A linha de zero. Sem ela, uma barra para baixo não tem referência e
              o desenho não diz onde o lucro deixou de existir. */

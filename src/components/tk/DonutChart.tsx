@@ -2,6 +2,8 @@
 
 import * as React from "react";
 
+import { useTamanho } from "@/components/dashboard/ui/useTamanho";
+
 /**
  * DonutChart — a rosca de Canais, com a legenda em COLUNA à direita.
  *
@@ -20,6 +22,9 @@ import * as React from "react";
 
 export type FatiaDonut = { nome: string; valor: number; cor: string };
 
+/** Folga entre a rosca e a legenda. */
+const GAP = 20;
+
 export function DonutChart({
   fatias,
   totalLabel,
@@ -33,6 +38,42 @@ export function DonutChart({
 }) {
   const [ativa, setAtiva] = React.useState<number | null>(null);
   const total = fatias.reduce((s, f) => s + f.valor, 0);
+
+  /**
+   * 🔴 F3 — O DIÂMETRO É `min(largura disponível, altura disponível)` (§4).
+   *
+   * A parte que engana é a ALTURA disponível: quando a legenda não cabe ao lado,
+   * o `flex-wrap` a joga para BAIXO do donut, e aí ela come altura que o donut
+   * achava que tinha. É por isso que a legenda é medida — sem isso a conta
+   * acerta em bloco largo e erra exatamente onde o bloco é apertado, que é onde
+   * ela precisa acertar.
+   *
+   * ⚠️ Não realimenta: a altura da LEGENDA não depende do tamanho do donut (ela
+   * é uma coluna de N linhas de texto), e `ch` é a altura do slot.
+   */
+  const { ref: raiz, largura: cw, altura: ch } = useTamanho<HTMLDivElement>();
+  const refLegenda = React.useRef<HTMLDivElement>(null);
+  const [hLegenda, setHLegenda] = React.useState(0);
+  React.useEffect(() => {
+    const el = refLegenda.current;
+    if (!el) return;
+    const medir = () => setHLegenda((a) => (Math.abs(a - el.offsetHeight) < 1 ? a : el.offsetHeight));
+    medir();
+    const obs = new ResizeObserver(medir);
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  /* Ao LADO enquanto a legenda cabe (ela tem `min-width: 180`); embaixo depois. */
+  const legendaAoLado = cw >= 180 + GAP + 132;
+  const alturaLivre = legendaAoLado ? ch : ch - hLegenda - GAP;
+  const larguraLivre = legendaAoLado ? cw - 180 - GAP : cw;
+  const diametro =
+    cw > 0 && ch > 0
+      ? /* Piso 72: abaixo disso o total no miolo não cabe e a rosca vira anel
+           mudo. Teto 230: acima ela vira disco (o teto do `clamp` antigo). */
+        Math.max(72, Math.min(230, Math.floor(Math.min(larguraLivre, alturaLivre))))
+      : tamanho;
 
   const R = 70;
   /* 14% do raio (`06` §5) — anel FINO, não pizza grossa. Era 20px, quase o
@@ -104,13 +145,15 @@ export function DonutChart({
 
   return (
     <div
+      ref={raiz}
       style={{
         display: "flex",
-        gap: 20,
+        gap: GAP,
         alignItems: "center",
         flexWrap: "wrap",
         flex: 1,
         minHeight: 0,
+        overflow: "hidden",
       }}
     >
       {/* 🎨 DIÂMETRO CONTÍNUO, não em degraus — decisão do dono em 07/08/2026.
@@ -119,8 +162,40 @@ export function DonutChart({
           `--tk-b-donut` tem piso e teto de LEITURA (abaixo some, acima vira
           disco), e o meio é proporção da largura do bloco (`cqw`).
 
-          ⚠️ A prop `tamanho` vira o FALLBACK, para uso fora de um `.tk-escala`. */}
-      <div style={{ position: "relative", width: `var(--tk-b-donut, ${tamanho}px)`, aspectRatio: "1", flex: "none" }}>
+          🔴 ELE PAROU DE DERIVAR A ALTURA DA LARGURA — F1, 12/08/2026.
+
+          Era `width: var(--tk-b-donut); aspect-ratio: 1`: a largura mandava, e a
+          altura era consequência. Com a altura vindo do slot isso inverte o
+          modelo — o donut ficava mais ALTO num monitor largo (mais `cqw`) e
+          estourava o card, que é a mesma inversão de monotonicidade que a F0b
+          mediu no `heatmap`.
+
+          Hoje o diâmetro é `min(altura disponível, --tk-b-donut)`: `height: 100%`
+          pega o slot, `max-height` aplica o teto de leitura, e o `aspect-ratio`
+          transfere para a largura — quem manda é a dimensão mais APERTADA, que é
+          a §4 do `07` (`diâmetro = min(largura, altura)`).
+
+          ⚠️ O `min-height` é o piso do próprio `clamp`, e existe para o uso FORA
+          de um pai com altura definida (onde `100%` não resolve e o donut
+          colapsaria a zero). ⛔ Não o transforme numa altura fixa: com pai
+          definido é o `max-height` que decide. */}
+      <div
+        style={{
+          position: "relative",
+          aspectRatio: "1",
+          flex: "none",
+          /* ⛔ O `minHeight: 132` SAIU. Ele era o piso do `clamp`, e num bloco de
+             4 colunas a 1280 a legenda descia para baixo do donut: 132 de rosca
+             + 4 linhas de legenda não cabiam nas 3 células, e `Origem do
+             faturamento` estourava **+72px**. Piso em px é a própria coisa que a
+             §7.8 proíbe — ele só não tinha aparecido porque nada encostava.
+
+             Hoje o diâmetro é a conta do §4, com a altura JÁ DESCONTADA da
+             legenda quando ela está embaixo. Ver `diametro`. */
+          width: diametro,
+          height: diametro,
+        }}
+      >
         <svg viewBox="0 0 180 180" width="100%" height="100%" style={{ transform: "rotate(-90deg)" }}>
           <circle cx="90" cy="90" r={R} fill="none" stroke="var(--tk-surface-hover)" strokeWidth={ESPESSURA} />
           {arcos.map((a) => (
@@ -153,7 +228,7 @@ export function DonutChart({
         </div>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minWidth: 180 }}>
+      <div ref={refLegenda} style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minWidth: 180 }}>
         {arcos.map((a) => (
           <div
             key={a.nome}

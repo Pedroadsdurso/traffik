@@ -1303,6 +1303,23 @@ a {
    ⛔ Ele acompanha a densidade como todo o resto. Um valor fixo aqui faria o
    hero encolher em relação aos vizinhos no `comfortable` e inchar no `compact`. */
 
+/* 🔴 `--tk-row` — A CÉLULA DA GRADE DO DASHBOARD (F1, 12/08/2026).
+   80px, e ele NÃO acompanha a densidade: o `h` de cada bloco está gravado no
+   layout do usuário em células, e uma célula que mudasse de altura com a
+   preferência faria o mesmo layout salvo desenhar tamanhos diferentes — o
+   número gravado deixaria de descrever o que ele descrevia quando foi gravado.
+   Quem acompanha a densidade é o gap ENTRE os blocos, que é espaçamento.
+
+   ⚠️ Ele é a única cópia de `ALTURA_CELULA` (`components/dashboard/catalogo.ts`)
+   que sobrou, e `npm run test:grade` reprova se os dois divergirem.
+
+   ⛔ E a conversão da migração (44 → 96) assume gap 16. Nas outras densidades o
+   passo real é 100 e 104 — está registrado no §11 do `07` e não é corrigido
+   aqui: mexer nisso muda a altura de layouts já gravados. */
+:root {
+  --tk-row: 80px;
+}
+
 :root,
 [data-density="compact"] {
   --tk-pad-card:        20px;
@@ -1718,8 +1735,6 @@ a {
     --tk-b-metrica: 30px;   /* número do KPI hero */
     --tk-b-metrica-sm: 17px;/* número da faixa de Resumo */
     --tk-b-spark: 32px;     /* altura do sparkline do hero */
-    --tk-b-plot: 190px;     /* altura da plotagem do LineChart */
-    --tk-b-barras: 120px;   /* altura da área de barras do SerieTemporal */
     --tk-b-linha: 40px;     /* altura da linha de lista/tabela */
     --tk-b-fita: 130px;     /* altura da fita do funil */
     --tk-b-fita-num: 24px;  /* os três números do cabeçalho do funil */
@@ -1733,7 +1748,7 @@ a {
   @container (min-width: 380px) {
     .tk-escala {
       --tk-b-metrica: 34px;  --tk-b-metrica-sm: 19px; --tk-b-spark: 40px;
-      --tk-b-plot: 230px;    --tk-b-barras: 150px;    --tk-b-linha: 44px;
+      --tk-b-linha: 44px;
       --tk-b-fita: 160px;    --tk-b-fita-num: 27px;
     }
   }
@@ -1741,7 +1756,7 @@ a {
   @container (min-width: 600px) {
     .tk-escala {
       --tk-b-metrica: 40px;  --tk-b-metrica-sm: 21px; --tk-b-spark: 52px;
-      --tk-b-plot: 290px;    --tk-b-barras: 190px;    --tk-b-linha: 48px;
+      --tk-b-linha: 48px;
       --tk-b-fita: 190px;    --tk-b-fita-num: 30px;
     }
   }
@@ -1749,7 +1764,7 @@ a {
   @container (min-width: 860px) {
     .tk-escala {
       --tk-b-metrica: 48px;  --tk-b-metrica-sm: 23px; --tk-b-spark: 64px;
-      --tk-b-plot: 350px;    --tk-b-barras: 235px;    --tk-b-linha: 52px;
+      --tk-b-linha: 52px;
       --tk-b-fita: 220px;    --tk-b-fita-num: 34px;
     }
   }

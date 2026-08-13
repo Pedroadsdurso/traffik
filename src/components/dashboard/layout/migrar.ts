@@ -29,7 +29,15 @@
  * ele possa fazer. Barulho sem ação é ruído.
  */
 
-import { CATALOGO_META, encaixarColunas, encaixarLinhas, reporEstruturais, type MetaBloco } from "../catalogo";
+import {
+  ALTURA_LINHA_ANTIGA,
+  CATALOGO_META,
+  celulasDePx,
+  encaixarAltura,
+  encaixarColunas,
+  reporEstruturais,
+  type MetaBloco,
+} from "../catalogo";
 
 /* ⛔ AS CONSTANTES VÊM ANTES DE QUEM AS USA.
    As três estavam declaradas depois das funções que as consomem — `const` em
@@ -42,9 +50,25 @@ export const MAX_FAIXA = 8;
 /** O grid antigo tinha 12 colunas no desktop — a mesma contagem de hoje. */
 const COLUNAS_ANTIGAS = 12;
 
-/** O envelope gravado hoje. `v` é o que separa dele do grid antigo. */
-export interface LayoutV3 extends LayoutZonas {
+/**
+ * O envelope gravado hoje. `v` é o que separa dele do grid antigo.
+ *
+ * ⛔ `v: 4` é o que diz "as alturas já estão em CÉLULAS". Sem a marca, um
+ * `linhas: 8` (unidade de 44px) e um `h: 8` (unidade de 96px) são o mesmo
+ * literal com significados que diferem por 2× — e a leitura não teria como
+ * saber qual. É a versão de envelope da regra do `inicioDaFita`: quando um
+ * conceito ganha uma segunda encarnação, o nome antigo vira ambíguo.
+ */
+export interface LayoutV4 extends LayoutZonas {
+  v: 4;
+}
+
+/** O envelope da grade de 12 com altura em `linhas` de 44px — 07 a 12/08/2026. */
+export interface LayoutV3 {
   v: 3;
+  hero: string[];
+  faixa: string[];
+  paineis: { id: string; col: number; linhas?: number }[];
 }
 
 /**
@@ -65,10 +89,10 @@ interface LayoutV2 {
   paineis: PainelV2[];
 }
 
-function versaoDe(x: unknown): 2 | 3 | null {
+function versaoDe(x: unknown): 2 | 3 | 4 | null {
   if (!x || typeof x !== "object" || Array.isArray(x)) return null;
   const v = (x as { v?: unknown }).v;
-  return v === 3 ? 3 : v === 2 ? 2 : null;
+  return v === 4 ? 4 : v === 3 ? 3 : v === 2 ? 2 : null;
 }
 
 /**
@@ -92,7 +116,7 @@ const COLUNAS_DO_ROTULO: Record<PainelV2["largura"], number> = {
  * **Confiar em `v: 3` para pular a validação é confiar que o passado obedeceu
  * regras que só existem no presente.**
  */
-function sanearEnvelope(raw: LayoutV2 | LayoutV3, versao: 2 | 3): LayoutZonas {
+function sanearEnvelope(raw: LayoutV2 | LayoutV3 | LayoutV4, versao: 2 | 3 | 4): LayoutZonas {
   const padrao = layoutPadrao();
   const hero = Array.isArray(raw.hero) ? raw.hero.filter((x) => typeof x === "string").slice(0, 4) : [];
   for (const m of HERO_PADRAO) {
@@ -118,27 +142,86 @@ function sanearEnvelope(raw: LayoutV2 | LayoutV3, versao: 2 | 3): LayoutZonas {
   if (!Array.isArray(raw.paineis)) return { hero, faixa, paineis: padrao.paineis };
 
   const paineis: LayoutZonas["paineis"] = [];
-  for (const p of raw.paineis as ({ id?: unknown } & Partial<PainelV2> & Partial<PainelGrade>)[]) {
+  for (const p of raw.paineis as ({ id?: unknown; linhas?: unknown } & Partial<PainelV2> &
+    Partial<PainelGrade>)[]) {
     const meta = CATALOGO_META.find((b) => b.id === p?.id);
     if (!meta) continue; // bloco que saiu do catálogo depois de gravado
     if (paineis.some((x) => x.id === meta.id)) continue;
-    /* v2 falava por RÓTULO, v3 fala em colunas. O rótulo vira coluna e passa
-       pelo mesmo encaixe — um `um-terco` gravado para um bloco cujo mínimo hoje
-       é 6 sobe para 6, em vez de nascer num tamanho que o produto recusaria. */
+    /* v2 falava por RÓTULO, v3 e v4 falam em colunas. O rótulo vira coluna e
+       passa pelo mesmo encaixe — um `um-terco` gravado para um bloco cujo mínimo
+       hoje é 6 sobe para 6, em vez de nascer num tamanho que o produto
+       recusaria. */
     const colBruta =
       versao === 2
         ? COLUNAS_DO_ROTULO[(p as PainelV2).largura] ?? meta.colPadrao
         : typeof p.col === "number"
           ? p.col
           : meta.colPadrao;
-    const linhasBrutas = versao === 2 || typeof p.linhas !== "number" ? undefined : p.linhas;
     paineis.push({
       id: meta.id,
       col: encaixarColunas(colBruta, meta),
-      linhas: encaixarLinhas(linhasBrutas, meta),
+      /* 🔴 SÓ O v4 TEM ALTURA EM CÉLULAS. O `linhas` do v2/v3 NÃO é lido aqui,
+         e não é esquecimento: converter na leitura faria toda abertura do
+         Dashboard reinterpretar o salvo, e a migração precisa ser um evento
+         ÚNICO e gravado — senão o layout do usuário passa a depender de qual
+         versão do código o abriu.
+
+         ⚠️ `undefined` aqui significa **"ainda não migrado"**, e o efeito de
+         migração é quem preenche. Até lá o bloco desenha em `auto`, que é
+         exatamente o comportamento de antes da F1. Os dois modos convivem. */
+      h: versao === 4 && typeof p.h === "number" ? encaixarAltura(p.h, meta) : undefined,
+      /* 🔴 O `linhas` ATRAVESSA A LEITURA EM v3 **E EM v4** — ele é a rede.
+         Ver `PainelGrade.linhasLegado`: depois de a migração gravar `h`, o
+         `linhas` é a ÚNICA coisa que ainda sabe qual altura o usuário tinha
+         escolhido. Lê-lo só no v3 o perderia no primeiro `save`. */
+      linhasLegado: typeof p.linhas === "number" ? p.linhas : undefined,
     });
   }
   return { hero, faixa, paineis: reporEstruturais(paineis) };
+}
+
+/* ── A CONVERSÃO 44 → 96, e a razão dela ────────────────────────────────────
+   🔴 ESTA É A PARTE QUE IMPORTA DA MIGRAÇÃO, E A RAZÃO MAIS QUE A FÓRMULA.
+
+   O campo `linhas` do v3 está em unidade de **44px** (`ALTURA_LINHA_ANTIGA`) e
+   era um PISO (`minHeight`); a célula nova vale **96px** (80 + 16 de gap) e é
+   altura EXATA. Comparar os dois números crus **dobra a altura**: `linhas: 8`
+   significa 352px hoje, e 8 células significariam 752px.
+
+   ⚠️ Sem a razão escrita, a próxima mudança de `ALTURA_LINHA_ANTIGA` ou de
+   `ALTURA_CELULA` repete o erro — a fórmula continuaria "certa" e o resultado,
+   errado. */
+
+/** As células que o `linhas` gravado (unidade de 44px) ocupava de verdade. */
+export function celulasDeLinhas(linhas: number): number {
+  return celulasDePx(linhas * ALTURA_LINHA_ANTIGA);
+}
+
+/**
+ * A altura migrada de UM painel, em células.
+ *
+ * ```
+ * h = max( células(linhas gravado) , hMin do bloco )
+ * ```
+ *
+ * 🔴 O `hMin` do catálogo **é a medição F0b** — a altura que o bloco de fato
+ * ocupava na grade em `auto`, no maior entre 1280 e 2260 (§11 do `07`). Então
+ * este `max` é literalmente a fórmula do documento:
+ * `max(ceil((linhas×44+16)/96), ceil((altura renderizada+16)/96))`.
+ *
+ * ⛔ **A medição vem do CATÁLOGO, não da tela.** Ela só existia enquanto a grade
+ * estava em `grid-auto-rows: auto`, que é justamente o que a F1 remove — é dado
+ * de ENTRADA, e colhê-lo depois é impossível.
+ *
+ * ⚠️ E o `linhas` é lido do ENVELOPE PERSISTIDO, nunca do `minHeight`
+ * renderizado: `celulaDaGrade` só aplicava o piso COM dado, então um bloco sem
+ * dado no período apareceria como "sem altura escolhida" tendo altura gravada.
+ * Medido em 12/08: 4 blocos pela leitura da tela × 10 pelo envelope — a
+ * migração pela tela teria perdido a escolha do usuário em 6 de 10.
+ */
+export function alturaMigrada(meta: MetaBloco, linhas: number | undefined): number {
+  const deLinhas = typeof linhas === "number" && Number.isFinite(linhas) ? celulasDeLinhas(linhas) : 0;
+  return Math.max(meta.hMin, deLinhas);
 }
 
 /** O item do grid antigo, como está gravado no `DashboardLayout.layout`. */
@@ -156,14 +239,45 @@ export interface PainelGrade {
   /** Largura em colunas de 12. Nunca abaixo do `colMin` do bloco. */
   col: number;
   /**
-   * Altura em linhas — **só nos blocos `alturaAjustavel`**.
+   * Altura em CÉLULAS de 96px (80 + 16 de gap). O slot ocupa exatamente `h`.
    *
-   * ⛔ `undefined` não é "não sei": é "a altura é a do CONTEÚDO", que é o padrão
-   * do produto. Gravar um número aqui para um bloco sem alça de altura seria dado
-   * morto, e o próximo leitor o aplicaria como se fosse escolha do usuário —
-   * reservando espaço para dado que não existe.
+   * ⛔ **`undefined` significa "ainda não migrado", e NÃO "sem altura".** O
+   * bloco desenha em `grid-row: auto` — a altura do conteúdo, igual a antes da
+   * F1 — até o efeito de migração preencher o campo.
+   *
+   * ⚠️ Os dois modos **convivem por tempo indeterminado**, e é decisão do dono:
+   * um bloco que nunca tem dado nunca fica elegível, então nunca ganha `h`. A
+   * asserção §7.1 do `07` (altura idêntica entre variantes) vale só para bloco
+   * MIGRADO — em `auto` a altura ainda é do conteúdo, por construção.
    */
-  linhas?: number;
+  h?: number;
+  /**
+   * O `linhas` gravado antes da F1, CRU, em unidade de 44px.
+   *
+   * ⛔ Nada que DESENHA lê este campo. Aplicá-lo como altura reintroduziria o
+   * piso de 44px por cima da grade de 96 e **dobraria** todo bloco alto.
+   *
+   * ### 🔴 ELE É PRESERVADO NO v4, E É A ÚNICA REDE QUE EXISTE
+   *
+   * ⚠️ **Este comentário dizia o oposto** — *"ele não é regravado: o envelope v4
+   * só tem `h`"* — e essa era a decisão errada. A conversão
+   * `linhas → h` é **destrutiva e irreversível**: `h` é o `max()` da conta com a
+   * medição F0b, então de `h` não se volta ao `linhas` que o usuário escolheu.
+   *
+   * A migração roda **uma vez, sozinha, ao abrir o Dashboard**, e agora roda em
+   * PRODUÇÃO. Se ela converter errado — um `hMin` mal medido, uma densidade que
+   * a conta não previu, um bloco que a F3 ainda não encolheu —, sem este campo
+   * não há de onde reconstituir nada: o layout do usuário vira o que a conversão
+   * decidiu, para sempre, e ninguém saberá qual era o anterior.
+   *
+   * ⛔ **Não "limpe" este campo por ele não ter leitor de desenho.** Ele é
+   * exatamente a classe de coisa que a regra *ANTES DE DELETAR UM ÓRFÃO,
+   * PERGUNTE O QUE ELE FAZIA* protege: sem consumidor, com consequência.
+   *
+   * 🔜 Ele pode sair no dia em que a migração tiver rodado em toda a base E
+   * alguém decidir que não há mais o que reconstituir. É decisão, não faxina.
+   */
+  linhasLegado?: number;
 }
 
 /** O layout novo: três zonas, cada uma com suas regras. */
@@ -255,10 +369,16 @@ export function layoutPadrao(): LayoutZonas {
          coluna aqui abaixo do `colMin`, ela sobe — em vez de o padrão nascer
          num tamanho que o redimensionamento recusaria. */
       col: encaixarColunas(col, meta),
-      /* ⛔ Sem altura: quem não é `alturaAjustavel` não tem `linhas` no layout.
-         `encaixarLinhas` devolve `undefined` para eles, e é esse `undefined` que
-         faz a grade usar a altura do CONTEÚDO — a correção do esburacado. */
-      linhas: encaixarLinhas(undefined, meta),
+      /* 🔴 O PADRÃO JÁ NASCE MIGRADO. Conta nova nunca passa pelo efeito de
+         migração: não há layout salvo para converter, e `hPadrao` é a saída da
+         F0b, que é a melhor altura conhecida para aquele bloco.
+
+         ⚠️ Isto NÃO reintroduz o esburacado de 07/08: quem responde por bloco
+         vazio é a condição F0 na renderização (colapso para
+         `min(h, células do estado vazio)`), sem tocar no `h`. Reservar altura
+         para dado que não existe continua proibido — o que mudou é ONDE isso é
+         decidido. */
+      h: meta.hPadrao,
     });
   }
   return { hero: [...HERO_PADRAO], faixa: [...FAIXA_PADRAO], paineis };
@@ -318,19 +438,85 @@ export function colunasDoGridAntigo(w: number, meta: MetaBloco): number {
 
 
 /**
- * A altura do grid antigo em linhas da grade nova.
+ * A altura do grid antigo, em `linhas` de 44px — a MESMA unidade do v3.
  *
  * ⚠️ As unidades NÃO são as mesmas: a linha do `react-grid-layout` valia ~30px
- * mais margem; a de hoje vale `ALTURA_LINHA` (44px). O fator de 0,75 é o que faz
- * um gráfico de `h: 8` chegar com 6 linhas — a mesma altura na tela, que é o que
- * o usuário reconhece. Converter 1:1 dobraria todo bloco de gráfico.
+ * mais margem; a de 44px é a do v3. O fator de 0,75 é o que faz um gráfico de
+ * `h: 8` chegar com 6 linhas — a mesma altura na tela, que é o que o usuário
+ * reconhece. Converter 1:1 dobraria todo bloco de gráfico.
  *
- * ⚠️ E ela devolve `undefined` para bloco sem `alturaAjustavel`: a altura
- * gravada no grid antigo era do GRID, não uma escolha sobre aquele bloco.
- * Preservá-la reintroduziria o esburacado que a altura por conteúdo resolve.
+ * 🔴 ELA PARA AQUI, EM `linhas`, e não vai até células de propósito: assim o
+ * grid antigo e o v3 entram no **mesmo** ponto de conversão (`alturaMigrada`).
+ * Duas rotas até a mesma altura divergiriam, e a divergência seria muda — dois
+ * usuários com o mesmo arranjo veriam alturas diferentes conforme a versão em
+ * que salvaram.
  */
-export function linhasDoGridAntigo(h: number, meta: MetaBloco): number | undefined {
-  return encaixarLinhas(h * 0.75, meta);
+export function linhasDoGridAntigo(h: number): number {
+  return Math.max(1, Math.round(h * 0.75));
+}
+
+/* ══ A MIGRAÇÃO DE ALTURA — as três camadas da guarda ════════════════════════
+   Elas são uma sequência, e cada uma responde a uma pergunta diferente. Juntar
+   duas num `if` só faria a falha de uma parecer a da outra.
+
+     1. ELEGIBILIDADE — POR BLOCO. "este bloco pode receber `h` agora?"
+     2. COMPLETUDE    — DO LAYOUT. "todos receberam? então há o que gravar."
+     3. RESERVA       — NO BANCO.  "eu sou quem grava?" (fica na action)
+
+   🔴 Por que a elegibilidade é `temDado`, e não "está no catálogo": o `hMin` que
+   a migração aplica é a medição F0b, feita com o bloco CHEIO. Aplicá-la a um
+   bloco que ninguém nunca viu com dado é gravar a altura de um conteúdo que não
+   existe — o defeito de 07/08 (o bloco vazio reservando 6 linhas para escrever
+   "Sem dado neste período"), agora persistido em vez de só desenhado.
+
+   ⚠️ A consequência é decisão do dono e está aceita: **bloco que nunca tem dado
+   fica sem `h`, em `auto`, por tempo indeterminado.** Os dois modos convivem. */
+
+/** O resultado de uma tentativa de migração. `completo` é a camada 2. */
+export interface MigracaoDeAltura {
+  paineis: PainelGrade[];
+  /**
+   * `true` só quando TODO painel do layout ficou com `h`.
+   *
+   * ⛔ É o que autoriza a escrita. Gravar um layout meio-migrado marcaria o
+   * envelope como `v: 4` — *"as alturas já estão em células"* — com painéis que
+   * ainda têm `linhas` por converter. O campo legado NÃO é regravado no v4, e o
+   * `linhas` daqueles blocos seria perdido para sempre: eles cairiam no
+   * `hPadrao` e a altura que o usuário escolheu sumiria em silêncio.
+   */
+  completo: boolean;
+}
+
+/**
+ * Converte as alturas de um layout lido. **Pura** — não escreve nada.
+ *
+ * @param temDado responde, por id de bloco, se ele tem dado NESTE momento. É a
+ *                camada 1 (elegibilidade), e ela é por bloco.
+ */
+export function migrarAlturas(
+  layout: LayoutZonas,
+  temDado: (id: string) => boolean,
+): MigracaoDeAltura {
+  let pendentes = 0;
+  const paineis = layout.paineis.map((p) => {
+    if (typeof p.h === "number") return p; // já migrado: não se toca
+    const meta = CATALOGO_META.find((b) => b.id === p.id);
+    if (!meta || !temDado(p.id)) {
+      pendentes++;
+      return p;
+    }
+    /* ⚠️ O `linhasLegado` FICA. Quem impede a próxima abertura de converter de
+       novo é o `h` existir (`precisaMigrarAltura`), não o campo antigo sumir —
+       eu tinha atado as duas coisas, e o efeito colateral era jogar fora a única
+       rede que a conversão destrutiva tem. */
+    return { id: p.id, col: p.col, h: alturaMigrada(meta, p.linhasLegado), linhasLegado: p.linhasLegado };
+  });
+  return { paineis, completo: pendentes === 0 };
+}
+
+/** `true` quando o layout lido ainda tem painel sem `h` — ou seja, há o que migrar. */
+export function precisaMigrarAltura(layout: LayoutZonas): boolean {
+  return layout.paineis.some((p) => typeof p.h !== "number");
 }
 
 /**
@@ -356,7 +542,7 @@ export function migrarLayout(bruto: unknown): LayoutZonas {
      desconhecido faria quem salvou naquela janela cair no padrão — perder o
      arranjo, em silêncio, por causa de uma decisão nossa. */
   const versao = versaoDe(bruto);
-  if (versao) return sanearEnvelope(bruto as LayoutV2 | LayoutV3, versao);
+  if (versao) return sanearEnvelope(bruto as LayoutV2 | LayoutV3 | LayoutV4, versao);
 
   if (!Array.isArray(bruto) || bruto.length === 0) return padrao;
 
@@ -402,7 +588,9 @@ export function migrarLayout(bruto: unknown): LayoutZonas {
       paineis.push({
         id,
         col: colunasDoGridAntigo(it.w, bloco),
-        linhas: linhasDoGridAntigo(it.h, bloco),
+        /* Entra como LEGADO, na mesma unidade do v3 — o efeito de migração
+           converte os dois pelo mesmo caminho. Ver `linhasDoGridAntigo`. */
+        linhasLegado: linhasDoGridAntigo(it.h),
       });
     }
 
