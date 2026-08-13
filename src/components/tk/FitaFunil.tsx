@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { calcularFluxo, caminhoDaFita } from "@/lib/funil/fita";
+import { calcularFluxo, caminhoDaFita, segmentosDaFita } from "@/lib/funil/fita";
 
 /**
  * FUNIL DE CONVERSÃO — só a fita, e a perda em número.
@@ -71,6 +71,41 @@ export interface EtapaEntradaFita {
   ajuda?: string;
   /** Linha sob o número absoluto: "11 do navegador". */
   composicao?: string;
+  /**
+   * 🔀 ENTRADA LATERAL — massa que chega NESTA etapa sem ter passado pela
+   * anterior, e que por isso NÃO entra na geometria da fita.
+   *
+   * O caso: checkout de comprador que nunca passou pelo nosso script
+   * (`PixelEvent` sem `clickId`). Ele é **disjunto** de `Sessões`, não
+   * subconjunto — somá-lo fazia a etapa ficar maior que a anterior e a pílula
+   * imprimir 128,1% de conversão.
+   *
+   * ⛔ Ela NÃO vira espessura. Se virasse, a fita voltaria a engordar no meio,
+   * que é a leitura impossível que a separação existe para acabar. Ela é
+   * DECLARADA: seta e rótulo próprio sobre a guia de entrada.
+   */
+  entradaLateral?: number;
+  /** O que a entrada lateral é, em uma frase. Vai no `title` da marca. */
+  entradaLateralAjuda?: string;
+  /**
+   * ✂️ A FONTE MUDA ANTES DESTA ETAPA — e a fita se PARTE aqui.
+   *
+   * O texto é o rótulo curto do corte (`"o gateway assume"`), e ele é
+   * obrigatório: um vão sem rótulo é indistinguível de um bug de layout.
+   *
+   * ## O que o corte garante, e nada mais garante
+   *
+   * | | |
+   * |---|---|
+   * | a fita **não atravessa** | nenhum segmento engorda ao trocar de instrumento |
+   * | a taxa fica `null` | não existe conversão entre medições de sistemas diferentes |
+   * | não há pílula de perda | a diferença não é gente que sumiu, é discordância |
+   *
+   * ⛔ **Não use isto para "etapa que cresceu".** Crescer dentro do mesmo
+   * instrumento é dado real e a fita deve mostrar. O corte é sobre a
+   * PROCEDÊNCIA — só entra quando as duas etapas têm donos diferentes.
+   */
+  fonteMuda?: string;
   /**
    * A etapa aparece com NOME e NÚMERO, mas fica fora da geometria da fita.
    *
@@ -172,7 +207,16 @@ export function interpolarNaoMedidas(
  * o funil volta a ser um funil.
  */
 export interface CoberturaFita {
-  /** A fração rastreada, de 0 a 1. Desenha a barra. `null` = indefinido. */
+  /**
+   * A fração rastreada, de 0 a 1. Desenha a barra. `null` = indefinido.
+   *
+   * 🔴 **NUMERADOR E DENOMINADOR SÃO OS DOIS DA META.** O numerador é
+   * `visitasDaMeta`, não o total de sessões. Com o total, tráfego de `google`,
+   * `organico` e `tiktok` entrava num numerador cujo denominador só cobre a
+   * Meta — medido no dev, **20 de 57 sessões (35%)**. A razão perdia o
+   * intervalo `[0,1]` e virava discordância entre instrumentos com cara de
+   * taxa.
+   */
   fracao: number | null;
   /** Só o número, para o display grande: `"2,9%"`. */
   pct: string;
@@ -180,6 +224,26 @@ export interface CoberturaFita {
   perdidos?: string;
   /** As causas — bloqueador, redirect que come a UTM, snippet ausente. */
   ajuda?: string;
+  /**
+   * 🔢 A SEGUNDA LINHA — CONTAGEM, nunca razão.
+   *
+   * `"20 sessões de outras origens"`. Elas não têm denominador nenhum aqui: não
+   * existe "cliques do Google" nesta base, então qualquer percentual sobre elas
+   * seria inventado. Ausente quando todo o tráfego veio da Meta.
+   */
+  outrasOrigens?: string;
+  /**
+   * ⚠️ A JANELA, declarada só quando as duas pontas NÃO se cobrem.
+   *
+   * `"cliques de 30/07 a 12/08 · sessões de 04/08 a 07/08"`. Sem isso a razão
+   * cai por dias em que ninguém poderia ter sido rastreado, e a tela não dá
+   * nenhum sinal de que a comparação é torta.
+   *
+   * ⛔ Recortar o denominador para casar as janelas seria pior: inventaria uma
+   * cobertura melhor que a medida. Declarar é o que o produto já faz com o ROAS
+   * que mistura populações.
+   */
+  janela?: string;
 }
 
 /**
@@ -230,27 +294,130 @@ export function FitaFunil({
   exclusoes?: ExclusaoFita[];
   cobertura?: CoberturaFita;
 }) {
-  const [caixa, setCaixa] = React.useState<HTMLDivElement | null>(null);
+  const caixaRef = React.useRef<HTMLDivElement | null>(null);
   const [desenho, setDesenho] = React.useState<HTMLDivElement | null>(null);
   const [largura, setLargura] = React.useState(0);
   const [alturaDisp, setAlturaDisp] = React.useState(0);
 
-  /* ⚠️ A largura é MEDIDA, não derivada de breakpoint: o mesmo bloco pode ter 4
-     ou 12 colunas, e a espessura da fita é em px. */
-  React.useEffect(() => {
-    if (!caixa) return;
-    const ro = new ResizeObserver(([e]) => setLargura(e?.contentRect.width ?? 0));
-    ro.observe(caixa);
-    return () => ro.disconnect();
-  }, [caixa]);
+  /**
+   * 🔴 O ESTADO DE FALHA DERIVA DE A MEDIÇÃO DESISTIR — não de "o componente
+   * montou".
+   *
+   * A primeira versão usava um `montado` ligado por `useEffect(() => setX(true))`
+   * só para saber que estava no cliente. Duas coisas erradas com isso:
+   *
+   * 1. **Ela respondia a pergunta errada.** "Montei" não é "não consegui medir";
+   *    entre os dois há os ~0,5s do laço, em que largura zero é o normal — e
+   *    nesse intervalo a tela afirmaria um defeito que ainda não existe.
+   * 2. `setState` síncrono no corpo de um efeito dispara render em cascata, e o
+   *    lint desta base recusa (`react-hooks/set-state-in-effect`).
+   *
+   * Agora quem acende é o próprio teto de 30 quadros, de dentro do `rAF` — que é
+   * exatamente o instante em que a afirmação *"não consegui medir"* passa a ser
+   * verdadeira. No servidor o laço nunca corre, então `desistiu` é `false` e
+   * nada é declarado: largura zero ali é o normal, não um defeito.
+   *
+   * ⚠️ DECLARADO AQUI EM CIMA, antes do efeito que o usa. A ordem inversa
+   * passou no `tsc` e foi a `no-use-before-define` que acusou — a mesma regra
+   * que fechou as duas TDZ do `overview.ts`.
+   */
+  const [desistiu, setDesistiu] = React.useState(false);
+
+  /**
+   * ⚠️ A largura é MEDIDA, não derivada de breakpoint: o mesmo bloco pode ter 4
+   * ou 12 colunas, e a espessura da fita é em px.
+   *
+   * ### 🔴 A MEDIÇÃO SÍNCRONA NÃO É REDUNDANTE COM O OBSERVER — 13/08/2026
+   *
+   * Esta effect era só `new ResizeObserver(...)`, e havia uma montagem em que
+   * **ele nunca entregava nada**: `largura` ficava em `0` PARA SEMPRE, e como
+   * toda a geometria e todos os rótulos moram atrás de `largura > 0`, o bloco
+   * ficava com `<svg>` presente e vazio — nem fita, nem estado vazio.
+   *
+   * Medido na tela: `.tk-fita` com **1246×368** de caixa real e `largura` em 0.
+   * Não saía com o dado chegando, **nem rolando o bloco para a viewport, nem
+   * redimensionando o contêiner de verdade** — o que prova que o observer não
+   * estava ligado naquela montagem, e não que ele estava atrasado.
+   *
+   * O caminho que reproduz é o NORMAL do usuário: o Dashboard abre em `Hoje`,
+   * `Hoje` sem clique renderiza o `EmptyState`, e a troca para um período com
+   * dado monta a fita. Quem abre o painel de manhã caía nisso todo dia.
+   *
+   * ⛔ **Não troque isto de volta por só o observer.** A leitura no commit é o
+   * que torna a largura uma propriedade da ESTRUTURA (o elemento tem caixa,
+   * logo tem largura) em vez de depender de um callback disparar — que é a
+   * distinção *proteção por ESTRUTURA × por TIMING* que esta base já pagou.
+   *
+   * ⚠️ `getBoundingClientRect().width` nos DOIS caminhos, de propósito. O
+   * `contentRect` do observer é a caixa de CONTEÚDO; misturar as duas medidas
+   * faria a largura oscilar no primeiro `padding` que alguém puser na
+   * `.tk-fita`, e o defeito seria de um pixel — invisível e permanente.
+   */
+  React.useLayoutEffect(() => {
+    let vivo = true;
+    let quadros = 0;
+    let observado: Element | null = null;
+
+    /* ⚠️ DECLARADO ANTES do `medir`, e não é estilo: `medir` lê `ro` no corpo,
+       e a ordem inversa só funcionava porque `medir` nunca corre durante a
+       avaliação do efeito. Isso é "não quebra" por circunstância, não "não pode
+       quebrar" — a família que a `no-use-before-define` foi ligada para fechar,
+       depois de duas TDZ derrubarem a `/api/ads` com 500 de corpo vazio.
+       O `() => medir()` acima é legal: declaração de função é içada. */
+    const ro = new ResizeObserver(() => medir());
+
+    /* 🔴 LÊ `caixaRef.current` A CADA QUADRO, NUNCA UM NÓ CAPTURADO.
+       Esta effect já teve `caixa` (um nó guardado em estado) no lugar do ref, e
+       ela ficava presa num nó que **nunca ganha largura**: medido, 30 quadros de
+       re-leitura seguiram devolvendo 0 enquanto o `.tk-fita` vivo no DOM media
+       1246px. Ou seja, o nó observado não era o nó desenhado.
+       `ref.current` acompanha a troca; um nó capturado no closure, não. */
+    function medir() {
+      if (!vivo) return;
+      const el = caixaRef.current;
+      if (el) {
+        if (el !== observado) {
+          if (observado) ro.unobserve(observado);
+          ro.observe(el);
+          observado = el;
+        }
+        const w = el.getBoundingClientRect().width;
+        if (w > 0) {
+          setLargura(w);
+          return;
+        }
+      }
+      /* ⚠️ Teto de 30 quadros (~0,5s). Laço sem teto vira CPU queimando para
+         sempre num bloco que legitimamente pode ter largura 0 (contêiner
+         escondido). Passado o teto quem fala é o estado de falha declarado
+         abaixo — nunca o silêncio. */
+      if (quadros++ < 30) requestAnimationFrame(medir);
+      /* 🔴 O TETO ESTOUROU: aqui a medição DESISTIU, e é só aqui que o estado de
+         falha pode ser declarado. Ver a nota do `desistiu` logo abaixo. */
+      else setDesistiu(true);
+    }
+
+    medir();
+    return () => {
+      vivo = false;
+      ro.disconnect();
+    };
+  }, []);
+
 
   /* 🔴 A ALTURA TAMBÉM É MEDIDA. A altura de um card não vem de container query
      nenhuma: ela vem do irmão mais alto da linha da grade, e não existe consulta
      sobre a altura de um irmão. Sem medir, um card esticado pelo vizinho deixa
      ar embaixo — e na referência a fita ocupa quase tudo. */
-  React.useEffect(() => {
+  /* ⚠️ Mesma correção da largura, e pelo mesmo motivo — ver o bloco acima. Este
+     observer tem o modo de falha idêntico; ele só não foi o que apareceu porque
+     a `faixaAlt` tem piso (`FAIXA_MIN`) e degrada para uma fita fina em vez de
+     sumir. Um defeito que degrada é mais difícil de ver, não menos provável. */
+  React.useLayoutEffect(() => {
     if (!desenho) return;
-    const ro = new ResizeObserver(([e]) => setAlturaDisp(e?.contentRect.height ?? 0));
+    const medir = () => setAlturaDisp(desenho.getBoundingClientRect().height);
+    medir();
+    const ro = new ResizeObserver(medir);
     ro.observe(desenho);
     return () => ro.disconnect();
   }, [desenho]);
@@ -290,6 +457,7 @@ export function FitaFunil({
         faixa: faixaAlt,
         margem: MARGEM_X,
         naFita: etapas.map((e) => !e.foraDaFita),
+        corte: etapas.map((e) => e.fonteMuda != null),
       }),
     [valoresParaGeometria, etapas, largura, faixaAlt],
   );
@@ -298,6 +466,37 @@ export function FitaFunil({
     return (
       <p className="text-caption text-text-muted" style={{ margin: 0 }}>
         Sem dados de funil no período.
+      </p>
+    );
+  }
+
+  /**
+   * 🔴 A GUARDA DE MEDIÇÃO DEIXOU DE SER SILENCIOSA — 13/08/2026.
+   *
+   * Tudo que desenha mora atrás de `largura > 0`. Enquanto isso era só o
+   * primeiro quadro, o custo era um piscar; quando a medição NÃO CHEGAVA, o
+   * mesmo `&&` produzia um card com título e **nada dentro, sem dizer por quê**.
+   *
+   * ⛔ A regra que fica: *guarda de "ainda não medi" não pode ser a mesma coisa
+   * que "não há o que mostrar"*. Se a medição falhar, o bloco AFIRMA a falha —
+   * ele nunca fica oco.
+   *
+   * ⚠️ `desistiu` é o que separa os dois casos, e ele é mais preciso que o
+   * `montado` que estava aqui: no servidor o laço nunca corre, então nada é
+   * declarado (e não há divergência de hidratação); no cliente ele só acende
+   * depois de o teto de 30 quadros estourar, que é o instante em que *"não
+   * consegui medir"* passa a ser verdade. Com `montado`, os ~0,5s do laço
+   * contavam como falha — a tela afirmaria defeito enquanto ainda media.
+   *
+   * ⚠️ Com a leitura síncrona no `useLayoutEffect`, este ramo passou a ser rede
+   * — não caminho. Se ele aparecer na tela de alguém, a medição falhou por um
+   * motivo novo, e é para ele ser visto.
+   */
+  if (desistiu && largura === 0) {
+    return (
+      <p className="text-caption text-text-muted" style={{ margin: 0 }}>
+        Não foi possível medir o espaço do bloco para desenhar o funil. Os números do período
+        continuam corretos nos outros blocos — recarregue a página para ver a figura.
       </p>
     );
   }
@@ -315,6 +514,9 @@ export function FitaFunil({
      ficou só no `<rect>`, que é quem degenera. */
   /* Só quem participa da geometria. */
   const etapasDaFita = fluxo.etapas.filter((e) => e.naFita);
+  /* Os trechos CONTÍGUOS de mesma fonte — um `<path>` para cada. Sem corte
+     nenhum devolve uma lista de um item, que é a fita inteira de antes. */
+  const segmentos = segmentosDaFita(fluxo);
   /* ⚠️ `inicioDaFita` (o centro da 1ª etapa) VIVEU AQUI e foi DELETADO em
      07/08/2026 — resto da renomeação que separou "centro da etapa" de "borda da
      área". Ficou atribuído e sem leitor: o consumidor passou a ser
@@ -407,7 +609,7 @@ export function FitaFunil({
        `minHeight: 0` é o que deixa a coluna encolher abaixo do conteúdo em vez
        de estourar o card. */
     <div
-      ref={setCaixa}
+      ref={caixaRef}
       className="tk-fita"
       style={{ minWidth: 0, minHeight: 0, flex: 1, display: "flex", flexDirection: "column" }}
     >
@@ -505,12 +707,26 @@ export function FitaFunil({
               />
             ))}
 
-          {largura > 0 && (
-            <path
-              d={caminhoDaFita(etapasDaFita, centroY, { x0: inicioDaPlotagem, x1: xFim })}
-              fill="url(#tk-fita-rampa)"
-            />
-          )}
+          {/* 🔴 UM `<path>` POR SEGMENTO — a fita se PARTE onde a fonte muda.
+              Antes era um caminho só, e ele atravessava a junção `ICs → Vendas
+              Inic.` ENGORDANDO (38 → 57): a silhueta afirmava ganho de massa
+              onde só houve troca de instrumento. Ver `segmentosDaFita`.
+
+              ⚠️ Cada segmento estende até a borda do PRÓPRIO segmento, não da
+              área toda: `x0` da área só no primeiro, `x1` da área só no último.
+              Nas pontas internas a fita termina no centro da etapa, que é onde
+              a medição daquele dono acaba. */}
+          {largura > 0 &&
+            segmentos.map((seg, i) => (
+              <path
+                key={`fita-${i}`}
+                d={caminhoDaFita(seg, centroY, {
+                  x0: i === 0 ? inicioDaPlotagem : seg[0]!.x,
+                  x1: i === segmentos.length - 1 ? xFim : seg[seg.length - 1]!.x,
+                })}
+                fill="url(#tk-fita-rampa)"
+              />
+            ))}
         </svg>
 
         {/* ── A CAMADA DOS RÓTULOS ─────────────────────────────────────────────
@@ -593,8 +809,11 @@ export function FitaFunil({
             >
               {cobertura.pct}
             </div>
+            {/* 🔴 A RAZÃO DIZ DE QUAL POPULAÇÃO ELA FALA — "da Meta", explícito.
+                Sem essas duas palavras o número parece cobrir o tráfego inteiro,
+                e ele cobre só o pedaço que tem denominador. */}
             <div className="text-caption text-text-secondary" style={{ lineHeight: 1.3 }}>
-              dos cliques rastreados
+              dos cliques da Meta rastreados
               {cobertura.perdidos && (
                 <>
                   <br />
@@ -621,6 +840,48 @@ export function FitaFunil({
                 }}
               />
             </div>
+
+            {/* ── A SEGUNDA LINHA: CONTAGEM, e ela não tem barra ───────────────
+                🔴 Ela é deliberadamente OUTRA grandeza. Estas sessões não têm
+                denominador nesta base — não existe "cliques do Google" aqui —,
+                então qualquer percentual sobre elas seria inventado. Dar-lhes
+                trilho as faria parecer parte da mesma razão, que é exatamente a
+                mistura que a linha de cima deixou de fazer.
+
+                ⛔ Não a some ao numerador "para o número ficar melhor". Foi
+                essa soma que fazia a cobertura falar de uma população que o
+                denominador não cobre. */}
+            {cobertura.outrasOrigens && (
+              <div
+                className="text-caption text-text-muted"
+                style={{ lineHeight: 1.3 }}
+                title={
+                  "Sessões que não vieram de anúncio da Meta. Elas são rastreadas " +
+                  "normalmente e contam no funil — mas ficam fora da razão acima, " +
+                  "porque o denominador dela (cliques no anúncio) só existe para a Meta."
+                }
+              >
+                {cobertura.outrasOrigens}
+              </div>
+            )}
+
+            {/* ⚠️ A JANELA, só quando as duas pontas NÃO se cobrem. Silêncio
+                aqui faria a razão cair por dias em que ninguém poderia ter sido
+                rastreado, sem nada na tela dizendo que a comparação é torta. */}
+            {cobertura.janela && (
+              <div
+                className="text-caption text-text-muted"
+                style={{ lineHeight: 1.3, fontStyle: "italic" }}
+                title={
+                  "As duas medições não cobrem o mesmo intervalo de dias. A razão " +
+                  "acima compara o que existe de cada lado — ela não foi recortada " +
+                  "para casar as janelas, porque isso mostraria uma cobertura melhor " +
+                  "do que a medida."
+                }
+              >
+                {cobertura.janela}
+              </div>
+            )}
           </div>
         )}
 
@@ -702,6 +963,16 @@ export function FitaFunil({
           /* `taxa` é `null` quando a etapa anterior é ZERO: não se divide por
              ausência, e "0%" ali afirmaria que todo mundo caiu fora. */
           if (e.taxa == null) return null;
+          /* 🔴 ACIMA DE 1 NÃO É CONVERSÃO — É DISCORDÂNCIA ENTRE INSTRUMENTOS.
+             Uma taxa de conversão pressupõe numerador SUBCONJUNTO do
+             denominador; quando ela passa de 100% essa premissa está
+             quebrada, e o número não tem intervalo válido. O caso real e
+             medido: `ICs` sai da tabela `Click` (nosso script) e `Vendas
+             Inic.` sai do gateway — 57 vendas contra 38 ICs dá 150%, que
+             lido como conversão diz "mais gente comprou do que chegou".
+             ⛔ Não é para corrigir o número nem esconder a pílula: é para
+             a pílula parar de afirmar taxa e passar a nomear a causa. */
+          const acimaDeUm = e.taxa > 1;
           /* Na guia a fita já está entre as duas espessuras; a MENOR é o que
              garante que a cápsula cabe nos dois lados da transição. */
           const naGuia = Math.min(e.espessura, fluxo.etapas[i - 1]!.espessura);
@@ -728,15 +999,30 @@ export function FitaFunil({
               )}
               <div
                 className="text-caption"
-                title={`De ${etapas[i - 1]!.label} para ${etapas[i]!.label}`}
+                title={
+                  acimaDeUm
+                    ? `${etapas[i]!.label} (${etapas[i]!.fonte ?? "fonte não declarada"}) tem mais do que ` +
+                      `${etapas[i - 1]!.label} (${etapas[i - 1]!.fonte ?? "fonte não declarada"}). ` +
+                      "As duas etapas não saem do mesmo instrumento, então a razão entre elas " +
+                      "não é taxa de conversão — ela mede o quanto as duas medições discordam."
+                    : `De ${etapas[i - 1]!.label} para ${etapas[i]!.label}`
+                }
                 style={{
-                  ...pilula("var(--tk-pilula)", "var(--tk-on-pilula)"),
+                  /* ⚠️ `--tk-tint-warning` / `--tk-on-tint-warning`, e os nomes
+                     foram CONFERIDOS no `globals.css`. Escrevi
+                     `--tk-warning-tint` na primeira versão: não existe, compila,
+                     passa no lint e cai no fallback — cor errada e nada acusa.
+                     Token é casamento de string com o CSS. */
+                  ...pilula(
+                    acimaDeUm ? "var(--tk-tint-warning)" : "var(--tk-pilula)",
+                    acimaDeUm ? "var(--tk-on-tint-warning)" : "var(--tk-on-pilula)",
+                  ),
                   left: guia,
                   top: cabe ? centroY : cima - FOLGA_PILULA - ALTURA_PILULA / 2,
                   fontWeight: 700,
                 }}
               >
-                {pct1(e.taxa)}
+                {acimaDeUm ? "fontes diferentes" : pct1(e.taxa)}
               </div>
             </React.Fragment>
           );
@@ -760,6 +1046,129 @@ export function FitaFunil({
               {p.pct != null && <span style={{ opacity: 0.72 }}> · {pct1(p.pct)}</span>}
             </div>
           ))}
+
+        {/* ── ✂️ A MARCA DO CORTE — o vão é DELIBERADO, e diz por quê ─────────
+            🔴 Vão sem rótulo é indistinguível de bug de layout. Quem olha um
+            buraco no meio de um gráfico conclui que algo não carregou — e essa
+            leitura é pior que a fita atravessando, porque ela põe em dúvida o
+            resto do bloco.
+
+            Aqui o vão AFIRMA: duas hastes tracejadas fechando cada ponta e um
+            rótulo curto dizendo de quem a medição passa a ser.
+
+            ⚠️ O rótulo é curto de propósito (`o gateway assume`). A explicação
+            longa mora no `title`; o que a silhueta precisa é de uma palavra que
+            impeça a leitura "faltou dado". */}
+        {fluxo.etapas.map((e, i) => {
+          const rotulo = etapas[i]?.fonteMuda;
+          if (!rotulo || !fluxo.cortes[i]) return null;
+          const guia = fluxo.guias[i - 1];
+          if (guia == null) return null;
+          return (
+            <div
+              key={`corte-${etapas[i]!.label}`}
+              title={
+                `A medição troca de dono aqui: ${etapas[i - 1]?.fonte ?? "a etapa anterior"} de um lado, ` +
+                `${etapas[i]?.fonte ?? "esta etapa"} do outro. A fita se parte porque a razão entre as duas ` +
+                "não é conversão — ela mede o quanto os dois sistemas discordam."
+              }
+              style={{
+                position: "absolute",
+                left: guia,
+                top: centroY,
+                transform: "translate(-50%, -50%)",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                pointerEvents: "auto",
+                cursor: "help",
+                whiteSpace: "nowrap",
+              }}
+            >
+              <span
+                className="text-caption"
+                style={{
+                  ...pilula("var(--tk-surface)", "var(--tk-text-secondary)"),
+                  position: "static",
+                  transform: "none",
+                  left: undefined,
+                  top: undefined,
+                  border: "1px dashed var(--tk-border)",
+                  fontWeight: 600,
+                }}
+              >
+                ✂ {rotulo}
+              </span>
+            </div>
+          );
+        })}
+
+        {/* ── 🔀 ENTRADA LATERAL — declarada, e FORA da geometria ─────────────
+            🔴 O QUE ELA É: massa que chega nesta etapa sem ter passado pela
+            anterior. O caso real é o checkout de quem nunca passou pelo nosso
+            script (`PixelEvent` sem `clickId`): ele é DISJUNTO de `Sessões`, não
+            subconjunto.
+
+            ⛔ ELA NÃO VIRA ESPESSURA, e é esse o ponto. Até 13/08/2026 ela era
+            somada à etapa, e a fita ENGORDAVA no meio: 38 + 35 = 73 contra 57
+            sessões, com a pílula imprimindo 128,1% de conversão — "mais gente
+            chegou ao checkout do que visitou o site". Um funil não ganha massa
+            do nada; quando parece que ganhou, entrou por outra porta.
+
+            A seta aponta PARA DENTRO da fita de propósito: ela diz de onde a
+            massa vem sem afirmar que a etapa anterior a produziu. */}
+        {fluxo.etapas.map((e, i) => {
+          const extra = etapas[i]?.entradaLateral ?? 0;
+          if (!e.naFita || extra <= 0) return null;
+          return (
+            <div
+              key={`lateral-${etapas[i]!.label}`}
+              title={
+                etapas[i]!.entradaLateralAjuda ??
+                "Chegaram a esta etapa sem passar pela anterior, por isso não entram na fita."
+              }
+              style={{
+                position: "absolute",
+                left: e.x,
+                top: 26,
+                transform: "translateX(-50%)",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 2,
+                pointerEvents: "auto",
+                cursor: "help",
+              }}
+            >
+              <span
+                className="text-caption"
+                style={{
+                  ...pilula("var(--tk-tint-category)", "var(--tk-on-tint-category)"),
+                  /* `pilula()` já posiciona em absoluto; aqui o pai é que
+                     posiciona, então o filho volta a ser estático. */
+                  position: "static",
+                  transform: "none",
+                  left: undefined,
+                  top: undefined,
+                  fontWeight: 700,
+                }}
+              >
+                +{extra.toLocaleString("pt-BR")} sem jornada
+              </span>
+              {/* A seta. `aria-hidden` porque quem carrega a informação para o
+                  leitor de tela é o texto da cápsula acima — a seta é a forma,
+                  e forma sozinha não informa (WCAG 1.4.1). */}
+              <span
+                aria-hidden
+                style={{
+                  width: 1,
+                  height: Math.max(4, TOPO - 26 - ALTURA_PILULA - 2),
+                  background: "var(--tk-category)",
+                }}
+              />
+            </div>
+          );
+        })}
 
         {/* ── Número absoluto, EMBAIXO, grande e em negrito ────────────────── */}
         {fluxo.etapas.map((e, i) => (

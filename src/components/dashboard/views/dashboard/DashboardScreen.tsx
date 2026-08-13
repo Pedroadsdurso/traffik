@@ -739,12 +739,38 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
                 {r.semCard ? (
                   r.render(v, ctx)
                 ) : (
-                  /* `preencher` + `distribuir`: os blocos de uma linha esticam
-                     até a altura do slot, e o menor distribui o conteúdo em vez
-                     de deixar o vazio embaixo. */
+                  /* `preencher`: o bloco estica até a altura do slot.
+
+                     ⛔ **SEM `distribuir`, e a ausência é a decisão.** Medido em
+                     13/08/2026, na varredura da §7.2: ele **não cria vazio —
+                     realoca**. Desligando-o nos 28 blocos, o vão não diminuiu;
+                     ele voltou inteiro para o fim:
+
+                       Produtos          meio 117 + fim 100  ->  fim 199
+                       Quando compram    meio 113 + fim  94  ->  fim 187
+                       Estado do sistema meio  57 + fim  40  ->  fim  80
+                       Top campanhas     meio  41 + fim  36  ->  fim  59
+
+                     E isso PIORA a leitura, pela regra do `CLAUDE.md` (*vão
+                     dentro de um card promete conteúdo*): vão no FIM lê como "o
+                     card acabou"; vão no MEIO, entre o cabeçalho e o conteúdo,
+                     lê como "aqui cabia algo que não veio". O `distribuir`
+                     convertia um caso do C6 num caso de promessa não cumprida.
+
+                     ⚠️ O comentário que ficava aqui dizia *"o menor distribui o
+                     conteúdo em vez de deixar o vazio embaixo"*, e ele descrevia
+                     o mundo PRÉ-F1 — quando a linha da grade igualava pela
+                     altura do maior e o vazio embaixo era acidente do vizinho.
+                     Com a altura vindo do slot, o vazio embaixo é o tamanho que
+                     o bloco tem, e escondê-lo no meio não o remove. Cicatriz que
+                     virou anatomia.
+
+                     ⛔ Não reponha `distribuir` para "centrar melhor". O que
+                     resolve o vão é o conteúdo crescer até o slot (origem A) ou
+                     a caixa parar de reservar altura que não pinta (origem B) —
+                     nunca mudar de lugar o que sobrou. */
                   <Card
                     preencher
-                    distribuir
                     /* A célula da grade já tem `containerType: size` — é o
                        contêiner que a escala mede. Ver o ⛔ da prop no `Card`. */
                     escala

@@ -310,6 +310,32 @@ const ETAPAS_PARA_FITA = (v: TraffikView): EtapaEntradaFita[] => {
       e.chaveInfo === "checkouts" && (e.doNavegador ?? 0) > 0 && (e.doNavegador ?? 0) < e.value
         ? `${e.value.toLocaleString("pt-BR")} ICs · ${(e.doNavegador ?? 0).toLocaleString("pt-BR")} do navegador`
         : undefined,
+    /**
+     * ✂️ ONDE O RASTREAMENTO ENTREGA O FUNIL AO GATEWAY — e a fita se parte.
+     *
+     * 🔴 É DECISÃO DE ARQUITETURA, não ajuste para estes números. O
+     * rastreamento é dono de clique, sessão e checkout iniciado; a venda chega
+     * por webhook do gateway, que é outro dono. A junção `ICs → Vendas Inic.`
+     * é troca de instrumento **por construção** — semana que vem os valores
+     * mudam e ela continua sendo.
+     *
+     * ⚠️ Por isso o corte é declarado aqui, na FONTE, e não derivado de "a
+     * etapa cresceu". Derivar do valor faria a fita se partir ou não conforme o
+     * período — e uma declaração que aparece e some com o dado não declara
+     * nada.
+     */
+    fonteMuda: e.chaveInfo === "iniciadas" ? "o gateway assume" : undefined,
+    /* 🔀 A entrada lateral. Ela NÃO entra na espessura — ver o bloco próprio na
+       `FitaFunil`. Aqui ela só atravessa, com a frase que a explica junto: o
+       número sozinho no meio da fita seria mais um valor sem procedência. */
+    entradaLateral: e.entradaLateral,
+    entradaLateralAjuda:
+      (e.entradaLateral ?? 0) > 0
+        ? "Checkouts de quem nunca passou pelo nosso script — não têm sessão " +
+          "rastreada para vir. Ficam fora da fita porque não saíram da etapa " +
+          "anterior: somá-los faria o funil ganhar massa do nada. Número alto " +
+          "aqui é sinal de rastreamento mal instalado."
+        : undefined,
     /* Duas razões diferentes para o MESMO estado, e a ordem importa: o buraco é
        a afirmação mais forte (a etapa não existe), então ele vence o aviso de
        pixel (a etapa existe e é derivada). */
@@ -344,13 +370,42 @@ const ETAPAS_PARA_FITA = (v: TraffikView): EtapaEntradaFita[] => {
  * ⚠️ `null` quando não houve clique nenhum — não se divide por ausência, e
  * "0% rastreado" afirmaria falha onde não houve tráfego.
  */
+/**
+ * `"2026-08-04"` → `"04/08"`. Dia e mês é o que cabe na coluna estreita.
+ *
+ * ⛔ A ENTRADA É CHAVE DE DIA, NÃO `Date` — e a diferença já custou um erro de
+ * runtime. A versão anterior recebia `Date` e chamava `getDate()`; o valor
+ * atravessa `/api/dashboard` como JSON e chega STRING, então a tela quebrou com
+ * `jc.de.getTime is not a function` enquanto o `tsc` seguia verde.
+ *
+ * ⚠️ Fatiar a string é o certo aqui, e `new Date("2026-08-04")` seria o errado:
+ * o construtor interpreta a forma só-data como **UTC** e, num fuso a oeste, o
+ * `getDate()` local devolve o dia ANTERIOR. A janela declarada passaria a
+ * mentir por um dia — em silêncio, e só para quem está em Brasília.
+ */
+const diaMes = (chave: string) => `${chave.slice(8, 10)}/${chave.slice(5, 7)}`;
+
 const COBERTURA_DO_FUNIL = (v: TraffikView): CoberturaFita | undefined => {
-  const etapas = ETAPAS_DO_FUNIL(v);
-  const cliques = etapas.find((e) => e.chaveInfo === "cliques")?.value ?? 0;
-  const sessoes = etapas.find((e) => e.chaveInfo === "visitas")?.value ?? 0;
-  if (cliques <= 0) return undefined;
-  const fracao = sessoes / cliques;
-  const perdidos = Math.max(0, cliques - sessoes);
+  const c = v.funnelCobertura;
+  if (c.cliquesDaMeta <= 0) return undefined;
+
+  /* 🔴 AS DUAS PONTAS SÃO DA META — e é essa a mudança de 13/08/2026.
+     O numerador era `Sessões` INTEIRO contra um denominador que só cobre a
+     Meta. Medido no dev: 20 das 57 sessões (35%) vinham de google, organico e
+     tiktok — tráfego que não pode existir no denominador por construção. A
+     razão não ficava imprecisa: ela perdia o intervalo [0,1]. */
+  const fracao = c.sessoesDaMeta / c.cliquesDaMeta;
+  const perdidos = Math.max(0, c.cliquesDaMeta - c.sessoesDaMeta);
+
+  /* ⚠️ A janela só é DECLARADA quando as duas pontas não se cobrem. Dizer
+     sempre viraria ruído que se aprende a ignorar — e aí ela não denuncia o dia
+     em que a divergência importar. */
+  const jc = c.janelaCliques;
+  const js = c.janelaSessoes;
+  /* Comparação de STRING, e é ela que o tipo permite: chave de dia é
+     `YYYY-MM-DD`, então igualdade textual é igualdade de data. */
+  const desencontro = jc != null && js != null && (jc.de !== js.de || jc.ate !== js.ate);
+
   return {
     fracao,
     pct: `${(fracao * 100).toFixed(1).replace(".", ",")}%`,
@@ -359,6 +414,19 @@ const COBERTURA_DO_FUNIL = (v: TraffikView): CoberturaFita | undefined => {
     perdidos:
       perdidos > 0
         ? `${perdidos.toLocaleString("pt-BR")} ${perdidos === 1 ? "clique perdido" : "cliques perdidos"}`
+        : undefined,
+    /* 🔢 CONTAGEM, e sem percentual — não existe "cliques do Google" nesta base,
+       então qualquer denominador para elas seria inventado. Ausente quando todo
+       o tráfego veio da Meta: aí não há segunda população para declarar. */
+    outrasOrigens:
+      c.sessoesDeOutrasOrigens > 0
+        ? `${c.sessoesDeOutrasOrigens.toLocaleString("pt-BR")} ${
+            c.sessoesDeOutrasOrigens === 1 ? "sessão" : "sessões"
+          } de outras origens`
+        : undefined,
+    janela:
+      desencontro && jc && js
+        ? `cliques ${diaMes(jc.de)}–${diaMes(jc.ate)} · sessões ${diaMes(js.de)}–${diaMes(js.ate)}`
         : undefined,
     ajuda: PERDA_DE_RASTREAMENTO_AJUDA,
   };

@@ -1395,17 +1395,66 @@ export function useTraffikState(
         chaveInfo: "checkouts",
         label: "Initiate Checkout",
         curto: "ICs",
+        /**
+         * 🔴 SÓ OS ICs COM JORNADA — e é o que mantém a cadeia medível.
+         *
+         * `funnel.checkouts` passou a ser `icsComJornada` em 13/08/2026. Antes
+         * era `comJornada + semJornada`, e as duas parcelas são POPULAÇÕES
+         * DISJUNTAS: uma é `Click` com `checkoutAt`, a outra é `PixelEvent` sem
+         * `clickId`. Somadas, a etapa ficava maior que `Sessões` — medido no
+         * dev, 38 + 35 = 73 contra 57, e a pílula imprimia **128,1%**.
+         *
+         * Uma taxa de conversão pressupõe numerador SUBCONJUNTO do
+         * denominador. `comJornada` é subconjunto de `Sessões` (mesma tabela);
+         * `semJornada` não é subconjunto de nada da cadeia.
+         */
         value: d?.funnel.checkouts ?? 0,
-        fonte: "Pixel + webhook — visitantes distintos",
+        fonte: "Nosso script — sessão que chegou ao checkout",
+        ajuda:
+          "Sessões rastreadas que chegaram ao checkout. Conta a MESMA população " +
+          "da etapa anterior, por isso a taxa entre as duas é conversão de " +
+          "verdade. Checkout de comprador que nunca passou pelo nosso script " +
+          "aparece à parte, como entrada lateral.",
         /**
          * 🔴 A parcela que NÃO vem da venda. Quando é 0, esta etapa está
          * repetindo "Vendas iniciadas" e o trecho entre as duas não foi medido.
          */
         doNavegador: d?.funnel.checkoutsDoNavegador ?? 0,
+        /**
+         * 🔴 A ENTRADA LATERAL — declarada, e FORA da cadeia.
+         *
+         * Checkout que não casou jornada nenhuma: o comprador nunca passou pelo
+         * nosso script. Ele existe, é o número que revela rastreamento mal
+         * instalado, e **não pode entrar na fita** — não é subconjunto de
+         * `Sessões`, é disjunto dela.
+         *
+         * ⛔ Somar de volta "para não perder o número" é exatamente o defeito
+         * que saiu daqui. O número não se perde: ele é dito, com o nome do que
+         * é, ao lado da etapa.
+         */
+        entradaLateral: d?.funnel.checkoutsSemJornada ?? 0,
       },
       { chaveInfo: "iniciadas", label: "Vendas iniciadas", curto: "Vendas Inic.", value: d?.funnel.iniciadas ?? 0, fonte: "Gateway — todos os status" },
       { chaveInfo: "aprovadas", label: "Vendas aprovadas", curto: "Vendas Apr.", value: d?.funnel.vendas ?? 0, fonte: "Gateway — status APROVADA" },
     ],
+    /**
+     * 🔴 AS PONTAS DA COBERTURA, CRUAS — a tela é que forma a frase.
+     *
+     * Elas não entram em `funnelStages` porque não são etapas: `visitasDaMeta`
+     * é um RECORTE de `Sessões`, e desenhá-lo como etapa própria contaria a
+     * mesma pessoa duas vezes na fita.
+     *
+     * ⚠️ As duas janelas vêm juntas de propósito. A cobertura só é comparável
+     * quando os dois lados cobrem os mesmos dias, e no dev eles não cobrem —
+     * `DailyAdMetric` de 30/07 a 12/08 contra `Click` de 04/08 a 07/08.
+     */
+    funnelCobertura: {
+      cliquesDaMeta: d?.funnel.cliques ?? 0,
+      sessoesDaMeta: d?.funnel.visitasDaMeta ?? 0,
+      sessoesDeOutrasOrigens: d?.funnel.visitasDeOutrasOrigens ?? 0,
+      janelaCliques: d?.funnel.janelaCliques,
+      janelaSessoes: d?.funnel.janelaSessoes,
+    },
     /**
      * Robôs já EXCLUÍDOS das métricas, por motivo. A tela mostra para o usuário
      * poder conferir se o filtro exagera ou falha — sem isso, "removemos os

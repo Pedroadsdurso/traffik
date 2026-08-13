@@ -16,7 +16,7 @@ import {
   zonedToUtc,
 } from "@/lib/timezone";
 import { chaveDoPedido, contarPedidos, umPorPedido } from "@/lib/pedidos";
-import { nomeDaFonte } from "@/lib/fontes";
+import { ehFonteMeta, nomeDaFonte } from "@/lib/fontes";
 import { ehTemplateNaoSubstituido, splitPipe } from "@/lib/utm/parse";
 import { CAMPOS_UTM, utmsDaVenda } from "@/lib/vendas/utmsDaVenda";
 import { getImpostoAnunciosPct } from "@/lib/impostoAnuncios";
@@ -166,10 +166,22 @@ export interface DashboardData {
   funnel: {
     cliques: number;
     visitas: number;
+    visitasDaMeta: number;
+    visitasDeOutrasOrigens: number;
+    /** ⚠️ A etapa da CADEIA: só os ICs com jornada. Ver a nota no cálculo. */
     checkouts: number;
+    checkoutsSemJornada: number;
+    checkoutsTotais: number;
     checkoutsDoNavegador: number;
     iniciadas: number;
     vendas: number;
+    /**
+     * ⛔ CHAVE DE DIA (`"2026-07-30"`), não `Date`. Este DTO atravessa
+     * `/api/dashboard` como JSON, e ali `Date` chega string — tipar `Date` aqui
+     * já produziu `jc.de.getTime is not a function` NA TELA, com `tsc` verde.
+     */
+    janelaCliques?: { de: string; ate: string };
+    janelaSessoes?: { de: string; ate: string };
   };
   /**
    * Cliques classificados como robô no período, por motivo. **Já estão FORA de
@@ -566,6 +578,22 @@ async function windowAggregate(
   return {
     sales: salesEscopo, clicks: clicksEscopo, metrics, expenses, pixelEvents: pixelEventsEscopo,
     initiateCheckouts: checkoutsDistintos,
+    /**
+     * 🔴 AS DUAS PARCELAS SEPARADAS — porque só UMA delas pertence à cadeia.
+     *
+     * `comJornada` sai da tabela `Click`: é subconjunto de `Sessões`, mesmo
+     * instrumento, e a razão entre os dois é conversão de verdade.
+     * `semJornada` é `PixelEvent` sem `clickId` — **disjunto** de `Sessões` por
+     * definição (o próprio comentário acima diz isso). Somados, produziam uma
+     * etapa MAIOR que a anterior: medido no dev, 38 + 35 = 73 contra 57
+     * sessões, e a pílula imprimia **128,1%** de conversão.
+     *
+     * ⛔ A soma NÃO desaparece: `initiateCheckouts` continua existindo e
+     * continua sendo o total de checkouts distintos. O que muda é quem entra na
+     * GEOMETRIA da fita — ver `entradaLateral` no funil.
+     */
+    icsComJornada: comJornada,
+    icsSemJornada: semJornada,
     icsNavegador,
     // ⚠️ NÃO passa pelo escopo de área: um clique de robô raramente tem
     // `utm_campaign` atribuível, então filtrá-lo por área o esconderia justamente
@@ -702,6 +730,61 @@ function summarize(w: Window, impostoAnunciosPct = 0) {
   const impressions = w.metrics.reduce((a, m) => a + m.impressions, 0);
   const adClicks = w.metrics.reduce((a, m) => a + m.clicks, 0);
   const clicksCount = w.clicks.length;
+
+  /**
+   * 🔴 AS SESSÕES QUE PODEM ESTAR NO DENOMINADOR DA META — e as que não podem.
+   *
+   * `adClicks` é `DailyAdMetric.clicks`: **só Meta**. Dividir o total de sessões
+   * por ele soma no numerador tráfego que o denominador não cobre — medido no
+   * dev em 13/08/2026, **20 das 57 sessões (35%)** vinham de `google`,
+   * `organico` e `tiktok`. Não é uma taxa ruim: é uma razão SEM INTERVALO
+   * VÁLIDO, porque o numerador deixa de ser subconjunto do denominador.
+   *
+   * A separação vai para a tela em DUAS grandezas, e de propósito: a razão fala
+   * da Meta, e as outras origens viram CONTAGEM ao lado. Somá-las de volta num
+   * percentual só recriaria a mistura com outra aparência.
+   */
+  const visitasDaMeta = w.clicks.filter((c) => ehFonteMeta(c.utmSource)).length;
+
+  /**
+   * 🔴 AS DUAS PONTAS DA COBERTURA NÃO COBREM A MESMA JANELA — e é medido.
+   *
+   * No dev, `DailyAdMetric` vai de 30/07 a 12/08 e a tabela `Click` de 04/08 a
+   * 07/08: o denominador tem **14 dias** e o numerador **4**. A razão cai por
+   * dias em que ninguém poderia ter sido rastreado, e nada na tela dizia isso.
+   *
+   * ⚠️ Vai para a tela como DECLARAÇÃO, não como correção. Recortar o
+   * denominador para a janela do `Click` inventaria uma cobertura melhor do que
+   * a medida; deixar em silêncio afirma uma pior. Só dizer qual é qual é
+   * honesto — a mesma saída do ROAS que mistura populações.
+   *
+   * ### 🔴 CHAVE DE DIA (`"2026-08-04"`), NUNCA `Date` — e isto foi MEDIDO
+   *
+   * A primeira versão devolvia `Date`. O `tsc` aceitou, o lint aceitou, e a
+   * tela quebrou com **`jc.de.getTime is not a function`**: este DTO atravessa
+   * `/api/dashboard` como JSON, e ali todo `Date` vira string. O tipo dizia
+   * `Date` e o valor era `"2026-07-30T00:00:00.000Z"`.
+   *
+   * ⛔ Não "conserte" reidratando com `new Date(...)` no consumidor. Isso
+   * deixaria o tipo mentindo em toda travessia futura. A chave de dia é o que o
+   * resto deste DTO já usa (`byDay[].date`), compara com `!==` sem armadilha, e
+   * não tem como chegar do outro lado sendo outra coisa.
+   */
+  const janelaDe = (chaves: string[]) => {
+    if (chaves.length === 0) return undefined;
+    /* Ordem lexicográfica = ordem cronológica, em `YYYY-MM-DD`. */
+    const ord = [...chaves].sort();
+    return { de: ord[0]!, ate: ord[ord.length - 1]! };
+  };
+  /* ⚠️ Cada lado com o helper da SUA coluna: `DailyAdMetric.date` é coluna de
+     data (meia-noite UTC) e `Click.timestamp` é instante — lê-los com o mesmo
+     conversor deslocaria um dos dois em um dia. */
+  const janelaCliques = janelaDe(w.metrics.map((m) => dateColumnKey(m.date)));
+  /* ⚠️ `w.janela.tz` direto, e não o `const tz` — ele só é declarado ~370 linhas
+     abaixo, e usá-lo aqui é TDZ de verdade. Quem acusou foi a
+     `no-use-before-define`; o `tsc` passou. É a terceira vez que essa regra pega
+     algo que o compilador deixou passar nesta base. */
+  const janelaSessoes = janelaDe(w.clicks.map((c) => dayKeyInTz(c.timestamp, w.janela.tz)));
 
   /**
    * 🔴 INDEFINIDO é `null`, não zero — e o Gerenciador já fazia isso.
@@ -975,11 +1058,30 @@ function summarize(w: Window, impostoAnunciosPct = 0) {
   const funnel = {
     cliques: adClicks,
     visitas: clicksCount,
-    checkouts: w.initiateCheckouts,
+    /** Das `visitas`, as que vieram da Meta — o único numerador que o denominador cobre. */
+    visitasDaMeta,
+    /** As de qualquer outra origem. CONTAGEM, nunca somada de volta numa razão. */
+    visitasDeOutrasOrigens: clicksCount - visitasDaMeta,
+    /**
+     * 🔴 A ETAPA DA CADEIA É `icsComJornada`, não o total.
+     *
+     * Só ela é subconjunto de `visitas` (mesma tabela `Click`). O total
+     * continua exposto em `checkoutsTotais` para quem precisar do número
+     * inteiro — mas ele não pode desenhar a fita, sob pena de uma etapa ficar
+     * maior que a anterior por soma de populações disjuntas.
+     */
+    checkouts: w.icsComJornada,
+    /** A entrada LATERAL: checkout sem jornada rastreada. Disjunto de `visitas`. */
+    checkoutsSemJornada: w.icsSemJornada,
+    /** `icsComJornada + icsSemJornada`. Não desenha nada; existe para conferência. */
+    checkoutsTotais: w.initiateCheckouts,
     /** Dos `checkouts`, quantos vieram do PIXEL. O resto é derivado da venda. */
     checkoutsDoNavegador: w.icsNavegador,
     iniciadas: totalSalesEvents,
     vendas: salesCount,
+    /** As duas janelas com dado, para a cobertura declarar quando divergem. */
+    janelaCliques,
+    janelaSessoes,
   };
 
   // ── Vendas por país (Bloco 5) ──
@@ -1438,3 +1540,4 @@ async function loadFilterOptions(userId: string) {
     sources: sourceRows.map((s) => s.utmSource!).filter(Boolean),
   };
 }
+

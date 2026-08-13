@@ -86,6 +86,17 @@ const VAZIA = {
     { chaveInfo: "iniciadas", label: "Vendas iniciadas", curto: "Vendas Inic.", value: 0, fonte: "Gateway" },
     { chaveInfo: "aprovadas", label: "Vendas aprovadas", curto: "Vendas Apr.", value: 0, fonte: "Gateway" },
   ],
+  /* ⚠️ ZERADO, não ausente — pela mesma razão do `metricCards` acima: `{}` seria
+     "o hook não montou", que é outro estado. Com `cliquesDaMeta: 0` a faixa de
+     cobertura não é desenhada, e é isso que se quer no período vazio: não se
+     divide por ausência de clique. */
+  funnelCobertura: {
+    cliquesDaMeta: 0,
+    sessoesDaMeta: 0,
+    sessoesDeOutrasOrigens: 0,
+    janelaCliques: undefined,
+    janelaSessoes: undefined,
+  },
   bots: [],
   ambientesDeTeste: [],
   sources: [],
@@ -135,6 +146,18 @@ const CHEIA = {
     { chaveInfo: "iniciadas", label: "Vendas iniciadas", curto: "Vendas Inic.", value: 80, fonte: "Gateway" },
     { chaveInfo: "aprovadas", label: "Vendas aprovadas", curto: "Vendas Apr.", value: 50, fonte: "Gateway" },
   ],
+  /* 🔴 A FIXTURE PRECISA PRODUZIR OS ESTADOS NOVOS, senão o bloco renderiza sem
+     nunca exercitá-los — a família do gerador que entrega o estado que impede
+     de ver o que se ia verificar.
+     Os números reproduzem o dev medido em 13/08/2026: parte das sessões vem de
+     fora da Meta, e as duas janelas NÃO se cobrem. */
+  funnelCobertura: {
+    cliquesDaMeta: 1000,
+    sessoesDaMeta: 480,
+    sessoesDeOutrasOrigens: 220,
+    janelaCliques: { de: "2026-07-30", ate: "2026-08-12" },
+    janelaSessoes: { de: "2026-08-04", ate: "2026-08-07" },
+  },
   /* Com dado, a declaração do que saiu do cálculo TEM de aparecer — é ela que
      exercita o `EXCLUSOES_DO_FUNIL`. Com as duas listas vazias o contador não
      renderiza, e o teste passaria sem nunca ter visto a linha. */
