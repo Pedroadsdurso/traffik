@@ -543,6 +543,114 @@ Nenhum deles aparece em `tsc`, `lint`, `build` ou nas 46 asserções da grade.
 | **o sparkline era cortado** | ele encolhia a caixa e mantinha `height={38}`: a §7.8 acontecendo dentro do componente. Passou a `100%` |
 | **a base da razão reprovava no contraste** | `opacity: 0.85` levava a **3,70:1** no claro e **4,15** no escuro. ⚠️ O `test:contraste` mede PARES DE TOKEN e nunca pegaria isto — a opacidade é aplicada no componente, em cima do par |
 
+## Estado em 13/08/2026
+
+> **Medido, não inferido.** Os três comandos do topo do `CLAUDE.md` foram
+> rodados; o que segue é a saída deles, e não uma cópia do estado anterior.
+
+### Fases
+
+| fase | estado |
+|---|---|
+| **F0b** · **F1** · **F3** | ✅ verdes, e **em produção** |
+| **F5** · **F2** | ✅ verdes, **só locais** |
+| **F4** (C1–C8, menos o C5) · **F6** | ⛔ abertas |
+
+### Onde cada coisa está
+
+| | |
+|---|---|
+| branch | `redesign/dashboard` |
+| HEAD | **`0ff5e97`** — F5+F2 |
+| `origin/redesign/dashboard` | **`f107392`** — a branch está **1 commit à frente** |
+| `origin/main` | **`36b52a1`**, empurrada em **12/08/2026 23:27** — *"merge: F1 + F3"* |
+| a branch × a `main` | **3 commits à frente**: `0ff5e97`, `f107392`, `f359f1a` |
+
+🔴 **F1 e F3 estão no ar para os testadores** — a `main` as levou em 12/08 23:27,
+e a produção segue a `main` (conferido: `curl` em `/login` devolve `tk-auth`).
+**F5 e F2 não.** As doze telas do redesign veem hoje a grade de células com o
+conteúdo cabendo no slot, e **ainda com as três zonas**.
+
+⛔ **Não afirme o estado do remoto a partir deste arquivo.** Ele envelhece
+sozinho — rode os três comandos.
+
+### 🔴 A ÚNICA PARTE DO REDESIGN SEM VERIFICAÇÃO VISUAL
+
+**As derivações de 4 e 1 coluna nunca foram vistas numa tela.** O que existe
+sobre elas é asserção pura (§7.4 e §7.5, em `npm run test:grade`): nenhum bloco
+passa da grade, a ordem é preservada, `h` é preservado.
+
+| coluna | como foi verificada |
+|---|---|
+| 12 | ✅ **vista** — modo de edição |
+| 8 | ✅ **vista** — a janela do dev tem `innerWidth` 1132 e a tela derivou sozinha |
+| **4** e **1** | ⛔ **só asserção** |
+
+O motivo é **falta de instrumento**, não falta de tempo: a derivação lê
+`window.innerWidth`, então o método do contêiner (encolher o elemento por JS, que
+pagou a largura estreita do Login e de Taxas) **não alcança** — ele mede a caixa,
+e aqui quem decide é a janela. E o `resize_window` do MCP mentiu cinco vezes
+nesta base.
+
+⚠️ **Isto não é o mesmo que a dívida de largura estreita das cinco telas.**
+Aquela é sobre o conteúdo estourar; esta é sobre um RAMO DE CÓDIGO que nenhum
+olho percorreu. A asserção prova a aritmética da largura; ela não responde *como
+ficou* — que é exatamente a distinção que esta fase pagou quatro vezes na passada
+visual da F5.
+
+🔜 Quem for verificar: uma janela de verdade abaixo de 960px e abaixo de 640px, e
+o desfecho registrado — qualquer que seja.
+
+### ➡️ Próxima fase, e a primeira coisa dela
+
+**F4 — acabamento dos gráficos (C1–C8, menos o C5, que a F3 já resolveu).**
+
+> **Primeiro passo:** consertar o **C1** — no `Sparkline`, fazer observação
+> isolada renderizar `<circle>` em vez de um `<path>` de menos de 12px, que é o
+> que hoje desenha a série do ROAS como fragmentos soltos.
+
+⚠️ Ele é o primeiro por ser o único dos oito que a F5 acabou de tocar: o
+sparkline saiu daqui com `altura="100%"` e com a caixa encolhível, e é o momento
+em que alguém já está com o arquivo aberto.
+
+### 🔬 O LIMITE DO `test:contraste` — ele não vê OPACIDADE
+
+> **Registrado como limite do INSTRUMENTO, não como defeito de um bloco.** Vale
+> para qualquer texto do projeto que carregue `opacity`.
+
+O `test:contraste` lê o `globals.css` e mede **pares de token**: uma cor de texto
+contra uma cor de fundo, as duas declaradas como variáveis. **Ele não vê o que o
+componente faz por cima do par** — e `opacity` é aplicada no componente.
+
+O caso que revelou: a linha de base da razão no `BlocoMetrica` tinha
+`opacity: 0.85` sobre `--tk-text-muted`. O PAR passa com folga; o pintado dava
+**3,70:1** no tema claro e **4,15:1** no escuro, abaixo do piso de 4,5. O teste
+estava verde o tempo todo, e estava certo — ele mediu o que sabe medir.
+
+| o instrumento | responde |
+|---|---|
+| `test:contraste` | *"os tokens da paleta formam pares legíveis?"* |
+| ⛔ **não responde** | *"a cor que chegou à tela é legível?"* |
+
+🔎 **O `grep` que acha os candidatos**, e ele é barato:
+
+```bash
+grep -rnE "opacity: 0?\.[0-9]" src/components/ --include=*.tsx
+```
+
+A pergunta por ocorrência é binária: *isto é TEXTO?* Opacidade em traço, hachura,
+sombra, ícone decorativo ou estado desabilitado não entra — o piso de 4,5 é sobre
+texto que alguém precisa ler.
+
+⛔ **Não "conserte" o teste para varrer opacidade.** Ele lê CSS, e a opacidade
+está no JSX; ensiná-lo a ler os dois seria a segunda implementação do mesmo
+cálculo em dois vocabulários. Quem responde a segunda pergunta é a medição da cor
+PINTADA (canvas 1×1, com o `globalAlpha` da opacidade, sobre o fundo REAL) — e
+ela é cara pelo mesmo motivo de sempre: exige navegador, servidor e sessão.
+
+⚠️ E é o mesmo buraco que o `06` já documenta para o CSS sem camada, agora com um
+caso medido em vez de uma suspeita.
+
 ## 🔎 O INVENTÁRIO — medido em 12/08/2026, e ele MUDOU a ordem
 
 A F4 era esperada como pré-requisito da F1. **Não é.** Contagem por padrão:
