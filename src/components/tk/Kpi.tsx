@@ -260,8 +260,18 @@ export function BlocoMetrica({ dados, carregando = false }: { dados: DadosKpi; c
 
             ⛔ Degrau e não interpolação: em tamanho intermediário o dígito perde
             hinting e pesa diferente do card vizinho. */}
+        {/* 🔑 A BASE DA RAZÃO VIVE AQUI TAMBÉM, e não só na linha de baixo.
+            Num slot de 2 células a linha de base é ESCONDIDA INTEIRA (ver
+            `.tk-kpi-base` no `globals.css`), e este `title` é o que a mantém
+            alcançável — o número é o que ela qualifica, então é dele que ela
+            deve pender.
+
+            ⛔ Não é redundância quando a linha está visível: é a mesma
+            declaração presa à coisa que ela descreve. E é o contrário de
+            truncar — o texto sai INTEIRO, nunca com reticências. */}
         <span
           className="text-metric-xl"
+          title={dados.base || undefined}
           style={{ fontSize: "var(--tk-b-kpi, var(--tk-b-metrica, 30px))", lineHeight: 1.05, color: corNumero, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}
         >
           {carregando ? "—" : dados.valor}
@@ -364,11 +374,15 @@ export function BlocoMetrica({ dados, carregando = false }: { dados: DadosKpi; c
           não é acusar o número. */}
       {dados.base && (
         <span
-          className="text-caption text-text-muted tk-kpi-alto"
+          className="text-caption text-text-muted tk-kpi-alto tk-kpi-base"
           /* ⚠️ `flex: none` — senão ELA é que encolhe. Medido: a linha de base
              do ROAS ficava 8px curta e a segunda linha do texto era cortada.
              Numa coluna flex, "quem cede" não é escolha do desenho: é quem
-             esqueceu de dizer que não cede. */
+             esqueceu de dizer que não cede.
+
+             🔑 `tk-kpi-base` é o que a esconde INTEIRA no slot de 2 células —
+             ver a ordem de sacrifício no `globals.css`. Escondê-la não é
+             cortá-la: o texto continua completo no `title` do número. */
           /* 🔴 O `opacity: 0.85` SAIU — medido em 12/08/2026, na passada da F5:
              ele levava a linha de base a **3,70:1** no tema claro e **4,15:1** no
              escuro, abaixo do piso de 4,5. Sem ele: 4,97 e 5,20.

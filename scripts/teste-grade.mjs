@@ -848,6 +848,47 @@ checar("o piso do sparkline existe, e o limiar é o que a geometria do traço ex
   assert.match(css, /\.tk-spark \{ container-type: size; \}/);
 });
 
+/* 🔴 A ORDEM DE SACRIFÍCIO DO KPI — a base sai ANTES do sparkline.
+   ────────────────────────────────────────────────────────────────────────────
+   Decisão do dono, 13/08/2026: número → rótulo → variação → sparkline → base.
+   Até aqui era o inverso por OMISSÃO — a base era `flex: none` e o sparkline o
+   único encolhível, então cedia quem devia ceder por último.
+
+   ⛔ O limiar NÃO é o número 176 escrito à mão: ele é a altura de DUAS CÉLULAS,
+   recalculada aqui das mesmas constantes que a grade usa. Se `--tk-row` ou o gap
+   mudarem, esta asserção cai — a mesma disciplina do limiar de 130px. */
+checar("a base do KPI sai no slot de 2 células, e o limiar é a própria grade", () => {
+  const css = ler("../src/app/globals.css");
+  const kpi = ler("../src/components/tk/Kpi.tsx");
+
+  const duasCelulas = ALTURA_CELULA * 2 + GAP_GRADE;
+  const m = css.match(/@container \(max-height: (\d+)px\)\s*\{\s*\.tk-kpi \.tk-kpi-base \{\s*display: none;\s*\}\s*\}/);
+  assert.ok(m, "linha de base: a query que esconde a `.tk-kpi-base` não existe");
+  assert.equal(
+    Number(m[1]),
+    duasCelulas,
+    `o limiar da base (${m?.[1]}) não é a altura de 2 células (${duasCelulas})`,
+  );
+
+  /* A classe tem de estar no componente, senão a regra é órfã. */
+  assert.match(kpi, /tk-kpi-alto tk-kpi-base/);
+
+  /* 🔑 ESCONDER NÃO É CORTAR — e é isto que concilia com a decisão de 07/08.
+     Se a linha some, a íntegra tem de continuar alcançável: o `title` do número
+     leva `dados.base`. Sem esta asserção, um commit futuro removeria o `title`
+     e a base sumiria de vez sem nada acusar. */
+  assert.match(kpi, /title=\{dados\.base \|\| undefined\}/);
+
+  /* ⛔ E ela NUNCA volta a ser truncada: reticências na base é o que a decisão
+     de 07/08/2026 proíbe. A guarda mira a DECLARAÇÃO de estilo da própria base,
+     não a palavra solta — `textOverflow` aparece em quatro outros lugares deste
+     arquivo, e mirar a palavra pegaria os vizinhos. */
+  const decl = kpi.slice(kpi.indexOf("tk-kpi-alto tk-kpi-base"));
+  const fim = decl.indexOf("{dados.base}");
+  assert.ok(fim > 0, "linha de base: não achei o corpo da linha de base");
+  assert.doesNotMatch(decl.slice(0, fim), /textOverflow|text-overflow/);
+});
+
 console.log(
   falhas.length === 0
     ? `\n\x1b[1m\x1b[32m${ok} asserções passaram, 0 falharam.\x1b[0m\n`

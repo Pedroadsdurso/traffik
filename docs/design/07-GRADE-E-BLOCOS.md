@@ -79,18 +79,52 @@ Se a altura do card é função do que está dentro, então:
 
 Defeitos visíveis nos prints, um a um:
 
-| # | onde | o que está errado |
-|---|---|---|
-| C1 | card ROAS | a série vira **fragmentos soltos**: buracos na série desenhados como segmentos órfãos de ~8px. Observação isolada deve virar **ponto**, não traço |
-| C2 | Vendas por dia | rótulos do eixo x cortados (`07-1`, `08-`) — o eixo não reduz a densidade de ticks quando falta largura |
-| C3 | Lucro por horário | barras sem eixo Y, sem rótulo de valor e sem linha de zero declarada; lê como erro de renderização |
-| C4 | Vendas por posicionamento e Formas de pagamento | a barra atrás do texto não está ancorada no maior valor da lista e sobra retângulo fora da coluna |
-| C5 | Taxa de aprovação | três medidores radiais em tamanho fixo, um deles com `0 de 1`, ocupando 400px de altura |
-| C6 | Produtos, Vendas por país, Alertas | 180–400px de vazio contínuo dentro do card |
-| C7 | modo de edição | títulos truncados (`Vendas ...`, `Faturam...`, `Ticket ...`) porque o chip tem largura fixa |
-| C8 | Vendas por horário | barras de largura fixa: com 24 buckets viram fios; com 6, tarjas |
+> ### 🔴🔴 ESTA LISTA É INFERÊNCIA LIDA DE SCREENSHOT — E 4 DOS 8 NÃO REPRODUZEM
+>
+> **Medido bloco a bloco em 13/08/2026, na tela, antes de consertar qualquer um.**
+> A coluna *"o que está errado"* abaixo foi escrita em 12/08 olhando prints, sem
+> medir o componente. O resultado:
+>
+> | | |
+> |---|---|
+> | descreviam conserto **que já existia** | C1 (desde 06/08), C2, C4 |
+> | descreviam código **que já não é assim** | C8 |
+> | **parcialmente** certos | C3 (o eixo Y falta; a linha de zero EXISTE) · C7 |
+> | certos, com o NÚMERO errado | C6 (121px, não "180–400") |
+>
+> ⛔ **Nenhuma prescrição desta lista entra em código sem reprodução na tela
+> antes.** Foi por isso que o C1 quase virou um conserto do que já estava
+> consertado — a segunda vez nesta fase que uma prescrição descreveu o passado.
 
-Nenhum deles é questão de gosto. São todos "o desenho não sabe o tamanho que tem".
+| # | onde | o que estava escrito | 🔬 medido em 13/08 |
+|---|---|---|---|
+| C1 | card ROAS | série vira fragmentos órfãos de ~8px; isolado deve virar ponto | 🔴 **prescrição errada.** O `<circle>` existe desde `db98cf2` (06/08) e a série do ROAS tem **zero buracos**. O defeito real era outro — sparkline a 0,1px pintando um sublinhado. ✅ **corrigido** |
+| C2 | Vendas por dia | eixo x cortado (`07-1`, `08-`); não reduz densidade de ticks | ✅ **não reproduz.** Ticks caem 5→4→2 de 1432 a 300px, **0 colisões e 0 vazamentos** em toda largura. Rótulos completos (`30/07`). O formato `07-1` nem existe mais |
+| C3 | Lucro por horário | sem eixo Y, sem rótulo de valor, **sem linha de zero** | ⚠️ **metade.** A linha de zero **EXISTE** (327px, visível, `permitirNegativo`). O que falta é **eixo Y** — e `LineChart` tem (`R$ 0 / 7.500 / 15.000`) enquanto `SerieTemporal` não: duas convenções no mesmo painel |
+| C4 | Posicionamento e Formas de pagamento | barra não ancorada no maior valor; retângulo fora da coluna | ✅ **não reproduz.** Maior barra = **exatamente 100%**; **0** barras fora do pai e **0** fora do card, em `formas-pagamento` e `produtos` |
+| C5 | Taxa de aprovação | três medidores em tamanho fixo, 400px de altura | ✅ resolvido pela F3 |
+| C6 | Produtos, Vendas por país, Alertas | **180–400px** de vazio contínuo | ⚠️ **reproduz, com o número errado.** Maior vão medido: `produtos` **121** · `alertas` **81** · `top-campanhas` **56** · `paises` **26** ✓ · `pagamentos` **28** ✓. E é sempre **no fim do card**, não dentro |
+| C7 | modo de edição | títulos de chip truncados por largura fixa | ⚠️ **reproduz de raspão** — chip a **122px** (a §6 pede 140) e *"Formas de pagamento"* corta por **2px**. ⛔ Mas a medição achou coisa **pior** ao lado — ver abaixo |
+| C8 | Vendas por horário | **largura fixa**: 24 buckets viram fios, 6 viram tarjas | ✅ **não reproduz.** A barra é sempre **50% do passo**: 35,8 / 21,6 / 13,6 / 9,1 / 6,6px conforme o card vai de 900 a 200. Proporcional por construção |
+
+> ### 🔴 O ACHADO QUE NÃO ESTAVA NA LISTA: no MODO DE EDIÇÃO o NÚMERO é truncado
+>
+> Medido junto do C7: na moldura de edição os cards de KPI ficam com **132px**, e
+> `R$ 7.058,65` sai cortado — `scrollWidth` excede `clientWidth` em **34px**;
+> `R$ -2.441,54` em **49px**.
+>
+> ⛔ **Isto viola a ordem de sacrifício** que o dono fixou em 13/08 (número →
+> rótulo → variação → sparkline → base): o número é o que NUNCA pode ser cortado,
+> e é justamente ele que está sendo. O `06` já registra a mesma família — *"o que
+> encolhe primeiro tem de ser o APOIO, nunca a resposta"* — e ali ela foi
+> resolvida para o rótulo, não para o número.
+>
+> 🔜 **Não consertado nesta sessão.** É trabalho do C7, e entra com o chip.
+
+⚠️ **O que a lista acertou como diagnóstico geral continua valendo:** o que
+sobrou (C3, C6, C7) é sempre *"o desenho não sabe o tamanho que tem"*. O que ela
+errou foi supor que os oito ainda estavam lá — **a F1, a F3 e a F5 consertaram
+quatro deles de passagem, e ninguém voltou para riscar a lista.**
 
 ---
 
@@ -554,8 +588,9 @@ Nenhum deles aparece em `tsc`, `lint`, `build` ou nas 46 asserções da grade.
 |---|---|
 | **F0b** · **F1** · **F3** | ✅ verdes, e **em produção** |
 | **F5** · **F2** | ✅ verdes, **só locais** |
-| **F4** | 🚧 **C1 ✅ (13/08)** · C5 já resolvido pela F3 · **abertos: C2 C3 C4 C6 C7 C8** |
+| **F4** | 🚧 **C1 ✅** · C2 C4 C8 **não reproduzem** · C5 já era da F3 · **abertos: C3 (só o eixo Y), C6, C7** |
 | **F6** | ⛔ aberta |
+| 🚧 **shell estreito** | frente PRÓPRIA, fora da F4 — ver a seção acima |
 
 ### Onde cada coisa está
 
@@ -607,27 +642,35 @@ ninguém tinha tentado.
 | **4** | ✅ **VISTA a 900px** — 4 colunas, `grid-auto-rows: 80px`, 28 blocos |
 | **1** | ✅ **VISTA a 600px** — 1 coluna, `rolagemDaPagina: 0` |
 
-> ### 🔑 O INSTRUMENTO: `resize_page` do MCP de devtools (CDP), NÃO o `resize_window`
+> ### 🔑 O INSTRUMENTO DE LARGURA — CDP, e ele funciona com a janela MAXIMIZADA
 >
-> Ele faz **override de métricas** (`Emulation.setDeviceMetricsOverride`) em vez
-> de redimensionar a janela: medido, `innerWidth` foi a **900** enquanto
-> `screen.availWidth` continuou **2560**.
+> ```
+> emulate      viewport: "1440x1000x1"   ← ESTE. Sobrevive a reload. Preferir sempre.
+> resize_page  width/height               ← perde a emulação em SILÊNCIO num reload,
+>                                            e depois falha com "Restore window to
+>                                            normal state before setting content size"
+> ```
 >
-> 🔴 **Ou seja: ele funciona com a janela MAXIMIZADA.** As duas sessões gastas
-> pedindo ao dono que desmaximizasse a janela partiam de uma causa que nunca foi
-> isolada — e este é o contraexemplo. A ferramenta era outra.
+> Os dois são CDP e os dois fazem **override de métricas**, não redimensionam a
+> janela: medido, `innerWidth` foi a **900** e a **1440** com `screen.availWidth`
+> em **2560** o tempo todo.
 >
-> ⚠️ **O limite dele, medido:** depois de um `reload` a emulação é **perdida** (a
-> janela volta a 2560, em silêncio) e uma nova chamada falha com
-> *"Restore window to normal state before setting content size"*. A falha é
-> RUIDOSA, que é a diferença que importa em relação ao `resize_window`.
+> 🔴 **A INSTRUÇÃO DE DESMAXIMIZAR A JANELA FOI APAGADA DESTE PROJETO.** Ela
+> nasceu de uma causa que nunca foi isolada (`a23844e`, 31/07, dizia só *"não
+> pegam com a janela do Chrome…"*), endureceu por cópia até virar requisito, e
+> custou **duas sessões** ao dono fazendo a parte dele corretamente. Estas
+> medições são o contraexemplo: **a maximização nunca foi o problema — a
+> ferramenta era outra.**
 >
-> ⛔ **Reconfira `innerWidth` depois de todo `resize_page`, e de novo depois de
-> qualquer navegação.** Um print tirado depois de um reload é um print de 2560.
-> Isto quase creditou a esta sessão um conserto que era só a janela ter voltado a
-> ser larga.
+> ⛔ **Reconfira `innerWidth` depois de qualquer navegação**, com `emulate`
+> também. Um print tirado depois de um reload pode ser um print de 2560, e isso
+> quase creditou a esta fase um conserto que era só a janela ter voltado a ser
+> larga.
 
-### 🐛 E o que as duas larguras mostraram: **o SHELL não responde a viewport estreito**
+### 🚧 FRENTE PRÓPRIA — o SHELL não responde a viewport estreito
+
+> **Decisão do dono, 13/08/2026: isto NÃO é F4 e não entra na fase.** Fica
+> registrado como frente separada, com o medido, para não voltar a ser descoberto.
 
 A grade deriva certo; a moldura em volta dela, não.
 

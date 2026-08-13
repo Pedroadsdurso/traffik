@@ -1865,6 +1865,41 @@ a {
   @container (height < 4px) {
     .tk-spark > * { visibility: hidden; }
   }
+
+  /* ══ A ORDEM DE SACRIFÍCIO DO KPI — 13/08/2026 ══════════════════════════════
+     Decisão do dono. Do que fica por último para o que sai primeiro:
+
+         número → rótulo → variação → sparkline → LINHA DE BASE
+
+     Ou seja: a base é a PRIMEIRA a sair, antes do sparkline. Até 13/08 era o
+     contrário por omissão — a base era `flex: none` e o sparkline era o único
+     encolhível, então quem cedia era o que a ordem manda ceder por ÚLTIMO.
+
+     ### O limiar são DUAS CÉLULAS, e ele veio da medição do card
+
+     Medido no ROAS, slot de 2 células (`2×80 + 16` = 176px de card):
+
+     | | |
+     |---|---|
+     | caixa de conteúdo | **126px** |
+     | precisa COM a base | **153,9px** — não cabe |
+     | precisa SEM a base | **115,5px** — cabe, com 10,5 de folga |
+
+     ⛔ E não cabe em LARGURA nenhuma: mesmo com a frase numa linha só o card
+     pediria 137,5px de 126. Por isso o limiar é de ALTURA, não de largura — o
+     erro seria mirar os 231px em que a frase quebra, que é sintoma.
+
+     Acima de 2 células (3 = 272px) sobra folga e a base volta sozinha.
+
+     ### ⛔ ISTO NÃO REVOGA A DECISÃO DE 07/08/2026
+
+     Aquela proíbe **cortar** a frase — reticências num texto que existe para ser
+     lido inteiro. Esconder a linha INTEIRA é outra coisa: o texto continua
+     completo no `title` do número (`Kpi.tsx`), que é de onde ele deve pender.
+     Meia frase mente sobre a base; frase ausente com a íntegra a um hover não. */
+  @container (max-height: 176px) {
+    .tk-kpi .tk-kpi-base { display: none; }
+  }
 }
 
 /* ══ CONTAINER QUERIES DOS BLOCOS — C3, 07/08/2026 ══════════════════════════
