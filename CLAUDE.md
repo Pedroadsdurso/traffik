@@ -148,6 +148,49 @@ exceção à regra — é o escopo dela.**
 > justamente para que a dúvida não seja resolvida pela conveniência de quem está
 > com o arquivo aberto.
 
+# 🚧 A TRAVA DE PUSH NA `main` É PARCIAL, E É POR MÁQUINA
+
+> **12/08/2026.** Registrado porque uma trava que parece resolvida é pior que
+> nenhuma: ela faz parar de olhar.
+
+## O que existe hoje, e as duas são config LOCAL deste clone
+
+| Config | Bloqueia |
+|---|---|
+| `branch.main.pushremote = no_push` | `git push` puro estando na `main` |
+| `remote.origin.push = refs/heads/main:refs/heads/__bloqueado__` | `git push origin main` — o alvo vira `__bloqueado__` |
+
+**Medido por `--dry-run`:** `git push origin main` → `main -> __bloqueado__`;
+`git push` na `main` → falha; `git push origin redesign/dashboard` → **funciona**,
+que é o que se quer.
+
+## ⛔ O QUE ELAS NÃO COBREM — e é a maior parte
+
+| | |
+|---|---|
+| 🔴 **outra máquina** | um clone novo não tem nenhuma das duas. `git config` não viaja no repositório |
+| 🔴 **outro clone aqui mesmo** | idem |
+| 🔴 **a interface do GitHub** | merge de PR pelo botão não passa por `git push` |
+| 🔴 **quem apagar a config** | uma linha, sem rastro no repositório |
+| ⚠️ **`git push origin main:main`** | refspec completo na linha de comando; não testado |
+
+> ### 🔴 A TRAVA QUE VALE É `branch protection` NO GITHUB, exigindo PR na `main`
+>
+> **É decisão do dono, no painel do GitHub — não minha, e não deste arquivo.**
+> Enquanto ela não existir, a `main` está protegida **apenas neste clone, apenas
+> contra as duas formas medidas acima**.
+>
+> ⛔ **Não trate a proteção como resolvida.** É exatamente a família da
+> *proteção acidental*: o que segurava a `main` até 12/08 não era a trava — era
+> ninguém ter digitado a outra forma. Eu digitei, sem saber que havia trava, e
+> passei.
+
+⚠️ E o motivo de a trava existir está registrado logo acima: em 12/08 16:35 a
+`main` foi avançada e **publicou o redesign inteiro sem decisão de ninguém**. A
+trava local reduz a chance de repetir; ela não a elimina.
+
+---
+
 # 🧮 N CÓPIAS NÃO SÃO N CONFIRMAÇÕES — SÃO UMA MEDIÇÃO, REPLICADA
 
 > **Formulação do dono, 12/08/2026, depois de a mesma mecânica aparecer em dois
@@ -191,6 +234,54 @@ observação passando adiante.
 ⚠️ **Isto vale para o `CLAUDE.md` inteiro**, que hoje tem muita coisa replicada —
 inclusive regras que eu repeti de seções anteriores sem reconferir. Um número
 citado em três seções continua sendo um número medido uma vez.
+
+## 🔎 A VARREDURA DE 13/08/2026 — o que ela achou, e onde ela cega
+
+⚠️ **O comando que o dono propôs não mede.** `git log --diff-filter=A -S` filtra
+o commit que **criou** o arquivo; num `CLAUDE.md` que já existia ele devolve
+vazio para tudo. A forma que acha quem introduziu a frase é:
+
+```bash
+git log -S "<frase>" --format='%h %ad %s' --date=short -- CLAUDE.md | tail -1
+```
+
+| Afirmação | Nx | 1ª ocorrência | O que ela mediu | Desfecho |
+|---|---|---|---|---|
+| `pixelConfigIds` é dimensão de filtro aprovada | 9 | `c4db658` · 28/07 | 🔴 **nada** — decisão, com "não reabrir" | ✅ reescrita, e virou a regra acima |
+| cookie do NextAuth é `httpOnly` → headless impossível | 4 | `0f97ed3` · 29/07 | 🔴 **outro cookie** (`fb_oauth_ws`, do OAuth) | ✅ item (d) foi de "bloqueado" para **NÃO TENTADO** |
+| `resize_window` "mente" / "precisa desmaximizar" | 16 | `a23844e` · 31/07 | ⚠️ *"não pegam com a janela do Chrome…"* — falha observada, causa **não isolada** | ✅ as duas afirmações endurecidas saíram |
+| plano Hobby só aceita cron diário | 3 | `89cb87f` · 24/07 | ✅ **mediu** — o deploy foi rejeitado | ⏸️ **fica.** ⚠️ Fato sobre produto de TERCEIRO, medido em **24/07/2026** e nunca reconferido. A Vercel muda limite de plano sem avisar este arquivo |
+| `controle inerte` | 7 | `7273008` · 06/08 | — é **padrão nomeado**, não afirmação factual | ⏸️ sai da lista: as 7 são aplicações do conceito, não cópias de uma medição |
+
+> ### ⛔ O LIMITE DESTA VARREDURA É O QUE ELA MAIS ENSINA
+>
+> Ela varreu **"frase que eu lembrei de procurar"** — que é, literalmente, a
+> fraqueza que esta regra descreve. Não é amostra: é o mesmo viés, um nível
+> acima. Cinco achados não dizem que há cinco.
+>
+> ### 🔬 O CRITÉRIO MECÂNICO QUE FALTA — registrado, NÃO implementado
+>
+> > **Toda afirmação FACTUAL SOBRE O MUNDO precisa de DATA e de COMO FOI
+> > MEDIDA. As que não tiverem são candidatas automáticas.**
+>
+> Factual sobre o mundo é o que poderia ser diferente sem ninguém mexer neste
+> repositório:
+>
+> | Classe | Exemplo daqui |
+> |---|---|
+> | o que uma FERRAMENTA faz | `resize_window`, `getComputedStyle`, jsdom, CDP |
+> | o que um PLANO/serviço permite | cron do Hobby, PITR do Supabase Free, limite da Graph API |
+> | o que um CAMPO tem | "0 leitores", "51 de 115 payloads", "402 arquivos em CRLF" |
+> | o que o REMOTO/produção está | `origin/main` em X, "a branch não existe lá" |
+>
+> ⚠️ **O que NÃO entra:** padrão nomeado, decisão de produto e regra de estilo.
+> Eles não descrevem o mundo — são escolhas, e escolhas não envelhecem por conta
+> própria. Confundir os dois faria a varredura acusar metade do arquivo e
+> desacreditar a lista, que é o erro do critério largo demais.
+>
+> ⛔ Não implementado de propósito. O critério vale como leitura antes de
+> escrever: **acabei de afirmar algo sobre o mundo? então a linha leva data e o
+> comando que a remede.**
 
 ⚠️ E é a mesma doença de *"está morto" registrado como ESTADO* (o
 `Workspace.sources`, declarado morto e com 21 referências): estado registrado
@@ -551,7 +642,9 @@ Ordem recomendada do roteiro: 1 → 9,10,11,12,13 → 2 → 3,4 → 5 → 6,7 �
   `?sslmode=require&uselibpqcompat=true`.
 - **BullMQ → cron externo** (serverless não roda worker). Foi Vercel Cron até
   descobrirmos que o plano Hobby só aceita cron diário e **rejeita o deploy inteiro**
-  com `*/15`. Hoje o agendamento vive em `.github/workflows/cron.yml` (GitHub Actions):
+  com `*/15`. ⚠️ **Medido em 24/07/2026** (o deploy foi rejeitado de
+  verdade) e **nunca reconferido**: é fato sobre produto de TERCEIRO, e a Vercel
+  muda limite de plano sem avisar este arquivo. Hoje o agendamento vive em `.github/workflows/cron.yml` (GitHub Actions):
   `sync-facebook` e `run-rules` a cada 15min, `reports` de hora em hora. As rotas
   `/api/cron/*` seguem protegidas por `CRON_SECRET`. Ver a seção de deploy.
 - **Atribuição venda→campanha/criativo é "best-effort"** por `utm_campaign` = nome
@@ -819,7 +912,10 @@ funil · hachura do heatmap a `rgba(0,0,0,0)` · este traço).
 > 2. varrer os elementos desenhados em vez de uma lista de tokens.
 >
 > ⚠️ O custo já foi levantado e é alto: navegador headless + dev server +
-> sessão, e o cookie do NextAuth é `httpOnly`.
+> sessão. ⛔ **Aqui dizia "e o cookie do NextAuth é `httpOnly`" como se isso
+> fechasse a porta — nunca foi medido contra o cookie de sessão** (13/08/2026).
+> Custo alto é motivo para adiar; impedimento é outra afirmação, e essa não
+> existe. Ver o item (d).
 
 ⚠️ **Prima disto, em outra camada:** uma asserção do piso da fita usava
 `[100, 0, 5]`, cujo valor já dava 6,5px — acima do piso, que portanto nunca
@@ -1155,8 +1251,9 @@ WCAG 1.4.1 obrigou a ter.
 > gargalo do funil": a coisa está no DOM, correta em teoria, e errada na tela.
 >
 > **Medir a cor PINTADA automaticamente é caro** — navegador headless + dev server
-> + sessão, e o cookie do NextAuth é `httpOnly` (o mesmo bloqueio que travou o
-> item (d)). O que é barato é o **guarda estático**: reprovar quando o
+> + sessão. ⛔ **Dizia "o mesmo bloqueio que travou o item (d)", e o item (d) não
+> está travado: está NÃO TENTADO** (13/08/2026). O `httpOnly` nunca foi exercido
+> contra o cookie de sessão — ver o item (d). O que é barato é o **guarda estático**: reprovar quando o
 > `globals.css` declarar `color` em seletor de elemento fora de `@layer`. Mede a
 > causa estrutural em vez do sintoma, e é ~15 linhas sem dependência nova.
 >
@@ -1192,11 +1289,26 @@ aqui), dá para exercitar o CÓDIGO em vez do tamanho: mover o gatilho para a bo
 com `position:fixed` prova o clamp do popover sem precisar de janela estreita.
 → `docs/design/05-MOCKUPS-VS-TOKENS.md`
 
-### Nunca confie na mensagem de sucesso do `resize_window`
+### Nunca confie na mensagem de sucesso do `resize_window` — CONFIRA o resultado
 
-Com a janela maximizada ele reporta êxito e **não redimensiona**. Depois de
-qualquer resize, leia `innerWidth` e compare. `innerWidth === screen.availWidth`
-é o indício de maximizada.
+Ele já **reportou êxito sem redimensionar** cinco vezes nesta base. Depois de
+qualquer resize, leia `innerWidth` e compare.
+
+> ⛔ **A CONDIÇÃO NÃO FOI ISOLADA — corrigido em 13/08/2026.**
+> Este parágrafo afirmava *"com a janela maximizada"* e *"`innerWidth ===
+> screen.availWidth` é o indício"*. A primeira ocorrência (`a23844e`, 31/07)
+> disse só *"não pegam com a janela do Chrome…"*: uma falha observada, sem
+> variável isolada. As cópias seguintes endureceram para "ele MENTE" e para "a
+> janela precisa estar desmaximizada" — e **ninguém mediu a maximização como
+> causa**.
+>
+> ⚠️ Duas sessões foram gastas pedindo ao dono que desmaximizasse a janela, com
+> base nessa causa não medida. O que é fato: o retorno dele não descreve o
+> resultado. O que é hipótese: por quê.
+>
+> 🔜 Isolar custa uma sessão: redimensionar com a janela restaurada e com ela
+> maximizada, lendo `innerWidth` nas duas. Até lá, "ele mente" e "precisa estar
+> desmaximizada" **não são afirmações deste arquivo**.
 
 > ### ⛔ E a ORDEM importa: crie a ABA primeiro, desmaximize DEPOIS
 > Descoberto em 05/08/2026, depois de duas tentativas frustradas em que o usuário
@@ -1455,11 +1567,25 @@ O raciocínio completo de cada item está em **`docs/FILA.md`**.
 > descendentes vazando). E o **método** — e os dois limites dele — está registrado
 > em `docs/FILA.md`, pronto para ser reusado nos componentes novos.
 
-> ### ⚠️ O bloqueio do item (d) é de AMBIENTE, não de código
-> `resize_window` mentiu duas vezes (última em 05/08: disse `560x900`,
-> `innerWidth` ficou **2560**). O CDP não substitui — `chrome-devtools-mcp` roda
-> num browser **separado e não autenticado**, e o cookie de sessão do NextAuth é
-> `httpOnly`, então não há como transplantá-lo.
+> ### ⚠️ O item (d) está NÃO TENTADO, não impedido — corrigido em 13/08/2026
+> `resize_window` **falhou** duas vezes (última em 05/08: pediu `560x900`,
+> `innerWidth` ficou **2560**).
+>
+> ⛔ **A frase seguinte dizia que o CDP "não substitui" porque o cookie do
+> NextAuth é `httpOnly` e "não há como transplantá-lo". Isso nunca foi medido.**
+> A varredura de 13/08 achou a primeira ocorrência de `httpOnly` neste arquivo:
+> `0f97ed3`, 29/07, sobre o `fb_oauth_ws` do OAuth do Facebook — **outro cookie,
+> outro assunto**. O bloqueio herdou a palavra e virou impedimento estabelecido
+> sem nunca ter sido exercido contra o cookie de SESSÃO.
+>
+> ⚠️ **Não é que dê certo — é que ninguém tentou.** Transplantar cookie
+> `httpOnly` entre navegadores é rotina de automação (`Network.setCookie` do
+> CDP existe exatamente para isso). Pode falhar por outro motivo; o que não
+> existe é a medição.
+>
+> 🔜 O item sai de "bloqueado por ambiente" para **"não tentado"**. Quem for
+> tentar: uma sessão de dev, `Network.setCookie` com o cookie do NextAuth, e o
+> desfecho registrado — qualquer que seja.
 >
 > ✅ A metade que não dependia de viewport **foi feita**: os condicionais da
 > gaveta de Integrações › Anúncios (erro de perfil, conta Desabilitada + backoff,
@@ -1612,6 +1738,44 @@ arquivo local, de propósito.
   "remover o controle".** É **descobrir por que gravamos algo que ninguém lê**:
   um dos dois lados está errado, e remover o controle escolheria um lado sem
   medir. Decisão do dono, 12/08/2026.
+
+  ### 🔴 A PRIMEIRA OCORRÊNCIA DELE NÃO MEDIU NADA — e se declarou fechada
+
+  Varredura de 13/08/2026. `git log -S "pixelConfigIds" -- CLAUDE.md | tail -1`
+  devolve **`c4db658`, 28/07/2026**, e a linha introduzida é:
+
+  > *"**Decisões registradas para não serem reabertas**: webhookIds e
+  > pixelConfigIds aprovados como dimensões de filtro"*
+
+  Nenhuma referência contada, nenhum consumidor procurado — uma **decisão**,
+  apresentada como assunto encerrado. Ela sustentou o campo por **quinze dias**
+  e por 9 cópias, até a contagem de 12/08 achar **0 leitores**.
+
+  E o reenquadramento de 12/08 vai além: `pixelConfigIds` **não é coluna órfã
+  solitária — é um lado inteiro de um par partido**. `preverExclusaoDaArea` lê
+  `<Recurso>.workspaceId`; o formulário de Áreas escreve `Workspace.*Ids`. Os
+  dois vínculos não se enxergam, e a consequência foi OBSERVADA na tela: uma
+  área com 1 conta e 1 webhook aparece **vazia** para a prévia de exclusão, e o
+  aviso de promoção de escopo não dispara num fluxo irreversível.
+
+  > ### ⛔ REGRA: NENHUM REGISTRO SE DECLARA FECHADO PARA REVISÃO
+  >
+  > ## O que fecha um assunto é MEDIÇÃO NOVA — nunca a idade da entrada, nunca a frase "não reabrir".
+  >
+  > *"Decisões registradas para não serem reabertas"* é o formato, e o formato é
+  > o defeito: ele transforma o registro em algo que **desencoraja exatamente a
+  > conferência que o desmentiria**. Uma decisão pode e deve ser registrada; o
+  > que ela não pode é vir com blindagem.
+  >
+  > ⚠️ Este projeto inteiro é feito de reaberturas que valeram: o ⛔ da sombra do
+  > `Card`, o `DE_PARA` que proibia três entradas que voltaram, a definição de
+  > "estrutural", o `minHeight: 120` do `EmptyState` que não era vinculante, o
+  > descarte do `linhas`. Nenhuma teria acontecido sob "não reabrir".
+  >
+  > ⛔ **Ao encontrar "decidido", "não reabrir", "assunto encerrado" ou "já
+  > discutido" neste arquivo, isso não é resposta — é sinal para procurar a
+  > medição.** Se não houver uma, a entrada é candidata, e a idade dela conta
+  > contra, não a favor.
 - **`DashboardLayout.workspaceId` nullable** — o NOT NULL entra num 2º deploy.
 - **`DashboardLayout.workspaceId` nullable** — o NOT NULL entra num 2º deploy.
 - **As ações em massa, o duplicar e o excluir nunca foram exercidos.** O
@@ -1838,7 +2002,7 @@ em arquivo local, de propósito. Quem responde é
 | **`Integrações › Visão geral` fora da sidebar** | a tela não existe (`integracoes/page.tsx` é `redirect`). Entra como PRIMEIRO filho no passo de Integrações |
 | **`/dashboard/integracoes/testes` fora da navegação** | decisão do `03`. Ela **morre** no passo de Integrações. ⛔ Não religue link para ela — ver a seção própria acima |
 | **Medidor de plano no rail** | não há backend de billing. Confirmado por `grep` no schema |
-| **Guarda estático de CSS sem camada** | proposto e **não construído**. Reprovaria o `test:contraste` quando o `globals.css` declarasse `color` em seletor de elemento fora de `@layer`. ~15 linhas, sem dependência. Medir a cor PINTADA automaticamente é caro (navegador + servidor + sessão `httpOnly`) e foi **descartado** |
+| **Guarda estático de CSS sem camada** | proposto e **não construído**. Reprovaria o `test:contraste` quando o `globals.css` declarasse `color` em seletor de elemento fora de `@layer`. ~15 linhas, sem dependência. ⚠️ Medir a cor PINTADA automaticamente foi **adiado por custo** (navegador + servidor + sessão) — a palavra era "descartado" por causa do `httpOnly`, que nunca foi medido |
 | **Item (d) — viewport estreito** | segue bloqueado por ambiente (`resize_window` mente) |
 
 ## ➡️ PRÓXIMO PASSO, e por quê
