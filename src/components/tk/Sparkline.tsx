@@ -26,7 +26,20 @@ export function Sparkline({
   /** `null` = bucket sem denominador. A linha se INTERROMPE ali. */
   valores: (number | null)[];
   cor?: string;
-  altura?: number;
+  /**
+   * A altura desenhada. **Aceita `"100%"`** — e é o que o `BlocoMetrica` passa.
+   *
+   * ⛔ Um número cru aqui é a §7.8 do `07` acontecendo dentro do componente: o
+   * SVG fixa a própria altura e o slot deixa de mandar. Medido em 12/08/2026 no
+   * card de ROAS, cuja caixa encolheu 18px para caber a linha de base — e o
+   * desenho continuou com 38, cortado.
+   *
+   * ⚠️ As três saídas usam o MESMO valor (o SVG, o espaço reservado da série
+   * inexistente e a caixa da mensagem), e têm de continuar usando: foi a altura
+   * reservada nos três casos que impediu um card sem histórico de ficar mais
+   * baixo que os vizinhos.
+   */
+  altura?: number | string;
 }) {
   const id = React.useId();
 

@@ -4,16 +4,39 @@ import * as React from "react";
 import { Sparkline } from "./Sparkline";
 
 /**
- * KpiHero e MetricStrip — os dois pesos de número da tela.
+ * BlocoMetrica — UM número da tela, nos dois pesos que ele sabe ter.
  *
- * 🔴 ELES EXISTEM AOS PARES, E É ESSE O PONTO. O Dashboard antigo tinha doze
- * cards idênticos em duas fileiras de seis: doze números do mesmo tamanho não
- * respondem pergunta nenhuma, porque nada na tela diz qual olhar primeiro. A
- * tela listava tudo e deixava a pessoa procurar.
+ * ### 🔴 ERAM DOIS COMPONENTES, E A F5 OS FUNDIU (12/08/2026)
  *
- * `KpiHero` são QUATRO, e só quatro. `MetricStrip` é uma linha, sem card e sem
- * sparkline, para o resto. A hierarquia é o produto — se um dia alguém puser
- * cinco heros ou der sparkline à faixa, o Dashboard volta a ser a grade de doze.
+ * `KpiHero` (card com sparkline) e `MetricStrip` (faixa sem card) existiam
+ * porque o layout tinha ZONAS: quatro heros numa fileira fixa, até oito
+ * compactas numa faixa. As zonas caíram, e com elas o motivo de os dois serem
+ * componentes diferentes — **um KPI hero e uma métrica compacta são a mesma
+ * coisa em slots de alturas diferentes.**
+ *
+ * ⛔ **A hierarquia não morreu, ela mudou de dono.** O argumento antigo continua
+ * inteiro: doze números do mesmo tamanho não respondem pergunta nenhuma, porque
+ * nada diz qual olhar primeiro. O que decide o peso agora é a ALTURA DO SLOT —
+ * o layout padrão dá 2 células aos quatro principais e 1 ao resto, e o usuário
+ * pode mudar. A hierarquia deixou de ser uma regra do componente para virar uma
+ * propriedade do arranjo, que é onde ela é visível e editável.
+ *
+ * ⚠️ **`MetricStrip` foi DELETADO**, não deixado sem consumidor. Ele era
+ * apresentação pura — nenhum efeito colateral a desalojar (a pergunta que a
+ * regra dos órfãos manda fazer) — e mantê-lo daria duas aparências para o mesmo
+ * dado, com a segunda alcançável só por quem lembrasse dela.
+ *
+ * ### Quem decide qual leitura aparece
+ *
+ * Uma container query de ALTURA, em `globals.css` (`.tk-kpi`). Abaixo de ~130px
+ * somem sparkline, legenda e base, e o número cai para o degrau menor. Não há
+ * prop `variante` e não deve haver: uma prop seria uma segunda verdade sobre o
+ * mesmo retângulo, e ela divergiria do slot no primeiro arrasto.
+ *
+ * ⛔ A query só responde dentro de um contêiner com `container-type: size` — a
+ * célula da grade do Dashboard. Fora dela (o Gerenciador, que usa `.tk-medida`,
+ * de `inline-size`) a query nunca casa e o bloco desenha a leitura completa, que
+ * é o que aquela tela quer.
  */
 
 export type DadosKpi = {
@@ -55,11 +78,11 @@ function tomDoDelta(delta: number, invertido?: boolean): "success" | "danger" | 
   return bom ? "success" : "danger";
 }
 
-const COR_TOM = {
-  success: "var(--tk-success)",
-  danger: "var(--tk-danger)",
-  muted: "var(--tk-text-muted)",
-} as const;
+/* ⛔ `COR_TOM` (a cor PURA do tom) saiu com o `MetricStrip` — era ele o único
+   consumidor, e ele pintava a variação como texto colorido solto. O que
+   sobreviveu é o par `TINTA_TOM` / `COR_SOBRE_TINTA`, que é a pílula: a cor pura
+   sobre o fundo do card dá 3,55:1, e os tokens `on-tint-*` existem exatamente
+   para essa combinação não voltar. Reintroduzi-la seria reabrir o par reprovado. */
 
 /**
  * O `trendLabel` só vale a linha se ele AFIRMA alguma coisa. "vs. período
@@ -159,7 +182,7 @@ function PilulaDelta({ delta, invertido }: { delta: number; invertido?: boolean 
   );
 }
 
-export function KpiHero({ dados, carregando = false }: { dados: DadosKpi; carregando?: boolean }) {
+export function BlocoMetrica({ dados, carregando = false }: { dados: DadosKpi; carregando?: boolean }) {
   const corNumero = dados.cor ?? "var(--tk-text)";
 
   /* 🔄 A LINHA SEGUIA O TOM DO DELTA, e parou em 07/08/2026. Um sparkline verde
@@ -180,20 +203,44 @@ export function KpiHero({ dados, carregando = false }: { dados: DadosKpi; carreg
        `container-type`. Sem o ancestral, a consulta cai na raiz e responde
        sobre a janela: ver o ⛔ da prop `escala` no `Card`. */
     <div
-      className="bg-surface border border-border tk-escala"
+      /* 🔑 `tk-kpi` é o que liga a leitura por ALTURA; `tk-escala` é a escala por
+         LARGURA que todos os blocos já tinham. As duas consultam o MESMO
+         contêiner (a célula da grade), e por isso vivem no mesmo elemento: o
+         `--tk-b-kpi` que o padding e o número leem é derivado do `--tk-b-metrica`
+         que a escala publica aqui. */
+      className="bg-surface border border-border tk-escala tk-kpi"
       style={{
         borderRadius: "var(--tk-radius-card)",
-        padding: "var(--tk-pad-hero)",
+        /* ⚠️ Padding e gap vêm de variável, não de literal: em um slot de uma
+           célula (80px) os 24px de `--tk-pad-hero` dos dois lados não deixam
+           altura para o rótulo E o número. Quem troca o valor é a container
+           query, no mesmo lugar que decide o resto da leitura compacta. */
+        padding: "var(--tk-pad-kpi, var(--tk-pad-hero))",
         boxShadow: "var(--tk-shadow-card)",
         display: "flex",
         flexDirection: "column",
-        gap: 6,
+        gap: "var(--tk-gap-kpi, 6px)",
+        justifyContent: "center",
         minWidth: 0,
         flex: 1,
+        /* ⛔ `height: 100%` além do `flex: 1`: na grade o bloco é filho direto da
+           célula (que é `container-type: size`, ou seja, `contain: size`), e ali
+           não há contexto flexível para o `flex` valer. Sem isto o card ficaria
+           com a altura do conteúdo dentro de um slot maior — a F1 pelo avesso. */
+        height: "100%",
         overflow: "hidden",
       }}
     >
-      <span className="text-label text-text-secondary" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+      {/* 🔴 `flex: none` NO RÓTULO E NA LINHA DO NÚMERO — achado na passada
+          visual da F5. Numa coluna flex sob pressão, todo filho encolhe: medido
+          no card de ROAS dentro da moldura de edição, o rótulo foi de 17px para
+          **4px** — legível como um risco.
+
+          ⛔ E o que encolhe primeiro tem de ser o APOIO, nunca a resposta. Sem
+          isto, o único card com uma linha a mais (o ROAS, que declara a base)
+          sacrificava justamente o texto que diz QUAL métrica é aquela. É a mesma
+          ordem de sacrifício das colunas de tabela, na vertical. */}
+      <span className="text-label text-text-secondary" style={{ flex: "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
         {dados.rotulo}
       </span>
 
@@ -204,7 +251,7 @@ export function KpiHero({ dados, carregando = false }: { dados: DadosKpi; carreg
           `flexWrap` porque a fileira tem 4 cards e a largura de cada um depende
           do arranjo que o usuário salvou: no card mais estreito a pílula desce
           para a linha de baixo em vez de espremer o número. */}
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap", minWidth: 0 }}>
+      <div style={{ display: "flex", flex: "none", alignItems: "baseline", gap: 10, flexWrap: "wrap", minWidth: 0 }}>
         {/* 🎨 O NÚMERO ESCALA EM DEGRAUS com a largura do card (`--tk-b-metrica`,
             4 faixas). `text-metric-xl` continua definindo peso, tracking e
             `font-variant-numeric`; só o TAMANHO passa a vir da escala — senão
@@ -215,7 +262,7 @@ export function KpiHero({ dados, carregando = false }: { dados: DadosKpi; carreg
             hinting e pesa diferente do card vizinho. */}
         <span
           className="text-metric-xl"
-          style={{ fontSize: "var(--tk-b-metrica, 30px)", lineHeight: 1.05, color: corNumero, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}
+          style={{ fontSize: "var(--tk-b-kpi, var(--tk-b-metrica, 30px))", lineHeight: 1.05, color: corNumero, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}
         >
           {carregando ? "—" : dados.valor}
         </span>
@@ -228,18 +275,58 @@ export function KpiHero({ dados, carregando = false }: { dados: DadosKpi; carreg
         )}
       </div>
 
+      {/* ══ O QUE SÓ EXISTE COM ALTURA ═══════════════════════════════════════
+          🔴 `.tk-kpi-alto` some abaixo de ~130px de slot, e a escolha do que
+          entra aqui não é de conforto: o que fica é o que RESPONDE (rótulo,
+          número, variação); o que sai é o que CONTEXTUALIZA (a série, contra o
+          que se compara, qual população o número cobre).
+
+          ⛔ É a mesma ordem de sacrifício das colunas de tabela deste projeto —
+          sai o apoio, nunca a resposta. Um bloco de uma célula que mostrasse o
+          sparkline e cortasse o número seria o inverso exato.
+
+          ⚠️ E a `base` sai junto, apesar de ela ser uma declaração honesta que
+          o produto quer fazer. Ela cabe em duas linhas de texto e o slot tem
+          80px: mantê-la ali produziria um número espremido com uma nota de
+          rodapé — a informação que o usuário não pode deixar de ver é o próprio
+          valor. Quem quer a base estica o bloco, e é uma alça de distância. */}
       {/* O sparkline vem ANTES do delta e depois do número: ele é o contexto do
           número, e o delta é a conclusão. Lido de cima para baixo dá
           "quanto → como veio → o que isso quer dizer".
 
-          A área tem altura FIXA nos quatro cards, com ou sem série — senão um
-          card sem dado fica mais baixo e a fileira desalinha. */}
-      {/* ⚠️ A altura vem da MESMA faixa do número, e é o que mantém a proporção
-          entre os dois quando o card cresce. Continua FIXA dentro de cada faixa,
-          com ou sem série — senão um card sem dado fica mais baixo e a fileira
-          desalinha. */}
-      <div className="tk-spark" style={{ margin: "2px -4px 0", height: "var(--tk-b-spark, 32px)" }}>
-        <Sparkline valores={dados.serie ?? []} cor={corLinha} altura={38} />
+          A área tem altura FIXA dentro de cada faixa, com ou sem série — senão
+          um card sem dado fica mais baixo e a fileira desalinha. */}
+      {/* 🔴 `flex: 0 1 …` — ELE PODE ENCOLHER, e não pode crescer. Medido na
+          passada visual: o card de ROAS é o único com uma linha a mais (a base
+          da razão), e no slot de 2 células ele pedia **5px** além do que tinha.
+          Com `height` cravado, esses 5px viravam corte silencioso.
+
+          ⛔ O que cede é o sparkline, e a escolha não é de conveniência: entre
+          rótulo, número, variação, legenda e SÉRIE, a série é a única que
+          continua dizendo o mesmo com menos pixel. É a ordem de sacrifício de
+          sempre — cede o apoio, nunca a resposta.
+
+          ⚠️ E ele NÃO cresce (`flex-grow: 0`): num slot alto ele viraria a maior
+          coisa do card, e um bloco de métrica não é um bloco de gráfico. Quem
+          quer a série grande tem `Receita vs. gasto`. */}
+      <div
+        className="tk-spark tk-kpi-alto"
+        /* ⚠️ `overflow: hidden` porque encolher a CAIXA não encolhe o que está
+           dentro dela. Visto na tela, na moldura de edição: com a caixa em 12px,
+           a frase "sem histórico para a tendência" (que fica centrada nela)
+           passava por cima de "sem período anterior para comparar" — duas linhas
+           de texto sobrepostas.
+
+           ⛔ Texto sobreposto é pior que texto cortado: o primeiro é ilegível e
+           parece defeito de renderização; o segundo se lê como falta de espaço,
+           que é o que é. Aqui o corte só acontece na PRÉVIA da edição, onde a
+           moldura come ~37px do slot — na tela de verdade a caixa é inteira. */
+        style={{ margin: "2px -4px 0", flex: "0 1 var(--tk-b-spark, 32px)", minHeight: 0, overflow: "hidden" }}
+      >
+        {/* ⚠️ `100%`, e não 38: quem decide a altura é a caixa de cima, que encolhe
+            quando o card precisa. Um número aqui faria o desenho ignorar o
+            encolhimento e ser cortado — a §7.8 dentro do próprio componente. */}
+        <Sparkline valores={dados.serie ?? []} cor={corLinha} altura="100%" />
       </div>
 
       {/* 🔴 RÓTULO DE COMPARAÇÃO SEM VALOR É PIOR QUE NADA. Sem delta, o hook
@@ -251,11 +338,11 @@ export function KpiHero({ dados, carregando = false }: { dados: DadosKpi; carreg
            — contra o que a variação está sendo medida. Ela é neutra de propósito:
            a cor já foi dita uma vez, e dizê-la duas vezes na mesma coluna faz o
            card inteiro parecer vermelho num dia ruim. */
-        <span className="text-caption text-text-muted" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        <span className="text-caption text-text-muted tk-kpi-alto" style={{ flex: "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           vs. período anterior
         </span>
       ) : apoioUtil(dados.trendLabel) ? (
-        <span className="text-caption text-text-muted" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        <span className="text-caption text-text-muted tk-kpi-alto" style={{ flex: "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {dados.trendLabel}
         </span>
       ) : (
@@ -263,7 +350,7 @@ export function KpiHero({ dados, carregando = false }: { dados: DadosKpi; carreg
            dado para comparar. Dizer isso é diferente de repetir a legenda "vs.
            período anterior" sem número — aquilo prometia uma comparação que não
            existia; isto explica a ausência dela. */
-        <span className="text-caption text-text-muted" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        <span className="text-caption text-text-muted tk-kpi-alto" style={{ flex: "none", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           sem período anterior para comparar
         </span>
       )}
@@ -277,8 +364,23 @@ export function KpiHero({ dados, carregando = false }: { dados: DadosKpi; carreg
           não é acusar o número. */}
       {dados.base && (
         <span
-          className="text-caption text-text-muted"
-          style={{ marginTop: 2, lineHeight: 1.35, opacity: 0.85 }}
+          className="text-caption text-text-muted tk-kpi-alto"
+          /* ⚠️ `flex: none` — senão ELA é que encolhe. Medido: a linha de base
+             do ROAS ficava 8px curta e a segunda linha do texto era cortada.
+             Numa coluna flex, "quem cede" não é escolha do desenho: é quem
+             esqueceu de dizer que não cede. */
+          /* 🔴 O `opacity: 0.85` SAIU — medido em 12/08/2026, na passada da F5:
+             ele levava a linha de base a **3,70:1** no tema claro e **4,15:1** no
+             escuro, abaixo do piso de 4,5. Sem ele: 4,97 e 5,20.
+             `--tk-text-muted` já é o token mais silencioso da paleta; abaixar
+             mais era pintar a declaração da base num tom que parte das pessoas
+             não lê — e ela existe justamente para ser lida.
+
+             ⚠️ **O `test:contraste` não pegava e não pegaria**: ele mede PARES DE
+             TOKEN no `globals.css`, e a opacidade é aplicada no componente, em
+             cima do par. Só medir a cor PINTADA acha isto — é o mesmo buraco que
+             o `06` §CSS já documenta, agora com um caso. */
+          style={{ flex: "none", marginTop: 2, lineHeight: 1.35 }}
         >
           {dados.base}
         </span>
@@ -287,77 +389,19 @@ export function KpiHero({ dados, carregando = false }: { dados: DadosKpi; carreg
   );
 }
 
-/**
- * A faixa dos sete restantes. Uma linha, sem card, sem sparkline — e rola na
- * horizontal em tela estreita em vez de quebrar em grade, porque quebrar em
- * grade a transforma de volta em "mais cards".
- */
-export function MetricStrip({ itens, carregando = false }: { itens: DadosKpi[]; carregando?: boolean }) {
-  if (itens.length === 0) return null;
-  return (
-    <div
-      className="bg-surface border border-border"
-      style={{
-        borderRadius: "var(--tk-radius-card)",
-        /* A faixa tem fundo, borda e raio de card — então tem a SOMBRA de card
-           (`06` §1). Sem ela a faixa ficava rente ao fundo logo abaixo de quatro
-           heros elevados, e a fileira inteira parecia meio desenhada. Os ITENS
-           dentro continuam sem card, que é o que o comentário acima diz. */
-        boxShadow: "var(--tk-shadow-card)",
-        display: "flex",
-        alignItems: "stretch",
-        overflowX: "auto",
-        padding: "10px 4px",
-      }}
-    >
-      {/* 🔴 `.tk-medida` NO ITEM e `.tk-escala` NO NÚMERO — nunca os dois no
-          mesmo elemento, e eu escrevi assim primeiro. **Um elemento com
-          `container-type` não é contêiner de si mesmo**: a consulta sobe para o
-          ancestral, e como a faixa não está numa célula da grade ela cairia na
-          RAIZ, respondendo sobre a janela.
+/* ⛔ `MetricStrip` FOI DELETADO AQUI — F5, 12/08/2026.
 
-          ⚠️ E medir o ITEM, não a faixa: a faixa é sempre da largura da tela, e
-          o que varia é a QUANTIDADE de métricas nela — com três, cada item tem o
-          dobro do espaço de quando há oito. Medir a faixa daria a mesma resposta
-          sempre, que é um controle que não controla nada.
+   Ele era a faixa dos sete restantes: uma linha sem card e sem sparkline, com
+   `.tk-medida` por item. Ele existia porque existia uma ZONA "Resumo" com teto
+   de oito, e as zonas acabaram.
 
-          São só duas faixas aqui (17 → 23px): a strip é compacta por desenho, e
-          escalar mais a transformaria de volta em "mais cards". */}
-      {itens.map((m, i) => (
-        <div
-          key={m.chave}
-          className="tk-medida"
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 2,
-            padding: "0 16px",
-            minWidth: 132,
-            flex: "1 0 auto",
-            borderLeft: i ? "1px solid var(--tk-border)" : undefined,
-          }}
-        >
-          <span className="text-caption text-text-muted" style={{ whiteSpace: "nowrap" }}>{m.rotulo}</span>
-          {/* 🔴 SEM ISTO A FAIXA MENTIA DURANTE O CARREGAMENTO. O `KpiHero`
-              recebia `carregando` e mostrava "—"; a faixa não recebia e seguia
-              imprimindo os SETE números do período ANTERIOR. Trocar o filtro e
-              ler dado velho achando que é novo não é detalhe de polimento — é a
-              tela afirmando um número que não corresponde ao filtro na tela.
+   ⚠️ A pergunta que a regra dos órfãos manda fazer antes de apagar — *"o que
+   este símbolo FAZIA?"* — tem resposta curta aqui: **desenhava**. Nenhum efeito
+   colateral, nenhuma gravação, nenhum segredo gerado no caminho. Era o caso em
+   que `grep` basta, e por isso ele saiu inteiro em vez de virar mais um
+   componente que existe e ninguém alcança.
 
-              Os dois pesos de número agora dizem a mesma coisa ao mesmo tempo. */}
-          <span
-            className="text-metric-md tk-escala"
-            style={{ fontSize: "var(--tk-b-metrica-sm, 17px)", color: m.cor ?? "var(--tk-text)", whiteSpace: "nowrap" }}
-          >
-            {carregando ? "—" : m.valor}
-          </span>
-          {!carregando && m.delta != null && (
-            <span className="text-caption" style={{ color: COR_TOM[tomDoDelta(m.delta, m.invertido)], whiteSpace: "nowrap" }}>
-              {m.delta > 0 ? "↑" : m.delta < 0 ? "↓" : "—"} {Math.abs(m.delta).toFixed(1).replace(".", ",")}%
-            </span>
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
+   🔑 O que dele ficou está no `BlocoMetrica`: a leitura compacta é a mesma
+   (rótulo pequeno, número em `--tk-b-metrica-sm`, variação), e o `carregando`
+   continua chegando — foi ele que consertou a faixa que imprimia os números do
+   período anterior enquanto o filtro trocava. */

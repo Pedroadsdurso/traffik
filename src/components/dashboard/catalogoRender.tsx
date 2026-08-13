@@ -24,7 +24,10 @@ import { TabelaCampanhas } from "@/components/tk/TabelaCampanhas";
 import { brl0 } from "@/lib/format";
 import { corFinanceira } from "@/lib/financeiro";
 
-import type { IdBloco } from "./catalogo";
+import { BlocoMetrica, type DadosKpi } from "@/components/tk/Kpi";
+
+import type { IdBloco, IdPainel } from "./catalogo";
+import { idDaMetrica, METRICAS, type ChaveDeMetrica, type IdMetrica } from "./metricas";
 import { ROTULO_HEAT, type CtxBlocos } from "./dadosDosBlocos";
 import type { TraffikView } from "./useTraffikState";
 
@@ -76,6 +79,22 @@ interface BaseBloco {
   /** O controle do cabeçalho do card (`06` §14.1). Vai para o slot `acao`. */
   acao?: (v: TraffikView, c: CtxBlocos) => React.ReactNode;
   render: (v: TraffikView, c: CtxBlocos) => React.ReactNode;
+  /**
+   * 🔴 O BLOCO DESENHA A PRÓPRIA SUPERFÍCIE — sem `<Card>` em volta.
+   *
+   * É o caso das métricas: elas já são um card (fundo, borda, raio, sombra) com
+   * um cabeçalho que NÃO é o do `Card` — o rótulo de uma métrica é pequeno e
+   * apagado, acima de um número grande, e o `titulo` do `Card` é `text-title`,
+   * acima de um corpo. Enfiar uma dentro do outro daria dois cabeçalhos e duas
+   * bordas.
+   *
+   * ⛔ **Isto não é uma exceção para "blocos especiais".** É a única pergunta
+   * que a tela faz sobre o tipo do bloco, e ela é sobre MOLDURA, não sobre
+   * categoria: um painel que um dia precise desenhar a própria superfície marca
+   * isto e a tela não muda. A alternativa era a tela perguntar "é métrica?", que
+   * é a zona voltando com outro nome.
+   */
+  semCard?: true;
 }
 
 /** O caso comum: pode não haver dado, e então há um estado vazio para mostrar. */
@@ -362,7 +381,85 @@ const EXCLUSOES_DO_FUNIL = (v: TraffikView): ExclusaoFita[] => {
   return fora;
 };
 
-export const RENDERS: Record<IdBloco, RenderBloco> = {
+/* ══ AS MÉTRICAS ════════════════════════════════════════════════════════════
+   🔴 QUAL POPULAÇÃO ESTÁ EM CIMA E QUAL ESTÁ EMBAIXO.
+
+   O ROAS do Dashboard divide **toda** a receita aprovada (`metrics.ts:668`, sem
+   filtro de origem: orgânico, Google, TikTok, Meta) pelo `spend` do
+   `DailyAdMetric`, que é **só da Meta**. Medido no dev em 07/08/2026: a tela
+   mostra **3,54x** enquanto o ROAS real da Meta é **0,71x** — inflação de 5×,
+   cruzando o 1,0x que separa "se paga" de "dá prejuízo".
+
+   ⛔ **A CONTA NÃO FOI ALTERADA, por decisão do dono.** O que a tela ganhou é a
+   declaração da base, do mesmo jeito que o funil declara a cobertura de
+   rastreamento: o usuário não pode ler um número sem saber o que ele mede.
+
+   ⚠️ Ele MORAVA no `DashboardScreen` e veio para cá com a F5 — não por
+   arrumação: lá ele era lido por uma função que montava o hero e a faixa, e as
+   duas deixaram de existir. Aqui ele fica ao lado do render que o consome.
+
+   🔜 Reabrir quando existir a segunda plataforma de anúncio. Hoje "gasto" e
+   "Meta" são sinônimos nesta base, e é isso que torna o erro invisível. */
+const BASE_DECLARADA: Partial<Record<ChaveDeMetrica, string>> = {
+  roas: "receita de todos os canais ÷ gasto da Meta",
+};
+
+/**
+ * O render de UMA métrica. Ele é o mesmo para as quinze — o que muda é a chave.
+ *
+ * ⛔ **`sempreCheio`, e o motivo é a distinção central deste projeto.** Uma
+ * métrica zerada é uma MEDIÇÃO, não ausência de dado: `R$ 0,00` de faturamento é
+ * a resposta certa para um período sem venda, e um estado vazio no lugar dela
+ * afirmaria que não sabemos — quando sabemos. Quem não sabe já tem resposta
+ * própria e ela é `—`, produzida no hook pelo `div()` de denominador zero.
+ *
+ * ⚠️ O `?? null` cobre a métrica que o hook ainda não montou (o primeiro render,
+ * antes de o dado chegar). Ele desenha o rótulo com `—`, que é o mesmo que o
+ * `carregando` faz — e não um card em branco.
+ */
+function renderDeMetrica(chave: ChaveDeMetrica, rotulo: string): RenderBloco {
+  const dadosDe = (v: TraffikView, c: CtxBlocos): DadosKpi => {
+    const k = v.metricCards[chave];
+    return {
+      chave,
+      rotulo,
+      valor: k?.value ?? "—",
+      delta: k?.delta ?? null,
+      invertido: k?.invertido,
+      trendLabel: k?.trendLabel,
+      cor: k?.cor,
+      base: BASE_DECLARADA[chave],
+      /* Mesma janela do gráfico. ⚠️ A série do sparkline tem um bucket por
+         rótulo do gráfico — é o mesmo `buckets` do servidor —, então o índice
+         vale para as duas sem conversão. */
+      serie: (v.sparklines[chave] ?? []).slice(c.inicioAparado),
+    };
+  };
+
+  return {
+    sempreCheio: true,
+    porQue:
+      "Zero é uma MEDIÇÃO, não ausência de dado: 'R$ 0,00' de faturamento é a resposta certa para um período sem venda. Quando o número de fato não existe — denominador zero — o hook já devolve '—', que é a outra afirmação e ela é diferente.",
+    semCard: true,
+    render: (v, c) => <BlocoMetrica dados={dadosDe(v, c)} carregando={v.dashLoading} />,
+  };
+}
+
+/* 🔑 OS RENDERS DE MÉTRICA SAEM DA MESMA LISTA QUE O CATÁLOGO (`METRICAS`).
+   É isso que preserva a regra de entrada deste arquivo para elas: um id de
+   métrica não consegue existir num lado e faltar no outro, porque os dois lados
+   são o mesmo `map`. O `Record<IdPainel, …>` abaixo continua cobrando, pelo
+   compilador, a metade escrita à mão.
+
+   ⚠️ O `as` não é um buraco: as chaves são LITERALMENTE derivadas de `METRICAS`,
+   a mesma tupla de onde `IdMetrica` sai. Mas ele desliga a checagem, então a
+   cobertura dos DOIS lados tem asserção própria em `npm run test:blocos-vazios`
+   — que é a forma desta base de trocar "confie" por "prove". */
+const RENDERS_DE_METRICA = Object.fromEntries(
+  METRICAS.map((m) => [idDaMetrica(m.chave), renderDeMetrica(m.chave, m.rotulo)]),
+) as Record<IdMetrica, RenderBloco>;
+
+const RENDERS_DE_PAINEL: Record<IdPainel, RenderBloco> = {
   /* ── OS QUATRO ESTRUTURAIS ────────────────────────────────────────────────
      ⚠️ Eles vieram do JSX fixo do `DashboardScreen`. **Nenhum ganhou um render
      novo**: o corpo é o mesmo, agora com `temDado` e `vazio` como todos os
@@ -736,6 +833,15 @@ export const RENDERS: Record<IdBloco, RenderBloco> = {
     ),
   },
 };
+
+/**
+ * O catálogo de renders inteiro — painéis e métricas, num espaço de id só.
+ *
+ * ⚠️ A união é feita AQUI e não em dois consumidores: a tela pergunta
+ * `RENDERS[id]` sem saber de que metade o bloco veio, que é a F5 na camada de
+ * desenho. Se ela precisasse escolher a metade, a zona teria voltado.
+ */
+export const RENDERS: Record<IdBloco, RenderBloco> = { ...RENDERS_DE_PAINEL, ...RENDERS_DE_METRICA };
 
 /* ⛔ O `CATALOGO` (metadado + render juntos) foi DELETADO com a rota
    `/dashboard/blocos`, que era o único consumidor. Quem precisa dos dois hoje é

@@ -316,12 +316,22 @@ devem ser mencionadas de novo até a fase fechar.
 |---|---|---|
 | **F0b** | **MEDIR** a altura renderizada de cada bloco no layout padrão a 12 colunas | a migração e a tabela da §3. ⚠️ **só é possível com a grade ainda em `auto`** |
 | ~~F0~~ | **deixou de ser fase — virou CONDIÇÃO de renderização.** Ver abaixo | — |
-| F1 | grade de células: `--tk-row`, `span w/h`, `min-width/min-height: 0`, altura fora do conteúdo | queixas 2, 4, 5 |
-| F2 | mínimos no catálogo + derivação por viewport | queixa 1 (parcial) e responsividade |
-| F3 | container queries por família, na ordem KPI → série → tabela → medidor → funil → mapa | queixa 3 |
+| F1 | ✅ grade de células: `--tk-row`, `span w/h`, `min-width/min-height: 0`, altura fora do conteúdo | queixas 2, 4, 5 |
+| F2 | ✅ mínimos no catálogo + derivação por viewport | queixa 1 (parcial) e responsividade |
+| F3 | ✅ container queries por família, na ordem KPI → série → tabela → medidor → funil → mapa | queixa 3 |
 | F4 | acabamento dos gráficos: C1–C8 | queixa 6 |
-| F5 | fim das zonas: um catálogo só, sem teto | queixa 1 |
+| F5 | ✅ fim das zonas: um catálogo só, sem teto | queixa 1 |
 | F6 | asserções §7 e varredura de vazio | — |
+
+> ### ⚠️ A F5 RODOU ANTES DA F4, e a ordem da tabela deixou de descrever o que
+> ### aconteceu — ela ficou porque descreve o que DESTRAVA o quê
+>
+> A execução real foi **F0b → F1 → F3 → F5 → F2**. A F5 não dependia da F4 (o
+> acabamento dos gráficos é independente do modelo de layout, como o inventário
+> já tinha medido), e a F2 veio depois dela porque derivar uma grade com três
+> zonas exigiria derivar três vezes.
+>
+> ⛔ Sobra a **F4** (C1–C8, menos o C5 que a F3 já resolveu) e a **F6**.
 
 > ### ⛔ F0 NÃO É FASE — é condição, e o colapso é POR BLOCO
 >
@@ -427,6 +437,111 @@ de `n` — e `n` é um número que CSS não conhece.
 ⚠️ O segundo é o caro: ele mediu "defeito" por duas leituras seguidas, então a
 regra das duas leituras **não o teria pego**. O que o pegou foi o print
 contradizendo o número.
+
+## ✅ F5 — executada em 12/08/2026: as três zonas viraram uma grade
+
+`hero` (sempre 4), `faixa` (até 8) e `paineis` eram **três estruturas separadas
+com três regras**, e os dois tetos eram a queixa 1: onze métricas disputando oito
+vagas. Nenhum dos dois números tinha razão de produto — eles existiam porque os
+três grupos eram três componentes.
+
+| | |
+|---|---|
+| catálogo | **31 blocos** — 16 painéis + 15 métricas, sem vaga reservada |
+| `KpiHero` + `MetricStrip` | viraram **`BlocoMetrica`**; o segundo foi deletado |
+| envelope | **v5**, com `blocos` numa lista só |
+| padrões | KPI de destaque **3×2**, métrica comum **3×1**, painel mantém a F0b |
+| `useArrasto` | uma carga, um destino — `zonaAceita` e o tipo `Zona` **apagados** |
+| operações do hook | `moverBloco` · `inserirBloco` · `removerBloco` · `redimensionar`. Saíram `trocarHero`, `moverMetrica`, `inserirFaixa`, `removerFaixa`, `faixaCheia` |
+
+### 🔑 A hierarquia NÃO morreu — ela mudou de dono
+
+O argumento que sustentava os quatro heros continua inteiro: *doze números do
+mesmo tamanho não respondem pergunta nenhuma*. O que decide o peso agora é a
+**altura do slot** — o padrão dá 2 células aos quatro principais e 1 ao resto, e
+uma container query de ALTURA (`.tk-kpi`, `max-height: 130px`) troca a leitura.
+
+⛔ **Não há prop `variante`, e não deve haver.** Uma prop seria uma segunda
+verdade sobre o mesmo retângulo, e divergiria do slot no primeiro arrasto.
+
+### 🔴 A MIGRAÇÃO: "ninguém muda de lugar", e a única exceção declarada
+
+A conversão zonas → grade tem **um ponto único** (`deZonasParaGrade`), por onde
+passam v1, v2, v3 e v4 — duas rotas até a mesma grade divergiriam em silêncio.
+
+A promessa é dura: *quem já tem layout salvo encontra os cards onde deixou*. O
+que a garante é as fileiras de métrica **fecharem 12**:
+
+| métricas | fileiras | larguras |
+|---|---|---|
+| 4 (o hero) | 1 | 3 3 3 3 |
+| 8 (o teto da faixa) | 2 | 3 3 3 3 · 3 3 3 3 |
+| 7 (a faixa padrão) | 2 | 3 3 3 3 · 4 4 4 |
+| 1 | 1 | 12 — que é o que a faixa de um item já era |
+
+⚠️ **A EXCEÇÃO DECLARADA é essa segunda linha**: a faixa de oito passa de UMA
+fileira para DUAS, porque em 12 colunas não existe largura inteira que mantenha
+oito lado a lado. Qualquer outro deslocamento é defeito — e é por isso que a
+fileira precisa FECHAR: uma que deixasse sobra permitiria um painel estreito
+SUBIR para o grupo de métricas, movendo um card sem que ninguém notasse.
+
+⛔ **A altura vem da ZONA, não do catálogo.** Uma métrica de destaque que o
+usuário tinha arrastado para o Resumo volta com `h = 1`, onde ela estava. O
+catálogo decide o tamanho de quem NASCE agora; a migração mede o que já existia.
+
+### 🕸️ A SEGUNDA REDE — `hero`/`faixa` atravessam o envelope v5
+
+`{hero, faixa, paineis} → blocos` é **irreversível**, pelo mesmo motivo do
+`linhas → h` da F1: da lista única não se recupera qual métrica era hero. A
+altura diz isso no instante da conversão e deixa de dizer no primeiro arrasto — e
+a conversão roda sozinha, em produção, sobre um arranjo que o usuário montou.
+
+Então o v5 grava `hero` e `faixa` como legado. **Nada os lê para desenhar**, e há
+asserção sobre as duas metades: que eles sobrevivem, e que não reinjetam métrica
+na grade.
+
+## ✅ F2 — executada em 12/08/2026: a derivação por viewport
+
+`layout/derivar.ts`, puro. `derivar(salvo, 12) === salvo` (§7.4), e em 8/4/1
+nenhum bloco passa da grade, a ordem é preservada e `h` também (§7.5).
+
+> ### 🔴 O INSTRUMENTO É O VIEWPORT, E NÃO O CONTÊINER — contra o hábito da base
+>
+> Esta base prefere medir o contêiner, com razão. **Aqui é o contrário, e o
+> motivo é o catálogo.** Os `colMin` foram calculados contra uma referência
+> declarada: *"uma janela de 1440px com o rail aberto: coluna ≈ 82px"*. Nessa
+> janela o contêiner mede ~1160px — que cairia na faixa de 8. A tela de
+> referência do catálogo inteiro passaria a ser derivada, e todo `colMin` do
+> arquivo estaria descrevendo uma largura que a grade não usa mais.
+>
+> ⚠️ Limiar e instrumento vêm em par. Trocar um sem o outro é o erro do
+> `getBoundingClientRect` clipado: o número continua saindo, medindo outra coisa.
+
+⛔ **A EDIÇÃO É SEMPRE 12 COLUNAS.** Ela opera sobre o layout SALVO; a derivação
+é leitura. Numa grade derivada, a alça mediria contra 4 colunas e o
+`redimensionar` gravaria "4" num campo que significa doze avos — o arranjo do
+usuário corrompido pelo tamanho da janela dele. Há guarda sobre isso.
+
+### 👁️ O que foi VISTO e o que foi MEDIDO
+
+| | |
+|---|---|
+| 12 colunas | ✅ **visto** (modo de edição) |
+| 8 colunas | ✅ **visto** — a janela do dev tem `innerWidth` 1132, e a tela derivou sozinha |
+| ⛔ 4 e 1 coluna | **não vistos** — só as asserções puras. Exigiria janela mais estreita, e o `resize_window` mente |
+| vazamento | ✅ **0 fugas em 55 células**, `rolagem: 0`, nos dois temas |
+| contraste | ✅ **medido**: rótulo 6,49/6,58 · número 17,85/16,11 · legenda e base 4,97/5,20 |
+
+### 🐛 Os quatro defeitos que só a tela mostrou
+
+Nenhum deles aparece em `tsc`, `lint`, `build` ou nas 46 asserções da grade.
+
+| | |
+|---|---|
+| 🔴 **a container query media a caixa ERRADA** | a célula é `container-type: size`, mas na edição a moldura come ~37px. Célula **176**, corpo **139**, e o KPI ficou com **99** pedindo **119** — o rótulo cortado inteiro (`altura 0`) em todos os cards. O corpo do `ItemEdicao` virou contêiner |
+| **o rótulo encolhia a 4px** | numa coluna flex sob pressão todo filho cede, e quem cedia era o texto que diz QUAL métrica é. `flex: none` no rótulo, no número e na legenda — o que cede é o sparkline |
+| **o sparkline era cortado** | ele encolhia a caixa e mantinha `height={38}`: a §7.8 acontecendo dentro do componente. Passou a `100%` |
+| **a base da razão reprovava no contraste** | `opacity: 0.85` levava a **3,70:1** no claro e **4,15** no escuro. ⚠️ O `test:contraste` mede PARES DE TOKEN e nunca pegaria isto — a opacidade é aplicada no componente, em cima do par |
 
 ## 🔎 O INVENTÁRIO — medido em 12/08/2026, e ele MUDOU a ordem
 

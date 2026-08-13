@@ -1776,6 +1776,51 @@ a {
      errou — `:root` e `[data-theme]` empatados, e o `:root` vinha depois. */
 }
 
+/* ══ AS DUAS LEITURAS DE UMA MÉTRICA — F5, 12/08/2026 ═══════════════════════
+   🔴 KPI HERO E MÉTRICA COMPACTA SÃO O MESMO BLOCO. O que os separa é a ALTURA
+   do slot, e é esta container query quem decide — não uma prop, não um campo do
+   catálogo. Uma prop seria uma segunda verdade sobre o mesmo retângulo, e ela
+   divergiria do slot no primeiro arrasto da alça.
+
+   ⛔ `max-height`, e não `max-width`: é a única consulta de ALTURA da base, e
+   ela só responde porque a célula da grade é `container-type: size` (F1). Num
+   contêiner de `inline-size` — o `.tk-medida` do Gerenciador — ela NUNCA casa, e
+   o bloco desenha a leitura completa. Isso é o comportamento certo lá e está
+   escrito no cabeçalho do `Kpi.tsx`; não "conserte" dando `size` ao `.tk-medida`.
+
+   ### O limiar é 130px, e ele vem da conta do slot de UMA célula
+
+   Uma célula são 80px. Com `--tk-pad-hero` (24) dos dois lados sobram 32px — não
+   cabe rótulo E número. Então a leitura compacta tem de valer para tudo abaixo
+   de duas células (176px), e 130 é o meio da faixa: acima dele já há espaço para
+   o sparkline de 32px + a legenda.
+
+   ⚠️ Ele NÃO é um limiar fixado antes de medir, que é o erro que esta grade já
+   cometeu três vezes: os dois números que o cercam (80 e 176) são a própria
+   geometria da grade, não uma estimativa. Se `--tk-row` mudar, este número muda
+   junto — e há asserção sobre isso em `npm run test:grade`. */
+@layer components {
+  .tk-kpi {
+    --tk-pad-kpi: var(--tk-pad-hero);
+    --tk-gap-kpi: 6px;
+    /* O número segue a escala por LARGURA, como sempre. A camada de altura só
+       troca de degrau — ela não inventa um tamanho próprio. */
+    --tk-b-kpi: var(--tk-b-metrica, 30px);
+  }
+
+  @container (max-height: 130px) {
+    .tk-kpi {
+      --tk-pad-kpi: 12px 14px;
+      --tk-gap-kpi: 2px;
+      --tk-b-kpi: var(--tk-b-metrica-sm, 17px);
+    }
+    /* ⛔ Sai o que CONTEXTUALIZA (série, contra o que se compara, qual população
+       o número cobre); fica o que RESPONDE. É a mesma ordem de sacrifício das
+       colunas de tabela — some o apoio, nunca a resposta. */
+    .tk-kpi .tk-kpi-alto { display: none; }
+  }
+}
+
 /* ══ CONTAINER QUERIES DOS BLOCOS — C3, 07/08/2026 ══════════════════════════
    ⛔ CONTAINER, e não `@media`. O mesmo bloco pode ter 3 colunas numa tela de
    1920px e 12 numa de 1280 — a janela não diz nada sobre a largura DELE. É esta

@@ -31,12 +31,18 @@ const {
   CATALOGO_META,
   GAP_GRADE,
   celulasDePx,
+  ehBlocoDeMetrica,
   encaixarAltura,
   metaDoBloco,
 } = await import("../src/components/dashboard/catalogo.ts");
 const { alturaMigrada, celulasDeLinhas, layoutPadrao, migrarAlturas, migrarLayout, precisaMigrarAltura } =
   await import("../src/components/dashboard/layout/migrar.ts");
 const { CountryPanel } = await import("../src/components/tk/CountryPanel.tsx");
+const { colunasParaLargura, derivarLayout, larguraDerivada } = await import(
+  "../src/components/dashboard/layout/derivar.ts"
+);
+const { RENDERS } = await import("../src/components/dashboard/catalogoRender.tsx");
+const { METRICAS } = await import("../src/components/dashboard/metricas.ts");
 
 let ok = 0;
 const falhas = [];
@@ -99,12 +105,26 @@ const F0B = [
   ["rodape", null, 3],
 ];
 
-checar("a tabela da F0b cobre TODO o catálogo (senão a varredura é parcial)", () => {
-  assert.equal(F0B.length, CATALOGO_META.length);
+/* 🔴 A TABELA COBRE OS PAINÉIS, e a distinção nasceu com a F5: as métricas
+   entraram no catálogo em 12/08/2026 e **não têm medição F0b** — ela era a
+   altura que o bloco ocupava na grade em `auto`, e naquele momento métrica não
+   era bloco. O `hMin`/`hPadrao` delas é decisão (1 e 1 ou 2), não medição, e
+   está escrito no catálogo.
+
+   ⚠️ A asserção continua exigindo cobertura TOTAL do que ela cobre, senão a
+   varredura vira parcial em silêncio no dia em que um painel novo entrar. */
+const PAINEIS_DO_CATALOGO = CATALOGO_META.filter((b) => !ehBlocoDeMetrica(b.id));
+
+checar("a tabela da F0b cobre TODO PAINEL do catálogo (senão a varredura é parcial)", () => {
+  assert.equal(F0B.length, PAINEIS_DO_CATALOGO.length);
   assert.deepEqual(
     F0B.map(([id]) => id).sort(),
-    CATALOGO_META.map((b) => b.id).sort(),
+    PAINEIS_DO_CATALOGO.map((b) => b.id).sort(),
   );
+  /* Linha de base do outro lado: as métricas EXISTEM no catálogo e ficaram de
+     fora de propósito. Sem isto, a asserção passaria com o catálogo vazio de
+     métricas — que é o estado que a F5 acabou de mudar. */
+  assert.ok(CATALOGO_META.length > PAINEIS_DO_CATALOGO.length, "nenhuma métrica no catálogo");
 });
 
 checar("o passo da célula é 96 — e é o divisor de toda conversão", () => {
@@ -179,10 +199,21 @@ checar("o `hMin` é piso do encaixe, e o teto não deixa passar de 12", () => {
    baixa com a F3 do bloco"), e o preço está escrito no catálogo: enquanto forem
    iguais, o bloco não encolhe abaixo do padrão. Esta asserção existe para o dia
    em que a F3 baixar um `hMin` — ela cai, e o commit tem de dizer por quê. */
-checar("hoje `hMin` e `hPadrao` são iguais nos 16 — a F3 é quem separa os dois", () => {
-  const separados = CATALOGO_META.filter((b) => b.hMin !== b.hPadrao).map((b) => b.id);
+checar("nos PAINÉIS `hMin` e `hPadrao` são iguais — a F3 é quem separa os dois", () => {
+  const separados = PAINEIS_DO_CATALOGO.filter((b) => b.hMin !== b.hPadrao).map((b) => b.id);
   assert.deepEqual(separados, []);
-  assert.ok(CATALOGO_META.every((b) => b.hPadrao >= b.hMin));
+  assert.ok(CATALOGO_META.every((b) => b.hPadrao >= b.hMin), "algum hPadrao abaixo do hMin");
+});
+
+/* 🔑 E NA MÉTRICA ELES DIVERGEM, de propósito — é o primeiro bloco da base com
+   versão compacta de verdade. `hMin: 1` é honesto porque existe container query
+   que produz a leitura de uma célula; o `hPadrao: 2` do destaque é a hierarquia
+   do layout padrão, não um piso. */
+checar("a métrica de destaque tem `hMin` 1 e `hPadrao` 2 — o único par separado", () => {
+  const metricas = CATALOGO_META.filter((b) => ehBlocoDeMetrica(b.id));
+  assert.ok(metricas.length >= 10, `só ${metricas.length} métricas no catálogo`);
+  assert.deepEqual([...new Set(metricas.map((b) => b.hMin))], [1]);
+  assert.deepEqual([...new Set(metricas.map((b) => b.hPadrao))].sort(), [1, 2]);
 });
 
 /* 🔎 A ÚNICA CÓPIA DE `ALTURA_CELULA` QUE SOBROU. O CSS não pode importar TS, e
@@ -211,7 +242,7 @@ const V3 = {
 
 checar("o v3 é lido SEM converter: os painéis chegam sem `h`", () => {
   const l = migrarLayout(V3);
-  const funil = l.paineis.find((p) => p.id === "funil");
+  const funil = l.blocos.find((p) => p.id === "funil");
   assert.equal(funil.h, undefined);
   /* ⚠️ E o `linhas` atravessa a leitura para o efeito de migração usar UMA vez.
      Sem isto, a conversão teria de acontecer na leitura — e aí toda abertura do
@@ -223,8 +254,8 @@ checar("o v3 é lido SEM converter: os painéis chegam sem `h`", () => {
 checar("CAMADA 1 — bloco sem dado NÃO ganha `h`", () => {
   const l = migrarLayout(V3);
   const r = migrarAlturas(l, (id) => id !== "funil");
-  assert.equal(r.paineis.find((p) => p.id === "funil").h, undefined);
-  assert.equal(r.paineis.find((p) => p.id === "fontes").h, metaDoBloco("fontes").hMin);
+  assert.equal(r.blocos.find((p) => p.id === "funil").h, undefined);
+  assert.equal(r.blocos.find((p) => p.id === "fontes").h, metaDoBloco("fontes").hMin);
 });
 
 checar("CAMADA 2 — com um bloco pendente, `completo` é falso (nada é gravado)", () => {
@@ -237,15 +268,15 @@ checar("CAMADA 2 — com um bloco pendente, `completo` é falso (nada é gravado
 checar("CAMADA 2 — com todos elegíveis, `completo` é verdadeiro e as alturas saem", () => {
   const r = migrarAlturas(migrarLayout(V3), () => true);
   assert.equal(r.completo, true);
-  assert.equal(r.paineis.find((p) => p.id === "funil").h, 5);
-  assert.equal(r.paineis.find((p) => p.id === "fontes").h, metaDoBloco("fontes").hPadrao);
+  assert.equal(r.blocos.find((p) => p.id === "funil").h, 5);
+  assert.equal(r.blocos.find((p) => p.id === "fontes").h, metaDoBloco("fontes").hPadrao);
   /* ⛔ ESTA ASSERÇÃO AFIRMAVA O CONTRÁRIO — que o campo legado SOME no migrado,
      "porque é ele que impede a próxima abertura de converter de novo". As duas
      metades estavam erradas: quem impede a reconversão é o `h` existir
      (`precisaMigrarAltura`), e descartar o legado jogava fora a única rede de
      uma conversão irreversível que roda sozinha em produção.
      Ver as três asserções de REDE, abaixo. */
-  assert.equal(r.paineis.find((p) => p.id === "funil").linhasLegado, 5);
+  assert.equal(r.blocos.find((p) => p.id === "funil").linhasLegado, 5);
 });
 
 /* ══ A REDE DA CONVERSÃO IRREVERSÍVEL ═══════════════════════════════════════
@@ -258,7 +289,7 @@ checar("CAMADA 2 — com todos elegíveis, `completo` é verdadeiro e as alturas
    o descarte estava documentado como decisão certa em três arquivos. */
 checar("REDE — o `linhas` sobrevive à migração, dentro do envelope migrado", () => {
   const r = migrarAlturas(migrarLayout(V3), () => true);
-  const funil = r.paineis.find((p) => p.id === "funil");
+  const funil = r.blocos.find((p) => p.id === "funil");
   assert.equal(funil.h, 5, "linha de base: a migração converteu");
   assert.equal(funil.linhasLegado, 5, "o `linhas` original tem de continuar lá");
   /* E ele NÃO desenha: a altura é `h`, não o legado. Sem esta metade, preservar
@@ -275,7 +306,7 @@ checar("REDE — o v4 relido devolve o `linhas`, e não pede migração de novo"
     paineis: [{ id: "funil", col: 6, h: 5, linhas: 5 }],
   };
   const l = migrarLayout(v4);
-  const funil = l.paineis.find((p) => p.id === "funil");
+  const funil = l.blocos.find((p) => p.id === "funil");
   assert.equal(funil.h, 5);
   assert.equal(funil.linhasLegado, 5, "ler `linhas` só no v3 o perderia no primeiro save");
   assert.equal(precisaMigrarAltura(l), false, "quem trava a reconversão é o `h`, não o campo sumir");
@@ -287,28 +318,28 @@ checar("REDE — quem GRAVA leva o campo junto (a ponta que o descarte tinha)", 
   assert.ok(i > 0, "linha de base: `paraSalvar` não existe");
   const corpo = hook.slice(i, hook.indexOf("\n}", i));
   /* Mira a MONTAGEM do objeto salvo. Foi exatamente aqui que o campo morria. */
-  assert.match(corpo, /linhas: p\.linhasLegado/);
+  assert.match(corpo, /linhas: b\.linhasLegado/);
   /* E o tipo do servidor precisa aceitá-lo, senão o `tsc` estaria calado sobre
      um campo que nunca chega ao banco. */
   const acao = ler("../src/lib/actions/dashboardLayout.ts");
-  const j = acao.indexOf("interface PainelSalvo");
-  assert.ok(j > 0, "linha de base: `PainelSalvo` não existe");
+  const j = acao.indexOf("interface BlocoSalvo");
+  assert.ok(j > 0, "linha de base: `BlocoSalvo` não existe");
   assert.match(acao.slice(j, acao.indexOf("\n}", j)), /linhas\?: number/);
 });
 
 checar("bloco JÁ migrado não é tocado — nem quando ficaria maior", () => {
   const v4 = { v: 4, hero: V3.hero, faixa: V3.faixa, paineis: [{ id: "funil", col: 6, h: 8 }] };
   const l = migrarLayout(v4);
-  assert.equal(l.paineis.find((p) => p.id === "funil").h, 8);
+  assert.equal(l.blocos.find((p) => p.id === "funil").h, 8);
   assert.equal(precisaMigrarAltura(l), false);
   const r = migrarAlturas(l, () => true);
-  assert.equal(r.paineis.find((p) => p.id === "funil").h, 8);
+  assert.equal(r.blocos.find((p) => p.id === "funil").h, 8);
 });
 
 checar("o padrão do produto já nasce migrado — conta nova não passa pela guarda", () => {
   const padrao = layoutPadrao();
   assert.equal(precisaMigrarAltura(padrao), false);
-  assert.ok(padrao.paineis.length > 0, "linha de base: o padrão tem painéis");
+  assert.ok(padrao.blocos.length > 0, "linha de base: o padrão tem painéis");
 });
 
 /* CAMADA 3 — a reserva é no banco (`migrarAlturaDoLayout`) e não roda aqui: ela
@@ -584,9 +615,9 @@ secao("§E — o `DashboardScreen` monta a grade da F1");
 
 checar("a grade usa `--tk-row`, e não `auto`", () => {
   const tela = ler("../src/components/dashboard/views/dashboard/DashboardScreen.tsx");
-  const i = tela.indexOf("const GRADE: React.CSSProperties");
-  assert.ok(i > 0, "linha de base: a constante GRADE não existe");
-  const corpo = tela.slice(i, tela.indexOf("};", i));
+  const i = tela.indexOf("const grade = (colunas: number): React.CSSProperties");
+  assert.ok(i > 0, "linha de base: a fábrica da GRADE não existe");
+  const corpo = tela.slice(i, tela.indexOf("});", i));
   assert.match(corpo, /gridAutoRows: "var\(--tk-row\)"/);
 });
 
@@ -601,6 +632,164 @@ checar("o slot leva `span` nos dois eixos e os DOIS mínimos zerados", () => {
      ser um piso — o modelo do qual a F1 acabou de sair. */
   assert.match(corpo, /minWidth: 0/);
   assert.match(corpo, /minHeight: 0/);
+});
+
+/* ══ §F — F2: a derivação por viewport (§5 e §7.4/§7.5 do `07`) ═════════════
+   🔴 UM LAYOUT SALVO, QUATRO DERIVAÇÕES. O grid antigo gravava um layout por
+   breakpoint, e o de `mobile` **nunca foi editável** — uma segunda verdade sobre
+   o arranjo que o usuário não tinha como consertar. Aqui há uma verdade e uma
+   função pura por cima dela. */
+secao("§F — F2: a derivação por viewport");
+
+checar("as quatro faixas do §5 são exatamente estas", () => {
+  assert.equal(colunasParaLargura(1920), 12);
+  assert.equal(colunasParaLargura(1280), 12);
+  assert.equal(colunasParaLargura(1279), 8);
+  assert.equal(colunasParaLargura(960), 8);
+  assert.equal(colunasParaLargura(959), 4);
+  assert.equal(colunasParaLargura(640), 4);
+  assert.equal(colunasParaLargura(639), 1);
+  assert.equal(colunasParaLargura(320), 1);
+});
+
+/* 🔴 §7.4 — `derivar(salvo, 12) === salvo`. Ela é o que garante que a tela
+   grande **não passa por transformação nenhuma**: se um dia a derivação começar
+   a mexer no layout de 12, esta cai antes de alguém ver na tela. */
+checar("§7.4 — a derivação é IDENTIDADE em 12 colunas", () => {
+  const salvo = layoutPadrao().blocos;
+  assert.ok(salvo.length > 10, "linha de base: o padrão tem poucos blocos");
+  assert.deepEqual(derivarLayout(salvo, 12), salvo);
+});
+
+/* 🔴 §7.5 — nenhum bloco derivado passa da grade, e a ORDEM é preservada. */
+checar("§7.5 — em 8, 4 e 1 nada ultrapassa a grade e a ordem é a mesma", () => {
+  const salvo = layoutPadrao().blocos;
+  for (const c of [8, 4, 1]) {
+    const d = derivarLayout(salvo, c);
+    const estouram = d.filter((b) => b.col > c).map((b) => `${b.id}=${b.col}`);
+    assert.deepEqual(estouram, [], `em ${c} colunas: ${estouram.join(", ")}`);
+    assert.deepEqual(d.map((b) => b.id), salvo.map((b) => b.id), `a ordem mudou em ${c} colunas`);
+    assert.deepEqual(d.map((b) => b.h), salvo.map((b) => b.h), `a altura mudou em ${c} colunas`);
+  }
+});
+
+/* ⛔ A GUARDA QUE PODE FALHAR PELO MOTIVO CERTO: sem o `min(colMin, C)`, um
+   bloco de `colMin: 5` numa grade de 4 sairia com 5 e transbordaria. Provado
+   pelo lado negativo — a conta sem o clamp devolve o mínimo cru. */
+checar("o `colMin` do catálogo NÃO vence a grade (provado pelo lado negativo)", () => {
+  const heat = metaDoBloco("heatmap"); // colMin 5
+  assert.equal(heat.colMin, 5, "linha de base: o `heatmap` deixou de ter colMin 5");
+  assert.equal(larguraDerivada(8, heat.colMin, 4), 4, "o mínimo do bloco transbordou a grade de 4");
+  assert.equal(larguraDerivada(8, heat.colMin, 1), 1);
+  /* E em 12 ele continua mandando: um `col` abaixo do mínimo sobe. */
+  assert.equal(larguraDerivada(2, heat.colMin, 12), 5);
+});
+
+checar("o `ceil` preserva a proporção — 8/12 vira 3 de 4, não 2", () => {
+  assert.equal(larguraDerivada(8, 2, 4), 3);
+  assert.equal(larguraDerivada(12, 2, 8), 8);
+  assert.equal(larguraDerivada(3, 2, 8), 2);
+  /* ⚠️ Arredondar para BAIXO encolheria todo mundo e a linha deixaria de fechar
+     — o oposto do que a proporção deveria preservar. */
+  assert.notEqual(larguraDerivada(8, 2, 4), 2);
+});
+
+/* ⛔ A EDIÇÃO NÃO É DERIVADA, e a guarda mira o CÓDIGO porque o efeito não é
+   mensurável aqui (é um hook de janela). Se a edição passasse a usar a grade
+   derivada, a alça mediria contra 4 colunas e o `redimensionar` gravaria "4" num
+   campo que significa doze avos — o arranjo do usuário corrompido pelo tamanho
+   da janela dele. */
+checar("a grade do MODO DE EDIÇÃO é sempre a de 12", () => {
+  const tela = semComentarios(ler("../src/components/dashboard/views/dashboard/DashboardScreen.tsx"));
+  const i = tela.indexOf("function useColunasDaGrade");
+  assert.ok(i > 0, "linha de base: `useColunasDaGrade` não existe");
+  const corpo = tela.slice(i, tela.indexOf("\n}", i));
+  assert.match(corpo, /return editando \? COLUNAS_GRADE : colunas;/);
+});
+
+/* ══ §G — F5: a grade única ═════════════════════════════════════════════════ */
+secao("§G — F5: métrica e painel são o mesmo objeto");
+
+/* 🔴 A REGRA DE ENTRADA DO CATÁLOGO, AGORA MEDIDA EM VEZ DE SÓ COMPILADA.
+   O `Record<IdPainel, …>` cobra os painéis pelo compilador; os renders de
+   métrica são GERADOS, e um `as` desliga a checagem ali. Esta asserção é o que
+   troca "confie" por "prove" — e ela vale para os dois lados. */
+checar("todo bloco do catálogo tem render, e todo render está no catálogo", () => {
+  const semRender = CATALOGO_META.filter((b) => !RENDERS[b.id]).map((b) => b.id);
+  assert.deepEqual(semRender, [], `no catálogo e sem render: ${semRender.join(", ")}`);
+  const semMeta = Object.keys(RENDERS).filter((id) => !CATALOGO_META.some((b) => b.id === id));
+  assert.deepEqual(semMeta, [], `com render e fora do catálogo: ${semMeta.join(", ")}`);
+  assert.ok(CATALOGO_META.length >= 25, `só ${CATALOGO_META.length} blocos — a asserção seria fraca`);
+});
+
+/* ⛔ O RÓTULO DA MÉTRICA TEM UMA FONTE SÓ. O catálogo lateral oferece um nome e
+   o card desenha outro se as duas listas divergirem — e a divergência é muda.
+   A asserção LÊ o catálogo e o registro do hook, e exige que batam. */
+checar("o rótulo do catálogo é o MESMO que o hook desenha", () => {
+  const hook = semComentarios(ler("../src/components/dashboard/useTraffikState.ts"));
+  const usados = [...hook.matchAll(/label: ROTULO_DA_METRICA\.(\w+)/g)].map((m) => m[1]);
+  assert.ok(usados.length >= 10, `só ${usados.length} rótulos lidos da fonte única`);
+  /* Os dois sentidos: nenhuma métrica do catálogo sem rótulo no hook, e nenhum
+     rótulo do hook fora do catálogo. */
+  const chaves = METRICAS.map((m) => m.chave);
+  assert.deepEqual(chaves.filter((c) => !usados.includes(c)), [], "métrica do catálogo que o hook não rotula");
+  assert.deepEqual(usados.filter((c) => !chaves.includes(c)), [], "rótulo no hook fora do catálogo");
+  /* ⛔ E nenhum literal sobrou DENTRO DO REGISTRO: um `label: "Faturamento"` cru
+     reintroduziria a segunda fonte sem que nada acusasse.
+
+     🔤 A JANELA É O PONTO, e a primeira versão desta guarda não a tinha: ela
+     procurava `label: "…"` no arquivo inteiro e reprovou **17 rótulos
+     legítimos** — etapas do funil, eventos de pixel, status de campanha. É a
+     oitava vez que uma guarda por texto desta base pega o alvo errado, e sempre
+     pelo mesmo motivo: **o certo contém a mesma sintaxe do errado.** O que
+     separa não é a sintaxe, é ONDE ela está. */
+  const i = hook.indexOf("const reg: Record<");
+  assert.ok(i > 0, "linha de base: o registro de métricas não existe no hook");
+  const registro = hook.slice(i, hook.indexOf("\n  };", i));
+  assert.ok(registro.includes("ROTULO_DA_METRICA"), "linha de base: a janela pegou o bloco errado");
+  const literais = [...registro.matchAll(/label: "[^"]+"/g)].map((m) => m[0]);
+  assert.deepEqual(literais, [], `rótulo de métrica escrito à mão: ${literais.join(" · ")}`);
+});
+
+/* ⛔ AS ZONAS FORAM APAGADAS, NÃO RENOMEADAS. Enquanto os nomes existissem,
+   quem lesse os arquivos encontraria descrita uma categoria que o produto não
+   tem — a família da proibição que envelhece e vira ordem de reverter. */
+checar("nenhum vestígio de zona no código do layout", () => {
+  const arquivos = [
+    "../src/components/dashboard/catalogo.ts",
+    "../src/components/dashboard/layout/useArrasto.ts",
+    "../src/components/dashboard/layout/useLayoutDashboard.ts",
+  ];
+  const ofensoras = [];
+  for (const a of arquivos) {
+    semComentarios(ler(a))
+      .split("\n")
+      .forEach((l, i) => {
+        if (/\b(zona|Zona|trocarHero|moverMetrica|inserirFaixa|removerFaixa|faixaCheia)\b/.test(l)) {
+          ofensoras.push(`${a.split("/").pop()}:${i + 1} ${l.trim().slice(0, 60)}`);
+        }
+      });
+  }
+  assert.deepEqual(ofensoras, []);
+  /* Linha de base: os arquivos existem e têm código. Sem ela, um caminho errado
+     passaria com três leituras vazias. */
+  assert.ok(arquivos.every((a) => semComentarios(ler(a)).length > 500));
+});
+
+/* 🔑 A LEITURA COMPACTA EXISTE, e ela é o que torna `hMin: 1` honesto. Um mínimo
+   sem container query que o sustente é promessa vazia — a mesma regra que o
+   `colMin` do catálogo já carrega. */
+checar("a container query de ALTURA do KPI existe, e o limiar cabe entre 1 e 2 células", () => {
+  const css = ler("../src/app/globals.css");
+  const m = css.match(/@container \(max-height: (\d+)px\) \{\s*\.tk-kpi \{/);
+  assert.ok(m, "linha de base: a query de altura do `.tk-kpi` não existe");
+  const limiar = Number(m[1]);
+  /* ⛔ O limiar NÃO é um número fixado antes de medir — os dois que o cercam são
+     a própria geometria da grade. Se `--tk-row` mudar, esta asserção cai. */
+  assert.ok(limiar > ALTURA_CELULA, `o limiar ${limiar} não separa a célula de ${ALTURA_CELULA}px`);
+  assert.ok(limiar < ALTURA_CELULA * 2 + GAP_GRADE, `o limiar ${limiar} engoliria o slot de 2 células`);
+  /* E o que ela esconde tem de existir no componente, senão a regra é órfã. */
+  assert.match(ler("../src/components/tk/Kpi.tsx"), /tk-kpi-alto/);
 });
 
 console.log(

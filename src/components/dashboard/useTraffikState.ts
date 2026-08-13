@@ -51,6 +51,13 @@ import { brl, brl0, buildPoints, elapsed, multFmt, pct, plural, roasFmt, TRACO }
 import { setLastWorkspaceId, type WorkspaceDTO } from "@/lib/actions/workspaces";
 import { DEFAULT_TIMEZONE } from "@/lib/timezone";
 import type { MetricKey } from "./types";
+/* 🔴 O RÓTULO DA MÉTRICA VEM DE FORA, e a direção da dependência é o ponto.
+   Ele estava escrito aqui em quinze literais; com a F5 (12/08/2026) a métrica
+   virou bloco do catálogo, e o catálogo lateral precisa do MESMO nome que o card
+   desenha. Copiá-lo para lá daria duas listas que divergem no primeiro commit
+   que renomear uma — com a lista oferecendo um nome e a tela mostrando outro.
+   ⚠️ MOVE, não mudança: nenhum rótulo foi alterado. */
+import { ROTULO_DA_METRICA } from "./metricas";
 
 /**
  * ⚠️ Vem de `lib/periodo.ts`. Era uma união local de 4 valores, uma TERCEIRA
@@ -662,19 +669,19 @@ export function useTraffikState(
       cor?: string;
     }
   > = {
-    faturamento: { label: "Faturamento", value: brl(revenue), ...trendOf("revenue") },
+    faturamento: { label: ROTULO_DA_METRICA.faturamento, value: brl(revenue), ...trendOf("revenue") },
     // ⚠️ Líquido e Lucro NÃO têm delta: o backend não calcula variação para eles
     // (dependem das taxas do período, que não são reprocessadas na janela
     // anterior). Um delta inventado aqui seria pior que nenhum.
     liquido: {
-      label: "Faturamento líquido",
+      label: ROTULO_DA_METRICA.liquido,
       value: brl(liquido),
       delta: null, invertido: false, trendColor: N, trendPath: UP_PATH,
       trendLabel: rotuloLiquido,
       cor: corFinanceira(liquido, "lucro"),
     },
     lucroLiquido: {
-      label: "Lucro",
+      label: ROTULO_DA_METRICA.lucroLiquido,
       value: brl(lucro),
       delta: null, invertido: false, trendColor: N, trendPath: UP_PATH,
       /* 🔴 O AVISO VAI NO CARD, não só no gráfico. Despesa única fica fora do
@@ -688,32 +695,32 @@ export function useTraffikState(
           : "líquido − anúncios − despesas",
       cor: corFinanceira(lucro, "lucro"),
     },
-    gasto: { label: "Gasto total", value: brl(spend), ...trendOf("spend", true) },
+    gasto: { label: ROTULO_DA_METRICA.gasto, value: brl(spend), ...trendOf("spend", true) },
     // ⚠️ Tipo "roas": o equilíbrio dele é 1x, não 0 — `0,80x` é prejuízo.
     //    Sem GASTO não existe ROAS, e agora o servidor já devolve `null` nesse
     //    caso — o `spend > 0 ? … : null` que havia aqui virou redundante. Ele
     //    era a metade certa da correção: a COR já sabia que o valor era
     //    indefinido enquanto o número continuava imprimindo "0,0x".
-    roas: { label: "ROAS", value: roasFmt(roas), ...trendOf("roas"), cor: corFinanceira(roas, "roas") },
+    roas: { label: ROTULO_DA_METRICA.roas, value: roasFmt(roas), ...trendOf("roas"), cor: corFinanceira(roas, "roas") },
     // Bloco 4: ROI passa a ser multiplicador (era "1331%"), com 2 casas como
     // nos exemplos do roteiro. Sem custo no período não há ROI — mostra "—".
-    roi: { label: "ROI", value: multFmt(roi), ...trendOf("roi"), cor: corFinanceira(roi, "roi") },
-    margem: { label: "Margem de lucro", value: pct(margin), ...trendOf("margem"), cor: corFinanceira(margin, "lucro") },
-    vendas: { label: "Vendas", value: String(sales), ...trendOf("sales") },
-    cpa: { label: "CPA", value: brl(cpa), ...trendOf("cpa", true) },
-    ticket: { label: "Ticket médio", value: brl(ticket), ...trendOf("ticket") },
-    arpu: { label: "ARPU", value: brl(arpu), ...trendOf("arpu") },
-    ctr: { label: "CTR", value: pct(ctr), ...trendOf("ctr") },
+    roi: { label: ROTULO_DA_METRICA.roi, value: multFmt(roi), ...trendOf("roi"), cor: corFinanceira(roi, "roi") },
+    margem: { label: ROTULO_DA_METRICA.margem, value: pct(margin), ...trendOf("margem"), cor: corFinanceira(margin, "lucro") },
+    vendas: { label: ROTULO_DA_METRICA.vendas, value: String(sales), ...trendOf("sales") },
+    cpa: { label: ROTULO_DA_METRICA.cpa, value: brl(cpa), ...trendOf("cpa", true) },
+    ticket: { label: ROTULO_DA_METRICA.ticket, value: brl(ticket), ...trendOf("ticket") },
+    arpu: { label: ROTULO_DA_METRICA.arpu, value: brl(arpu), ...trendOf("arpu") },
+    ctr: { label: ROTULO_DA_METRICA.ctr, value: pct(ctr), ...trendOf("ctr") },
     // ⚠️ VALOR em destaque, contagem como apoio. "12 vendas pendentes" não diz
     // quanto dinheiro está na mesa; "R$ 240,00" diz.
     pendentes: {
-      label: "Vendas pendentes",
+      label: ROTULO_DA_METRICA.pendentes,
       value: brl(pendentesValor),
       delta: null, invertido: false, trendColor: N, trendPath: DOWN_PATH,
       trendLabel: plural(pendentes, "venda aguardando pagamento", "vendas aguardando pagamento", "nenhuma aguardando"),
     },
-    reembolsadas: { label: "Reembolsadas", value: String(reembolsadas), delta: null, invertido: false, trendColor: N, trendPath: DOWN_PATH, trendLabel: "no período" },
-    chargeback: { label: "Taxa de chargeback", value: pct(chargebackRate), delta: null, invertido: false, trendColor: A, trendPath: UP_PATH, trendLabel: "sobre eventos de venda" },
+    reembolsadas: { label: ROTULO_DA_METRICA.reembolsadas, value: String(reembolsadas), delta: null, invertido: false, trendColor: N, trendPath: DOWN_PATH, trendLabel: "no período" },
+    chargeback: { label: ROTULO_DA_METRICA.chargeback, value: pct(chargebackRate), delta: null, invertido: false, trendColor: A, trendPath: UP_PATH, trendLabel: "sobre eventos de venda" },
   };
   const kpiCards = s.metricOrder.filter((key) => s.metricVisible[key]).map((key) => reg[key]);
 

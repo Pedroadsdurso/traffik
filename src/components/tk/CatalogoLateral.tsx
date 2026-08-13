@@ -26,46 +26,51 @@ import * as React from "react";
  * catálogo produziria um gesto que atravessa a tela e não muda nada — o usuário
  * ficaria procurando o que fez de errado.
  *
- * ⚠️ Todo item listado aqui é POSICIONÁVEL. Nada entra nesta lista sem uma zona
- * que o receba: opção que não tem destino é a versão de catálogo do botão
- * inerte, e o usuário só descobre depois de tentar.
+ * ⚠️ Todo item listado aqui é POSICIONÁVEL. Nada entra nesta lista sem lugar que
+ * o receba: opção que não tem destino é a versão de catálogo do botão inerte, e
+ * o usuário só descobre depois de tentar.
+ *
+ * ### 🔴 UMA LISTA SÓ DE DESTINO, DOIS GRUPOS DE LEITURA — F5, 12/08/2026
+ *
+ * Havia duas seções porque havia duas ZONAS: métrica ia para Principais ou
+ * Resumo, painel ia para Painéis, e a seção dizia para onde cada coisa podia ir.
+ * Isso acabou — **tudo cai no mesmo lugar**, e a frase do teto ("Resumo está no
+ * limite de 8") saiu com o teto.
+ *
+ * ⚠️ Os dois grupos FICARAM, e não por inércia: eles pararam de responder "para
+ * onde isto vai" e passaram a responder **"que tipo de coisa é esta"** — um
+ * número contra um painel. Vinte e poucas fichas numa lista única, ordenadas por
+ * nada, seriam uma lista para procurar em vez de uma para escolher. O que mudou
+ * é que o agrupamento virou conveniência de leitura, não regra de destino.
  */
 
-export interface MetricaDisponivel {
-  chave: string;
-  rotulo: string;
-}
-
-export interface PainelDisponivel {
+export interface BlocoDisponivel {
   id: string;
   titulo: string;
   descricao: string;
+  /** `true` = é uma métrica. Decide só em qual dos dois grupos ela é listada. */
+  metrica?: boolean;
 }
 
 export function CatalogoLateral({
-  metricas,
-  paineis,
-  faixaCheia,
+  blocos,
   arrastando,
   ehAlvo,
   destino,
-  aoArrastarMetrica,
-  aoArrastarPainel,
+  aoArrastar,
   aoTerminarArrasto,
 }: {
-  metricas: MetricaDisponivel[];
-  paineis: PainelDisponivel[];
-  /** Só para a frase do teto — o arrasto para o hero continua valendo. */
-  faixaCheia: boolean;
+  blocos: BlocoDisponivel[];
   arrastando: boolean;
   /** O ponteiro está sobre este painel agora. */
   ehAlvo: boolean;
   /** Handlers de remoção. `null` = não aceita a carga atual (cursor proibido). */
   destino: { onDragOver: (e: React.DragEvent) => void; onDrop: (e: React.DragEvent) => void } | null;
-  aoArrastarMetrica: (chave: string, rotulo: string) => void;
-  aoArrastarPainel: (id: string, titulo: string) => void;
+  aoArrastar: (id: string, titulo: string) => void;
   aoTerminarArrasto: () => void;
 }) {
+  const metricas = blocos.filter((b) => b.metrica);
+  const paineis = blocos.filter((b) => !b.metrica);
   const aceitaRemocao = arrastando && destino !== null;
 
   return (
@@ -108,14 +113,6 @@ export function CatalogoLateral({
         <h3 className="text-label text-text" style={{ margin: 0 }}>
           Métricas disponíveis
         </h3>
-        {faixaCheia && (
-          /* ⚠️ Aviso, não bloqueio. O Resumo está cheio, mas Principais continua
-             aceitando — dizer "não cabe" sem qualificar seria falso, e o arrasto
-             mostraria o contrário meio segundo depois. */
-          <p className="text-caption text-text-muted" style={{ margin: 0, lineHeight: 1.4 }}>
-            Resumo está no limite de 8. Para o Resumo, remova uma antes; Principais aceita por troca.
-          </p>
-        )}
         {metricas.length === 0 ? (
           <p className="text-caption text-text-muted" style={{ margin: 0 }}>
             Todas as métricas já estão no painel.
@@ -123,9 +120,13 @@ export function CatalogoLateral({
         ) : (
           metricas.map((m) => (
             <Ficha
-              key={m.chave}
-              titulo={m.rotulo}
-              aoIniciar={() => aoArrastarMetrica(m.chave, m.rotulo)}
+              key={m.id}
+              titulo={m.titulo}
+              /* ⚠️ A métrica ganhou descrição com a F5, e não é enfeite: numa
+                 lista única com painéis, "ARPU" e "CPA" ao lado de "Funil"
+                 precisam dizer o que respondem tanto quanto ele. */
+              descricao={m.descricao}
+              aoIniciar={() => aoArrastar(m.id, m.titulo)}
               aoTerminar={aoTerminarArrasto}
             />
           ))
@@ -182,7 +183,7 @@ export function CatalogoLateral({
               /* A descrição diz o que o bloco RESPONDE. Sem ela a lista vira
                  sete nomes, e a escolha vira adivinhação. */
               descricao={p.descricao}
-              aoIniciar={() => aoArrastarPainel(p.id, p.titulo)}
+              aoIniciar={() => aoArrastar(p.id, p.titulo)}
               aoTerminar={aoTerminarArrasto}
             />
           ))
