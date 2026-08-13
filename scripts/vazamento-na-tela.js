@@ -65,6 +65,33 @@ window.__grade = () =>
     .pop();
 
 window.naTela = async (viewport) => {
+  /**
+   * 🔴 ABA DE FUNDO NÃO MEDE — e o modo de falha era MUDO.
+   *
+   * Medido em 13/08/2026: com `document.hidden`, o navegador **não dispara
+   * `requestAnimationFrame`**. A espera de duas passagens de quadro abaixo
+   * nunca resolve, a promessa fica pendente para sempre, e não há exceção —
+   * `naTela(2260)` devolveu uma promessa que jamais assentou, com o `catch`
+   * vazio e o resultado `null`.
+   *
+   * ⛔ Isso é indistinguível de "ainda está rodando", que é a pior forma de
+   * silêncio: quem chamou conclui que a medição demora, não que ela não vai
+   * acontecer. É a mesma família do teste que passa sem examinar nada — a saída
+   * de "não consegui" é igual à de "estou quase".
+   *
+   * ⚠️ Não troque a espera por `setTimeout` puro "para funcionar em aba de
+   * fundo". A dupla passagem de quadro existe porque ler logo depois de mexer
+   * no layout devolve o valor ANTERIOR com cara de medição — foi o que produziu
+   * "13 descendentes vazando" nesta base. Em aba oculta não há repintura para
+   * esperar, então a medição **não é possível**, e o certo é dizer isso.
+   */
+  if (document.hidden) {
+    throw new Error(
+      "ABA OCULTA: requestAnimationFrame não dispara em aba de fundo, e a espera " +
+        "de repintura nunca resolveria. Traga esta aba para a frente e rode de novo. " +
+        "⛔ Sem isto a chamada ficaria pendente para sempre, sem erro.",
+    );
+  }
   const g0 = window.__grade();
   const alvo = g0.parentElement;
   if (viewport) {
