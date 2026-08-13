@@ -148,6 +148,56 @@ exceção à regra — é o escopo dela.**
 > justamente para que a dúvida não seja resolvida pela conveniência de quem está
 > com o arquivo aberto.
 
+# 🧮 N CÓPIAS NÃO SÃO N CONFIRMAÇÕES — SÃO UMA MEDIÇÃO, REPLICADA
+
+> **Formulação do dono, 12/08/2026, depois de a mesma mecânica aparecer em dois
+> casos no mesmo dia.** Está aqui em cima porque ela governa como se LÊ este
+> arquivo — inclusive a META-REGRA logo abaixo.
+
+| O registro | Aparecia em | O que era |
+|---|---|---|
+| *"⛔ NADA FOI PARA O GITHUB"* | **17 lugares** | **uma** medição, de 05/08, copiada de sessão em sessão |
+| *"o `linhas` não é regravado; o v4 só tem `h`"* | **3 arquivos** | **uma** decisão minha, repetida como se fosse conferida |
+
+> ## Nos dois, a repetição parecia consenso. Nos dois, a primeira ocorrência era a única que tinha olhado alguma coisa — e nos dois ela estava errada.
+
+### 🔴 POR QUE A REPETIÇÃO ENGANA MAIS QUE O ERRO SOZINHO
+
+Um registro isolado é lido como afirmação de alguém, e se pesa. Dezessete cópias
+são lidas como fato estabelecido: ninguém revisa o que "todo mundo já sabe".
+E o custo é proporcional — a premissa da branch sustentou **três semanas** de
+decisões de fase, e o descarte do `linhas` quase levou o layout de cada testador
+na primeira abertura, **numa conversão sem volta**.
+
+⚠️ **A cópia não mente**: cada uma das 17 era verdadeira quando escrita. O que
+falha é o leitor tratar `N` como amostra independente, quando `N` é a mesma
+observação passando adiante.
+
+> ### ⛔ A DISCIPLINA
+>
+> **Antes de tratar um registro repetido como estabelecido, ache a PRIMEIRA
+> ocorrência e veja o que ELA mediu.** Se ela não mediu nada — se era inferência,
+> decisão ou fotografia de um estado —, as outras `N−1` não acrescentam
+> evidência nenhuma.
+>
+> ```bash
+> grep -rn "<a frase>" . --include=*.md --include=*.ts | head -1   # a mais antiga do arquivo
+> git log --diff-filter=A -S "<a frase>" --format='%h %ad %s' --date=short | tail -1
+> ```
+>
+> A segunda linha é a que responde: ela acha o commit que **introduziu** a frase,
+> e a mensagem dele diz se houve medição ou se foi decisão.
+
+⚠️ **Isto vale para o `CLAUDE.md` inteiro**, que hoje tem muita coisa replicada —
+inclusive regras que eu repeti de seções anteriores sem reconferir. Um número
+citado em três seções continua sendo um número medido uma vez.
+
+⚠️ E é a mesma doença de *"está morto" registrado como ESTADO* (o
+`Workspace.sources`, declarado morto e com 21 referências): estado registrado
+envelhece sozinho, e **replicado, envelhece sem deixar rastro de que envelheceu**.
+
+---
+
 # 🧭 META-REGRA — COMO REGISTRAR UM ACHADO, PARA QUE ELE SIRVA
 
 > **Formulação do dono, 12/08/2026.** Está no topo porque governa todo o resto

@@ -327,6 +327,49 @@ checar("CAMADA 3 — a escrita da migração é condicional (`updateMany` com re
   assert.ok(!/\.create\(/.test(corpo), "a migração não pode criar linha");
 });
 
+/* ══ OS CAMINHOS DE ESCRITA DO LAYOUT — três, e só um é automático ══════════
+   🔴 NASCEU DE UMA ESCRITA QUE NINGUÉM SOUBE EXPLICAR (12/08/2026, 01:19): o
+   layout do dev apareceu regravado com larguras diferentes das que a migração
+   tinha escrito, e nem eu nem o dono sabíamos quem gravou.
+
+   A investigação eliminou a migração pelo código (`precisaMigrarAltura` já era
+   falso) e mediu que uma carga SEM TOQUE não escreve nada. Sobrou o `salvar`,
+   que exige clique.
+
+   ⛔ Esta guarda existe para o dia em que alguém acrescentar um autosave — de
+   arrasto, de `beforeunload`, de intervalo. Escrita silenciosa num campo que o
+   usuário configura é a família que apagou o `linhas` e que sumiu com o seletor
+   de `calc`: ninguém percebe até o layout de alguém mudar sozinho. */
+secao("caminhos de escrita do layout");
+
+checar("só existem TRÊS escritas de layout, e as três estão nomeadas", () => {
+  const hook = ler("../src/components/dashboard/layout/useLayoutDashboard.ts");
+  const escritas = [...semComentarios(hook).matchAll(/await (saveLayoutZonas|resetDashboardLayout|migrarAlturaDoLayout)\(/g)].map(
+    (m) => m[1],
+  );
+  assert.deepEqual(escritas.sort(), ["migrarAlturaDoLayout", "resetDashboardLayout", "saveLayoutZonas"]);
+});
+
+checar("a ÚNICA escrita sem clique é a migração — e ela é travada pelo `h`", () => {
+  const hook = semComentarios(ler("../src/components/dashboard/layout/useLayoutDashboard.ts"));
+  /* `saveLayoutZonas` e `resetDashboardLayout` moram em `salvar`/`redefinir`,
+     que só chegam à tela pela `BarraEdicao` — e ela só desenha os botões em modo
+     de edição. Se um deles aparecer dentro de um `useEffect`, isto reprova. */
+  const efeitos = [...hook.matchAll(/useEffect\(\(\)\s*=>\s*\{([\s\S]*?)\n  \}/g)].map((m) => m[1]);
+  assert.ok(efeitos.length > 0, "linha de base: o hook não tem efeito nenhum");
+  const comEscrita = efeitos.filter((c) => /saveLayoutZonas|resetDashboardLayout/.test(c));
+  assert.deepEqual(comEscrita, [], "escrita de layout dentro de efeito é autosave");
+
+  const tela = semComentarios(ler("../src/components/dashboard/views/dashboard/DashboardScreen.tsx"));
+  assert.match(tela, /aoSalvar=\{ed\.salvar\}/, "linha de base: o Salvar perdeu o dono");
+  /* E o gatilho da migração continua sendo um efeito guardado — se alguém tirar
+     a guarda, a migração vira autosave de verdade. */
+  assert.match(
+    semComentarios(ler("../src/components/dashboard/layout/useLayoutDashboard.ts")),
+    /if \(tentouMigrar\.current \|\| carregando \|\| snapshot !== null\) return;/,
+  );
+});
+
 /* ══ §C — §7.1: a altura não muda com a variante ════════════════════════════
    🔴 A MEDIÇÃO DE VERDADE É NA TELA. Aqui o que se prova é a CAUSA: a variante
    Globo cravava `minHeight: 420` (a altura do desenho virando altura do bloco),
