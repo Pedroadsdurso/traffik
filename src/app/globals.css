@@ -1819,6 +1819,52 @@ a {
        colunas de tabela — some o apoio, nunca a resposta. */
     .tk-kpi .tk-kpi-alto { display: none; }
   }
+
+  /* ══ O PISO DO SPARKLINE — C1, 13/08/2026 ═══════════════════════════════════
+     🔴 SPARKLINE ESMAGADO NÃO FICA PEQUENO: ELE VIRA UMA RETA, e uma reta sob um
+     número lê como SUBLINHADO — decoração se passando por dado, que é o defeito
+     que esta base recusou no arco do globo.
+
+     O `.tk-spark` é o único filho encolhível do KPI (`flex: 0 1 32px`; rótulo,
+     número, legenda e base são `flex: none`, e isso é deliberado — ver
+     `Kpi.tsx`). Quando a pressão passa de 32px ele vai a ZERO, e o traço de
+     1,5px é `non-scaling-stroke`: ele continua sendo pintado.
+
+     ### O limiar é 4px, e ele foi MEDIDO neste componente
+
+     Com a caixa em `h` px, a oscilação vertical pintada da linha, descontada a
+     espessura do traço, medida na série real de Faturamento (que usa a banda
+     inteira do `viewBox`, ou seja o MELHOR caso possível):
+
+     |  h  |  2   |  3   |  4    |  8    |  32   |
+     |-----|------|------|-------|-------|-------|
+     | osc |0,13px|0,94px|1,75px |5,00px |24,50px|
+     | ÷traço| 0,1×| 0,6×| 1,2×  | 3,3×  | 16,3× |
+
+     Abaixo de 4px a linha oscila MENOS que a própria espessura — ela está
+     inteira dentro do próprio traço, que é a definição mensurável de "é uma
+     reta". E como a medição usou o melhor caso, qualquer série mais achatada
+     vira reta ANTES disso: 4px é piso, não estimativa.
+
+     ⛔ NÃO troque por um número redondo. Ele sai de `traço(1,5px)` contra a
+     banda útil do `viewBox` (`A − PY×2` = 26 de 32) — se qualquer um dos três
+     mudar, remeça em vez de ajustar o limiar.
+
+     ⚠️ `visibility`, não `display: none`: o espaço continua RESERVADO. O
+     `Sparkline` já reserva altura nos dois estados vazios dele pelo mesmo
+     motivo — um card sem série não pode ficar mais baixo que os vizinhos.
+
+     🔴 E ISTO NÃO CONSERTA A ORIGEM, de propósito. O ROAS chega a este estado
+     porque a linha de base (`receita de todos os canais ÷ gasto da Meta`)
+     quebra em DUAS linhas a ~231px, e aí o conteúdo rígido ocupa 121,9 dos
+     126px de caixa. As duas saídas — truncar a base ou dar `h: 3` ao bloco —
+     são decisão do dono, e estão registradas no `07`. Esta regra só garante que
+     enquanto isso a tela não AFIRME uma tendência que não desenhou. */
+  .tk-spark { container-type: size; }
+
+  @container (height < 4px) {
+    .tk-spark > * { visibility: hidden; }
+  }
 }
 
 /* ══ CONTAINER QUERIES DOS BLOCOS — C3, 07/08/2026 ══════════════════════════

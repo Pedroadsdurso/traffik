@@ -554,17 +554,37 @@ Nenhum deles aparece em `tsc`, `lint`, `build` ou nas 46 asserções da grade.
 |---|---|
 | **F0b** · **F1** · **F3** | ✅ verdes, e **em produção** |
 | **F5** · **F2** | ✅ verdes, **só locais** |
-| **F4** (C1–C8, menos o C5) · **F6** | ⛔ abertas |
+| **F4** | 🚧 **C1 ✅ (13/08)** · C5 já resolvido pela F3 · **abertos: C2 C3 C4 C6 C7 C8** |
+| **F6** | ⛔ aberta |
 
 ### Onde cada coisa está
 
-| | |
+| | Medido em **13/08/2026**, ao abrir a sessão da F4 |
 |---|---|
 | branch | `redesign/dashboard` |
-| HEAD | **`0ff5e97`** — F5+F2 |
-| `origin/redesign/dashboard` | **`f107392`** — a branch está **1 commit à frente** |
+| HEAD | **`f2b03e8`** — o commit de doc que criou esta seção |
+| `origin/redesign/dashboard` | **`f107392`** — a branch está **2 commits à frente** (`0ff5e97`, `f2b03e8`) |
 | `origin/main` | **`36b52a1`**, empurrada em **12/08/2026 23:27** — *"merge: F1 + F3"* |
-| a branch × a `main` | **3 commits à frente**: `0ff5e97`, `f107392`, `f359f1a` |
+| a branch × a `main` | **4 à frente e 1 ATRÁS** |
+
+> ### ⚠️ ESTA TABELA NASCEU ERRADA EM TRÊS LINHAS — e o motivo vale mais que a correção
+>
+> A versão anterior dizia HEAD `0ff5e97`, **1** commit à frente do remoto e **3**
+> à frente da `main`. Os três estavam errados **no instante em que foram
+> commitados**: a seção foi escrita antes do `git commit` que a contém, então o
+> commit que a grava já a desmente. Estado fotografado envelhece **antes de
+> chegar ao disco**.
+>
+> ⛔ E o **"1 ATRÁS"** nunca esteve escrito: é o merge `36b52a1` da `main`, que a
+> branch não tem. Contar só um lado de `A...B` transforma "divergiram" em
+> "estou à frente" — e é a diferença entre um push e um push que perde trabalho.
+>
+> ### 🔎 A MEDIÇÃO, e ela custa 10 segundos
+> ```bash
+> git rev-list --left-right --count HEAD...origin/main   # os DOIS lados
+> git rev-list --left-right --count HEAD...origin/redesign/dashboard
+> ```
+> ⛔ **Nunca leia os números acima como estado atual.** Rode as duas linhas.
 
 🔴 **F1 e F3 estão no ar para os testadores** — a `main` as levou em 12/08 23:27,
 e a produção segue a `main` (conferido: `curl` em `/login` devolve `tk-auth`).
@@ -574,44 +594,153 @@ conteúdo cabendo no slot, e **ainda com as três zonas**.
 ⛔ **Não afirme o estado do remoto a partir deste arquivo.** Ele envelhece
 sozinho — rode os três comandos.
 
-### 🔴 A ÚNICA PARTE DO REDESIGN SEM VERIFICAÇÃO VISUAL
+### ✅ AS DERIVAÇÕES DE 4 E 1 COLUNA FORAM VISTAS — 13/08/2026, e o instrumento existe
 
-**As derivações de 4 e 1 coluna nunca foram vistas numa tela.** O que existe
-sobre elas é asserção pura (§7.4 e §7.5, em `npm run test:grade`): nenhum bloco
-passa da grade, a ordem é preservada, `h` é preservado.
+**Esta seção dizia que elas nunca tinham sido vistas, e que o motivo era falta de
+instrumento.** A segunda metade estava errada: o instrumento existe, é o CDP, e
+ninguém tinha tentado.
 
 | coluna | como foi verificada |
 |---|---|
 | 12 | ✅ **vista** — modo de edição |
 | 8 | ✅ **vista** — a janela do dev tem `innerWidth` 1132 e a tela derivou sozinha |
-| **4** e **1** | ⛔ **só asserção** |
+| **4** | ✅ **VISTA a 900px** — 4 colunas, `grid-auto-rows: 80px`, 28 blocos |
+| **1** | ✅ **VISTA a 600px** — 1 coluna, `rolagemDaPagina: 0` |
 
-O motivo é **falta de instrumento**, não falta de tempo: a derivação lê
-`window.innerWidth`, então o método do contêiner (encolher o elemento por JS, que
-pagou a largura estreita do Login e de Taxas) **não alcança** — ele mede a caixa,
-e aqui quem decide é a janela. E o `resize_window` do MCP mentiu cinco vezes
-nesta base.
+> ### 🔑 O INSTRUMENTO: `resize_page` do MCP de devtools (CDP), NÃO o `resize_window`
+>
+> Ele faz **override de métricas** (`Emulation.setDeviceMetricsOverride`) em vez
+> de redimensionar a janela: medido, `innerWidth` foi a **900** enquanto
+> `screen.availWidth` continuou **2560**.
+>
+> 🔴 **Ou seja: ele funciona com a janela MAXIMIZADA.** As duas sessões gastas
+> pedindo ao dono que desmaximizasse a janela partiam de uma causa que nunca foi
+> isolada — e este é o contraexemplo. A ferramenta era outra.
+>
+> ⚠️ **O limite dele, medido:** depois de um `reload` a emulação é **perdida** (a
+> janela volta a 2560, em silêncio) e uma nova chamada falha com
+> *"Restore window to normal state before setting content size"*. A falha é
+> RUIDOSA, que é a diferença que importa em relação ao `resize_window`.
+>
+> ⛔ **Reconfira `innerWidth` depois de todo `resize_page`, e de novo depois de
+> qualquer navegação.** Um print tirado depois de um reload é um print de 2560.
+> Isto quase creditou a esta sessão um conserto que era só a janela ter voltado a
+> ser larga.
 
-⚠️ **Isto não é o mesmo que a dívida de largura estreita das cinco telas.**
-Aquela é sobre o conteúdo estourar; esta é sobre um RAMO DE CÓDIGO que nenhum
-olho percorreu. A asserção prova a aritmética da largura; ela não responde *como
-ficou* — que é exatamente a distinção que esta fase pagou quatro vezes na passada
-visual da F5.
+### 🐛 E o que as duas larguras mostraram: **o SHELL não responde a viewport estreito**
 
-🔜 Quem for verificar: uma janela de verdade abaixo de 960px e abaixo de 640px, e
-o desfecho registrado — qualquer que seja.
+A grade deriva certo; a moldura em volta dela, não.
 
-### ➡️ Próxima fase, e a primeira coisa dela
+| medido a 600px | |
+|---|---|
+| rail | **236px abertos** — 39% da tela, e a grade fica com **292px** |
+| saudação | *"Boa tarde, [DEV]"* colide com a busca do header — o "B" fica atrás dela |
+| subtítulo | quebra **uma palavra por linha** |
+| fugas horizontais dentro da grade | **14** — ⚠️ das quais **3 são falso positivo**: são rótulos `sr-only` com `clientWidth: 1` |
+
+⛔ **Isto não é F4 e não foi consertado.** É achado de SHELL, e o rail recolhível
+já existe — falta ele recolher sozinho abaixo de um limiar, que é decisão do
+dono. Registrado aqui para não voltar a ser descoberto.
+
+### ✅ C1 — executado em 13/08/2026, e o defeito NÃO era o que estava escrito
 
 **F4 — acabamento dos gráficos (C1–C8, menos o C5, que a F3 já resolveu).**
+Falta **C2, C3, C4, C6, C7, C8**.
 
-> **Primeiro passo:** consertar o **C1** — no `Sparkline`, fazer observação
-> isolada renderizar `<circle>` em vez de um `<path>` de menos de 12px, que é o
-> que hoje desenha a série do ROAS como fragmentos soltos.
+> ### 🔴 A PRESCRIÇÃO DO C1 DESCREVIA UM CONSERTO QUE JÁ EXISTIA HÁ SEIS DIAS
+>
+> Este bloco dizia: *"primeiro passo: no `Sparkline`, fazer observação isolada
+> renderizar `<circle>` em vez de um `<path>`"*. Medido:
+>
+> ```bash
+> git log -S "isolados" --format='%h %ad' --date=short -- src/components/tk/Sparkline.tsx | tail -1
+> # db98cf2  2026-08-06
+> ```
+>
+> O `<circle>` para trecho isolado entrou em **06/08**, e o C1 foi escrito em
+> **12/08** — a prescrição nasceu descrevendo o passado. Ela veio da leitura de um
+> print, não do componente.
+>
+> ⚠️ **E os "fragmentos soltos" não são reproduzíveis no dado de hoje:** medido
+> na tela, a série do ROAS a 30 dias tem `trechos: 1, circulos: 0` — **não há
+> buraco nenhum nela**. A hipótese não tinha como ser exercida.
 
-⚠️ Ele é o primeiro por ser o único dos oito que a F5 acabou de tocar: o
-sparkline saiu daqui com `altura="100%"` e com a caixa encolhível, e é o momento
-em que alguém já está com o arquivo aberto.
+### 🐛 O que estava REALMENTE na tela: o sparkline do ROAS pintando um SUBLINHADO
+
+Medido a 1440px, no card de ROAS, com `Últimos 30 dias`:
+
+| | ROAS | Faturamento (controle) |
+|---|---|---|
+| caixa de conteúdo do card | 126px | 126px |
+| filhos rígidos + gaps | **121,9px** | 83,5px |
+| sobra para o sparkline (`flex: 0 1 32px`) | **4,1px** | 42,5px |
+| caixa pintada do SVG | **0,1px** | 32px |
+
+O `.tk-spark` é o **único filho encolhível** — rótulo, número, legenda e base são
+`flex: none`, e isso é deliberado (*"o que cede é o sparkline"*, F5). Ninguém
+escreveu **até onde** ele pode ceder. O ROAS tem uma linha a mais (a base
+`receita de todos os canais ÷ gasto da Meta`), ela quebra em **duas** linhas a
+231px de card, e o sparkline vai a zero — onde o traço de 1,5px, que é
+`non-scaling-stroke`, **continua sendo pintado**.
+
+> ## Sparkline esmagado não fica pequeno. Ele vira uma RETA — e uma reta sob um número lê como sublinhado: decoração se passando por dado, que é o defeito que esta base recusou no arco do globo.
+
+✅ **Provado pelo lado negativo, na tela:** escondendo o SVG, a linha sob "1,94x"
+**some**. Ela era o sparkline.
+
+⚠️ E o comentário do `Kpi.tsx:301` dizia que o ROAS *"pedia **5px** além do que
+tinha"* — verdade quando a base ocupava UMA linha. O número descrevia uma
+medição, não um contrato, e envelheceu sem que nada avisasse.
+
+### 🔬 O limiar é 4px, e ele foi MEDIDO no próprio componente
+
+Oscilação vertical pintada da linha, descontada a espessura do traço, na série
+real de Faturamento — que usa a banda inteira do `viewBox`, ou seja o **melhor
+caso possível**:
+
+| caixa | 2px | 3px | **4px** | 8px | 32px |
+|---|---|---|---|---|---|
+| oscilação | 0,13 | 0,94 | **1,75** | 5,00 | 24,50 |
+| ÷ espessura do traço | 0,1× | 0,6× | **1,2×** | 3,3× | 16,3× |
+
+Abaixo de 4px a linha oscila **menos que a própria espessura** — está inteira
+dentro do próprio traço, que é a definição mensurável de *"é uma reta"*. Como a
+medição usou o melhor caso, série mais achatada vira reta antes: **4px é piso, não
+estimativa.**
+
+E a conta fecha com a geometria: `banda útil = (A − 2·PY)/A = 26/32`, e o piso é
+o menor `h` em que a oscilação passa de **dois** traços →
+`ceil(2 × 1,5 ÷ (26/32)) = 4`.
+
+> ### ⛔ A GUARDA RECALCULA O LIMIAR, NUNCA O REPETE
+> `test:grade` lê `A`, `PY` e `strokeWidth` do próprio `Sparkline.tsx` e exige que
+> o número do CSS seja igual ao que a geometria produz. Mudar qualquer uma das
+> três derruba a asserção e cobra a remedição.
+>
+> ✅ **Provado pelo lado negativo:** trocando o piso para 6px, a suíte falha
+> dizendo *"o piso do CSS (6) divergiu da geometria do traço (4)"*.
+>
+> ⚠️ A primeira versão da âncora **não casou** e a linha de base a denunciou pelo
+> nome — a regra de sempre, agora paga também aqui.
+
+`.tk-spark` ganhou `container-type: size` e `@container (height < 4px)` esconde o
+conteúdo por `visibility` (não `display`), para o espaço seguir **reservado**.
+
+### 🔴 O QUE FICA ABERTO, e é decisão do dono
+
+O piso impede a tela de **afirmar** uma tendência que não desenhou. Ele **não
+conserta a origem** — o ROAS continua sem sparkline abaixo de ~231px de card. As
+duas saídas são de produto:
+
+| saída | custo |
+|---|---|
+| truncar a linha de base com reticências | ela existe para ser lida inteira — foi decisão de 07/08 |
+| dar `h: 3` ao bloco de ROAS no catálogo | ele fica mais alto que os outros três heros |
+
+⚠️ **Efeito colateral medido, e ele não é neutro:** `container-type: size` implica
+`contain: size`, e a caixa do sparkline nos outros KPIs foi de **32px para
+36,3px**. Nenhum defeito visível apareceu por isso, mas está registrado — quem
+mexer aqui de novo parte deste número, não de 32.
 
 ### 🔬 O LIMITE DO `test:contraste` — ele não vê OPACIDADE
 

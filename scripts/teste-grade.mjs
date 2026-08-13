@@ -792,6 +792,62 @@ checar("a container query de ALTURA do KPI existe, e o limiar cabe entre 1 e 2 c
   assert.match(ler("../src/components/tk/Kpi.tsx"), /tk-kpi-alto/);
 });
 
+/* 🔴 C1 — O PISO DO SPARKLINE, E O LIMIAR É RECALCULADO AQUI, NUNCA REPETIDO.
+   ────────────────────────────────────────────────────────────────────────────
+   Um sparkline esmagado não fica pequeno: ele vira uma RETA, e uma reta sob um
+   número lê como sublinhado. Medido em 13/08/2026 no card de ROAS, cuja caixa
+   ia a 0,1px enquanto o traço de 1,5px continuava sendo pintado.
+
+   ⛔ Esta asserção NÃO conhece o número 4. Ela o deriva das três constantes que
+   o produzem, lidas do próprio `Sparkline.tsx`. Se qualquer uma mudar — a banda
+   do `viewBox`, o respiro ou a espessura do traço —, ela cai e cobra a remedição
+   em vez de continuar verde sobre um limiar que deixou de descrever a tela.
+
+   É a mesma disciplina do limiar de 130px acima, e a mesma de
+   *documentação que LÊ o valor não envelhece*. */
+checar("o piso do sparkline existe, e o limiar é o que a geometria do traço exige", () => {
+  const spark = ler("../src/components/tk/Sparkline.tsx");
+
+  /* Linha de base: as três constantes têm de ser ACHADAS. Sem isto uma âncora
+     quebrada deixaria a conta rodar sobre `NaN` e o `assert` viraria ruído. */
+  const A = Number(spark.match(/const A = (\d+);/)?.[1]);
+  const PY = Number(spark.match(/const PY = (\d+);/)?.[1]);
+  const traco = Number(spark.match(/strokeWidth="([\d.]+)"/)?.[1]);
+  assert.ok(A > 0 && PY > 0 && traco > 0, `linha de base: A=${A} PY=${PY} traço=${traco}`);
+
+  /* A oscilação PINTADA de uma série que usa a banda inteira, numa caixa de `h`,
+     é `(A − 2·PY)/A · h`. Ela só é distinguível de uma reta quando sobra mais
+     que uma espessura de traço depois de descontar a própria espessura — ou
+     seja, quando a oscilação passa de DOIS traços. Medido na tela: 3px dá 0,6×
+     o traço e 4px dá 1,2×, que é exatamente onde esta conta cruza. */
+  const banda = (A - 2 * PY) / A;
+  const esperado = Math.ceil((2 * traco) / banda);
+
+  const css = ler("../src/app/globals.css");
+  /* ⚠️ A âncora tolera quebra de linha E `\r\n`: 402 arquivos desta base estão em
+     CRLF, e um `\n` cru falharia aqui em SILÊNCIO — devolvendo "não achei" com a
+     mesma cara de "está tudo certo". Quem denuncia isso é o `assert.ok` abaixo. */
+  const m = css.match(
+    /@container \(height < (\d+)px\)\s*\{\s*\.tk-spark > \*\s*\{\s*visibility:\s*hidden;\s*\}\s*\}/,
+  );
+  assert.ok(m, "linha de base: a query do piso do `.tk-spark` não existe");
+  assert.equal(
+    Number(m[1]),
+    esperado,
+    `o piso do CSS (${m?.[1]}) divergiu da geometria do traço (${esperado}) — remeça na tela`,
+  );
+
+  /* ⚠️ `visibility`, e NÃO `display: none`: o espaço fica RESERVADO, senão um
+     card sem série fica mais baixo que os vizinhos — que é o motivo de o próprio
+     `Sparkline` reservar altura nos dois estados vazios dele. */
+  assert.doesNotMatch(css, /\.tk-spark > \* \{ display: none/);
+
+  /* E a regra não pode ser órfã: quem a liga é a classe no `Kpi.tsx`, e ela só
+     funciona se o wrapper for um contêiner de TAMANHO. */
+  assert.match(ler("../src/components/tk/Kpi.tsx"), /className="tk-spark/);
+  assert.match(css, /\.tk-spark \{ container-type: size; \}/);
+});
+
 console.log(
   falhas.length === 0
     ? `\n\x1b[1m\x1b[32m${ok} asserções passaram, 0 falharam.\x1b[0m\n`
