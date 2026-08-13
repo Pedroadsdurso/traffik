@@ -66,7 +66,17 @@ const corpoDoItem = (semPadding: boolean): React.CSSProperties => ({
   /* ⚠️ Bloco que desenha a própria superfície (a métrica) já traz o padding
      dele. Somar o da moldura dava 40px de casca dupla — e num slot de uma célula
      esses 40px são metade do que existe. */
-  padding: semPadding ? 0 : "var(--tk-pad-card)",
+  /* 🔴 C7 — o cabeçalho virou SOBREPOSTO (ver o comentário na moldura), então o
+     corpo recebe o slot inteiro. O recuo do topo existe só para o conteúdo não
+     nascer por baixo dos controles — e só onde a moldura desenha o padding: o
+     bloco que traz a própria superfície já centra o que tem dentro. */
+  /* ⚠️ O RECUO VALE NOS DOIS RAMOS, e a primeira versão só o deu a um.
+     Visto na tela: com o cabeçalho sobreposto e `padding: 0`, os cards de
+     métrica compacta perderam o RÓTULO — ele nascia em y=0, debaixo dos
+     controles, e o card virava um número sem nome. É o defeito que o `06` já
+     nomeia: some o apoio, nunca a resposta — só que aqui sumiu o apoio sem
+     ninguém ter decidido. */
+  padding: semPadding ? "22px 0 0" : "calc(var(--tk-pad-card) + 22px) var(--tk-pad-card) var(--tk-pad-card)",
   minWidth: 0,
   flex: 1,
   overflow: "hidden",
@@ -191,8 +201,27 @@ export function ItemEdicao({
         overflow: "hidden",
       }}
     >
+      {/* 🔴 C7 — O CABEÇALHO SOBREPÕE, ELE NÃO CONSOME ALTURA DO SLOT.
+          Medido em 13/08/2026: no fluxo, ele comia **37px** — um slot de 2
+          células (176px) entregava **139** ao bloco. O modo de edição é onde a
+          pessoa DECIDE o tamanho, e ele era justamente o lugar que mostrava o
+          bloco menor do que ele vai ficar.
+
+          ⛔ Dar mais altura à moldura não era saída: com `grid-row: span h` ela
+          ocupa exatamente `h` células, e esticar invadiria a linha de baixo.
+          Sobrepor é o que devolve o slot inteiro ao corpo.
+
+          ⚠️ O corpo ganhou `paddingTop` do tamanho do cabeçalho SÓ quando ele
+          traz o próprio padding — senão o conteúdo nasceria por baixo dos
+          controles. Bloco que desenha a própria superfície (a métrica) já centra
+          o conteúdo e não precisa. */}
       <div
         style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 1,
           display: "flex",
           alignItems: "center",
           gap: 6,
@@ -215,8 +244,23 @@ export function ItemEdicao({
           </span>
         )}
 
+        {/* 🔴 C7 — O TÍTULO PODE ENCURTAR, MAS NUNCA FICA INALCANÇÁVEL.
+            Medido em 13/08/2026: no modo de edição a grade cai de 1140 para
+            **782px** (o catálogo lateral leva ~300), o card de KPI vai a 182px e
+            este cabeçalho a **122** — "Formas de pagamento" passava por 2px e
+            saía `Formas de pagament…`.
+
+            ⛔ Aqui o `ellipsis` FICA, e a diferença com o número do KPI é o que
+            decide: o número é a RESPOSTA do bloco e um dígito a menos o torna
+            falso; o título é o RÓTULO, e um rótulo abreviado continua
+            identificando enquanto a íntegra estiver a um hover. É a ordem de
+            sacrifício de sempre — encurta o apoio, nunca a resposta.
+
+            ⚠️ Encolher a fonte aqui seria pior: o cabeçalho tem controles de
+            altura fixa ao lado, e texto de 9px entre botões de 13 vira ruído. */}
         <span
           className="text-caption text-text"
+          title={tituloVisivel ? titulo : undefined}
           style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
         >
           {tituloVisivel ? titulo : ""}

@@ -4,6 +4,62 @@ import * as React from "react";
 import { Sparkline } from "./Sparkline";
 
 /**
+ * 🔴 C7 — O NÚMERO ENCOLHE ATÉ CABER, E NUNCA É CORTADO.
+ *
+ * O corpo do número vem de `--tk-b-kpi`, um DEGRAU por largura de contêiner. O
+ * degrau não pode saber o comprimento do texto: `R$ 47` e `R$ 7.058,65` recebem
+ * o mesmo tamanho, e o segundo estoura. Medido em 13/08/2026, no modo de
+ * edição: card de 182px, número a 30px pedindo **166px de 132**.
+ *
+ * ⛔ **`ellipsis` não é opção.** Um `R$ 7.05…` não é um número menor; é um
+ * número errado, e a ordem de sacrifício do KPI (número → rótulo → variação →
+ * sparkline → base) põe o número em primeiro exatamente por isso.
+ *
+ * ### O piso NÃO é inventado
+ *
+ * É `--tk-b-metrica-sm / --tk-b-metrica` — a razão entre os dois degraus que o
+ * sistema JÁ tem: 17/30 na densidade padrão. O degrau pequeno é o corpo da
+ * leitura compacta, que este projeto já usa e já validou em contraste e
+ * legibilidade. Abaixo dele não há tamanho aprovado, então abaixo dele não
+ * descemos: o número passa a caber por outro caminho (o usuário alarga o bloco).
+ *
+ * ⚠️ **Uma medição, sem laço.** A razão `clientWidth / scrollWidth` diz de
+ * quanto precisa em UMA leitura — reduzir de degrau em degrau remediria a cada
+ * passo e faria N reflows por render.
+ */
+const PISO_ESCALA_NUMERO = 17 / 30;
+
+function useCouberNumero(valor: string) {
+  const ref = React.useRef<HTMLSpanElement>(null);
+  const [escala, setEscala] = React.useState(1);
+
+  React.useLayoutEffect(() => {
+    const no = ref.current;
+    if (!no) return;
+    const medir = () => {
+      /* ⚠️ MEDE SEMPRE A PARTIR DO CORPO CHEIO. Sem restaurar, a segunda leitura
+         mediria o texto JÁ reduzido, a razão sairia perto de 1 e a escala
+         encolheria em cascata a cada resize — o número derretendo sozinho ao
+         arrastar a alça. O `fontSize` inline é o que manda aqui, então é ele que
+         precisa voltar ao valor cheio durante a leitura. */
+      const anterior = no.style.fontSize;
+      no.style.fontSize = "var(--tk-b-kpi, var(--tk-b-metrica, 30px))";
+      const cabe = no.clientWidth;
+      const pede = no.scrollWidth;
+      no.style.fontSize = anterior;
+      if (pede <= 0 || cabe <= 0) return;
+      setEscala(pede <= cabe ? 1 : Math.max(PISO_ESCALA_NUMERO, cabe / pede));
+    };
+    medir();
+    const ro = new ResizeObserver(medir);
+    ro.observe(no);
+    return () => ro.disconnect();
+  }, [valor]);
+
+  return { ref, escala };
+}
+
+/**
  * BlocoMetrica — UM número da tela, nos dois pesos que ele sabe ter.
  *
  * ### 🔴 ERAM DOIS COMPONENTES, E A F5 OS FUNDIU (12/08/2026)
@@ -184,6 +240,7 @@ function PilulaDelta({ delta, invertido }: { delta: number; invertido?: boolean 
 
 export function BlocoMetrica({ dados, carregando = false }: { dados: DadosKpi; carregando?: boolean }) {
   const corNumero = dados.cor ?? "var(--tk-text)";
+  const { ref: refNumero, escala: escalaNumero } = useCouberNumero(dados.valor);
 
   /* 🔄 A LINHA SEGUIA O TOM DO DELTA, e parou em 07/08/2026. Um sparkline verde
      porque a variação foi positiva pinta de "lucro" uma série que é de
@@ -269,10 +326,22 @@ export function BlocoMetrica({ dados, carregando = false }: { dados: DadosKpi; c
             ⛔ Não é redundância quando a linha está visível: é a mesma
             declaração presa à coisa que ela descreve. E é o contrário de
             truncar — o texto sai INTEIRO, nunca com reticências. */}
+        {/* 🔴 C7 — O NÚMERO NUNCA TRUNCA. Ele ENCOLHE até caber.
+            ⛔ `textOverflow: ellipsis` SAIU daqui, e a remoção é o conserto: um
+            `R$ 7.05…` não é um número menor, é um número ERRADO — e a ordem de
+            sacrifício do KPI põe o número em primeiro justamente porque ele é a
+            resposta. Medido em 13/08/2026 no modo de edição: card de 182px, o
+            número a 30px pedia 166px de 132 e saía cortado em 34. */}
         <span
+          ref={refNumero}
           className="text-metric-xl"
           title={dados.base || undefined}
-          style={{ fontSize: "var(--tk-b-kpi, var(--tk-b-metrica, 30px))", lineHeight: 1.05, color: corNumero, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}
+          style={{
+            /* `escalaNumero` é 1 enquanto couber; abaixo disso é a razão medida,
+               com piso. Ver `useCouberNumero`. */
+            fontSize: `calc(var(--tk-b-kpi, var(--tk-b-metrica, 30px)) * ${escalaNumero})`,
+            lineHeight: 1.05, color: corNumero, whiteSpace: "nowrap", minWidth: 0,
+          }}
         >
           {carregando ? "—" : dados.valor}
         </span>

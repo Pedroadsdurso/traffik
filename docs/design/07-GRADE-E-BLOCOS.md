@@ -87,25 +87,42 @@ Defeitos visíveis nos prints, um a um:
 >
 > | | |
 > |---|---|
-> | descreviam conserto **que já existia** | C1 (desde 06/08), C2, C4 |
-> | descreviam código **que já não é assim** | C8 |
-> | **parcialmente** certos | C3 (o eixo Y falta; a linha de zero EXISTE) · C7 |
+> | descreviam conserto **que já existia** | C1 (desde `db98cf2`, 06/08) |
+> | **RISCADOS** — consertados por outra fase, com o commit citado | C4 · C8 |
+> | **parcialmente** certos | C3 (o eixo Y faltava; a linha de zero EXISTIA) · C7 |
 > | certos, com o NÚMERO errado | C6 (121px, não "180–400") |
 >
 > ⛔ **Nenhuma prescrição desta lista entra em código sem reprodução na tela
 > antes.** Foi por isso que o C1 quase virou um conserto do que já estava
 > consertado — a segunda vez nesta fase que uma prescrição descreveu o passado.
+>
+> ### 🔴🔴 E EU RISQUEI O C2 ERRADO — a lição é sobre o INSTRUMENTO, não sobre a lista
+>
+> Na primeira passada eu dei o C2 como *"não reproduz"* e quase o apaguei. **Ele
+> era real.** A medição tinha pegado o `LineChart` (o `receita-gasto`), que usa
+> `dd/MM` e reduz ticks corretamente — e o C2 vive no `SerieTemporal`, cujos
+> rótulos `07-15`/`08-04` são **literalmente** o `07-1`/`08-` que a lista
+> descreve.
+>
+> ⚠️ **Riscar é tão perigoso quanto acumular.** A lista que só cresce vira a
+> família das 17 linhas; a lista riscada por medição do elemento errado APAGA um
+> defeito real e o deixa em produção com atestado de saúde. As duas falham pela
+> mesma porta: **medir sem confirmar QUAL elemento se mediu.**
+>
+> 🔎 O sinal barato, e ele custa uma linha: antes de concluir, imprima o que a
+> medição pegou — largura, classe, texto. Foi `larguraCard: 1432` num bloco que
+> mede 369 que deveria ter me parado, e não parou.
 
 | # | onde | o que estava escrito | 🔬 medido em 13/08 |
 |---|---|---|---|
 | C1 | card ROAS | série vira fragmentos órfãos de ~8px; isolado deve virar ponto | 🔴 **prescrição errada.** O `<circle>` existe desde `db98cf2` (06/08) e a série do ROAS tem **zero buracos**. O defeito real era outro — sparkline a 0,1px pintando um sublinhado. ✅ **corrigido** |
-| C2 | Vendas por dia | eixo x cortado (`07-1`, `08-`); não reduz densidade de ticks | ✅ **não reproduz.** Ticks caem 5→4→2 de 1432 a 300px, **0 colisões e 0 vazamentos** em toda largura. Rótulos completos (`30/07`). O formato `07-1` nem existe mais |
-| C3 | Lucro por horário | sem eixo Y, sem rótulo de valor, **sem linha de zero** | ⚠️ **metade.** A linha de zero **EXISTE** (327px, visível, `permitirNegativo`). O que falta é **eixo Y** — e `LineChart` tem (`R$ 0 / 7.500 / 15.000`) enquanto `SerieTemporal` não: duas convenções no mesmo painel |
-| C4 | Posicionamento e Formas de pagamento | barra não ancorada no maior valor; retângulo fora da coluna | ✅ **não reproduz.** Maior barra = **exatamente 100%**; **0** barras fora do pai e **0** fora do card, em `formas-pagamento` e `produtos` |
-| C5 | Taxa de aprovação | três medidores em tamanho fixo, 400px de altura | ✅ resolvido pela F3 |
-| C6 | Produtos, Vendas por país, Alertas | **180–400px** de vazio contínuo | ⚠️ **reproduz, com o número errado.** Maior vão medido: `produtos` **121** · `alertas` **81** · `top-campanhas` **56** · `paises` **26** ✓ · `pagamentos` **28** ✓. E é sempre **no fim do card**, não dentro |
-| C7 | modo de edição | títulos de chip truncados por largura fixa | ⚠️ **reproduz de raspão** — chip a **122px** (a §6 pede 140) e *"Formas de pagamento"* corta por **2px**. ⛔ Mas a medição achou coisa **pior** ao lado — ver abaixo |
-| C8 | Vendas por horário | **largura fixa**: 24 buckets viram fios, 6 viram tarjas | ✅ **não reproduz.** A barra é sempre **50% do passo**: 35,8 / 21,6 / 13,6 / 9,1 / 6,6px conforme o card vai de 900 a 200. Proporcional por construção |
+| C2 | Vendas por dia | eixo x cortado (`07-1`, `08-`); não reduz densidade de ticks | ✅ **REAL, e corrigido** (`36bccdc`). ⚠️ Eu o dei como "não reproduz" medindo o `LineChart`; ele vive no `SerieTemporal`. A causa não era densidade: o rótulo mora numa célula de `1/n` com `overflow: hidden`, e 36px não cabem em 7px por menos rótulos que se desenhe |
+| C3 | Lucro por horário | sem eixo Y, sem rótulo de valor, **sem linha de zero** | ✅ **corrigido** (`36bccdc`) — mas só a **metade certa**: a linha de zero já EXISTIA. O que faltava era o eixo Y, e ele veio unificado com o `LineChart` em `lib/grafico/eixo.ts` |
+| ~~C4~~ | ~~Posicionamento e Formas de pagamento~~ | ~~barra não ancorada no maior valor~~ | 🗑️ **RISCADO.** Consertado em **`1d8be69`** (23/07), que é onde `barWidth` passou a ser `total / prodMax`. Medido em 13/08 para confirmar: maior barra = **exatamente 100%**, **0** fora do pai e **0** fora do card |
+| ~~C5~~ | ~~Taxa de aprovação~~ | ~~medidores em tamanho fixo, 400px~~ | 🗑️ **RISCADO.** Consertado pela **F3** (`c0f5254`) |
+| C6 | Produtos, Vendas por país, Alertas | **180–400px** de vazio contínuo | ✅ **corrigido no que era defeito.** Medido: `produtos` 121 · `alertas` 81 · `top-campanhas` 56 — e **nenhum deles esconde nada**. Só `atividade` tinha `+32`, e o rodapé dele agora ancora no fim: vão **0** |
+| C7 | modo de edição | títulos de chip truncados por largura fixa | ✅ **corrigido**, e o achado maior foi ao lado: o **número** do KPI era truncado em 34px. Hoje ele encolhe até caber, com piso, e a moldura devolveu 37px ao slot |
+| ~~C8~~ | ~~Vendas por horário~~ | ~~largura fixa: 24 buckets viram fios~~ | 🗑️ **RISCADO.** Consertado pela **F3** (`c0f5254`), que removeu `--tk-b-barras`. Medido em 13/08: a barra é sempre **50% do passo** — 35,8 / 21,6 / 13,6 / 9,1 / 6,6px conforme o card vai de 900 a 200 |
 
 > ### 🔴 O ACHADO QUE NÃO ESTAVA NA LISTA: no MODO DE EDIÇÃO o NÚMERO é truncado
 >
@@ -588,7 +605,7 @@ Nenhum deles aparece em `tsc`, `lint`, `build` ou nas 46 asserções da grade.
 |---|---|
 | **F0b** · **F1** · **F3** | ✅ verdes, e **em produção** |
 | **F5** · **F2** | ✅ verdes, **só locais** |
-| **F4** | 🚧 **C1 ✅** · C2 C4 C8 **não reproduzem** · C5 já era da F3 · **abertos: C3 (só o eixo Y), C6, C7** |
+| **F4** | ✅ **FECHADA em 13/08.** C1 C2 C3 C6 C7 corrigidos · C4 C5 C8 riscados, com o commit que os consertou |
 | **F6** | ⛔ aberta |
 | 🚧 **shell estreito** | frente PRÓPRIA, fora da F4 — ver a seção acima |
 

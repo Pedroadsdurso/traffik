@@ -952,6 +952,49 @@ checar("o eixo dos gráficos é uma fonte só, e os limiares são derivados", ()
   assert.match(fileira, /overflow: "visible"/);
 });
 
+/* 🔴 C6 — VÃO COM `+N` É DEFEITO; VÃO SEM `+N` É ALTURA ESCOLHIDA.
+   ────────────────────────────────────────────────────────────────────────────
+   Regra do dono, 13/08/2026, e ela é o que separa os dois casos que a medição
+   achou juntos:
+
+   | bloco | vão medido | tem `+N`? | |
+   |---|---|---|---|
+   | `atividade` | 29px | **sim (+32)** | 🔴 defeito — a tela diz "não coube mais" e deixa espaço |
+   | `produtos` | 121px | não | ✅ fica — `BreakdownPanel` faz `.map` sem `slice`, mostra tudo |
+   | `alertas` | 81px | não | ✅ fica |
+   | `top-campanhas` | 56px | não | ✅ fica — `TabelaCampanhas` também não corta |
+
+   ⛔ Consertar os três de baixo seria ENCHER o bloco com o que o usuário não
+   pediu. A alça é dele; a altura, também.
+
+   A asserção é ESTRUTURAL porque a de layout não existe em jsdom (§7.3): quem
+   tem `+N` ancora o rodapé no fim, e `marginTop: auto` é o que faz isso. */
+checar("todo bloco com `+N` ancora o rodapé no fim do card", () => {
+  /* Linha de base dupla: os arquivos existem E de fato têm um `+N`. Sem ela,
+     renomear o rodapé faria a guarda passar sobre dois arquivos sem rodapé. */
+  const comMaisN = [
+    ["FeedVendas", ler("../src/components/tk/FeedVendas.tsx")],
+    ["AlertList", ler("../src/components/tk/AlertList.tsx")],
+  ];
+  for (const [nome, fonte] of comMaisN) {
+    assert.match(fonte, /\+ \{/, `linha de base: ${nome} não tem rodapé de "+N"`);
+    assert.match(
+      fonte,
+      /marginTop: "auto"/,
+      `${nome} tem "+N" e não ancora o rodapé — o vão volta para o fim do card`,
+    );
+  }
+
+  /* ⛔ E o outro lado: quem NÃO esconde nada não pode ganhar `slice`. Um corte
+     silencioso ali seria conteúdo escondido SEM `+N`, que é pior que o vão —
+     a tela deixaria de mostrar linha sem dizer que deixou. */
+  for (const nome of ["BreakdownPanel", "TabelaCampanhas"]) {
+    const fonte = semComentarios(ler(`../src/components/tk/${nome}.tsx`));
+    assert.match(fonte, /linhas\.map\(/, `linha de base: ${nome} não desenha a lista`);
+    assert.doesNotMatch(fonte, /linhas\.slice\(/, `${nome} passou a cortar a lista sem "+N"`);
+  }
+});
+
 console.log(
   falhas.length === 0
     ? `\n\x1b[1m\x1b[32m${ok} asserções passaram, 0 falharam.\x1b[0m\n`
