@@ -239,10 +239,61 @@ checar("CAMADA 2 — com todos elegíveis, `completo` é verdadeiro e as alturas
   assert.equal(r.completo, true);
   assert.equal(r.paineis.find((p) => p.id === "funil").h, 5);
   assert.equal(r.paineis.find((p) => p.id === "fontes").h, metaDoBloco("fontes").hPadrao);
-  /* O campo legado SOME no migrado: é ele que impede a próxima abertura de
-     converter de novo, e regravá-lo faria o v4 carregar duas unidades de altura
-     ao mesmo tempo. */
-  assert.equal(r.paineis.find((p) => p.id === "funil").linhasLegado, undefined);
+  /* ⛔ ESTA ASSERÇÃO AFIRMAVA O CONTRÁRIO — que o campo legado SOME no migrado,
+     "porque é ele que impede a próxima abertura de converter de novo". As duas
+     metades estavam erradas: quem impede a reconversão é o `h` existir
+     (`precisaMigrarAltura`), e descartar o legado jogava fora a única rede de
+     uma conversão irreversível que roda sozinha em produção.
+     Ver as três asserções de REDE, abaixo. */
+  assert.equal(r.paineis.find((p) => p.id === "funil").linhasLegado, 5);
+});
+
+/* ══ A REDE DA CONVERSÃO IRREVERSÍVEL ═══════════════════════════════════════
+   🔴 `linhas → h` NÃO TEM VOLTA: `h` é `max(células(linhas), hMin)`, e do `max`
+   não se recupera o operando. A migração roda SOZINHA ao abrir o Dashboard, e a
+   partir de 12/08/2026 roda em PRODUÇÃO. O `linhas` preservado é a única coisa
+   que ainda sabe o que o usuário tinha escolhido.
+
+   ⛔ Estas três asserções existem porque a primeira versão DESCARTAVA o campo, e
+   o descarte estava documentado como decisão certa em três arquivos. */
+checar("REDE — o `linhas` sobrevive à migração, dentro do envelope migrado", () => {
+  const r = migrarAlturas(migrarLayout(V3), () => true);
+  const funil = r.paineis.find((p) => p.id === "funil");
+  assert.equal(funil.h, 5, "linha de base: a migração converteu");
+  assert.equal(funil.linhasLegado, 5, "o `linhas` original tem de continuar lá");
+  /* E ele NÃO desenha: a altura é `h`, não o legado. Sem esta metade, preservar
+     o campo poderia virar aplicá-lo — que dobraria todo bloco alto. */
+  assert.notEqual(funil.h, funil.linhasLegado * 1 + 1);
+});
+
+checar("REDE — o v4 relido devolve o `linhas`, e não pede migração de novo", () => {
+  /* O ciclo completo: v4 gravado COM `linhas` volta com o legado intacto. */
+  const v4 = {
+    v: 4,
+    hero: V3.hero,
+    faixa: V3.faixa,
+    paineis: [{ id: "funil", col: 6, h: 5, linhas: 5 }],
+  };
+  const l = migrarLayout(v4);
+  const funil = l.paineis.find((p) => p.id === "funil");
+  assert.equal(funil.h, 5);
+  assert.equal(funil.linhasLegado, 5, "ler `linhas` só no v3 o perderia no primeiro save");
+  assert.equal(precisaMigrarAltura(l), false, "quem trava a reconversão é o `h`, não o campo sumir");
+});
+
+checar("REDE — quem GRAVA leva o campo junto (a ponta que o descarte tinha)", () => {
+  const hook = ler("../src/components/dashboard/layout/useLayoutDashboard.ts");
+  const i = hook.indexOf("function paraSalvar");
+  assert.ok(i > 0, "linha de base: `paraSalvar` não existe");
+  const corpo = hook.slice(i, hook.indexOf("\n}", i));
+  /* Mira a MONTAGEM do objeto salvo. Foi exatamente aqui que o campo morria. */
+  assert.match(corpo, /linhas: p\.linhasLegado/);
+  /* E o tipo do servidor precisa aceitá-lo, senão o `tsc` estaria calado sobre
+     um campo que nunca chega ao banco. */
+  const acao = ler("../src/lib/actions/dashboardLayout.ts");
+  const j = acao.indexOf("interface PainelSalvo");
+  assert.ok(j > 0, "linha de base: `PainelSalvo` não existe");
+  assert.match(acao.slice(j, acao.indexOf("\n}", j)), /linhas\?: number/);
 });
 
 checar("bloco JÁ migrado não é tocado — nem quando ficaria maior", () => {

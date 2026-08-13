@@ -19,16 +19,26 @@ import {
 import { CATALOGO_META, encaixarAltura, encaixarColunas, metaDoBloco } from "../catalogo";
 
 /**
- * O que vai para o banco. ⛔ `linhasLegado` NÃO entra: ele é campo de leitura de
- * envelope antigo, e regravá-lo faria o v4 carregar as duas unidades de altura
- * ao mesmo tempo — que é a ambiguidade que a versão do envelope existe para
- * matar.
+ * O que vai para o banco.
+ *
+ * 🔴 **`linhasLegado` ENTRA, como `linhas`.** Este comentário dizia o contrário
+ * — que regravá-lo faria o v4 carregar duas unidades de altura ao mesmo tempo, e
+ * que a versão do envelope existe para matar essa ambiguidade.
+ *
+ * A ambiguidade que o `v` mata é sobre **qual campo desenha**, e ela continua
+ * morta: quem desenha é `h`, sempre; `linhas` não é lido por nada de layout. O
+ * que a versão anterior fazia era outra coisa — jogar fora a única cópia do que
+ * o usuário tinha escolhido, numa conversão que **não tem volta** (`h` é o
+ * `max()` da conta com a medição F0b) e que roda **sozinha, em produção**.
+ *
+ * ⚠️ Ele é preservado inclusive quando o usuário redimensiona à mão: a rede não
+ * fica menos útil por ele ter mexido no bloco depois. Uma regra, não duas.
  */
 function paraSalvar(l: LayoutZonas): LayoutSalvo {
   return {
     hero: l.hero,
     faixa: l.faixa,
-    paineis: l.paineis.map((p) => ({ id: p.id, col: p.col, h: p.h })),
+    paineis: l.paineis.map((p) => ({ id: p.id, col: p.col, h: p.h, linhas: p.linhasLegado })),
   };
 }
 
@@ -310,10 +320,12 @@ export function useLayoutDashboard(workspaceId?: string | null) {
       const h = encaixarAltura(alturaBruta, meta);
       const atual = l.paineis.find((p) => p.id === id);
       if (!atual || (atual.col === col && atual.h === h)) return l; // nada mudou
-      /* ⚠️ O `linhasLegado` é DESCARTADO no primeiro redimensionamento, e tem de
-         ser: com `h` definido, o campo antigo deixou de ter uso e mantê-lo faria
-         o painel carregar duas alturas em unidades diferentes. */
-      return { ...l, paineis: l.paineis.map((p) => (p.id === id ? { id: p.id, col, h } : p)) };
+      /* ⚠️ O `linhasLegado` SOBREVIVE ao redimensionamento — o `...p` o carrega.
+         Aqui dizia que ele "tem de ser descartado", e o argumento (duas alturas
+         em unidades diferentes) confundia CARREGAR com DESENHAR: quem desenha é
+         `h`, e só. Descartar era perder a rede da conversão irreversível no
+         primeiro arrasto. */
+      return { ...l, paineis: l.paineis.map((p) => (p.id === id ? { ...p, col, h } : p)) };
     });
   }, []);
 

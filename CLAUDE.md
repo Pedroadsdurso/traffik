@@ -1,5 +1,50 @@
 @AGENTS.md
 
+# 🔴🔴 O ESTADO DO GIT DESTE ARQUIVO ESTAVA ERRADO — E O REDESIGN ESTÁ EM PRODUÇÃO
+
+> **Medido em 12/08/2026, 22h. Esta seção vence as ~17 linhas
+> "⛔ NADA FOI PARA O GITHUB" que aparecem nos ESTADO DA SESSÃO abaixo.**
+
+| | Medido |
+|---|---|
+| `origin/main` | **`492dcdb`** — avançada de `4e6aa9e` em **12/08/2026 16:35** |
+| `origin/redesign/dashboard` | **existe**, primeiro push em **12/08/2026 16:30** |
+| produção (`https://342dd-virid.vercel.app/login`) | serve `tk-auth` e `tk-auth-marca` |
+
+`tk-auth` **não existe** em `4e6aa9e` (0 ocorrências) e existe em `492dcdb` (3).
+Ou seja: **as doze telas do redesign estão no ar para os testadores desde
+12/08/2026 16:35.**
+
+> ### ⛔ AS LINHAS "NADA FOI PARA O GITHUB" ABAIXO NÃO SÃO MENTIRA — SÃO HISTÓRIA
+>
+> Cada uma era **verdadeira quando foi escrita**: até 12/08 16:30 a branch de
+> fato não existia no remoto. Elas não foram apagadas porque apagá-las
+> reescreveria o registro de sessões que aconteceram.
+>
+> ⚠️ **O que elas não podem mais ser é lidas como estado atual.** Uma delas diz
+> "75 commits locais"; hoje são 0 à frente do remoto. Estado registrado envelhece
+> sozinho — foi exatamente por isso que a META-REGRA do topo pede PADRÃO e
+> MEDIÇÃO em vez de fotografia.
+>
+> ### 🔎 A MEDIÇÃO, e ela custa 10 segundos
+> ```bash
+> git ls-remote --heads origin            # o que existe no remoto, agora
+> git reflog show origin/main --date=iso | head -3   # quando main andou
+> curl -s https://342dd-virid.vercel.app/login | grep -c tk-auth   # o que a produção serve
+> ```
+> ⛔ **Nunca afirme o estado do remoto a partir deste arquivo.** Rode as três.
+
+### ⚠️ A CONSEQUÊNCIA QUE MUDA DECISÃO, não só o registro
+
+A regra do congelamento (a seção logo abaixo) foi escrita quando o redesign era
+uma branch que ninguém via. Ela continua valendo — mas o custo de errar mudou de
+"o dono vê no dev" para **"o testador vê em produção"**.
+
+⛔ **Não conclua daí que a regra ficou mais rígida ou mais frouxa.** Ela é a
+mesma; o que mudou é que "MEDE · REGISTRA · AVISA" agora tem prazo.
+
+---
+
 # ⛔⛔ O REDESIGN NÃO MUDA FUNCIONALIDADE, CONTAS NEM LÓGICA
 
 > **Regra do dono, 07/08/2026. Vale daqui até o fim do redesign, e vence
@@ -5252,6 +5297,56 @@ imagem é o caso comum"* nos Criativos.
 `::-webkit-search-cancel-button`, `::-webkit-calendar-picker-indicator`,
 `:-internal-autofill-selected`, o `accent-color` padrão de `checkbox`/`radio`
 nativo, e a barra de rolagem. Todos são pintados pelo agente do usuário.
+
+---
+
+# ⚖️ PRINT × MEDIÇÃO — QUANDO OS DOIS DISCORDAM, A RESPOSTA NÃO É ESCOLHER O DE SEMPRE
+
+> **Formulação do dono, 12/08/2026, depois de o par falhar nas DUAS direções na
+> mesma semana.** Ela fecha a regra anterior, que ficou meia: *"screenshot
+> levanta a hipótese, medição confirma"* descreve um dos dois casos e **inverte o
+> outro**.
+
+## Os dois casos, e eles apontam para lados opostos
+
+| | O que aconteceu | Quem estava certo |
+|---|---|---|
+| **autofill do Chrome** | `getComputedStyle` dizia `transparent`; o print mostrava dois retângulos brancos no tema escuro | 🖼️ **o PRINT** — o valor pintado não estava no CSSOM |
+| **`getBoundingClientRect()` clipado** | a varredura acusava **13 fugas** no Funil, em **duas leituras seguidas**; o print mostrava o bloco inteiro dentro do card | 🔬 **o PRINT** — o retângulo de elemento clipado reporta geometria NÃO clipada |
+
+> ## No primeiro o print ACHOU o que a medição não via. No segundo o print DESMENTIU o que a medição afirmava. A ferramenta que errou foi a mesma nos dois.
+
+### 🔴 E o segundo derruba a defesa que esta base tinha
+
+A regra das **duas leituras** nasceu de uma medição transitória (ler antes da
+repintura). Ela não teria pego este caso: as duas leituras deram 13, com minutos
+de intervalo, porque o valor **estava estável e errado**. Repetir uma medição só
+elimina ruído — não elimina **instrumento medindo a propriedade errada**.
+
+> ### ⛔ A DISCIPLINA, e ela é uma pergunta, não uma preferência
+>
+> Quando print e medição discordam, **nenhum dos dois vence por ser o de
+> sempre**. A pergunta é:
+>
+> > **"Que propriedade cada um está medindo — e qual delas é a que eu quero?"**
+>
+> | O que se quer saber | Quem responde |
+> |---|---|
+> | cor/contraste com precisão | 🔬 medição (canvas 1×1, sobre o fundo REAL) |
+> | o que o **navegador** pinta sozinho (autofill, `accent-color`, scrollbar) | 🖼️ print — não está no CSSOM |
+> | "cabe no slot?" | 🔬 `scrollHeight`/`scrollWidth` — eles **respeitam o clip** |
+> | "vaza para fora?" | ⛔ **NÃO** `getBoundingClientRect()` de descendente: ele ignora o clip do ancestral |
+>
+> ⚠️ E há um terceiro desfecho, que é o mais barato e o mais esquecido:
+> **conserte o INSTRUMENTO.** Nos dois casos a saída não foi "confiar no print" —
+> foi trocar a medida por uma que mede a propriedade certa
+> (`scrollWidth − clientWidth`) ou aceitar que aquela propriedade não é
+> mensurável por CSSOM e dizer isso.
+
+⚠️ **O sinal barato:** os dois discordarem **em magnitude absurda**. 465px de
+fuga num card de 470px não é "quase certo" — é o instrumento respondendo outra
+pergunta. Discordância pequena costuma ser repintura; discordância grotesca é
+quase sempre unidade ou referencial errado.
 
 ---
 

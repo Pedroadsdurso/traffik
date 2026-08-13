@@ -91,12 +91,24 @@ export async function loadLayoutZonas(workspaceId?: string | null): Promise<unkn
   return row?.layout ?? null;
 }
 
-/** O painel como o envelope v4 o guarda. ⛔ Sem `linhas`: a unidade de 44px morreu. */
+/** O painel como o envelope v4 o guarda. */
 export interface PainelSalvo {
   id: string;
   col: number;
   /** Altura em CÉLULAS de 96px. Ver `layout/migrar.ts`. */
   h?: number;
+  /**
+   * 🔴 O `linhas` de antes da F1, em unidade de 44px — **PRESERVADO DE PROPÓSITO**.
+   *
+   * ⛔ Este campo dizia "a unidade de 44px morreu" e era descartado na gravação.
+   * Ele não pode ser: a conversão `linhas → h` é **irreversível** (`h` é o `max()`
+   * com a medição F0b), a migração roda sozinha ao abrir o Dashboard, e a partir
+   * de 12/08/2026 ela roda em PRODUÇÃO. Sem ele, uma conversão errada não tem de
+   * onde ser desfeita — o layout do usuário vira o que a conta decidiu.
+   *
+   * ⚠️ Ele NÃO é lido para desenhar. Quem impede a reconversão é o `h` existir.
+   */
+  linhas?: number;
 }
 
 export type LayoutSalvo = { hero: string[]; faixa: string[]; paineis: PainelSalvo[] };

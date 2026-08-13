@@ -170,10 +170,11 @@ function sanearEnvelope(raw: LayoutV2 | LayoutV3 | LayoutV4, versao: 2 | 3 | 4):
          migração é quem preenche. Até lá o bloco desenha em `auto`, que é
          exatamente o comportamento de antes da F1. Os dois modos convivem. */
       h: versao === 4 && typeof p.h === "number" ? encaixarAltura(p.h, meta) : undefined,
-      /* O `linhas` do v3 atravessa a leitura SEM ser convertido, para o efeito
-         de migração poder usá-lo uma vez e nunca mais. Ele não é lido por nada
-         que desenhe — ver `PainelGrade.linhasLegado`. */
-      linhasLegado: versao === 3 && typeof p.linhas === "number" ? p.linhas : undefined,
+      /* 🔴 O `linhas` ATRAVESSA A LEITURA EM v3 **E EM v4** — ele é a rede.
+         Ver `PainelGrade.linhasLegado`: depois de a migração gravar `h`, o
+         `linhas` é a ÚNICA coisa que ainda sabe qual altura o usuário tinha
+         escolhido. Lê-lo só no v3 o perderia no primeiro `save`. */
+      linhasLegado: typeof p.linhas === "number" ? p.linhas : undefined,
     });
   }
   return { hero, faixa, paineis: reporEstruturais(paineis) };
@@ -251,14 +252,30 @@ export interface PainelGrade {
    */
   h?: number;
   /**
-   * O `linhas` do envelope v3, CRU, em unidade de 44px.
+   * O `linhas` gravado antes da F1, CRU, em unidade de 44px.
    *
-   * ⛔ Nada que desenha lê este campo — ele existe só para o efeito de migração
-   * converter uma vez. Aplicá-lo como altura reintroduziria o piso de 44px por
-   * cima da grade de 96 e **dobraria** todo bloco alto.
+   * ⛔ Nada que DESENHA lê este campo. Aplicá-lo como altura reintroduziria o
+   * piso de 44px por cima da grade de 96 e **dobraria** todo bloco alto.
    *
-   * ⚠️ Ele **não é regravado**: o envelope v4 só tem `h`. Se ele reaparecer num
-   * salvo v4, é bug de escrita, não compatibilidade.
+   * ### 🔴 ELE É PRESERVADO NO v4, E É A ÚNICA REDE QUE EXISTE
+   *
+   * ⚠️ **Este comentário dizia o oposto** — *"ele não é regravado: o envelope v4
+   * só tem `h`"* — e essa era a decisão errada. A conversão
+   * `linhas → h` é **destrutiva e irreversível**: `h` é o `max()` da conta com a
+   * medição F0b, então de `h` não se volta ao `linhas` que o usuário escolheu.
+   *
+   * A migração roda **uma vez, sozinha, ao abrir o Dashboard**, e agora roda em
+   * PRODUÇÃO. Se ela converter errado — um `hMin` mal medido, uma densidade que
+   * a conta não previu, um bloco que a F3 ainda não encolheu —, sem este campo
+   * não há de onde reconstituir nada: o layout do usuário vira o que a conversão
+   * decidiu, para sempre, e ninguém saberá qual era o anterior.
+   *
+   * ⛔ **Não "limpe" este campo por ele não ter leitor de desenho.** Ele é
+   * exatamente a classe de coisa que a regra *ANTES DE DELETAR UM ÓRFÃO,
+   * PERGUNTE O QUE ELE FAZIA* protege: sem consumidor, com consequência.
+   *
+   * 🔜 Ele pode sair no dia em que a migração tiver rodado em toda a base E
+   * alguém decidir que não há mais o que reconstituir. É decisão, não faxina.
    */
   linhasLegado?: number;
 }
@@ -488,9 +505,11 @@ export function migrarAlturas(
       pendentes++;
       return p;
     }
-    /* ⚠️ O `linhasLegado` some no resultado: quem tem `h` não tem mais o campo
-       antigo, e é isso que impede a próxima abertura de converter de novo. */
-    return { id: p.id, col: p.col, h: alturaMigrada(meta, p.linhasLegado) };
+    /* ⚠️ O `linhasLegado` FICA. Quem impede a próxima abertura de converter de
+       novo é o `h` existir (`precisaMigrarAltura`), não o campo antigo sumir —
+       eu tinha atado as duas coisas, e o efeito colateral era jogar fora a única
+       rede que a conversão destrutiva tem. */
+    return { id: p.id, col: p.col, h: alturaMigrada(meta, p.linhasLegado), linhasLegado: p.linhasLegado };
   });
   return { paineis, completo: pendentes === 0 };
 }
