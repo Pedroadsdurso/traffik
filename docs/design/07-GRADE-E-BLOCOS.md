@@ -1315,3 +1315,64 @@ o formulário limpo **não** desenha alerta nenhum.
 > passa"* — eu estaria plantando o defeito que a varredura procura. Um
 > componente extraído tem consumidor de produção, e some do radar por ser
 > correto, não por disfarce.
+
+### 8 · A triagem das 114 puras sem teste — o corte e as duas cobertas
+
+**Ordem do dono: priorizar por consequência, cortar as triviais.**
+
+| balde | n |
+|---|---|
+| candidatos puros (nem server action, nem rede) | **112** |
+| **triviais** — cortadas (`getAppUrl`, `nomePais`, `centroide`, conversão de cor…) | 7 |
+| **prioritárias por consequência** | **12** |
+| resto (formatação, helpers de gateway, wrappers de data) | 93 |
+
+> ### ⚠️ O CLASSIFICADOR AUTOMÁTICO ERROU O ALVO, e vale registrar
+> A primeira triagem por expressão regular pôs `evaluateRule`, `runUserRules`,
+> `agruparPorPedido` e os de fuso no balde **"outros"** — justamente as de maior
+> consequência. **Refiz com julgamento**, e conferi uma a uma por `grep` antes
+> de construir. Saída plausível não é evidência de que o instrumento acertou o
+> alvo — nem quando o instrumento é a própria triagem.
+
+**As 12 prioritárias, e o critério de cada uma:**
+
+| função | por quê |
+|---|---|
+| `ratearDespesa` · `fatorDeRateio` · `contarUnicasAtivas` | 💰 **mudou o Lucro em produção** em 06/08 |
+| `evaluateRule` · `runUserRules` | 🔴 **age sozinho**: pausa campanha e altera orçamento, com dinheiro real |
+| `parseXcod` · `parseTrackingCodes` · `splitPipe` | 🎯 atribuição venda→campanha, o núcleo do Bloco 11 |
+| `agruparPorPedido` | a armadilha do `pedidoId`, paga **quatro** vezes |
+| `zonedToUtc` · `dayStart` · `dayEnd` | 🕐 "nenhuma agregação usa o dia do processo" |
+| `secretsMatch` | 🔒 comparação em tempo constante |
+| `getImpostoAnunciosPct` | 💰 entra no break-even |
+
+**Cobertas nesta rodada: 2 de 12** (as duas de maior consequência).
+
+#### `test:rateio` — 33 asserções
+
+Congela **relação, não valor**: mês inteiro vale exatamente 1 em agosto (31),
+fevereiro (28) e abril (30); um dia de fevereiro vale mais que um de agosto;
+`27/02–02/03` soma `2/28 + 2/31` e **não** `4/30`.
+
+⛔ **Plantio: o divisor fixo de 30**, que o `CLAUDE.md` proíbe por nome. Ele dá
+`1,0333` em agosto e `0,9333` em fevereiro — erra para os dois lados —, e a
+asserção do mês inteiro **derruba**.
+
+✅ E o caso literal do defeito de produção virou asserção: mensal de R$ 500 em
+"Hoje" vale **R$ 16,13**, não R$ 500.
+
+#### `test:utm-parse` — 27 asserções
+
+Congela o descarte de **id não numérico** em `splitPipe`, que é decisão e não
+descuido: a Meta usa inteiros longos, e `camp-dev-A` é indistinguível de
+placeholder.
+
+⛔ **Plantio: a versão frouxa que aceita o placeholder** — o "conserto" que
+alguém faria ao ver o dev atribuir tudo por nome. Com ele, `Camp A` e `Camp B`
+**colidem no mesmo id** `{{campaign.id}}`, que é atribuição errada silenciosa.
+
+⚠️ E uma asserção minha foi **apagada**, não corrigida: ela tinha `|| true` e
+não podia falhar — o defeito que este arquivo existe para não cometer.
+
+**Ficam na fila, por ordem de consequência:** `evaluateRule`/`runUserRules`,
+`agruparPorPedido`, os três de fuso, `secretsMatch`, `getImpostoAnunciosPct`.

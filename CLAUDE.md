@@ -4427,7 +4427,97 @@ o seed não acompanhou aquelas vendas de checkout. Em produção quem decide é 
 
 ---
 
-# 🪟 A VISIBILIDADE DA JANELA NÃO É ALCANÇÁVEL DE DENTRO DO NAVEGADOR — SEIS caminhos, todos falharam
+# 🚫🪟 O INSTRUMENTO DE JANELA É **INDISPONÍVEL NESTA MÁQUINA** — encerrado em 14/08/2026
+
+> **Ordem do dono, depois do sétimo caminho falhar.** Isto não é "ainda não
+> conseguimos": é um recurso que esta estação **não oferece**, e tratá-lo como
+> temporário custou várias sessões.
+
+**`requestAnimationFrame` nunca disparou.** A medição decisiva, com a aba armada
+e instrumentada:
+
+```
+quadrosAcumulados ... 0     ← rAF jamais rodou
+transicoes .......... 0     ← visibilitychange nunca disparou, em horas
+visibilityState ..... hidden
+hasFocus ............ false
+window.focus() ...... sem erro, e sem efeito
+```
+
+⚠️ **Zero TRANSIÇÕES é a leitura que encerra o assunto.** Não é que a varredura
+falhou — é que a aba não ficou visível um instante sequer. Um `visibilitychange`
+é evento, não timer: ele não é estrangulado, e teria registrado qualquer janela
+de visibilidade, por curta que fosse.
+
+## ⛔ O QUE FICA PUBLICADO COMO NÃO VERIFICADO EM TELA
+
+**Está no `## Estado` do `07`, e não sai de lá até alguém medir noutra máquina:**
+
+| | |
+|---|---|
+| **#1** | bandas de **8, 4 e 1 coluna** — só 2260 foi medida, 1 de 5 larguras |
+| **#2** | o **`h` derivado de medição de estado vazio** |
+| **#3** | a **origem B** da §7.2 (vão até a borda) |
+| **#4** | a **origem A** da §7.2 (vão entre conteúdos) |
+
+⛔ **Não os marque como feitos por asserção verde.** O que existe são funções
+puras testadas; o que falta é o que só a tela responde.
+
+## 🔎 OS SETE CAMINHOS, para ninguém regastar nenhum
+
+| # | caminho | desfecho |
+|---|---|---|
+| 1 | esperar visibilidade em laço (4s · 6s · 8s) | oculta o tempo todo |
+| 2 | clique sintético do CDP em ponto inerte | o clique acontece na página; a janela **não sobe** |
+| 3 | screenshot (hipótese: ativa a aba) | refutada; depois passou a dar *timeout* |
+| 4 | aba nova no grupo existente | nasce `hidden` |
+| 5 | fechar o grupo e forçar janela nova | nasce `hidden` |
+| 6 | **lançar `chrome.exe` pelo SO** com `--new-window --window-position=0,0 --window-size=1280,900` | o Chrome veio para frente; a janela do MCP seguiu oculta (`innerWidth` continuou 2560 — o MCP vive em OUTRA janela) |
+| 7 | **`window.focus()` da própria página** | sem erro e **sem efeito** |
+
+⛔ **O 6 e o 7 fecham a família pelos dois lados**: o 6 age fora do navegador, o
+7 age de dentro dele. Nenhum move o gerenciador de janelas.
+
+> ### 🔬 E A DISCORDÂNCIA COM O DONO SE RESOLVE, sem ninguém estar errado
+> Ele via uma janela do Chrome visível; o Chrome dizia `hidden`. **Havia mais de
+> uma janela** — inclusive uma `about:blank` aberta pela tentativa 6. É o par
+> *PRINT × MEDIÇÃO*: os dois certos sobre objetos diferentes.
+>
+> ✅ **O que resolve a ambiguidade é MARCAR a aba:** `document.title = "★ MEDIR
+> AQUI ★"`. Um identificador que o humano lê na barra vale mais que qualquer
+> descrição de qual janela é qual.
+
+## ✅ O QUE FUNCIONA COM A ABA OCULTA — e é o que salva a sessão
+
+| | |
+|---|---|
+| ✅ ler o DOM, `getComputedStyle`, `getBoundingClientRect` | funciona |
+| ✅ **clicar** (trocar período, abrir menu, marcar caixa) | funciona |
+| ✅ injetar instrumento, armar `visibilitychange`, `setInterval` | funciona |
+| ⛔ `requestAnimationFrame` | não dispara |
+| ⛔ `setTimeout` longo | estrangulado a ~1/minuto após 5 min |
+| ⛔ screenshot | *timeout* |
+
+**Prepare o estado com a aba oculta e deixe ARMADO. Não gaste sessão tentando
+levantar a janela.**
+
+> ### ⚠️ E O `Runtime.evaluate` CONGELA COM `await` EM ABA OCULTA
+> A causa: com a aba oculta o `setTimeout` é estrangulado, então um
+> `await new Promise(r => setTimeout(r, 1200))` leva até **60s** e estoura o
+> *timeout* de 45s. **Em aba possivelmente oculta, script SÍNCRONO.**
+
+### 🔬 O par que DISTINGUE as causas de `hidden`
+
+| `hidden` | `hasFocus` | leitura |
+|---|---|---|
+| `true` | **`true`** | janela **minimizada ou totalmente ocluída** |
+| `true` | `false` | janela em segundo plano, **ou** aba em segundo plano dentro dela |
+| `false` | `false` | ✅ visível sem foco — dá para medir (22 fps medidos) |
+| `false` | `true` | ✅ visível e focada (165 fps medidos) |
+
+---
+
+# 🪟 (histórico) A VISIBILIDADE DA JANELA NÃO É ALCANÇÁVEL DE DENTRO DO NAVEGADOR
 
 > **14/08/2026.** Registrado por ordem do dono, depois de a última tentativa
 > (lançar o Chrome pelo SO) também falhar. **Pare de tentar em sessão nova sem
