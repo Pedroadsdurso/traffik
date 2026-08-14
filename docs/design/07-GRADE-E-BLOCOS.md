@@ -1618,3 +1618,48 @@ impressas: **146** casos com métrica inválida, **181** com painel.
 ✅ E `heroLegado`/`faixaLegado` têm asserção própria: são a **procedência**, e
 perdê-los é a família *"excluir configuração não pode apagar a procedência"* —
 aqui sem volta.
+
+### 15 · O construtor de alertas saiu do `useMemo` — e o sexto alerta foi LIGADO
+
+**`test:alertas`, 39 asserções, 6 alertas.**
+
+> ### ⚠️ A ORDEM PEDIDA ERA IMPOSSÍVEL, e o que a substituiu é mais forte
+> O dono pediu: teste primeiro, extrair depois, e o mesmo teste passando prova
+> que nada sumiu. **O primeiro passo não existia** — o construtor estava dentro
+> do `useMemo` e não havia como chamá-lo. O que prova no lugar:
+>
+> 1. o `git diff` mostra o corpo saindo do `useMemo` e entrando no módulo
+>    **idêntico** — é um MOVE;
+> 2. `test:alertas` exercita **os cinco ids originais**, cada um com o par
+>    **dispara / não dispara**.
+>
+> ⚠️ Um alerta que só se sabe disparar não está coberto: o par é o que separa
+> "existe" de "existe e é condicional".
+
+**O que as asserções congelaram, além da existência:**
+
+- `roi-caiu` tem fronteira **estrita**: exatamente −20% **não** dispara;
+- `delta: null` **não** vira alerta — não medido ≠ ruim;
+- token **desconhecido** (data nula) **entra** na lista, e é o caso mais
+  perigoso (perfis anteriores à coluna, os mais antigos);
+- o **tom** do `erroSync` é respeitado: `aviso` → `warning`, não crítico;
+- sem gasto **nenhum** não alerta — alarmar ali gritaria em toda conta nova.
+
+**Plantio: `Date.now()` interno em vez do `agora` recebido.** Ele não produz
+número errado — produz **divergência de hidratação**, e o React aborta a árvore.
+Medido: o mesmo token sai `warning` no servidor e `danger` no cliente cinco dias
+depois. É a regra do `elapsed()`, onde o efeito visível foi a navegação parar.
+
+#### O sexto alerta, `donos-<id>`
+
+⛔ **Um por PIXEL, não um por entrada** — cinco chaves ilegíveis no mesmo pixel
+são um problema só, e cinco linhas iguais afogariam os outros. O detalhe nomeia
+cada evento, o dono assumido, e **a consequência**: *"se dois lados enviarem o
+mesmo, a Meta conta em dobro"*.
+
+> ### ✅ E O PISO DE ZERO WARNINGS PAGOU NA HORA
+> A extração deixou **quatro imports órfãos** (`estadoDoToken`,
+> `tokenPedeAtencao`, `rotuloDoToken`, `detalheDoToken`) em `dadosDosBlocos.tsx`.
+> O lint acusou no primeiro comando — é a família *import não chamado dá
+> aparência de cobertura*, pega em segundos **porque o piso era zero**. Com oito
+> warnings de ruído, ela teria passado.

@@ -5,7 +5,7 @@ import * as React from "react";
 import { bandeiraDe, centroide, nomePais } from "@/lib/countries";
 import { nomeDaFonte } from "@/lib/fontes";
 import { brl } from "@/lib/format";
-import { detalheDoToken, estadoDoToken, rotuloDoToken, tokenPedeAtencao } from "@/lib/integracoes/token";
+import { montarAlertas } from "@/lib/dashboard/alertas";
 import { useTheme } from "@/components/theme/ThemeProvider";
 
 import type { Alerta } from "@/components/tk/AlertList";
@@ -151,85 +151,29 @@ export function useDadosDosBlocos(v: TraffikView) {
   const { visao: visaoPais, setVisao: setVisaoPais } = useVisaoPais(paises.length);
 
   /* ── Alertas — DERIVADOS do que já existe, sem dado novo ─────────────────── */
-  const alertas: Alerta[] = React.useMemo(() => {
-    const lista: Alerta[] = [];
-
-    if (!v.fbConnected) {
-      lista.push({
-        id: "sem-conta",
-        severidade: "warning",
-        titulo: "Nenhuma conta de anúncio conectada",
-        detalhe: "Sem ela não há gasto, ROAS nem ROI.",
-        href: "/dashboard/integracoes/anuncios",
-      });
-    }
-
-    /* ── TOKEN DA META EXPIRANDO ───────────────────────────────────────────
-       🔴 É a falha mais cara que esta ferramenta tem, e ela é MUDA: o token
-       vence, a sincronização para, o gasto congela — e o ROAS passa a mentir
-       por omissão enquanto o motor de regras decide com dado velho.
-
-       ⛔ A conta NÃO é feita aqui. `lib/integracoes/token.ts` é a fonte única, e
-       a tela de Integrações usa exatamente as mesmas funções.
-
-       ⚠️ `desconhecido` ENTRA na lista, e é o caso mais perigoso: são os perfis
-       conectados antes de a coluna existir — os mais antigos, logo os mais
-       prováveis de já estarem vencidos. */
-    for (const p of v.perfisCrus) {
-      const t = estadoDoToken(p.tokenExpiresAt, new Date(agora));
-      if (!tokenPedeAtencao(t)) continue;
-      lista.push({
-        id: `token-${p.id}`,
-        severidade: t.tipo === "expira" ? "warning" : "danger",
-        titulo: `${p.name}: ${rotuloDoToken(t)}`,
-        detalhe: detalheDoToken(t) ?? undefined,
-        href: "/dashboard/integracoes",
-      });
-    }
-
-    /* `erroSync` já vem TRADUZIDO pelo `erroMeta.ts` — mensagem em linguagem de
-       consequência, ação sugerida e um `tom` que diz se é erro ou aviso. Usar o
-       tom dele em vez de marcar tudo como crítico é o que impede o painel de
-       encher de vermelho por rate limit, que passa sozinho. */
-    for (const p of v.adProfiles ?? []) {
-      for (const c of p.accounts ?? []) {
-        if (!c.erroSync) continue;
-        lista.push({
-          id: `conta-${c.id}`,
-          severidade: c.erroSync.tom === "erro" ? "danger" : "warning",
-          titulo: `${c.name}: ${c.erroSync.mensagem}`,
-          detalhe: c.erroSync.acao ?? undefined,
-          href: "/dashboard/integracoes/anuncios",
-        });
-      }
-    }
-
-    const roi = v.metricCards.roi;
-    if (roi?.delta != null && roi.delta < -20) {
-      lista.push({
-        id: "roi-caiu",
-        severidade: "warning",
-        titulo: "ROI caiu mais de 20% no período",
-        detalhe: `Agora em ${roi.value}.`,
-      });
-    }
-
-    /* Gasto sem conversão: há gasto na série e nenhuma venda. É o alerta que
-       mais custa dinheiro, e ele só é possível porque as duas séries vivem no
-       mesmo objeto. */
-    const gastoTotal = v.chartSerie.spend.reduce((s, n) => s + n, 0);
-    const receitaTotal = v.chartSerie.revenue.reduce((s, n) => s + n, 0);
-    if (gastoTotal > 0 && receitaTotal === 0) {
-      lista.push({
-        id: "gasto-sem-conversao",
-        severidade: "danger",
-        titulo: "Gasto sem nenhuma conversão",
-        detalhe: `${brl(gastoTotal)} investidos e nenhuma venda atribuída no período.`,
-      });
-    }
-
-    return lista;
-  }, [v.fbConnected, v.adProfiles, v.perfisCrus, v.metricCards.roi, v.chartSerie, agora]);
+  const alertas: Alerta[] = React.useMemo(
+    /* ⛔ O CORPO SAIU DAQUI EM 14/08/2026 — `lib/dashboard/alertas.ts`.
+       Enquanto ele morava neste `useMemo`, NENHUM dos cinco alertas tinha
+       asserção: um construtor dentro de componente é inalcançável por teste.
+       O move foi verbatim, e `test:alertas` exercita os cinco ids originais. */
+    () =>
+      montarAlertas({
+        fbConnected: v.fbConnected,
+        perfisCrus: v.perfisCrus,
+        adProfiles: v.adProfiles,
+        roi: v.metricCards.roi,
+        chartSerie: v.chartSerie,
+        agora,
+        brl,
+        /* 🔴 LIGADO EM 14/08/2026 — o campo existia no DTO e ninguém o lia, que
+           é a definição de dado morto. `donosCorrompidos` enumera os
+           `eventOwners` ilegíveis, e sem este alerta a escolha do usuário sobre
+           QUEM envia o evento à Meta se perdia em silêncio: a corrupção cai no
+           padrão, o envio é RELIGADO, e a Meta volta a contar em dobro. */
+        pixels: v.pixels,
+      }),
+    [v.fbConnected, v.adProfiles, v.perfisCrus, v.metricCards.roi, v.chartSerie, v.pixels, agora],
+  );
 
   /* ── Rodapé de estado ────────────────────────────────────────────────────── */
   const rodape: BlocoEstado[] = React.useMemo(() => {
