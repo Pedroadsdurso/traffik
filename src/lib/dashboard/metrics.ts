@@ -168,11 +168,12 @@ export interface DashboardData {
     visitas: number;
     visitasDaMeta: number;
     visitasDeOutrasOrigens: number;
-    /** ⚠️ A etapa da CADEIA: só os ICs com jornada. Ver a nota no cálculo. */
+    /** ⚠️ A etapa da CADEIA: só os ICs MEDIDOS NO NAVEGADOR. Ver a nota no cálculo. */
     checkouts: number;
+    /** Checkouts escritos pelo webhook do gateway — circulares, fora da geometria. */
+    checkoutsDerivadosDaVenda: number;
     checkoutsSemJornada: number;
     checkoutsTotais: number;
-    checkoutsDoNavegador: number;
     iniciadas: number;
     vendas: number;
     /**
@@ -1063,20 +1064,48 @@ function summarize(w: Window, impostoAnunciosPct = 0) {
     /** As de qualquer outra origem. CONTAGEM, nunca somada de volta numa razão. */
     visitasDeOutrasOrigens: clicksCount - visitasDaMeta,
     /**
-     * 🔴 A ETAPA DA CADEIA É `icsComJornada`, não o total.
+     * 🔴 A ETAPA DA CADEIA É SÓ O QUE O NAVEGADOR MEDIU — 13/08/2026.
      *
-     * Só ela é subconjunto de `visitas` (mesma tabela `Click`). O total
-     * continua exposto em `checkoutsTotais` para quem precisar do número
-     * inteiro — mas ele não pode desenhar a fita, sob pena de uma etapa ficar
-     * maior que a anterior por soma de populações disjuntas.
+     * ## Duas correções, e a segunda é a que importa
+     *
+     * A primeira trocou o TOTAL (com + sem jornada) por `icsComJornada`, porque
+     * as duas parcelas são populações disjuntas e somadas faziam a etapa ficar
+     * maior que a anterior.
+     *
+     * A segunda vai fundo: **`icsComJornada` ainda era de fonte MISTURADA.**
+     * `Click.checkoutAt` tem dois escritores — o pixel (`checkoutSource:
+     * "navegador"`) e o webhook do gateway (`"gateway"`, via
+     * `registrarCheckoutDoGateway`). O segundo é escrito PORQUE a venda chegou.
+     *
+     * ### 🔴 E daí sai um defeito circular, não só uma impureza
+     *
+     * Checkout que só existe porque a venda chegou **nunca perde ninguém no
+     * caminho até a venda**: ele entra no funil já convertido. Com ele dentro
+     * da etapa, a razão `Sessões → ICs` deixa de medir *"o snippet detectou o
+     * checkout?"* e passa a medir, em parte, *"houve venda?"* — que é a etapa
+     * seguinte respondendo pela anterior.
+     *
+     * Hoje a etapa é `icsNavegador`: **a única parcela independente da venda**,
+     * e a única que é subconjunto de `visitas` pelo mesmo instrumento.
+     *
+     * ⛔ Não some `checkoutsDerivadosDaVenda` de volta "para não perder o
+     * número". Ele não se perde — é declarado FORA da geometria, como
+     * `Cliques`. O que se perderia somando é o significado da razão.
      */
-    checkouts: w.icsComJornada,
+    checkouts: w.icsNavegador,
+    /**
+     * Os checkouts que existem porque a venda chegou. **Fora da geometria.**
+     *
+     * ⚠️ No banco de dev este número é ARTEFATO DO SEED, não medição: o
+     * `seed-dev` insere `Sale` direto e escreve `checkoutSource` à mão, sem
+     * passar por `ingestSale` — então `registrarCheckoutDoGateway` nunca roda
+     * ali. Em produção quem decide é o `gerouCheckout` do payload do gateway.
+     */
+    checkoutsDerivadosDaVenda: Math.max(0, w.icsComJornada - w.icsNavegador),
     /** A entrada LATERAL: checkout sem jornada rastreada. Disjunto de `visitas`. */
     checkoutsSemJornada: w.icsSemJornada,
     /** `icsComJornada + icsSemJornada`. Não desenha nada; existe para conferência. */
     checkoutsTotais: w.initiateCheckouts,
-    /** Dos `checkouts`, quantos vieram do PIXEL. O resto é derivado da venda. */
-    checkoutsDoNavegador: w.icsNavegador,
     iniciadas: totalSalesEvents,
     vendas: salesCount,
     /** As duas janelas com dado, para a cobertura declarar quando divergem. */

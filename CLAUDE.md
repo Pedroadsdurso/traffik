@@ -4221,6 +4221,98 @@ saía **128,1%**, que é o impossível apresentado como ganho.
 
 ---
 
+# 🧩 COBERTURA DO SNIPPET DE CHECKOUT — TRÊS SINTOMAS, UM DEFEITO
+
+> **Ligados em 13/08/2026 por ordem do dono.** Estavam em três lugares da fila
+> como se fossem três investigações. **São o mesmo buraco**, e separados cada um
+> volta a ser investigado do zero.
+
+> ## O snippet não está detectando o checkout, e o webhook do gateway tapa o rombo — em silêncio.
+
+| Sintoma | Onde estava | O que ele é |
+|---|---|---|
+| **checkout duplicado na Atividade Recente** | fila de atribuição | um do snippet, um do webhook — a dedup só funciona quando o snippet chegou primeiro |
+| **testador da Cakto sem `InitiateCheckout`** | fila de atribuição | o snippet não disparou ali |
+| **poucos ICs do navegador contra o total** | achado do funil, 13/08 | o resto é derivado da venda |
+
+⛔ **Não trate nenhum dos três como defeito de tela.** A tela do funil agora
+DECLARA o problema (a etapa vale só o que o navegador viu, e o resto vai
+declarado fora da geometria) — mas declarar não conserta. O defeito é o Bloco B.
+
+> ### 🔴 POR QUE O WEBHOOK TAPANDO O ROMBO É PIOR QUE O ROMBO
+>
+> `Click.checkoutAt` tem dois escritores, e o do gateway roda **porque a venda
+> chegou**. Então o buraco se preenche sozinho no lugar exato em que ele
+> importa: a conta fecha, o funil fica bonito, e a instalação quebrada nunca
+> aparece. É a mesma família do *número lisonjeiro* — erro que agrada não
+> provoca investigação.
+>
+> ### 🔎 A MEDIÇÃO, e ela vale para qualquer conta
+> ```sql
+> SELECT "checkoutSource", COUNT(*) FROM "Click"
+>  WHERE "userId"=$1 AND "checkoutAt" IS NOT NULL GROUP BY 1;
+> ```
+> A razão `navegador / (navegador + gateway)` **é a cobertura do snippet de
+> checkout**. Perto de zero significa que só o webhook está medindo.
+
+### ⚠️ O NÚMERO DO DEV NÃO SERVE DE EVIDÊNCIA — e eu já errei isso
+
+Medido em 13/08: 24 `gateway` e 14 `navegador`. **Os dois são artefato do
+`seed-dev`**, que insere `Sale` direto e escreve `checkoutSource` à mão — o
+`registrarCheckoutDoGateway` só roda pelo `ingestSale`, e o seed não passa por
+ele. Por dia: 06/08 → 35 vendas / 24 ICs; 08/08 → 22 vendas / 14 ICs. Os números
+são o LOTE, não o mecanismo.
+
+⛔ Eu apresentei 24/14 como "63% dos ICs são derivados da venda", e isso é
+verdade sobre o seed, não sobre o produto. **O ponto estrutural não depende
+disso** — dois escritores, um circular por construção — mas a proporção real em
+produção **NÃO FOI MEDIDA**.
+
+⚠️ E as **19 vendas sem checkout nenhum** (18 APROVADAS) são do mesmo artefato:
+o seed não acompanhou aquelas vendas de checkout. Em produção quem decide é o
+`gerouCheckout` do payload, e o dev não responde por ele.
+
+---
+
+# 🫥 PROMESSA QUE NÃO ASSENTA É PIOR QUE EXCEÇÃO — e `rAF` não roda em aba oculta
+
+> **Medido em 13/08/2026**, ao tentar rodar o `naTela` nas quatro larguras.
+
+Com `document.hidden`, o navegador **não dispara `requestAnimationFrame`**. Uma
+espera de repintura nunca resolve, a promessa fica pendente para sempre, e **não
+há exceção**: o `catch` não roda, o resultado fica `null`, e quem chamou conclui
+que a medição está demorando.
+
+> ## "Não vai acontecer" com a mesma cara de "está quase" é a pior forma de silêncio.
+
+⛔ **A saída não é trocar por `setTimeout`.** A dupla passagem de quadro existe
+porque ler logo depois de mexer no layout devolve o valor ANTERIOR — foi o que
+produziu "13 descendentes vazando" nesta base. Em aba oculta não há repintura
+para esperar: a medição **não é possível**, e o certo é dizer isso. Hoje
+`naTela` **lança nomeando**.
+
+### ✅ A VARREDURA DO QUE JÁ FOI ANOTADO — nenhum registro cai
+
+A pergunta certa: *alguma medição registrada saiu de aba oculta e foi lida como
+"zero fugas"?* **Não, e a razão é estrutural:** uma chamada pendurada não
+devolve `0` — ela não devolve NADA.
+
+| registro | o que o sustenta |
+|---|---|
+| `0 estouros a 1280 e 2260` | veio com **`16 blocos examinados`** |
+| `0 fugas, rolagem 0` (F5) | veio com **`55 células`** |
+| `13` / `14 fugas` | não-zero: a chamada completou |
+
+**Todo `0` registrado carrega um denominador positivo**, e denominador positivo
+é impossível numa promessa que não assentou.
+
+> ### ⛔ A REGRA QUE FICA
+> **Registro de varredura sem o número de itens EXAMINADOS não é verificável.**
+> `"0 fugas"` sozinho é indistinguível de `"não consegui medir"`. O denominador
+> não é detalhe do relatório — é o que permite auditá-lo depois.
+
+---
+
 # 👻 O TERCEIRO ESTADO — nem medido, nem vazio: o componente que fica em `largura === 0` PARA SEMPRE
 
 > **Medido em 13/08/2026, no `FitaFunil`.** É "proteção por TIMING, não por

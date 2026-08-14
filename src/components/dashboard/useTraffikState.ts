@@ -1409,17 +1409,23 @@ export function useTraffikState(
          * `semJornada` não é subconjunto de nada da cadeia.
          */
         value: d?.funnel.checkouts ?? 0,
-        fonte: "Nosso script — sessão que chegou ao checkout",
+        fonte: "Nosso script — checkout DETECTADO no navegador",
         ajuda:
-          "Sessões rastreadas que chegaram ao checkout. Conta a MESMA população " +
-          "da etapa anterior, por isso a taxa entre as duas é conversão de " +
-          "verdade. Checkout de comprador que nunca passou pelo nosso script " +
-          "aparece à parte, como entrada lateral.",
+          "Sessões em que o nosso script viu o checkout começar. Só esta parcela " +
+          "é independente da venda, e por isso é a única que pode ficar na fita: " +
+          "checkout escrito pelo webhook do gateway existe PORQUE a venda chegou, " +
+          "então ele nunca perde ninguém no caminho até ela — dentro da etapa, " +
+          "faria a conversão medir venda em vez de detecção. Os dois grupos de " +
+          "fora aparecem declarados sob o número.",
         /**
-         * 🔴 A parcela que NÃO vem da venda. Quando é 0, esta etapa está
-         * repetindo "Vendas iniciadas" e o trecho entre as duas não foi medido.
+         * 🔴 OS CHECKOUTS DERIVADOS DA VENDA — declarados, FORA da geometria.
+         *
+         * Mesma decisão de `Cliques`: eles existem, o usuário precisa vê-los, e
+         * não podem entrar na escala porque são de outro instrumento. Aqui é
+         * pior que "outro instrumento": é o instrumento SEGUINTE escrevendo a
+         * etapa anterior.
          */
-        doNavegador: d?.funnel.checkoutsDoNavegador ?? 0,
+        derivadosDaVenda: d?.funnel.checkoutsDerivadosDaVenda ?? 0,
         /**
          * 🔴 A ENTRADA LATERAL — declarada, e FORA da cadeia.
          *

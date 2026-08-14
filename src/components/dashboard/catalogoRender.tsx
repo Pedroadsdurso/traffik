@@ -228,10 +228,22 @@ const ETAPAS_DO_FUNIL = (v: TraffikView) => v.funnelStages;
  * ⛔ A etapa NÃO some quando isso acontece. Etapa que desaparece muda a forma
  * do funil em silêncio, e a forma é o que a pessoa compara entre períodos.
  */
-const AVISO_SEM_PIXEL =
-  "Nenhum Initiate Checkout veio do navegador neste período: todos foram " +
-  "deduzidos das vendas. Sem o pixel na página de checkout esta etapa apenas " +
-  "repete “Vendas iniciadas”, e a conversão entre as duas não foi medida.";
+/* ⛔ `AVISO_SEM_PIXEL` VIVIA AQUI E FOI DELETADO em 13/08/2026 — não movido,
+   não comentado. Ele dizia:
+
+     "Nenhum IC veio do navegador: todos foram deduzidos das vendas. Sem o pixel
+      esta etapa apenas repete 'Vendas iniciadas'."
+
+   🔴 A frase descrevia comportamento que MUDOU. A etapa deixou de somar os
+   checkouts derivados da venda — hoje ela é só `icsNavegador` —, então ela não
+   tem mais como repetir "Vendas iniciadas". Mantê-la instruiria o próximo leitor
+   a reintroduzir a soma que a correção tirou, e ela é BEM ESCRITA, que é o que
+   torna essa família cara.
+
+   ✅ O caso que ela cobria não ficou órfão: com a etapa valendo só o navegador,
+   "nenhum IC do navegador" agora é literalmente `ICs = 0`, e quem fala é
+   `ehBuracoImpossivel` + `AVISO_BURACO` — que já nomeia o pixel ausente. Uma
+   guarda a menos, e a que sobrou é a que pode disparar. */
 
 /**
  * ⚠️ A perda `Cliques → Sessões` é PERDA DE RASTREAMENTO, não abandono. A etapa
@@ -287,8 +299,6 @@ const AVISO_BURACO =
 
 const ETAPAS_PARA_FITA = (v: TraffikView): EtapaEntradaFita[] => {
   const etapas = ETAPAS_DO_FUNIL(v);
-  const ics = etapas.find((e) => e.chaveInfo === "checkouts");
-  const semPixel = ics != null && ics.value > 0 && (ics.doNavegador ?? 0) === 0;
   /* ⚠️ Só as etapas DA FITA entram na conta do buraco. `Cliques` está fora da
      geometria (outro instrumento), e incluí-lo faria a etapa 1 contar como
      "posterior" de si mesma na hora de olhar a forma. */
@@ -306,9 +316,32 @@ const ETAPAS_PARA_FITA = (v: TraffikView): EtapaEntradaFita[] => {
     /* A composição só aparece quando há DUAS origens de verdade. Com tudo do
        gateway quem fala é a hachura; com tudo do navegador não há o que
        decompor. */
+    /**
+     * 🔴 A COMPOSIÇÃO DO NÓ DE ICs — e ela declara O QUE NÃO DESENHA.
+     *
+     * A etapa vale só os checkouts vistos pelo navegador. Os outros dois grupos
+     * existem e precisam ser ditos, senão o número parece o total e o usuário
+     * conclui que o rastreamento cobre menos do que cobre:
+     *
+     * | grupo | por que está fora |
+     * |---|---|
+     * | derivados da venda | escritos pelo webhook do gateway — **circulares**: só existem porque a venda chegou |
+     * | sem jornada | `PixelEvent` sem `clickId` — disjunto de `Sessões`, entra como entrada lateral |
+     *
+     * ⚠️ A frase só aparece quando há o que declarar. Com tudo medido no
+     * navegador não há grupo de fora, e uma linha dizendo "0 derivados" viraria
+     * ruído sobre a boa notícia.
+     */
     composicao:
-      e.chaveInfo === "checkouts" && (e.doNavegador ?? 0) > 0 && (e.doNavegador ?? 0) < e.value
-        ? `${e.value.toLocaleString("pt-BR")} ICs · ${(e.doNavegador ?? 0).toLocaleString("pt-BR")} do navegador`
+      e.chaveInfo === "checkouts" && ((e.derivadosDaVenda ?? 0) > 0 || (e.entradaLateral ?? 0) > 0)
+        ? [
+            `${e.value.toLocaleString("pt-BR")} vistos no navegador`,
+            (e.derivadosDaVenda ?? 0) > 0
+              ? `${(e.derivadosDaVenda ?? 0).toLocaleString("pt-BR")} derivados da venda`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")
         : undefined,
     /**
      * ✂️ ONDE O RASTREAMENTO ENTREGA O FUNIL AO GATEWAY — e a fita se parte.
@@ -336,14 +369,10 @@ const ETAPAS_PARA_FITA = (v: TraffikView): EtapaEntradaFita[] => {
           "anterior: somá-los faria o funil ganhar massa do nada. Número alto " +
           "aqui é sinal de rastreamento mal instalado."
         : undefined,
-    /* Duas razões diferentes para o MESMO estado, e a ordem importa: o buraco é
-       a afirmação mais forte (a etapa não existe), então ele vence o aviso de
-       pixel (a etapa existe e é derivada). */
-    trechoNaoMedido: buracos.has(e.chaveInfo)
-      ? AVISO_BURACO
-      : e.chaveInfo === "checkouts" && semPixel
-        ? AVISO_SEM_PIXEL
-        : undefined,
+    /* ⚠️ Sobrou UMA razão, e é a que pode disparar. A segunda (`AVISO_SEM_PIXEL`)
+       saiu em 13/08/2026 junto com a soma que a tornava alcançável — ver a nota
+       no lugar dela. Ter duas, com uma inalcançável, era proteção morta. */
+    trechoNaoMedido: buracos.has(e.chaveInfo) ? AVISO_BURACO : undefined,
     /* 🔴 `Cliques` sai da GEOMETRIA da fita, mas continua sendo etapa: nome em
        cima, número embaixo. A perda dele para `Sessões` é instrumentação, não
        comportamento — quem a mostra é a faixa de cobertura. Ver `CoberturaFita`.
