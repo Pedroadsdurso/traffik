@@ -1020,3 +1020,123 @@ Grade em `grid-auto-rows: auto`, 12 colunas, gap 16, densidade padrão.
 
 ⛔ Isto é entrada para a F2, não defeito da medição: ou o `hMin` dele sobe para
 3, ou o conteúdo do rodapé encolhe na F3. **A F1 não pode migrá-lo para 1.**
+
+---
+
+# ## Estado em 14/08/2026 — o redesign entrou na `main`
+
+> **Escrito DEPOIS do commit de merge, e é ele que esta seção descreve.**
+>
+> | | |
+> |---|---|
+> | commit | **`7990913`** |
+> | horário | **14/08/2026, 15:08:11 −03** |
+> | `origin/main` | `36b52a1` → `7990913` (conferido por `git ls-remote`, não pelo que o `push` disse) |
+> | conteúdo | 19 commits de `redesign/dashboard` · árvore **idêntica** à de `7a8e823`, que rodou a suíte |
+
+## 🔴🔴 O QUE FOI PARA PRODUÇÃO SEM VERIFICAÇÃO DE TELA
+
+**Esta é a razão de esta seção existir.** Não é ressalva de rodapé: são quatro
+coisas que ninguém olhou numa tela, e elas estão no ar.
+
+| # | O que | Estado da medição |
+|---|---|---|
+| 1 | **bandas de 8, 4 e 1 coluna** (`960–1279`, `640–959`, `<640`) | ⛔ **NÃO MEDIDAS.** Só **2260** foi medida — 1 de 5 larguras |
+| 2 | **origem A da §7.2** — vão entre conteúdos | ⛔ **NÃO MEDIDA** |
+| 3 | **origem B da §7.2** — vão até a borda | ⛔ **NÃO MEDIDA** |
+| 4 | **`h` derivado de medição de estado VAZIO** | ⛔ **NÃO MEDIDO** |
+
+### O que FOI medido, com denominador — para a lista acima ser auditável
+
+A 2260, com dado real (`Últimos 30 dias`, R$ 7.058,65), **28 de 28 blocos
+examinados**, `semGancho: []`, `svgSemTinta: 0`, `rolagemDaPagina: 0`:
+
+```
+estouro na vertical .... 1 de 28   → `Produtos`, 21px, h: 4
+estouro na horizontal .. 0 de 28
+```
+
+⚠️ **Duas leituras contaram** (base e 2260 — a mesma largura efetiva, porque
+`innerWidth 2560 − cromo 300 = 2260`). Uma terceira, a 1280, **mediu `0` estouros
+e foi DESCARTADA**: 1 amostra oculta durante a leitura. ⛔ Ela não vale como
+"1280 está limpa" — vale como não medida.
+
+### 🔴 O `Produtos` é um defeito CONHECIDO e NÃO CORRIGIDO
+
+Ele saiu de **vão de 121px** (o C6, no estado vazio) para **estouro de 21px**
+depois da migração de altura. A suspeita registrada é que o `h` migrado veio de
+medição do estado VAZIO e o conteúdo com dado real não cabe nele.
+
+⛔ **Nada de `h` foi tocado neste merge**, por decisão do dono: `git diff --stat`
+em `migrar`/`catalogo` devolve **0 linhas**, e `migrarAlturaDoLayout` segue byte
+a byte o que já roda em produção desde 13/08. **Não há dado irreversível novo.**
+
+⚠️ E há um indício forte de que a procedência é mesmo o vazio, mas **indício não
+é medição**: a faixa da tabela F0b (§11) é **192–382px**, que é exatamente a
+faixa do estado vazio registrada no `CLAUDE.md`. Onze dos 16 painéis medem
+valores idênticos entre si (`238` em seis, `256` em cinco) — conteúdos
+completamente diferentes com a mesma altura é assinatura de PISO, não de
+conteúdo. **Confirmar exige medir cada um com dado real.**
+
+## ⛔ POR QUE A MEDIÇÃO NÃO FOI POSSÍVEL — e não é "faltou tentar"
+
+`requestAnimationFrame` **não dispara em aba oculta**, e a janela do Chrome
+esteve `document.visibilityState === "hidden"` em **~20 sondagens** ao longo da
+sessão inteira. Testado e descartado, nesta ordem:
+
+| tentativa | resultado |
+|---|---|
+| esperar visibilidade (4s, 6s, 8s) | oculta o tempo todo |
+| clique sintético do CDP em ponto inerte | **não levanta janela no nível do SO** |
+| screenshot (hipótese: ele ativa a aba) | hipótese **refutada**; depois passou a dar timeout |
+| aba **nova** no grupo existente | nasce `hidden` |
+| fechar o grupo e forçar **janela nova** | nasce `hidden` |
+
+✅ **O instrumento RECUSA nomeando, em vez de pendurar.** `naTela` lança quando
+`document.hidden`, porque a versão anterior devolvia uma promessa que **jamais
+assentava, sem exceção** — e isso é indistinguível de "está demorando".
+
+⛔ **A espera de dupla passagem de quadro NÃO foi enfraquecida** para contornar.
+`setTimeout` puro devolveria o valor ANTERIOR com cara de medição — foi o que
+produziu os "13 descendentes vazando" desta base, que na releitura eram 0.
+
+### 🔎 Onde a medição está armada, para a próxima sessão não remontar nada
+
+Aba **`299375711`**, já no estado certo: período `Últimos 30 dias`,
+`modoEdicao: false`, **28/28 com gancho**, grade 2260, instrumento completo
+injetado, varredura armada em `visibilitychange` + poll de 1,2s.
+
+Ela mede **as três coisas de uma vez** (`scrollH`/`clientH`/`hQueCabe` por
+bloco, origem A, origem B, `soB`) nas cinco larguras, e **descarta qualquer
+leitura com amostra oculta**. Basta a janela ficar visível ~10s; ou, no DevTools
+daquela aba, `await window.__varrer()`.
+
+## ✅ O que este merge ENTREGOU, e foi verificado por asserção
+
+| | |
+|---|---|
+| **§7.2 com as duas origens** | A (entre-conteúdos) e B (até-a-borda) da MESMA varredura de bandas. `B \ A` é o conjunto cujo buraco encosta numa borda — a família do C6. Invariante em runtime lança se A > B |
+| **partição da fita sob asserção** | `444ce75` entrou sem nenhuma; `teste-desenho.mjs` importava `calcularFluxo`/`segmentosDaFita` **sem chamar** |
+| **o nó do observer em ESTADO** | 5 de 6 consumidores de `ResizeObserver` violavam a regra do cabeçalho de `useTamanho.ts` |
+| **`etapasDaFita` removido** | resto — o filtro `naFita` migrou para dentro de `segmentosDaFita`. A fita **não perdeu comportamento** |
+
+`tsc` 0 erros · `lint` 0 erros · **52 scripts, 1.427 asserções, 0 falhas.**
+
+> ### 🔓 A TRAVA DE PUSH DA `main` TEM UM BURACO — agora MEDIDO
+>
+> O `CLAUDE.md` listava `git push origin main:main` como *"refspec completo na
+> linha de comando; **não testado**"*. Testado em 14/08/2026, por `--dry-run`:
+>
+> ```
+> git push --dry-run origin main       →  main -> __bloqueado__     (a trava pega)
+> git push --dry-run origin main:main  →  36b52a1..7990913 main -> main   (PASSA)
+> ```
+>
+> ⛔ **O refspec completo atravessa as duas configs locais.** Foi por ele que
+> este merge subiu — com autorização explícita do dono —, mas a linha do
+> `CLAUDE.md` deixa de ser hipótese: a trava local **não** protege a `main` de
+> quem digitar o refspec inteiro, e nunca protegeu de outra máquina, de outro
+> clone, nem do botão de merge do GitHub.
+>
+> **A trava que vale continua sendo `branch protection` no GitHub**, e ela segue
+> não existindo.
