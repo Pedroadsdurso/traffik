@@ -22,6 +22,7 @@ import { StatusFooter } from "@/components/tk/StatusFooter";
 import { TabelaCampanhas } from "@/components/tk/TabelaCampanhas";
 
 import { brl0 } from "@/lib/format";
+import { composicaoDoNoDeICs } from "@/lib/funil/composicao";
 import { corFinanceira } from "@/lib/financeiro";
 
 import { BlocoMetrica, type DadosKpi } from "@/components/tk/Kpi";
@@ -341,16 +342,17 @@ const ETAPAS_PARA_FITA = (v: TraffikView): EtapaEntradaFita[] => {
      * viraria ruído sobre a boa notícia.
      */
     composicao:
-      e.chaveInfo === "checkouts" && ((e.derivadosDaVenda ?? 0) > 0 || (e.entradaLateral ?? 0) > 0)
-        ? (() => {
-            const der = e.derivadosDaVenda ?? 0;
-            const sem = e.entradaLateral ?? 0;
-            const n = (x: number) => x.toLocaleString("pt-BR");
-            const partes = [`${n(e.value)} vistos no navegador`];
-            if (der > 0) partes.push(`${n(der)} derivados da venda`);
-            if (sem > 0) partes.push(`${n(sem)} sem jornada`);
-            return `${partes.join(" · ")} = ${n(e.value + der + sem)} checkouts`;
-          })()
+      /* ⛔ A CONSTRUÇÃO MORA EM `lib/funil/composicao.ts`, e não volta para cá.
+         Enquanto ela era uma IIFE aqui dentro, NENHUM teste a alcançava: a
+         asserção que parecia cobri-la montava a string à mão e a passava pronta
+         ao componente. Medido em 14/08/2026 — mudei a regra inteira da linha e
+         as 38 asserções do `teste-desenho` seguiram verdes. */
+      e.chaveInfo === "checkouts"
+        ? composicaoDoNoDeICs({
+            valor: e.value,
+            derivadosDaVenda: e.derivadosDaVenda,
+            entradaLateral: e.entradaLateral,
+          })
         : undefined,
     /**
      * 🔬 O QUE A ETAPA MEDE — e daqui sai o rótulo da queda até ela.

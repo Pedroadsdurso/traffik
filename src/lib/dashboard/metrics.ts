@@ -168,9 +168,11 @@ export interface DashboardData {
     visitas: number;
     visitasDaMeta: number;
     visitasDeOutrasOrigens: number;
-    /** ⚠️ A etapa da CADEIA: só os ICs MEDIDOS NO NAVEGADOR. Ver a nota no cálculo. */
+    /** ⚠️ A etapa da CADEIA: os ICs COM JORNADA (subconjunto de `visitas`, mesmo
+     *  instrumento). Ver a nota no cálculo — inclusive o que isso custa. */
     checkouts: number;
-    /** Checkouts escritos pelo webhook do gateway — circulares, fora da geometria. */
+    /** Parcela DE DENTRO de `checkouts` escrita pelo webhook do gateway. É ela que
+     *  torna o trecho seguinte parcialmente circular, e por isso é publicada. */
     checkoutsDerivadosDaVenda: number;
     checkoutsSemJornada: number;
     checkoutsTotais: number;
@@ -1085,16 +1087,41 @@ function summarize(w: Window, impostoAnunciosPct = 0) {
      * checkout?"* e passa a medir, em parte, *"houve venda?"* — que é a etapa
      * seguinte respondendo pela anterior.
      *
-     * Hoje a etapa é `icsNavegador`: **a única parcela independente da venda**,
-     * e a única que é subconjunto de `visitas` pelo mesmo instrumento.
+     * 🔀 A ETAPA É `icsComJornada` — decisão do dono, 14/08/2026, e ela
+     * SUBSTITUI a de 13/08 (`icsNavegador`). O critério passou a ser
+     * **MESMA POPULAÇÃO**, não "independência da venda".
      *
-     * ⛔ Não some `checkoutsDerivadosDaVenda` de volta "para não perder o
-     * número". Ele não se perde — é declarado FORA da geometria, como
-     * `Cliques`. O que se perderia somando é o significado da razão.
+     * `comJornada` é `Click` com `checkoutAt`: subconjunto de `Sessões` pela
+     * mesma tabela e pelo mesmo instrumento. `semJornada` é `PixelEvent` sem
+     * `clickId` — disjunto, e continua fora.
+     *
+     * ### ⚖️ O QUE SE GANHA E O QUE SE PAGA — as duas metades, escritas
+     *
+     * | | |
+     * |---|---|
+     * | ganha | `Sessões → ICs` vira conversão de verdade: 38 de 57, mesmo instrumento. Com `icsNavegador` a razão era 14/57, que mistura COBERTURA DE DETECÇÃO com conversão e não é nem uma coisa nem outra |
+     * | paga | 🔴 `ICs → Vendas Inic.` fica PARCIALMENTE CIRCULAR: os 24 derivados existem porque a venda chegou, então nunca perdem ninguém no caminho até ela |
+     *
+     * ⛔ **O preço não é escondido — ele é DECLARADO na tela.** Com 38 na etapa
+     * e 57 em `Vendas Inic.`, o trecho passa de 1, e a pílula recusa imprimir
+     * porcentagem: ela diz **"fontes diferentes"**. A guarda existe justamente
+     * para este caso, e é por isso que as duas mudanças foram especificadas
+     * juntas — sem ela, a circularidade sairia como "150% de conversão".
+     *
+     * ⚠️ A decisão anterior (`icsNavegador`) NÃO fica anotada ao lado como
+     * alternativa viva: proibição que muda é apagada, e o motivo da mudança
+     * entra no lugar. O argumento dela está preservado acima, na linha "paga".
      */
-    checkouts: w.icsNavegador,
+    checkouts: w.icsComJornada,
     /**
-     * Os checkouts que existem porque a venda chegou. **Fora da geometria.**
+     * Os checkouts que existem porque a venda chegou. **DENTRO da etapa desde
+     * 14/08/2026** — eles são parte de `icsComJornada`, e o que os mantém
+     * visíveis é a linha declarativa da tela, não a exclusão da geometria.
+     *
+     * 🔴 Ele é publicado porque é ELE que torna `ICs → Vendas Inic.`
+     * parcialmente circular. Sem este número na tela, a circularidade seria
+     * invisível — e um trecho circular que ninguém consegue nomear é pior que
+     * um trecho grande.
      *
      * ⚠️ No banco de dev este número é ARTEFATO DO SEED, não medição: o
      * `seed-dev` insere `Sale` direto e escreve `checkoutSource` à mão, sem

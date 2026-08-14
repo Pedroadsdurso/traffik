@@ -1409,14 +1409,18 @@ export function useTraffikState(
          * `semJornada` não é subconjunto de nada da cadeia.
          */
         value: d?.funnel.checkouts ?? 0,
-        fonte: "Nosso script — checkout DETECTADO no navegador",
+        fonte: "Nosso script — sessões que iniciaram checkout",
         ajuda:
-          "Sessões em que o nosso script viu o checkout começar. Só esta parcela " +
-          "é independente da venda, e por isso é a única que pode ficar na fita: " +
-          "checkout escrito pelo webhook do gateway existe PORQUE a venda chegou, " +
-          "então ele nunca perde ninguém no caminho até ela — dentro da etapa, " +
-          "faria a conversão medir venda em vez de detecção. Os dois grupos de " +
-          "fora aparecem declarados sob o número.",
+          "Sessões que chegaram ao checkout. Entram aqui as que o nosso script " +
+          "viu começar E as que o webhook do gateway carimbou na mesma jornada — " +
+          "as duas são linhas da tabela de sessões, então a razão com a etapa " +
+          "anterior é conversão dentro do mesmo instrumento. O checkout sem " +
+          "jornada nenhuma fica FORA: ele não é subconjunto de sessões, é " +
+          "disjunto delas, e aparece declarado sob o número. " +
+          "Atenção ao trecho seguinte: a parcela carimbada pelo gateway existe " +
+          "porque a venda chegou, então ela não perde ninguém no caminho até a " +
+          "venda — por isso a taxa dali sai como 'fontes diferentes' em vez de " +
+          "porcentagem.",
         /**
          * 🔴 OS CHECKOUTS DERIVADOS DA VENDA — declarados, FORA da geometria.
          *

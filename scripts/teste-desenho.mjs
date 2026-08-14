@@ -610,7 +610,7 @@ checar("razão ACIMA DE 1 não é impressa como taxa — ela nomeia a causa", ()
   assert.ok(!normal.includes("fontes diferentes"), "a guarda disparou sobre uma taxa válida");
 });
 
-checar("as três parcelas do nó de ICs moram em UMA linha, e ela FECHA o total", () => {
+checar("o nó de ICs tem UMA ancoragem, e a lateral fica FORA da soma", () => {
   /* 🔴 A regressão que esta asserção impede é a de 13/08/2026, e ela nasceu de
      uma correção: com o nó valendo 14 (só o navegador), os 35 "sem jornada"
      deixaram de ser complemento do número exibido — viraram complemento de um
@@ -621,7 +621,14 @@ checar("as três parcelas do nó de ICs moram em UMA linha, e ela FECHA o total"
      ⛔ Por isso a asserção é sobre a ARITMÉTICA do texto, não sobre a presença
      das palavras: um texto que liste as três parcelas e não feche a conta
      passaria num `includes`. */
-  const composicao = "14 vistos no navegador · 24 derivados da venda · 35 sem jornada = 73 checkouts";
+  /* ⚠️ Esta string é FIXTURE — quem a CONSTRÓI é `lib/funil/composicao.ts`, e é
+     lá que a construção tem asserção (`test:funil-composicao`). Aqui se mede o
+     DESENHO dela. A distinção custou caro: enquanto a construção morava numa
+     IIFE do `catalogoRender`, mudar a regra inteira da linha deixava as 38
+     asserções deste arquivo verdes — o estado final certo, o caminho sem
+     exercício. */
+  const composicao =
+    "38 com jornada (14 vistos no navegador · 24 carimbados pelo gateway) · e 35 sem jornada, fora da cadeia";
   const html = renderToStaticMarkup(
     React.createElement(FitaFunil, {
       etapas: [
@@ -635,15 +642,26 @@ checar("as três parcelas do nó de ICs moram em UMA linha, e ela FECHA o total"
   /* 1 · UMA ancoragem: a pílula de entrada lateral não existe mais. */
   assert.ok(!html.includes("sem jornada</"), "a pílula voltou — o nó tem duas ancoragens de novo");
 
-  /* 2 · A linha fecha a conta, e os números batem. */
+  /* 2 · A linha sai INTEIRA, e as parcelas de DENTRO fecham o nó. */
   assert.ok(html.includes(composicao), "a composição não saiu inteira");
-  const nums = [...composicao.matchAll(/(\d+) (?:vistos|derivados|sem)/g)].map((m) => +m[1]);
-  const total = +composicao.match(/= (\d+) checkouts/)[1];
-  assert.ok(nums.length === 3, "linha de base: a composição não tem três parcelas");
+  const dentro = [...composicao.matchAll(/([\d.]+) (?:vistos|carimbados)/g)].map((m) =>
+    Number(m[1].replace(/\./g, "")),
+  );
+  assert.ok(dentro.length === 2, "linha de base: a composição não tem as duas parcelas de dentro");
+  const no = Number(composicao.match(/^([\d.]+) com jornada/)[1].replace(/\./g, ""));
   assert.equal(
-    nums.reduce((a, b) => a + b, 0),
-    total,
-    "a composição NÃO fecha: as parcelas não somam o total declarado",
+    dentro.reduce((a, b) => a + b, 0),
+    no,
+    "as parcelas de dentro não somam o nó",
+  );
+
+  /* 3 · ⛔ A REGRESSÃO DE 128,1%: a lateral NÃO pode entrar numa soma. Com o nó
+     valendo 38 e a lateral 35, um "= 73" afirmaria que a etapa vale 73 quando a
+     geometria mede 38 — o impossível apresentado como ganho. */
+  assert.ok(!composicao.includes("="), "a linha voltou a afirmar um total");
+  assert.ok(
+    /35 sem jornada, fora da cadeia/.test(composicao),
+    "a lateral deixou de ser declarada como FORA da cadeia",
   );
 });
 
