@@ -32,15 +32,27 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-
 const { consequenciasDaExclusao, ampliaEscopo } = await import("../src/lib/areas/consequencia.ts");
 const { resumoDoRecorte, CAMPOS_DE_RECORTE, CORES_DE_AREA } = await import("../src/lib/areas/apresentacao.ts");
-/* ⛔ As duas gavetas importam os DTOs por `import type`, que é apagado na
-   compilação — por isso elas renderizam sem `DATABASE_URL`. A `AreasScreen`
-   importa as ações de verdade e fica só nas guardas de texto. */
-const { GavetaExcluir } = await import("../src/components/dashboard/views/areas/GavetaExcluir.tsx");
+
+/* 🪦 `React`, `renderToStaticMarkup` E `GavetaExcluir` ERAM IMPORTADOS AQUI, e
+   os três foram REMOVIDOS em 14/08/2026 — nenhum era chamado.
+ *
+ * ⛔ Import não chamado num arquivo de teste é AFIRMAÇÃO DE COBERTURA que nada
+ * sustenta: quem abrisse este arquivo veria `GavetaExcluir` na lista e
+ * concluiria que o diálogo do fluxo IRREVERSÍVEL estava coberto por render.
+ *
+ * ### Por que a renderização foi abandonada — e não deve voltar
+ *
+ * A `GavetaExcluir` usa `tk/Gaveta`, que PORTA para o `<body>` com
+ * `createPortal`. Sem DOM, `renderToStaticMarkup` devolve **string vazia** — e
+ * aí toda asserção de NEGAÇÃO (`!html.includes(...)`) passa afirmando o
+ * contrário do verdadeiro. Quatro asserções deste arquivo já estiveram nesse
+ * estado, e quem as denunciou foi a linha de base de comprimento do markup.
+ *
+ * ✅ O que cobre o diálogo hoje são as GUARDAS DE TEXTO sobre a fonte dele
+ * (`DIALOGO`, mais abaixo). Não é o mesmo que ver a tela, e o limite está
+ * escrito lá — mas é uma medição que pode falhar pelo motivo que alega. */
 
 let ok = 0;
 const falhas = [];

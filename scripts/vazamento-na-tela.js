@@ -166,4 +166,8 @@ window.naTela = async (viewport) => {
   };
 };
 
-"naTela() pronto — use await naTela(1280) / await naTela(2260)";
+/* ⚠️ ATRIBUICAO, nao expressao solta: o valor continua sendo o retorno do REPL
+   (que e o ponto — colar o arquivo no console imprime esta linha), e o lint
+   para de emitir no-unused-expressions. Um warning ignorado ja escondeu um
+   defeito real nesta base em 14/08. */
+globalThis.__naTelaPronto = "naTela() pronto — use await naTela(1280) / await naTela(2260)";

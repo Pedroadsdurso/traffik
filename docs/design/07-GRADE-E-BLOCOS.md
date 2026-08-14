@@ -1140,3 +1140,124 @@ daquela aba, `await window.__varrer()`.
 >
 > **A trava que vale continua sendo `branch protection` no GitHub**, e ela segue
 > não existindo.
+
+---
+
+## 🧾 Decisões de 14/08/2026 (sessão sem janela) — e a regra que decidiu cada uma
+
+> Tomadas sozinho, pela regra de desempate do dono: **(1)** o que não corta
+> informação do usuário vence · **(2)** o que não muda posição do que ele já tem
+> vence · **(3)** o reversível vence o irreversível · **(4)** na dúvida, o mais
+> conservador, registrado como provisório.
+
+### 1 · O `h` derivado de vazio — ⏸️ NÃO corrigido, e a regra é a (3) e a (4)
+
+**O levantamento estático fechou, e ele é forte.** Cruzando a tabela da §11 com
+o `catalogo.ts`:
+
+| | |
+|---|---|
+| painéis na F0b | **16** (os outros 12 dos 28 são KPIs, e não têm entrada na tabela) |
+| catálogo × F0b | **16 de 16 batem** — `hMin === h migrado` em todos, zero divergências |
+| **altura medida IDÊNTICA a outro bloco** | 🔴 **11 de 16** |
+| faixa das medições F0b | **192–382px** |
+| faixa do estado vazio (registrada no `CLAUDE.md`) | **192–382px** — a mesma |
+
+```
+256px × 5   atividade, paises, aprovacao, posicionamento, lucro-por-hora
+238px × 6   vendas-por-dia, vendas-por-hora, receita-gasto, fontes, produtos, pagamentos
+```
+
+> ## Uma rosca, um mapa com ranking, um gráfico de barras por hora e uma tabela de produtos NÃO coincidem ao pixel por conteúdo. Isso é PISO.
+
+⚠️ E os dois clusters distam **18px** — uma linha de `text-caption`, que é
+exatamente o que separa um estado vazio cuja frase de causa quebra em uma ou em
+duas linhas.
+
+⛔ **Mesmo assim, nenhum `h` foi alterado.** Pela regra **(3)**: `h` alimenta
+`migrarAlturaDoLayout`, que é **irreversível** (`h = max(...)`) e roda sozinha ao
+abrir o Dashboard. E pela **(4)**: o que existe é indício convergente, não
+medição — a tabela da §11 **não registra qual período estava ativo**, e
+procedência não se deduz do artefato, só se remede.
+
+🔎 **A medição que fecha o assunto**, para a sessão em que a janela colaborar:
+para cada bloco, `scrollHeight` do card com dado real contra o slot. Já está
+armada — `window.__bom[w].naoCabem` traz `scrollH`, `clientH`, `estouro` e
+`hQueCabe` por bloco, nas cinco larguras.
+
+⚠️ **O único caso conhecido segue sendo o `Produtos`**: 21px de estouro a 2260,
+com `h: 4`. ⛔ E a aritmética que apareceu antes (`238 → 293`) **estava errada**:
+ela assumia `h: 3`, e o layout vivo tem 4. O `h` correto sai da medição, não de
+conta sobre a F0b.
+
+### 2 · A divergência catálogo × §11 virou ASSERÇÃO — `test:catalogo-f0b`
+
+Os dois lados batiam **por disciplina, e nada garantia isso**. Agora são 8
+asserções, com plantio (mexer no `h` de um lado só é detectado, nomeando o
+bloco) e linha de base nos dois lados (a tabela lida do `07`, o catálogo lido do
+`.ts`).
+
+⚠️ Ela **não** valida que a medição da §11 está certa — valida que as duas
+cópias do resultado concordam. A procedência continua aberta, acima.
+
+✅ E ela **publica o agrupamento a cada execução**, para a evidência do piso não
+depender de ninguém lembrar de recalcular.
+
+### 3 · Origem A e B — coberto o que é puro, e o limite está escrito
+
+`test:vazio-origens` foi de 16 para **21 asserções**. Entraram:
+
+- `soB === B \ A`, e ele só contém `topo`/`fim` — é o **discriminador do C6**, e
+  se quebrar a lista volta a misturar defeito de distribuição com defeito de
+  altura de slot;
+- a fronteira do limiar é **estrita**: 32px não reprova, 33px reprova. Um `>=`
+  ali inflaria a lista, e lista inflada é lista desacreditada.
+
+⛔ O que continua fora do alcance de asserção: `__pintadoNoCard`,
+`__cardDoBloco` e `__internoDoCard` **precisam de motor de layout**. A
+confirmação de tela segue pendente, e é só ela.
+
+### 4 · O lint chegou a ZERO WARNINGS — e isso é o achado, não a arrumação
+
+Estava em `0 erros, 8 warnings`, e **um `0 erros, 12 warnings` escondeu um
+defeito real nesta mesma sessão**: os imports órfãos que faziam a partição da
+fita parecer testada.
+
+⛔ Três dos oito eram a mesma família, num arquivo de teste de fluxo
+**IRREVERSÍVEL**: `teste-areas-tela.mjs` importava `React`,
+`renderToStaticMarkup` e **`GavetaExcluir`** sem chamar nenhum. Quem abrisse o
+arquivo concluiria que o diálogo de exclusão estava coberto por render — e ele
+**porta para o `<body>`**, então `renderToStaticMarkup` devolveria string vazia
+e toda asserção de negação passaria afirmando o contrário do verdadeiro.
+
+Os outros: dois literais de REPL viraram atribuição (o valor de retorno
+continua, o warning some) e três `.map((x, i) =>` perderam o índice não usado.
+
+> ## Com zero warnings, o próximo warning é sinal. Com oito, nenhum é.
+
+### 5 · `cronAutorizado` ganhou teste — a varredura das famílias achou isto
+
+A varredura por *função de produção que nenhum teste cita* devolveu **203 de
+395**, e **114** fora de server action e rede. O de maior consequência:
+`cronAutorizado`, a regra *"ausência de configuração nunca vira permissão"*.
+
+O `CLAUDE.md` registra que ela foi verificada **com `curl`, à mão, em
+29/07/2026**. Uma verificação manual que virou parágrafo é cobertura
+inexistente: o parágrafo é verdadeiro sobre o dia em que foi escrito e não diz
+nada sobre hoje — e ali o custo de errar é uma rota que **pausa campanha e
+altera orçamento** aberta na internet.
+
+`test:cron-auth`, **18 asserções**: sem secret ninguém entra (inclusive com
+`CRON_SECRET=""` e só-espaços, que é o jeito real de reabrir a porta sem
+perceber), prefixo parcial recusado, formato só `Bearer`. E a **outra metade do
+par**: guarda estática de que **toda** rota `/api/cron/*` chama a função —
+4 de 4 —, porque função de auth perfeita que uma rota esquece de chamar é o
+cadeado do lado de fora.
+
+> ### ⚠️ O LIMITE DA VARREDURA, e ele é a própria família
+> A primeira versão dela reportou *"237 sem teste"* usando um parser de imports
+> que **não pegava `await import` desestruturado** — `derivarLayout` e
+> `ads/metrics` apareciam como descobertos e são testados. O número foi
+> descartado, não publicado. **Saída plausível não é evidência de que o
+> instrumento mediu o alvo**, e um relatório de cobertura errado teria mandado a
+> próxima pessoa escrever teste para o que já tem.

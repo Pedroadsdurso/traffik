@@ -585,7 +585,7 @@ function AbaLogs({ item }: { item: ItemIntegracao }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
-      {logs.map((l, i) => (
+      {logs.map((l) => (
         <div key={l.id} className="tk-linha" style={{ display: "flex", gap: 9, alignItems: "baseline", padding: "7px 8px", borderRadius: 8 }}>
           <span
             aria-hidden="true"
@@ -765,7 +765,7 @@ function ContasConectadas({ v }: { v: TraffikView }) {
   return (
     <Card titulo="Contas conectadas" descricao="Contas de anúncio da Meta nesta área">
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {visiveis.map((a, i) => (
+        {visiveis.map((a) => (
           <div
             key={a.id}
             style={{
@@ -900,7 +900,7 @@ function AtividadeRecente({ v }: { v: TraffikView }) {
         </p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column" }}>
-          {linhas.map((l, i) => (
+          {linhas.map((l) => (
             <div key={l.id} className="tk-linha" style={{ display: "flex", gap: 9, alignItems: "baseline", padding: "7px 8px", borderRadius: 8 }}>
               <span aria-hidden="true" style={{ color: l.cor, display: "flex", flex: "none" }}>
                 <Icone nome={l.icone} tamanho={13} />

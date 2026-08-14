@@ -456,4 +456,6 @@ window.__donoDoVao = (nomePref, limiar = 32) => {
   });
 };
 
-"vazio pronto — __ajustar(1280) numa chamada, vazioAgora() na seguinte";
+/* ⚠️ Ver a nota gemea em vazamento-na-tela.js: atribuicao em vez de expressao
+   solta, para o retorno do REPL continuar existindo sem warning. */
+globalThis.__vazioPronto = "vazio pronto — __ajustar(1280) numa chamada, vazioAgora() na seguinte";

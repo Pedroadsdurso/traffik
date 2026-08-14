@@ -115,6 +115,50 @@ console.log("\nCARD 0..400, limiar 32");
   ok("linha de base: o fuzz produziu caso SO de B (" + viuSoB + ")", viuSoB > 0);
 }
 
+/* ---- 4b. `soB` = B \ A, e ele e EXATAMENTE topo+fim ---------------------
+   E o discriminador do C6: quem so aparece em B tem o buraco encostando numa
+   borda, e o conserto e ALTURA DE SLOT, nao distribuicao. Se esta igualdade
+   quebrar, a lista de C6 volta a misturar as duas causas. */
+{
+  const casos = [
+    { bandas: [[0, 100]], nome: "so fim" },
+    { bandas: [[300, 400]], nome: "so topo" },
+    { bandas: [[0, 50], [300, 400]], nome: "topo? nao — meio + fim" },
+    { bandas: [[100, 150], [350, 400]], nome: "topo + meio" },
+    { bandas: [[100, 150], [200, 250]], nome: "topo + meio + fim" },
+  ];
+  let viuSoB = 0;
+  for (const { bandas, nome } of casos) {
+    const vaos = medir(bandas, 0, 400);
+    const a = A(vaos);
+    const soB = vaos.filter((v) => v.onde !== "meio");
+    assert.deepEqual(
+      soB,
+      vaos.filter((v) => !a.includes(v)),
+      "soB divergiu de B\\A em: " + nome,
+    );
+    assert.ok(
+      soB.every((v) => v.onde === "topo" || v.onde === "fim" || v.onde === "vazio inteiro"),
+      "soB tem vao de meio em: " + nome,
+    );
+    if (soB.length) viuSoB++;
+  }
+  ok("soB e exatamente B\\A, e so tem topo/fim", true, casos.length + " casos");
+  ok("linha de base: houve caso com soB nao vazio (" + viuSoB + ")", viuSoB > 0);
+}
+
+/* ---- 4c. O LIMIAR e ESTRITO: 32 nao entra, 33 entra ----------------------
+   ⛔ A fronteira e o que a §4 do `07` define ("maior que 32px"). Um `>=` aqui
+   faria a lista crescer com vaos que a regra aceita — e o custo de uma lista
+   inflada e ela ser desacreditada inteira. */
+{
+  const exato = medir([[0, 100], [132, 400]], 0, 400); // vao de exatamente 32
+  eq("vao de EXATAMENTE 32 nao reprova", B(exato).map((v) => v.px), []);
+  const um = medir([[0, 100], [133, 400]], 0, 400); // vao de 33
+  eq("vao de 33 reprova", B(um).map((v) => v.px), [33]);
+  ok("a fronteira e estrita (>), nao >=", B(exato).length === 0 && B(um).length === 1);
+}
+
 /* ---- 5. O limiar e por VAO, nao pela soma ---- */
 {
   const vaos = medir([[0, 50], [80, 130], [160, 400]], 0, 400);
