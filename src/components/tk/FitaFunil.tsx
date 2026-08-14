@@ -517,10 +517,18 @@ export function FitaFunil({
      é 0, todos os x são 0, e o rótulo "não medido" sumia do markup. São duas
      coisas diferentes — a geometria precisa de largura, o rótulo não. O guarda
      ficou só no `<rect>`, que é quem degenera. */
-  /* Só quem participa da geometria. */
-  const etapasDaFita = fluxo.etapas.filter((e) => e.naFita);
   /* Os trechos CONTÍGUOS de mesma fonte — um `<path>` para cada. Sem corte
-     nenhum devolve uma lista de um item, que é a fita inteira de antes. */
+     nenhum devolve uma lista de um item, que é a fita inteira de antes.
+
+     ⚠️ `etapasDaFita` (`fluxo.etapas.filter(e => e.naFita)`) VIVEU AQUI e foi
+     DELETADO em 14/08/2026 — resto da partição da fita (`444ce75`). O recorte
+     que ele fazia NÃO se perdeu: ele migrou para dentro de `segmentosDaFita`,
+     que encerra o segmento ao encontrar `naFita: false` e documenta isso.
+
+     ⛔ Não o traga de volta "para deixar explícito". Duas listas filtradas pelo
+     mesmo critério em lugares diferentes é a receita de divergirem — e aqui a
+     divergência desenharia a fita por cima de uma coluna que não participa da
+     escala, que é exatamente o que a partição existe para impedir. */
   const segmentos = segmentosDaFita(fluxo);
   /* ⚠️ `inicioDaFita` (o centro da 1ª etapa) VIVEU AQUI e foi DELETADO em
      07/08/2026 — resto da renomeação que separou "centro da etapa" de "borda da

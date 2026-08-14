@@ -48,33 +48,28 @@ import React from "react";
    chamador comparar: `[]` compara igual a `[]`, que é exatamente o buraco.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/**
- * Extrai a geometria de `entrada` e **falha nomeando** quando não houver nenhuma.
+/* 🪦 `geometria(entrada, oQue)` VIVEU AQUI e foi REMOVIDA em 14/08/2026.
  *
- * @param entrada  markup, lista de números, ou o que a asserção for comparar
- * @param oQue     o nome do que se está medindo, para a falha ser acionável
+ * Ela era a guarda "INSTRUMENTO VAZIO" para a asserção de geometria da FITA — e
+ * essa asserção **não pode existir neste arquivo**, pelo motivo que a tabela
+ * acima já registra: a fita esconde a geometria atrás de `largura > 0`, e no
+ * `renderToStaticMarkup` não há layout. A guarda ficou definida e **nunca
+ * chamada**, o que é proteção morta: quem lesse o arquivo veria uma guarda de
+ * instrumento vazio e concluiria que a geometria da fita estava coberta.
+ *
+ * ⛔ Não a reintroduza "para usar nas outras". As asserções de Donut, Sparkline
+ * e Medidor já carregam a própria linha de base (`assert.ok(area, …)`,
+ * `assert.ok(linha, …)`) e comparam contra número diferente de zero — nenhuma
+ * delas passa com markup vazio.
+ *
+ * ✅ A partição da fita — o que os imports `calcularFluxo`/`segmentosDaFita`
+ * anunciavam e nunca mediram — é asserida em `scripts/teste-particao-fita.mjs`,
+ * contra as funções PURAS, que é onde ela de fato vive.
  */
-function geometria(entrada, oQue) {
-  const vals =
-    typeof entrada === "string"
-      ? (entrada.match(/ d="[^"]{20,}"/g) ?? [])
-      : Array.isArray(entrada)
-        ? entrada.filter((v) => Number.isFinite(v))
-        : [];
-  assert.ok(
-    vals.length > 0,
-    `INSTRUMENTO VAZIO: nenhuma geometria em "${oQue}". A comparação passaria ` +
-      `por construção — ver a guarda genérica no topo deste arquivo. ` +
-      `Se a origem é markup, lembre que a fita esconde a geometria atrás de ` +
-      `'largura > 0' e que não há layout no renderToStaticMarkup.`,
-  );
-  return vals;
-}
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { interpolarNaoMedidas } from "@/components/tk/FitaFunil";
 import { ehBuracoImpossivel } from "@/components/dashboard/catalogoRender";
-import { calcularFluxo, segmentosDaFita } from "@/lib/funil/fita";
 
 const { DonutChart } = await import("../src/components/tk/DonutChart.tsx");
 const { Sparkline } = await import("../src/components/tk/Sparkline.tsx");

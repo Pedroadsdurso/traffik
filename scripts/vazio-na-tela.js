@@ -13,27 +13,42 @@
  * conteúdo e a borda interna do card"*. A §7 acrescenta o método: *"bounding
  * box do conteúdo contra o retângulo interno do card"*.
  *
- * Isso admitia DUAS leituras, e elas achavam conjuntos diferentes:
+ * Isso admitia DUAS leituras, e elas achavam conjuntos diferentes. Elas têm
+ * nome, e as DUAS saem na medição:
  *
- *   (a) só o vão ENTRE pares de coisas pintadas
- *   (b) o vão em qualquer lugar, INCLUSIVE do topo do retângulo interno até a
- *       primeira coisa pintada, e da última até a borda de baixo
+ *   ORIGEM A — ENTRE-CONTEÚDOS
+ *     só o vão entre PARES de coisas pintadas. Um buraco que encosta na borda
+ *     do card não existe para ela: não há par ao redor, há folha e borda.
+ *     É exatamente `onde === "meio"`.
  *
- * ⛔ **A §7.2 é a (b), e quem decide é a queixa que ela existe para matar.** O
- * C6 era *"180–400px de vazio contínuo"* em Produtos, Vendas por país e
- * Alertas — lista curta num card alto, com o buraco EMBAIXO. A leitura (a) não
- * enxerga esse caso: não há par de folhas ao redor do vão, há folha e borda.
+ *   ORIGEM B — ATÉ-A-BORDA
+ *     o vão em qualquer lugar, INCLUSIVE do topo do retângulo interno até a
+ *     primeira coisa pintada (`topo`) e da última até a borda de baixo (`fim`).
+ *     É A ∪ {topo, fim}.
+ *
+ * ⛔ **A §7.2 É A ORIGEM B, e quem decide é a queixa que ela existe para
+ * matar.** O C6 era *"180–400px de vazio contínuo"* em Produtos, Vendas por
+ * país e Alertas — lista curta num card alto, com o buraco EMBAIXO. A origem A
+ * não enxerga esse caso, e era o caso.
+ *
+ * ⚠️ **Mas A NÃO é descartada, e o motivo é que a diferença é que informa.**
+ * Como B ⊇ A por construção, `B \ A` é precisamente o conjunto dos blocos cujo
+ * buraco ENCOSTA NUMA BORDA — a família do C6. Publicar só B daria um número
+ * sem procedência: um bloco com 90px reprovaria sem dizer se o buraco está
+ * entre duas listas (defeito de distribuição) ou depois da última linha
+ * (defeito de altura do slot). São causas diferentes e consertos diferentes.
+ *
+ * ⛔ **Um número de B sozinho não é acionável.** Sempre leia o par.
  *
  * ⚠️ **E a referência SAI da definição, não é escolha independente.** Se o vão
  * vai "até a borda", a borda precisa ser a do CARD — então a referência é o
  * retângulo interno do card (caixa de padding menos padding), e não o
  * `[data-tk-corpo]`. Ver §2.
  *
- * Cada vão sai classificado — `topo` · `meio` · `fim` —, que é a distinção que
- * faltava nas duas medições anteriores. Ela não é cosmética: o `CLAUDE.md`
- * (*VÃO DENTRO DE UM CARD PROMETE CONTEÚDO*) diz que os mesmos pixels se leem
- * de formas diferentes conforme o que está embaixo deles. `fim` é o card
- * acabando; `meio` é a tela afirmando que ali cabia algo.
+ * Cada vão sai classificado — `topo` · `meio` · `fim`. Ela não é cosmética: o
+ * `CLAUDE.md` (*VÃO DENTRO DE UM CARD PROMETE CONTEÚDO*) diz que os mesmos
+ * pixels se leem de formas diferentes conforme o que está embaixo deles. `fim`
+ * é o card acabando; `meio` é a tela afirmando que ali cabia algo.
  *
  * ============================================================================
  * 2. A REFERÊNCIA — e `[data-tk-corpo]` NÃO é a mesma coisa em dois componentes
@@ -297,6 +312,17 @@ window.vazioAgora = (limiar = 32) => {
     const { faixas, conta } = window.__pintadoNoCard(card);
     const { vaos, pintados } = window.__vaosVerticais(faixas, interno.topo, interno.base, limiar);
     const rc = card.getBoundingClientRect();
+
+    /* ⛔ AS DUAS ORIGENS, do MESMO conjunto de bandas — nunca de duas varreduras.
+       Duas varreduras seriam duas implementações da mesma conta, e esta base já
+       pagou por isso: elas divergem, e quando erram igual é pior. B ⊇ A é
+       garantido por construção, e a asserção abaixo cobra isso. */
+    const entreConteudos = vaos.filter((v) => v.onde === "meio");
+    const ateABorda = vaos;
+    if (entreConteudos.length > ateABorda.length) {
+      throw new Error("INVARIANTE QUEBRADA: A tem mais vaos que B em " + nome);
+    }
+
     blocos.push({
       bloco: nome,
       semDado: !!card.querySelector("[data-tk-vazio]"),
@@ -306,7 +332,14 @@ window.vazioAgora = (limiar = 32) => {
       h: Number(getComputedStyle(c).gridRow.replace("span ", "")) || null,
       fontes: conta,
       pintados,
-      vaos,
+      /* origem A — só o vão entre pares de coisas pintadas */
+      entreConteudos,
+      /* origem B — a §7.2. Inclui `topo` e `fim`, que é o que carrega o C6 */
+      ateABorda,
+      /* o que SÓ B vê: o buraco encosta numa borda. É a procedência do número. */
+      soAteABorda: ateABorda.filter((v) => v.onde !== "meio"),
+      /* mantido para não quebrar quem já lê `vaos` — é a origem B */
+      vaos: ateABorda,
     });
   }
 
@@ -332,8 +365,36 @@ window.vazioAgora = (limiar = 32) => {
       kpi: regras["gancho e o card (KPI)"] || 0,
       painel: regras["gancho e o corpo, card e o pai"] || 0,
     },
-    violam: comDado.filter((b) => b.vaos.length),
-    vazioComVao: blocos.filter((b) => b.semDado && b.vaos.length).map((b) => b.bloco),
+    /* O par, em uma linha, com o DENOMINADOR junto — "3 reprovam" sem dizer
+       sobre quantos é tão pouco auditável quanto "0 fugas" sem examinados. */
+    resumo: {
+      origemA_entreConteudos: comDado.filter((b) => b.entreConteudos.length).length + "/" + comDado.length,
+      origemB_ateABorda: comDado.filter((b) => b.ateABorda.length).length + "/" + comDado.length,
+      soB_encostaNaBorda: comDado.filter((b) => b.ateABorda.length && !b.entreConteudos.length).length,
+      limiar,
+    },
+    /* ⛔ O PAR, e a leitura é a DIFERENÇA — nunca B sozinho.
+
+       `violamA`  buraco entre dois conteúdos → defeito de DISTRIBUIÇÃO
+       `violamB`  a §7.2 inteira
+       `soB`      B \ A: o buraco encosta numa borda → família do C6, e o
+                  conserto é altura de slot, não distribuição
+
+       Um bloco que aparece em `soB` e não em `violamA` NÃO tem espaço mal
+       repartido: ele tem slot maior que o conteúdo. Tratar os dois com o mesmo
+       conserto foi o que fez a lista de C6 crescer e encolher sem ninguém
+       entender por quê. */
+    violamA: comDado.filter((b) => b.entreConteudos.length),
+    violamB: comDado.filter((b) => b.ateABorda.length),
+    soB: comDado.filter((b) => b.ateABorda.length && !b.entreConteudos.length).map((b) => ({
+      bloco: b.bloco,
+      vaos: b.soAteABorda,
+      cardA: b.cardA,
+      h: b.h,
+    })),
+    /* mantido: é a origem B */
+    violam: comDado.filter((b) => b.ateABorda.length),
+    vazioComVao: blocos.filter((b) => b.semDado && b.ateABorda.length).map((b) => b.bloco),
     todos: blocos,
   };
 };
