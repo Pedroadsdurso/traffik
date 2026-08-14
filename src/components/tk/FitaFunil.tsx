@@ -72,21 +72,26 @@ export interface EtapaEntradaFita {
   /** Linha sob o número absoluto: "11 do navegador". */
   composicao?: string;
   /**
-   * 🔀 ENTRADA LATERAL — massa que chega NESTA etapa sem ter passado pela
-   * anterior, e que por isso NÃO entra na geometria da fita.
+   * 🔬 O QUE ESTA ETAPA MEDE — e é daqui que sai o rótulo da queda até ela.
    *
-   * O caso: checkout de comprador que nunca passou pelo nosso script
-   * (`PixelEvent` sem `clickId`). Ele é **disjunto** de `Sessões`, não
-   * subconjunto — somá-lo fazia a etapa ficar maior que a anterior e a pílula
-   * imprimir 128,1% de conversão.
+   * | valor | a queda até esta etapa significa |
+   * |---|---|
+   * | `comportamento` (padrão) | gente que **saiu**: abandono, recusa, desistência |
+   * | `deteccao` | gente que o instrumento **não viu** — o comportamento pode ter acontecido |
    *
-   * ⛔ Ela NÃO vira espessura. Se virasse, a fita voltaria a engordar no meio,
-   * que é a leitura impossível que a separação existe para acabar. Ela é
-   * DECLARADA: seta e rótulo próprio sobre a guia de entrada.
+   * ## 🔴 Por que é um campo, e não um caso especial dos ICs
+   *
+   * A etapa de ICs vale só os checkouts que o navegador detectou, então a queda
+   * `Sessões → ICs` inclui 24 sessões que **fizeram checkout** e o snippet não
+   * viu. Chamar isso de perda é o mesmo erro de categoria que a fita tinha um
+   * nível acima: forma e rótulo afirmando abandono onde houve cegueira do
+   * instrumento — e é ele que manda o gestor otimizar a oferta quando o
+   * problema é a instalação.
+   *
+   * ⛔ Corrigir só o texto desta etapa deixaria a próxima etapa de detecção
+   * nascer com o rótulo errado. Declarando na FONTE, ela herda sozinha.
    */
-  entradaLateral?: number;
-  /** O que a entrada lateral é, em uma frase. Vai no `title` da marca. */
-  entradaLateralAjuda?: string;
+  mede?: "comportamento" | "deteccao";
   /**
    * ✂️ A FONTE MUDA ANTES DESTA ETAPA — e a fita se PARTE aqui.
    *
@@ -1032,20 +1037,51 @@ export function FitaFunil({
             🔴 É AQUI que a perda existe: em número, não em área. Ancorada na
             guia porque perda acontece ENTRE duas etapas — ancorá-la num centro
             de etapa a atribuiria a uma delas. */}
-        {fluxo.perdas.map((p) => (
+        {fluxo.perdas.map((p) => {
+          /**
+           * 🔴 O RÓTULO VEM DO QUE A ETAPA DE DESTINO MEDE — não de um caso
+           * especial desta etapa.
+           *
+           * | destino mede | a queda é | como se escreve |
+           * |---|---|---|
+           * | `comportamento` | gente que SAIU | `−43` — o menos afirma saída |
+           * | `deteccao` | gente que o instrumento NÃO VIU | `43 não detectados` |
+           *
+           * ⛔ O sinal de menos sai junto no caso de detecção, e não é detalhe:
+           * `−43` afirma que 43 pessoas deixaram o funil. Das 43 aqui, **24
+           * fizeram checkout** — o snippet é que não viu. Chamar isso de perda
+           * manda o gestor otimizar a oferta quando o problema é a instalação,
+           * que é o mesmo erro de categoria que tirou `Cliques` da fita.
+           *
+           * ⚠️ Derivado de `mede`, então uma etapa de detecção NOVA herda o
+           * rótulo certo sem ninguém lembrar de tratá-la.
+           */
+          const deteccao = etapas[p.de + 1]?.mede === "deteccao";
+          return (
             <div
               key={`perda-${p.de}`}
               className="text-caption"
+              title={
+                deteccao
+                  ? "Sessões que não chegaram a esta etapa PELA MEDIÇÃO. Parte delas " +
+                    "pode ter feito checkout sem o nosso script ver — aqui não há " +
+                    "como distinguir quem desistiu de quem não foi detectado."
+                  : `Saíram entre ${etapas[p.de]?.label} e ${etapas[p.de + 1]?.label}`
+              }
               style={{
                 ...pilula("var(--tk-pilula)", "var(--tk-on-pilula)"),
                 left: p.x,
                 top: TOPO + faixaAlt + 12,
+                cursor: "help",
               }}
             >
-              −{p.valor.toLocaleString("pt-BR")}
+              {deteccao ? "" : "−"}
+              {p.valor.toLocaleString("pt-BR")}
+              {deteccao && " não detectados"}
               {p.pct != null && <span style={{ opacity: 0.72 }}> · {pct1(p.pct)}</span>}
             </div>
-          ))}
+          );
+        })}
 
         {/* ── ✂️ A MARCA DO CORTE — o vão é DELIBERADO, e diz por quê ─────────
             🔴 Vão sem rótulo é indistinguível de bug de layout. Quem olha um
@@ -1103,72 +1139,20 @@ export function FitaFunil({
           );
         })}
 
-        {/* ── 🔀 ENTRADA LATERAL — declarada, e FORA da geometria ─────────────
-            🔴 O QUE ELA É: massa que chega nesta etapa sem ter passado pela
-            anterior. O caso real é o checkout de quem nunca passou pelo nosso
-            script (`PixelEvent` sem `clickId`): ele é DISJUNTO de `Sessões`, não
-            subconjunto.
+        {/* ⛔ A PÍLULA DE ENTRADA LATERAL VIVIA AQUI E FOI REMOVIDA em 13/08/2026.
 
-            ⛔ ELA NÃO VIRA ESPESSURA, e é esse o ponto. Até 13/08/2026 ela era
-            somada à etapa, e a fita ENGORDAVA no meio: 38 + 35 = 73 contra 57
-            sessões, com a pílula imprimindo 128,1% de conversão — "mais gente
-            chegou ao checkout do que visitou o site". Um funil não ganha massa
-            do nada; quando parece que ganhou, entrou por outra porta.
+            Ela funcionava enquanto o nó valia 38: a leitura era binária — 38 com
+            jornada, 35 sem. Quando o nó passou a valer 14 (só o navegador), os 35
+            deixaram de ser complemento do número exibido e viraram complemento de
+            um 38 que não está escrito em lugar nenhum da tela.
 
-            A seta aponta PARA DENTRO da fita de propósito: ela diz de onde a
-            massa vem sem afirmar que a etapa anterior a produziu. */}
-        {fluxo.etapas.map((e, i) => {
-          const extra = etapas[i]?.entradaLateral ?? 0;
-          if (!e.naFita || extra <= 0) return null;
-          return (
-            <div
-              key={`lateral-${etapas[i]!.label}`}
-              title={
-                etapas[i]!.entradaLateralAjuda ??
-                "Chegaram a esta etapa sem passar pela anterior, por isso não entram na fita."
-              }
-              style={{
-                position: "absolute",
-                left: e.x,
-                top: 26,
-                transform: "translateX(-50%)",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 2,
-                pointerEvents: "auto",
-                cursor: "help",
-              }}
-            >
-              <span
-                className="text-caption"
-                style={{
-                  ...pilula("var(--tk-tint-category)", "var(--tk-on-tint-category)"),
-                  /* `pilula()` já posiciona em absoluto; aqui o pai é que
-                     posiciona, então o filho volta a ser estático. */
-                  position: "static",
-                  transform: "none",
-                  left: undefined,
-                  top: undefined,
-                  fontWeight: 700,
-                }}
-              >
-                +{extra.toLocaleString("pt-BR")} sem jornada
-              </span>
-              {/* A seta. `aria-hidden` porque quem carrega a informação para o
-                  leitor de tela é o texto da cápsula acima — a seta é a forma,
-                  e forma sozinha não informa (WCAG 1.4.1). */}
-              <span
-                aria-hidden
-                style={{
-                  width: 1,
-                  height: Math.max(4, TOPO - 26 - ALTURA_PILULA - 2),
-                  background: "var(--tk-category)",
-                }}
-              />
-            </div>
-          );
-        })}
+            🔴 O leitor precisava compor 14 + 24 + 35 = 73 com as TRÊS populações
+            penduradas no mesmo nó em três lugares: o número, a linha declarativa
+            embaixo e a pílula acima. Três ancoragens para um nó é pior que o
+            problema que a separação consertou.
+
+            ✅ Hoje as três moram na LINHA DECLARATIVA (`composicao`), num texto só
+            que fecha o total. Ver `ETAPAS_PARA_FITA` no `catalogoRender`. */}
 
         {/* ── Número absoluto, EMBAIXO, grande e em negrito ────────────────── */}
         {fluxo.etapas.map((e, i) => (

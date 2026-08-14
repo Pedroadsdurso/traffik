@@ -4221,6 +4221,71 @@ saía **128,1%**, que é o impossível apresentado como ganho.
 
 ---
 
+# 🏭 FIXTURE QUE CRIA O REGISTRO FINAL DIRETO DEIXA O CAMINHO DE INGESTÃO SEM EXERCÍCIO
+
+> **Registrado em 13/08/2026 como PADRÃO**, não como nota do dia — é a terceira
+> aparição da mesma mecânica em duas sessões.
+
+> ## O estado final fica CERTO, a suíte fica verde, e o código que deveria tê-lo produzido nunca roda.
+
+| # | A fixture cria | O caminho que fica sem exercício |
+|---|---|---|
+| 1 | as etapas à mão, no `teste-desenho` | `ETAPAS_PARA_FITA` — plantei a soma indevida no `catalogoRender` e a suíte seguiu **verde** |
+| 2 | `Sale` direto, no `seed-dev` | `ingestSale` → `registrarCheckoutDoGateway` — **nunca roda em dev** |
+| 3 | `checkoutSource` escrito à mão | a decisão de `gerouCheckout` do payload do gateway |
+
+### 🔴 POR QUE ISTO É PIOR QUE FIXTURE COM DADO ERRADO
+
+Fixture com dado errado produz tela esquisita, e alguém desconfia. Esta produz o
+estado **exatamente certo** — e por isso ninguém olha. O caminho que falta é
+invisível dos dois lados: o teste não o chama, e a tela não tem como mostrar que
+ele não foi chamado.
+
+⚠️ E ela **contamina o que se lê do banco**: o dev tinha 24 `gateway` e 14
+`navegador`, que parecem medição de dois mecanismos e são carimbo de LOTE do
+gerador (06/08 → 35 vendas / 24 ICs; 08/08 → 22 / 14).
+
+> ### 🔎 A MEDIÇÃO QUE SERVE PARA QUALQUER CASO
+>
+> ## Por quais funções a fixture passa antes de chegar no estado que o teste observa?
+>
+> Se a resposta for "nenhuma — ela escreve o estado final", então **todo o
+> caminho de produção até aquele estado está sem cobertura**, por mais verde que
+> a suíte esteja.
+>
+> ```bash
+> # o que ESCREVE a coluna em produção…
+> grep -rn "checkoutAt\|checkoutSource" src/lib/ --include=*.ts | grep -v "select\|where"
+> # …e quem a fixture chama para chegar lá
+> grep -n "import\|await " scripts/seed-dev.mjs | head -30
+> ```
+> A pergunta binária por coluna: *o escritor de produção aparece na lista da
+> fixture?* Se não, aquele ramo nunca foi percorrido.
+
+⚠️ É prima de *O SEED PRODUZ ESTADO INCOMPLETO* e de *TESTE QUE CONSTRÓI A
+PRÓPRIA ENTRADA*. A diferença é o alvo: aquelas falam do DADO gerado; esta fala
+do CÓDIGO que deixou de rodar para gerá-lo.
+
+> ### ⛔ E O RECUO QUE ISTO PRODUZIU FICA REGISTRADO — não só a correção
+>
+> Eu medi 24/14 e reportei **"63% dos ICs são derivados da venda"** como fato
+> sobre o produto. É fato sobre o SEED. O número atravessou uma análise, uma
+> decisão de arquitetura e uma mensagem de commit antes de alguém perguntar de
+> onde ele vinha.
+>
+> ## Número de seed lido como número de produto é exatamente como afirmação falsa entra nesta base.
+>
+> Ele não chega como erro: chega como medição, com casas decimais e um `SELECT`
+> atrás. O que faltou não foi rigor na conta — foi a pergunta seguinte: *quem
+> escreveu esta linha, o produto ou o gerador?*
+>
+> ⚠️ O ponto estrutural sobreviveu ao recuo (dois escritores, um circular por
+> construção), e é por isso que a decisão de arquitetura continuou válida. **Mas
+> a proporção real em produção segue NÃO MEDIDA**, e nada neste arquivo deve
+> sugerir o contrário.
+
+---
+
 # 🧩 COBERTURA DO SNIPPET DE CHECKOUT — TRÊS SINTOMAS, UM DEFEITO
 
 > **Ligados em 13/08/2026 por ordem do dono.** Estavam em três lugares da fila

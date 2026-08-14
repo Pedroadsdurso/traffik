@@ -317,32 +317,52 @@ const ETAPAS_PARA_FITA = (v: TraffikView): EtapaEntradaFita[] => {
        gateway quem fala é a hachura; com tudo do navegador não há o que
        decompor. */
     /**
-     * 🔴 A COMPOSIÇÃO DO NÓ DE ICs — e ela declara O QUE NÃO DESENHA.
+     * 🔴 A COMPOSIÇÃO DO NÓ DE ICs — UMA ancoragem, e ela FECHA o total.
      *
-     * A etapa vale só os checkouts vistos pelo navegador. Os outros dois grupos
-     * existem e precisam ser ditos, senão o número parece o total e o usuário
-     * conclui que o rastreamento cobre menos do que cobre:
+     * ## Por que as três populações moram numa linha só
      *
-     * | grupo | por que está fora |
+     * Elas já estiveram em três lugares do mesmo nó: o número (14), esta linha
+     * (os 24) e uma pílula acima (os 35). O leitor tinha de compor
+     * `14 + 24 + 35 = 73` sozinho — e os 35 nem eram complemento do número
+     * exibido: eram complemento de um 38 que não estava escrito em lugar nenhum.
+     *
+     * ⛔ Três ancoragens num nó é pior que o problema que a separação
+     * consertou. Hoje o texto fecha a conta: cada parcela com o nome do que é, e
+     * o total no fim.
+     *
+     * | parcela | por que não desenha |
      * |---|---|
-     * | derivados da venda | escritos pelo webhook do gateway — **circulares**: só existem porque a venda chegou |
-     * | sem jornada | `PixelEvent` sem `clickId` — disjunto de `Sessões`, entra como entrada lateral |
+     * | vistos no navegador | 🟦 **desenha** — é a única independente da venda |
+     * | derivados da venda | circulares: só existem porque a venda chegou |
+     * | sem jornada | `PixelEvent` sem `clickId` — disjunto de `Sessões` |
      *
-     * ⚠️ A frase só aparece quando há o que declarar. Com tudo medido no
-     * navegador não há grupo de fora, e uma linha dizendo "0 derivados" viraria
-     * ruído sobre a boa notícia.
+     * ⚠️ Só aparece quando há mais de uma parcela. Com tudo medido no navegador
+     * não há composição, e uma linha dizendo "0 derivados · 0 sem jornada"
+     * viraria ruído sobre a boa notícia.
      */
     composicao:
       e.chaveInfo === "checkouts" && ((e.derivadosDaVenda ?? 0) > 0 || (e.entradaLateral ?? 0) > 0)
-        ? [
-            `${e.value.toLocaleString("pt-BR")} vistos no navegador`,
-            (e.derivadosDaVenda ?? 0) > 0
-              ? `${(e.derivadosDaVenda ?? 0).toLocaleString("pt-BR")} derivados da venda`
-              : null,
-          ]
-            .filter(Boolean)
-            .join(" · ")
+        ? (() => {
+            const der = e.derivadosDaVenda ?? 0;
+            const sem = e.entradaLateral ?? 0;
+            const n = (x: number) => x.toLocaleString("pt-BR");
+            const partes = [`${n(e.value)} vistos no navegador`];
+            if (der > 0) partes.push(`${n(der)} derivados da venda`);
+            if (sem > 0) partes.push(`${n(sem)} sem jornada`);
+            return `${partes.join(" · ")} = ${n(e.value + der + sem)} checkouts`;
+          })()
         : undefined,
+    /**
+     * 🔬 O QUE A ETAPA MEDE — e daqui sai o rótulo da queda até ela.
+     *
+     * `ICs` mede DETECÇÃO: das sessões que não chegaram nela, 24 fizeram
+     * checkout e o snippet não viu. "Perda" ali afirmaria abandono onde houve
+     * cegueira do instrumento, e mandaria o gestor mexer na oferta.
+     *
+     * ⛔ Declarado na FONTE, não como caso especial no desenho: se amanhã outra
+     * etapa medir detecção, ela herda o rótulo certo sem ninguém lembrar.
+     */
+    mede: e.chaveInfo === "checkouts" ? ("deteccao" as const) : undefined,
     /**
      * ✂️ ONDE O RASTREAMENTO ENTREGA O FUNIL AO GATEWAY — e a fita se parte.
      *
@@ -358,17 +378,10 @@ const ETAPAS_PARA_FITA = (v: TraffikView): EtapaEntradaFita[] => {
      * nada.
      */
     fonteMuda: e.chaveInfo === "iniciadas" ? "o gateway assume" : undefined,
-    /* 🔀 A entrada lateral. Ela NÃO entra na espessura — ver o bloco próprio na
-       `FitaFunil`. Aqui ela só atravessa, com a frase que a explica junto: o
-       número sozinho no meio da fita seria mais um valor sem procedência. */
-    entradaLateral: e.entradaLateral,
-    entradaLateralAjuda:
-      (e.entradaLateral ?? 0) > 0
-        ? "Checkouts de quem nunca passou pelo nosso script — não têm sessão " +
-          "rastreada para vir. Ficam fora da fita porque não saíram da etapa " +
-          "anterior: somá-los faria o funil ganhar massa do nada. Número alto " +
-          "aqui é sinal de rastreamento mal instalado."
-        : undefined,
+    /* ⛔ `entradaLateral` NÃO é mais passada à fita — os 35 vivem na
+       `composicao` acima, junto das outras duas parcelas. Ver a nota lá: três
+       ancoragens no mesmo nó custavam mais que a informação que davam.
+       O acessor do hook continua, porque é ele que alimenta a composição. */
     /* ⚠️ Sobrou UMA razão, e é a que pode disparar. A segunda (`AVISO_SEM_PIXEL`)
        saiu em 13/08/2026 junto com a soma que a tornava alcançável — ver a nota
        no lugar dela. Ter duas, com uma inalcançável, era proteção morta. */

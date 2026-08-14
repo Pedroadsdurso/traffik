@@ -615,172 +615,68 @@ checar("razão ACIMA DE 1 não é impressa como taxa — ela nomeia a causa", ()
   assert.ok(!normal.includes("fontes diferentes"), "a guarda disparou sobre uma taxa válida");
 });
 
-checar("a entrada LATERAL é declarada e NÃO entra na espessura da fita", () => {
-  /* 🔴 A regressão que esta asserção existe para impedir é a de antes de
-     13/08/2026: `semJornada` era somado à etapa, e a fita ENGORDAVA no meio —
-     38 + 35 = 73 contra 57 sessões, com a pílula imprimindo 128,1%.
+checar("as três parcelas do nó de ICs moram em UMA linha, e ela FECHA o total", () => {
+  /* 🔴 A regressão que esta asserção impede é a de 13/08/2026, e ela nasceu de
+     uma correção: com o nó valendo 14 (só o navegador), os 35 "sem jornada"
+     deixaram de ser complemento do número exibido — viraram complemento de um
+     38 que não está escrito em lugar nenhum. Com a pílula acima, a linha
+     embaixo e o número no meio, o nó tinha TRÊS ancoragens e o leitor precisava
+     compor 14 + 24 + 35 sozinho.
 
-     ⚠️ A prova de que ela não vira espessura é DIFERENCIAL: a geometria da fita
-     tem de ser IDÊNTICA com e sem a entrada lateral. Um `includes` do número
-     provaria só que o texto saiu. */
-  const base = { label: "ICs", valor: 38, valorFmt: "38" };
-  const semLateral = [{ label: "Sessões", valor: 57, valorFmt: "57" }, base];
-  const comLateral = [semLateral[0], { ...base, entradaLateral: 35 }];
-
-  const hSem = renderToStaticMarkup(React.createElement(FitaFunil, { etapas: semLateral }));
-  const hCom = renderToStaticMarkup(React.createElement(FitaFunil, { etapas: comLateral }));
-
-  assert.ok(hSem.length > 1000, "linha de base: a fita não renderizou");
-  assert.ok(hCom.includes("+35 sem jornada"), "a entrada lateral não foi declarada");
-  assert.ok(!hSem.includes("sem jornada"), "a declaração saiu sem ninguém pedir");
-
-  /* ── A GEOMETRIA ───────────────────────────────────────────────────────────
-     🔴 A PRIMEIRA VERSÃO DESTA METADE NÃO MEDIA NADA, e o modo de erro é o do
-     dia: eu comparei os atributos `d` dos caminhos SVG do markup estático. Só
-     que a fita guarda toda a geometria atrás de `largura > 0`, e no
-     `renderToStaticMarkup` não existe layout — medido, **0 caminhos `d=`** nos
-     dois lados. A asserção comparava `"" === ""`, passava por construção, e
-     tinha a mesma cara de uma medição.
-
-     ⛔ Não troque de volta por leitura do markup. A costura mensurável é
-     `interpolarNaoMedidas`: ela é a ÚNICA entrada de `calcularFluxo`
-     (`FitaFunil.tsx:402-406`), então qualquer vazamento da entrada lateral para
-     a espessura passaria por aqui obrigatoriamente. */
-  /* ⚠️ Passa pela guarda genérica: ela LANÇA se a lista vier vazia, em vez de
-     deixar `[] === []` passar. Ver o bloco no topo do arquivo. */
-  const geo = (es, nome) => geometria(interpolarNaoMedidas(es), nome);
-  assert.deepEqual(geo(semLateral, "fita sem lateral"), [57, 38], "linha de base");
-  assert.deepEqual(
-    geo(comLateral, "fita com lateral"),
-    geo(semLateral, "fita sem lateral"),
-    "a entrada lateral mexeu na espessura — ela tem de ficar FORA da geometria",
-  );
-  /* E o valor ERRADO é nomeado, para o teste falhar pelo motivo que alega: se
-     alguém somar de volta, a etapa vira 73 e esta linha é a que cai. */
-  assert.ok(
-    !geo(comLateral, "fita com lateral").includes(73),
-    "a entrada lateral foi somada à etapa (38 + 35 = 73)",
-  );
-
-  /* E a taxa da etapa continua sendo 38/57, não 73/57. */
-  assert.ok(hCom.includes("66,7%"), "a taxa deixou de ser calculada sobre a população da cadeia");
-});
-
-checar("a guarda genérica de instrumento FALHA quando a geometria vem vazia", () => {
-  /* 🔴 O LADO NEGATIVO DA PRÓPRIA GUARDA. Sem ele ela seria mais uma proteção
-     que nunca disparou — e este arquivo já registrou que guarda sem disparo é
-     comentário com sintaxe de código.
-     Os três casos abaixo são exatamente as três formas que passaram verde nesta
-     base: markup sem caminho, markup sem NENHUM `d=`, e lista vazia. */
-  for (const [entrada, nome] of [
-    ["<svg></svg>", "markup sem path"],
-    ['<svg><path d="M0,0"/></svg>', "markup com d= curto demais para ser geometria"],
-    [[], "lista vazia"],
-  ]) {
-    assert.throws(
-      () => geometria(entrada, nome),
-      /INSTRUMENTO VAZIO/,
-      `a guarda não disparou para: ${nome}`,
-    );
-  }
-  /* E o positivo: com geometria de verdade ela devolve e não atrapalha. */
-  assert.equal(geometria([57, 38], "controle").length, 2);
-});
-
-checar("a fita se PARTE onde a fonte muda — e nenhum segmento engorda", () => {
-  /* 🔴 A regressão que esta asserção impede é a silhueta afirmando ganho de
-     massa numa troca de instrumento: 38 ICs (nossa tabela `Click`) para 57
-     vendas (gateway) desenhava a fita ENGORDANDO, e forma se lê antes de texto.
-
-     ⛔ E ela prova as três consequências do corte de uma vez, porque provar só
-     a partição deixaria taxa e perda livres para atravessar. */
-  const etapas = [
-    { label: "Sessões", valor: 57, valorFmt: "57", fonte: "Nosso script" },
-    { label: "ICs", valor: 38, valorFmt: "38", fonte: "Nosso script" },
-    { label: "Vendas Inic.", valor: 57, valorFmt: "57", fonte: "Gateway", fonteMuda: "o gateway assume" },
-    { label: "Vendas Apr.", valor: 47, valorFmt: "47", fonte: "Gateway" },
-  ];
-  const html = renderToStaticMarkup(React.createElement(FitaFunil, { etapas }));
-  assert.ok(html.length > 1000, "linha de base: a fita não renderizou");
-
-  /* 1 · O VÃO É DECLARADO. Vão sem rótulo é indistinguível de bug de layout. */
-  assert.ok(html.includes("o gateway assume"), "o corte não foi rotulado na tela");
-
-  /* 1b · 🔴 A FITA ESTÁ MESMO PARTIDA — e isto precisa de asserção PRÓPRIA.
-     Medido: plantando `if (false && …)` em `segmentosDaFita`, as asserções de
-     rótulo, taxa e perda seguiram TODAS verdes. Elas verificam as consequências
-     do corte, não a partição — e a partição é o que o dono decidiu.
-     ⛔ E não dá para contar `<path>` no markup: sem layout, `largura` é 0 e não
-     sai caminho nenhum. A costura mensurável é a função pura. */
-  const fluxo = calcularFluxo(etapas.map((e) => e.valor), {
-    largura: 1000,
-    faixa: 200,
-    margem: 12,
-    naFita: etapas.map(() => true),
-    corte: etapas.map((e) => e.fonteMuda != null),
-  });
-  const segs = segmentosDaFita(fluxo);
-  /* Passa pela guarda genérica: cada segmento tem de ter espessura de verdade,
-     senão "2 segmentos" poderia ser dois vazios. */
-  segs.forEach((s, i) => geometria(s.map((e) => e.espessura), `segmento ${i}`));
-  assert.equal(segs.length, 2, "a fita NÃO se partiu no corte — ela atravessa a troca de fonte");
-  assert.deepEqual(
-    segs.map((s) => s.map((e) => e.valor)),
-    [[57, 38], [57, 47]],
-    "os segmentos não são os dois trechos de mesma fonte",
-  );
-  /* E o que o dono pediu, em uma linha: NENHUM segmento engorda por dentro. */
-  segs.forEach((s, i) =>
-    s.forEach((e, j) => {
-      if (j === 0) return;
-      assert.ok(
-        e.valor <= s[j - 1].valor,
-        `o segmento ${i} engorda de ${s[j - 1].valor} para ${e.valor}`,
-      );
+     ⛔ Por isso a asserção é sobre a ARITMÉTICA do texto, não sobre a presença
+     das palavras: um texto que liste as três parcelas e não feche a conta
+     passaria num `includes`. */
+  const composicao = "14 vistos no navegador · 24 derivados da venda · 35 sem jornada = 73 checkouts";
+  const html = renderToStaticMarkup(
+    React.createElement(FitaFunil, {
+      etapas: [
+        { label: "Sessões", valor: 57, valorFmt: "57" },
+        { label: "ICs", valor: 14, valorFmt: "14", composicao, mede: "deteccao" },
+      ],
     }),
   );
+  assert.ok(html.length > 1000, "linha de base: a fita não renderizou");
 
-  /* 2 · AS DUAS TAXAS LEGÍTIMAS CONTINUAM DESENHADAS — é o motivo de partir em
-         vez de tirar `Vendas` da geometria, que jogaria o 82,5% fora junto. */
-  assert.ok(html.includes("66,7%"), "a taxa dentro do rastreamento sumiu");
-  assert.ok(html.includes("82,5%"), "a taxa dentro do gateway sumiu — partir não pode custar ela");
+  /* 1 · UMA ancoragem: a pílula de entrada lateral não existe mais. */
+  assert.ok(!html.includes("sem jornada</"), "a pílula voltou — o nó tem duas ancoragens de novo");
 
-  /* 3 · NADA É AFIRMADO ATRAVÉS DO CORTE: nem taxa, nem perda. */
-  assert.ok(!html.includes("150,0%"), "a razão atravessou o corte como taxa");
-  assert.ok(!html.includes("fontes diferentes"), "a pílula sobrou: quem declara agora é o vão");
-  /* A perda LEGÍTIMA continua: 57 → 38 é queda dentro do rastreamento. Ela é a
-     linha de base da asserção seguinte — sem ela, "não achei perda" passaria
-     com um componente que parou de desenhar perda nenhuma. */
-  assert.ok(html.includes("−19"), "linha de base: a perda legítima dentro do instrumento sumiu");
-
-  /* ⚠️ COM ESTES NÚMEROS A PERDA ATRAVÉS DO CORTE NEM PODERIA APARECER — 38 →
-     57 é ganho, e ganho já não vira pílula de perda. Uma asserção aqui passaria
-     sem exercer a regra do corte. O caso que exerce é a etapa PÓS-corte ser
-     MENOR: aí, sem a regra, sairia `−8`. */
-  const caindo = [
-    ...etapas.slice(0, 2),
-    { label: "Vendas Inic.", valor: 30, valorFmt: "30", fonte: "Gateway", fonteMuda: "o gateway assume" },
-  ];
-  const hCaindo = renderToStaticMarkup(React.createElement(FitaFunil, { etapas: caindo }));
-  assert.ok(hCaindo.includes("−19"), "linha de base: a perda legítima sumiu no segundo fixture");
-  assert.ok(
-    !/−8\b/.test(hCaindo),
-    "desenhou PERDA através do corte — a diferença ali é discordância de medição, não gente que sumiu",
+  /* 2 · A linha fecha a conta, e os números batem. */
+  assert.ok(html.includes(composicao), "a composição não saiu inteira");
+  const nums = [...composicao.matchAll(/(\d+) (?:vistos|derivados|sem)/g)].map((m) => +m[1]);
+  const total = +composicao.match(/= (\d+) checkouts/)[1];
+  assert.ok(nums.length === 3, "linha de base: a composição não tem três parcelas");
+  assert.equal(
+    nums.reduce((a, b) => a + b, 0),
+    total,
+    "a composição NÃO fecha: as parcelas não somam o total declarado",
   );
 });
 
-checar("sem corte declarado, a fita continua INTEIRA — o lado negativo", () => {
-  /* Sem este par, um componente que partisse SEMPRE passaria na asserção acima.
-     E partir sem motivo é pior que não partir: inventa uma troca de fonte. */
-  const semCorte = [
-    { label: "Sessões", valor: 57, valorFmt: "57" },
-    { label: "ICs", valor: 38, valorFmt: "38" },
-    { label: "Vendas Inic.", valor: 30, valorFmt: "30" },
-  ];
-  const html = renderToStaticMarkup(React.createElement(FitaFunil, { etapas: semCorte }));
-  assert.ok(html.length > 1000, "linha de base: a fita não renderizou");
-  assert.ok(!html.includes("✂"), "partiu a fita sem ninguém declarar troca de fonte");
-  assert.ok(html.includes("78,9%"), "a taxa do trecho sem corte sumiu");
+checar("a queda até uma etapa de DETECÇÃO não é rotulada como perda", () => {
+  /* 🔴 Das 43 sessões que não chegaram aos ICs, 24 fizeram checkout — o snippet
+     é que não viu. `−43` afirma que 43 pessoas deixaram o funil, e manda o
+     gestor otimizar a oferta quando o problema e a instalação. Mesmo erro de
+     categoria que tirou `Cliques` da fita, um nível abaixo. */
+  const par = (mede) =>
+    renderToStaticMarkup(
+      React.createElement(FitaFunil, {
+        etapas: [
+          { label: "Sessões", valor: 57, valorFmt: "57" },
+          { label: "ICs", valor: 14, valorFmt: "14", ...(mede ? { mede } : {}) },
+        ],
+      }),
+    );
+  const deteccao = par("deteccao");
+  const comportamento = par(null);
+
+  assert.ok(deteccao.length > 1000, "linha de base: a fita não renderizou");
+  /* A linha de base do PAR: sem `mede`, a pílula continua sendo perda com menos. */
+  assert.ok(comportamento.includes("−43"), "linha de base: a pílula de perda sumiu do caso comum");
+  assert.ok(!comportamento.includes("não detectados"), "o rótulo de detecção vazou para o caso comum");
+
+  /* E com `mede: deteccao`, some o menos e entra a palavra certa. */
+  assert.ok(deteccao.includes("não detectados"), "a queda de detecção não foi rotulada");
+  assert.ok(!deteccao.includes("−43"), "o sinal de menos sobreviveu — ele afirma saída do funil");
 });
 
 checar("a etapa da fita NÃO soma a entrada lateral antes de chegar ao componente", () => {
