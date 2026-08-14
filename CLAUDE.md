@@ -4337,6 +4337,37 @@ produção **NÃO FOI MEDIDA**.
 o seed não acompanhou aquelas vendas de checkout. Em produção quem decide é o
 `gerouCheckout` do payload, e o dev não responde por ele.
 
+> ## 🔜 ITEM ABERTO — A PROPORÇÃO REAL NÃO FOI MEDIDA, E ELA É O DEFEITO
+>
+> **Não é pendência de tela.** A tela já declara o que sabe (a etapa vale só o
+> navegador, o resto vai declarado). O que falta é saber **quanto do checkout
+> real o snippet está vendo em produção** — e isso é o Bloco B.
+>
+> ### 🔎 A MEDIÇÃO, escrita, para rodar na PRIMEIRA CONTA REAL
+>
+> ```sql
+> SELECT "checkoutSource", COUNT(*)::int
+>   FROM "Click"
+>  WHERE "userId" = $1 AND "checkoutAt" IS NOT NULL
+>  GROUP BY 1;
+> ```
+>
+> **cobertura = `navegador / (navegador + gateway)`**
+>
+> | resultado | leitura |
+> |---|---|
+> | perto de 1 | o snippet está vendo o checkout — o webhook só complementa |
+> | perto de 0 | 🔴 **só o webhook está medindo**: a instalação não detecta checkout, e o funil só parece inteiro porque a venda tapa o buraco |
+>
+> ⛔ **NÚMERO DE DEV NÃO SERVE DE RESPOSTA PARA ESTE ITEM.** O `seed-dev` insere
+> `Sale` direto, nunca passa por `ingestSale`, e escreve `checkoutSource` à mão —
+> então o que se lê ali é o carimbo do gerador, não o comportamento. Já errei
+> isso uma vez: ver o recuo na seção *FIXTURE QUE CRIA O REGISTRO FINAL DIRETO*.
+>
+> ⚠️ E leve o DENOMINADOR junto ao registrar o resultado: `"cobertura de 12%"`
+> sem dizer sobre quantos checkouts é tão pouco auditável quanto `"0 fugas"` sem
+> o número de examinados.
+
 ---
 
 # 🫥 PROMESSA QUE NÃO ASSENTA É PIOR QUE EXCEÇÃO — e `rAF` não roda em aba oculta
