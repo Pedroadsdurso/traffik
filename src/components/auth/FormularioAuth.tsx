@@ -37,6 +37,47 @@ import type { AuthFormState } from "@/app/(auth)/actions";
 
 type Modo = "login" | "signup";
 
+/**
+ * O aviso de credencial recusada.
+ *
+ * 🔴 EXTRAÍDO EM 14/08/2026, e o motivo é COBERTURA — não estética.
+ *
+ * Ele vivia inline, atrás de `estado.error`, e `estado` vem de
+ * `useActionState`. **A ação não roda no SSR**: o estado inicial é `{}`, então
+ * `renderToStaticMarkup` nunca alcançava este ramo. O `test:login` passava uma
+ * ação falsa e mesmo assim media só o formulário limpo.
+ *
+ * ⛔ O `CLAUDE.md` já registrava que este é **o único caminho que o usuário
+ * percorre quando algo dá errado**: quem acerta a senha vê a tela por dois
+ * segundos e vai embora; quem erra fica ali, lendo. Era o caminho sem
+ * asserção.
+ *
+ * ⚠️ A alternativa era uma prop `estadoInicial` que só o teste passasse — e
+ * isso é literalmente o sinal barato da família *"helper com parâmetro que
+ * ninguém mais passa"*. Um componente com consumidor de verdade não tem esse
+ * problema.
+ *
+ * `role="alert"` para o erro ser anunciado sozinho: ele aparece DEPOIS do
+ * envio, e sem isto quem usa leitor de tela só descobriria voltando ao campo.
+ */
+export function AvisoDeErro({ mensagem }: { mensagem: string }) {
+  return (
+    <p
+      role="alert"
+      className="text-danger bg-tint-danger"
+      style={{
+        margin: 0,
+        fontSize: 13,
+        borderRadius: "var(--tk-radius-controle)",
+        border: "1px solid color-mix(in oklch, var(--tk-danger) 35%, transparent)",
+        padding: "9px 11px",
+      }}
+    >
+      {mensagem}
+    </p>
+  );
+}
+
 const COPIA: Record<Modo, { titulo: string; subtitulo: string; acao: string; ocupado: string }> = {
   login: {
     titulo: "Bem-vindo de volta",
@@ -121,24 +162,7 @@ export function FormularioAuth({
 
         {modo === "login" && <LinhaDeApoio />}
 
-        {estado.error && (
-          /* `role="alert"` para o erro do servidor ser anunciado sozinho: ele
-             aparece DEPOIS do envio, e sem isto quem usa leitor de tela só
-             descobriria voltando ao campo. */
-          <p
-            role="alert"
-            className="text-danger bg-tint-danger"
-            style={{
-              margin: 0,
-              fontSize: 13,
-              borderRadius: "var(--tk-radius-controle)",
-              border: "1px solid color-mix(in oklch, var(--tk-danger) 35%, transparent)",
-              padding: "9px 11px",
-            }}
-          >
-            {estado.error}
-          </p>
-        )}
+        {estado.error && <AvisoDeErro mensagem={estado.error} />}
 
         <BotaoEnviar rotulo={copia.acao} ocupado={copia.ocupado} />
       </form>

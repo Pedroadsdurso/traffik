@@ -314,6 +314,70 @@ checar("o CTA é a variante do ANEL, não o gradiente preenchido do mockup", () 
   );
 });
 
+/* ── O CAMINHO DO FRACASSO — o único que o usuário percorre com calma ──────
+ *
+ * 🔴 Ele estava SEM ASSERÇÃO até 14/08/2026, e a razão era estrutural: o aviso
+ * vivia inline atrás de `estado.error`, e `useActionState` **não roda a ação no
+ * SSR**. O `test:login` passava `acaoFalsa` e mesmo assim media só o formulário
+ * limpo — a ação falsa dava a APARÊNCIA de exercitar o envio.
+ *
+ * ⛔ Quem acerta a senha vê a tela por dois segundos e vai embora. Quem erra
+ * fica ali, lendo. Era esse o caminho descoberto.
+ */
+{
+  const { AvisoDeErro } = await import("../src/components/auth/FormularioAuth.tsx");
+
+  checar("o erro do servidor RENDERIZA a mensagem que veio", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AvisoDeErro, { mensagem: "E-mail ou senha inválidos." }),
+    );
+    assert.ok(html.length > 30, "linha de base: o aviso não renderizou");
+    assert.ok(
+      html.includes("E-mail ou senha inválidos."),
+      "a mensagem do servidor não chegou à tela",
+    );
+  });
+
+  checar("o erro é ANUNCIADO sozinho — `role=alert`", () => {
+    const html = renderToStaticMarkup(React.createElement(AvisoDeErro, { mensagem: "x" }));
+    assert.ok(
+      html.includes('role="alert"'),
+      "sem `role=alert` quem usa leitor de tela só descobre o erro voltando ao campo",
+    );
+  });
+
+  checar("o aviso carrega o TOM de erro, não texto solto", () => {
+    const html = renderToStaticMarkup(React.createElement(AvisoDeErro, { mensagem: "x" }));
+    /* ⛔ `bg-tint-danger` + `text-danger` é o par tingido. A cor PURA sobre o
+       fundo do card dá 3,55:1 — é o par que os tokens `on-tint-*` existem para
+       não deixar voltar. */
+    assert.ok(html.includes("text-danger"), "o aviso perdeu a cor de erro");
+    assert.ok(html.includes("bg-tint-danger"), "o aviso perdeu o fundo tingido");
+  });
+
+  checar("a mensagem NÃO é inventada pelo componente", () => {
+    /* O texto vem do servidor. Um fallback aqui faria a tela afirmar uma causa
+       que o servidor não disse — e o usuário agiria sobre ela. */
+    const html = renderToStaticMarkup(React.createElement(AvisoDeErro, { mensagem: "Conta bloqueada." }));
+    assert.ok(html.includes("Conta bloqueada."), "a mensagem do servidor foi trocada");
+    assert.ok(
+      !html.includes("inválid"),
+      "o componente injetou um texto próprio por cima do que o servidor mandou",
+    );
+  });
+
+  checar("o formulário LIMPO não desenha aviso nenhum", () => {
+    /* A linha de base do PAR: sem isto, as asserções acima passariam num
+       componente que desenha o alerta sempre. */
+    const limpo = HTML.login;
+    assert.ok(limpo.length > 1000, "linha de base: a tela não renderizou");
+    assert.ok(
+      !limpo.includes('role="alert"'),
+      "o aviso de erro aparece no formulário limpo — alarme que grita sem motivo",
+    );
+  });
+}
+
 /* ── rodapé ──────────────────────────────────────────────────────────────── */
 
 console.log(`\n${falhas.length === 0 ? "\x1b[32m✓" : "\x1b[31m✗"} ${ok} asserções\x1b[0m`);

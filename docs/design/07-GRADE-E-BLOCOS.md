@@ -1261,3 +1261,57 @@ cadeado do lado de fora.
 > descartado, não publicado. **Saída plausível não é evidência de que o
 > instrumento mediu o alvo**, e um relatório de cobertura errado teria mandado a
 > próxima pessoa escrever teste para o que já tem.
+
+### 6 · A varredura das famílias — o que ela achou depois
+
+**Família nova, nomeada pelo dono: *teste que existe e nunca rodou*.**
+
+`teste-ambiente.mjs` tinha `npm run test:ambiente` e **nenhum agregado o
+invocava**. É a família do `teste-fita.mjs` (07/08/2026), agora com um segundo
+caso — e a diferença entre os dois é o que torna a família traiçoeira:
+
+| | |
+|---|---|
+| `teste-fita` | estava **podre** — 9 asserções quebradas, e a suíte verde |
+| `teste-ambiente` | estava **saudável** — 58 asserções passando |
+
+> ## Órfão podre e órfão saudável são indistinguíveis sem EXECUTAR. Não havia como saber qual era qual sem rodar os dois.
+
+⚠️ E o custo é assimétrico no tempo: o órfão saudável de hoje é o podre de
+amanhã, no primeiro commit que mudar o contrato que ele mede.
+
+**`test:agregado-completo` (6 asserções)** fecha a porta: todo `teste-*.mjs` tem
+script npm, e todo script npm é invocado por um agregado. Denominador impresso —
+**70 arquivos, 71 scripts em agregado**.
+
+✅ **Ela reprovou no estado real antes de consertar**, o que vale mais que
+plantio sintético — e o primeiro que ela pegou foi **ela mesma**, recém-criada e
+ainda sem script npm.
+
+⛔ O limite está escrito nela: prova que o arquivo é INVOCADO, não que ele mede
+alguma coisa. Um teste no agregado com zero asserções passa por ali.
+
+### 7 · O caminho do FRACASSO do Login ganhou asserção
+
+O `CLAUDE.md` registrava que o estado de erro do formulário **nunca foi
+exercido**, e propunha uma ação falsa como remédio. **A proposta não funcionava,
+e o motivo é estrutural:** `useActionState` **não roda a ação no SSR** — o
+estado inicial é `{}`, e `renderToStaticMarkup` nunca alcançava aquele ramo. O
+`test:login` já passava uma `acaoFalsa`, e isso dava a **aparência** de
+exercitar o envio.
+
+⛔ **Quem acerta a senha vê a tela por dois segundos e vai embora. Quem erra
+fica ali, lendo.** Era esse o caminho descoberto.
+
+O aviso virou `AvisoDeErro`, exportado, com consumidor de verdade.
+`test:login` foi de 22 para **27 asserções**: a mensagem do servidor chega
+inteira, `role="alert"` está lá, o par tingido não sumiu, o componente **não
+inventa texto por cima do que o servidor mandou**, e — a linha de base do par —
+o formulário limpo **não** desenha alerta nenhum.
+
+> ### ⚠️ POR QUE NÃO UMA PROP `estadoInicial`
+> Era a saída óbvia e foi **recusada**: uma prop que só o teste passa é
+> literalmente o sinal barato da família *"helper com parâmetro que ninguém mais
+> passa"* — eu estaria plantando o defeito que a varredura procura. Um
+> componente extraído tem consumidor de produção, e some do radar por ser
+> correto, não por disfarce.
