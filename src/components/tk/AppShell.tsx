@@ -165,10 +165,14 @@ export function AppShell({
    * propósito: guardar a altura em estado re-renderizaria o shell inteiro a cada
    * mudança de tamanho da janela, para mexer em dois `style`.
    */
-  const faixaRef = React.useRef<HTMLDivElement>(null);
+  /* ⛔ O NÓ EM ESTADO, ref CALLBACK — regra do cabeçalho de useTamanho.ts.
+     Com useRef o nó nunca entra nas deps, e a faixa que aparece depois do
+     primeiro effect nunca seria observada: --tk-faixa-topo ficaria no 0px e
+     todo overlay voltaria a nascer por baixo dela. */
+  const [faixaNo, setFaixaNo] = React.useState<HTMLDivElement | null>(null);
   React.useEffect(() => {
     const raiz = document.documentElement;
-    const el = faixaRef.current;
+    const el = faixaNo;
     if (!el) {
       // Produção: sem faixa, sem deslocamento. `0px` explícito em vez de apagar
       // a variável, porque apagar deixaria o fallback do primeiro quadro (26px)
@@ -182,7 +186,7 @@ export function AppShell({
     const ro = new ResizeObserver(medir);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [banco?.avisar]);
+  }, [banco?.avisar, faixaNo]);
 
   // ── Contrato da faixa de filtros ───────────────────────────────────────────
   const [temFaixa, setTemFaixa] = React.useState(false);
@@ -207,7 +211,7 @@ export function AppShell({
             pessoa estava. */}
         {banco?.avisar && (
           <div
-            ref={faixaRef}
+            ref={setFaixaNo}
             role="status"
             style={{
               position: "fixed",

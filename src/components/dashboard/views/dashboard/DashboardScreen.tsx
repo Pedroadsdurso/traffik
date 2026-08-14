@@ -251,19 +251,20 @@ function VazioMedido({
   medir: (id: string, el: HTMLElement | null) => void;
   children: React.ReactNode;
 }) {
-  const ref = React.useRef<HTMLDivElement>(null);
+  /* ⛔ O NÓ EM ESTADO, ref CALLBACK — regra do cabeçalho de useTamanho.ts. */
+  const [no, setNo] = React.useState<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
-    const el = ref.current;
+    const el = no;
     if (!el) return;
     const remedir = () => medir(id, el);
     remedir();
     const obs = new ResizeObserver(remedir);
     obs.observe(el);
     return () => obs.disconnect();
-  }, [id, medir]);
+  }, [id, medir, no]);
 
-  return <div ref={ref}>{children}</div>;
+  return <div ref={setNo}>{children}</div>;
 }
 
 /**

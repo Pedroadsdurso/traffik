@@ -4110,6 +4110,63 @@ agir sobre a medição.**
 pelo motivo que ela alega medir*. A diferença é que aqui a asserção pode falhar
 — ela só está falhando sobre outra coisa.
 
+## 📦 IMPORT NÃO CHAMADO DÁ APARÊNCIA DE COBERTURA — e o lint já sabia
+
+> **14/08/2026.** Mesma família: o instrumento não acertou o alvo. Aqui o
+> instrumento é o **arquivo de teste**, e o alvo é o que ele alega medir.
+
+`scripts/teste-desenho.mjs` importava `calcularFluxo` e `segmentosDaFita` e
+**não chamava nenhum dos dois**. A partição da fita entrou em `444ce75` (13/08)
+sem **uma única asserção** — e quem abrisse o arquivo veria os dois nomes na
+lista de imports e concluiria que a partição estava coberta.
+
+No mesmo arquivo, `geometria(entrada, oQue)` estava **definida e nunca
+chamada**: a guarda "INSTRUMENTO VAZIO" que existe para impedir asserção vazia,
+ela própria inerte.
+
+> ## Um símbolo importado e não chamado é uma AFIRMAÇÃO DE COBERTURA que nada sustenta — e ela é lida por humano, não por ferramenta.
+
+| | o que o leitor conclui |
+|---|---|
+| teste **ausente** | nada — a lacuna é visível |
+| teste com **import órfão** | 🔴 *"isto é testado"* — e o arquivo até nomeia o que ele não mede |
+
+### 🔎 A GUARDA, e ela já existia — estava sendo IGNORADA
+
+**`no-unused-vars` pega isto.** Os warnings estavam lá o tempo todo:
+
+```
+scripts/teste-desenho.mjs
+  57:10  warning  'geometria' is defined but never used
+  77:10  warning  'calcularFluxo' is defined but never used
+  77:25  warning  'segmentosDaFita' is defined but never used
+```
+
+⛔ **O achado não é o import — é que o lint saía com `0 errors, 12 warnings` e
+ninguém lia a segunda metade.** Um sinal que ninguém lê é um sinal que não
+existe, e é a mesma doença do teste que fica vermelho sozinho: ali o ruído
+envenena o alarme, aqui o alarme já toca e ninguém atende.
+
+```bash
+npx eslint . 2>&1 | grep -E "is (defined|assigned).*never used" | grep -iE "scripts/|teste-"
+```
+
+**A pergunta binária por acerto:** *este símbolo é do domínio que o arquivo diz
+testar?* Se for, a asserção que o usaria **não existe** — e a lacuna é do
+tamanho do que o nome dele promete.
+
+⚠️ E o remédio não é apagar o import: é **escrever a asserção que faltava**, ou
+mover a pergunta para onde ela é respondível. Aqui a partição virou
+`test:particao-fita` (14 asserções, contra as funções PURAS), porque no
+`renderToStaticMarkup` a geometria da fita mora atrás de `largura > 0` e não há
+layout — o import prometia uma medição que **naquele arquivo era impossível**.
+
+⚠️ Prima de *TESTE VERDE SOBRE CAMINHO MORTO* e de *AS TRÊS FORMAS DO MESMO
+SILÊNCIO*. A diferença: nas outras a suíte afirma cobertura pelo verde; nesta
+ela afirma pelo **cabeçalho de imports**, que ninguém executa.
+
+---
+
 ## 🔁 O QUINTO CASO É DE OUTRO EIXO: o alvo estava certo, o MOMENTO não
 
 > **13/08/2026, na varredura da §7.2.** Os quatro anteriores erram QUAL objeto

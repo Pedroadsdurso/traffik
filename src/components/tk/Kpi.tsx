@@ -30,33 +30,44 @@ import { Sparkline } from "./Sparkline";
 const PISO_ESCALA_NUMERO = 17 / 30;
 
 function useCouberNumero(valor: string) {
-  const ref = React.useRef<HTMLSpanElement>(null);
+  /* ⛔ O NÓ VIVE EM ESTADO, e a `ref` devolvida é CALLBACK — não troque por
+     `useRef`. É a regra do cabeçalho de `dashboard/ui/useTamanho.ts`, e este
+     hook a violava: com `useRef`, o nó nunca entra nas deps, então o effect não
+     re-roda quando ele aparece ou muda de identidade. O sintoma seria mudo — o
+     número fica na escala 1 e trunca, sem erro. */
+  const [no, setNo] = React.useState<HTMLSpanElement | null>(null);
   const [escala, setEscala] = React.useState(1);
 
   React.useLayoutEffect(() => {
-    const no = ref.current;
     if (!no) return;
-    const medir = () => {
+    /* ⚠️ O nó entra por PARÂMETRO, e não é estilo: `react-hooks/immutability`
+       recusa mutação de valor vindo de `useState()`, e a medição abaixo precisa
+       escrever `style.fontSize` para ler o corpo cheio. A regra está certa sobre
+       estado do React e é cega para o fato de um elemento do DOM ser um objeto
+       hospedeiro mutável — passar por parâmetro diz isso ao lint sem desligar
+       nada. ⛔ Não troque por um `eslint-disable`: a regra continua valendo para
+       o resto do arquivo, e um disable aqui apagaria o alarme para o próximo. */
+    const medir = (alvo: HTMLSpanElement) => {
       /* ⚠️ MEDE SEMPRE A PARTIR DO CORPO CHEIO. Sem restaurar, a segunda leitura
          mediria o texto JÁ reduzido, a razão sairia perto de 1 e a escala
          encolheria em cascata a cada resize — o número derretendo sozinho ao
          arrastar a alça. O `fontSize` inline é o que manda aqui, então é ele que
          precisa voltar ao valor cheio durante a leitura. */
-      const anterior = no.style.fontSize;
-      no.style.fontSize = "var(--tk-b-kpi, var(--tk-b-metrica, 30px))";
-      const cabe = no.clientWidth;
-      const pede = no.scrollWidth;
-      no.style.fontSize = anterior;
+      const anterior = alvo.style.fontSize;
+      alvo.style.fontSize = "var(--tk-b-kpi, var(--tk-b-metrica, 30px))";
+      const cabe = alvo.clientWidth;
+      const pede = alvo.scrollWidth;
+      alvo.style.fontSize = anterior;
       if (pede <= 0 || cabe <= 0) return;
       setEscala(pede <= cabe ? 1 : Math.max(PISO_ESCALA_NUMERO, cabe / pede));
     };
-    medir();
-    const ro = new ResizeObserver(medir);
+    medir(no);
+    const ro = new ResizeObserver(() => medir(no));
     ro.observe(no);
     return () => ro.disconnect();
-  }, [valor]);
+  }, [no, valor]);
 
-  return { ref, escala };
+  return { ref: setNo, escala };
 }
 
 /**
