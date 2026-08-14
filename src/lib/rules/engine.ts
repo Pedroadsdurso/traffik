@@ -107,7 +107,16 @@ function num(v: unknown): number {
  * O contrato é o do `div()` de `lib/ads/metrics.ts`, que é a fonte única desta
  * base para razão com denominador zero.
  */
-function metricValue(m: EntityMetrics, key: RuleCondition["metrica"]): number | null {
+/**
+ * ⚠️ EXPORTADA EM 14/08/2026 PARA SER TESTAVEL — nada mais mudou.
+ *
+ * `evaluateRule` e `runUserRules` sao async e tocam o prisma; o nucleo de
+ * DECISAO desta funcao (e de `conditionsMet`/`planejarAcao`) e puro, e era
+ * inalcancavel por teste so por ser privado do modulo. Este arquivo e
+ * CONGELADO (anterior a 4e6aa9e): a exportacao e um MOVE de visibilidade, sem
+ * uma linha de comportamento alterada.
+ */
+export function metricValue(m: EntityMetrics, key: RuleCondition["metrica"]): number | null {
   switch (key) {
     case "gasto":
       return m.spend;
@@ -134,7 +143,8 @@ function metricValue(m: EntityMetrics, key: RuleCondition["metrica"]): number | 
  * dispara**, em vez de virar igualdade por acidente: numa regra que pausa
  * campanha, errar para o lado de não agir é o único lado seguro.
  */
-function conditionsMet(conds: RuleCondition[], m: EntityMetrics): boolean {
+/** ⚠️ Exportada para teste em 14/08/2026 — ver a nota em `metricValue`. */
+export function conditionsMet(conds: RuleCondition[], m: EntityMetrics): boolean {
   if (!conds.length) return false;
   return conds.every((c) => {
     const actual = metricValue(m, c.metrica);
@@ -427,7 +437,8 @@ type PlanoDeAcao =
   | { agir: true; novoOrcamento?: number }
   | { agir: false; motivo: string; ok: boolean };
 
-function planejarAcao(rule: RuleRow, e: EntidadeAlvo): PlanoDeAcao {
+/** ⚠️ Exportada para teste em 14/08/2026 — ver a nota em `metricValue`. */
+export function planejarAcao(rule: RuleRow, e: EntidadeAlvo): PlanoDeAcao {
   if (!e.token) return { agir: false, motivo: "Sem token do perfil.", ok: false };
 
   if (rule.action === "PAUSAR") {

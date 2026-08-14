@@ -1376,3 +1376,63 @@ não podia falhar — o defeito que este arquivo existe para não cometer.
 
 **Ficam na fila, por ordem de consequência:** `evaluateRule`/`runUserRules`,
 `agruparPorPedido`, os três de fuso, `secretsMatch`, `getImpostoAnunciosPct`.
+
+### 9 · As 10 restantes das 12 — 8 cobertas, 1 fora da lista, 1 sem caminho puro
+
+| função | estado |
+|---|---|
+| `metricValue` · `conditionsMet` · `planejarAcao` | ✅ `test:motor-regras` (45) |
+| `secretsMatch` | ✅ `test:nucleo-critico` |
+| `zonedToUtc` · `dayStart` · `dayEnd` | ✅ `test:nucleo-critico` |
+| `agruparPorPedido` | ✅ `test:nucleo-critico` |
+| `getImpostoAnunciosPct` | ⛔ **sai da lista** — é `async` e lê do banco |
+| `evaluateRule` · `runUserRules` | ⚠️ **sem caminho puro** — o núcleo de decisão delas está coberto |
+
+#### O motor de regras — e a exportação num arquivo CONGELADO
+
+`evaluateRule`/`runUserRules` são `async` e tocam o prisma. O que **decide** é
+puro e era inalcançável só por ser privado do módulo. `rules/engine.ts` é
+anterior a `4e6aa9e`, então a mudança foi a mínima possível: **três `export`, e
+nada mais** — conferido por `git diff`, que mostra só as três linhas.
+
+⚠️ E importar o módulo ainda lançava (o prisma é importado no topo, o mesmo
+bloqueio do `escopoDeConfig`). Resolvido **sem tocar no arquivo**: o teste define
+uma `DATABASE_URL` obviamente falsa em `localhost`, e a construção do cliente é
+preguiçosa. ⛔ Se algum caminho tentar conectar, falha ALTO — e falhar alto é o
+que se quer, porque significaria que a função não era pura.
+
+**Três plantios, todos consertos plausíveis:**
+
+| plantio | o que ele faz |
+|---|---|
+| **A** — `null → 0` | *"o CPA está vindo null, vou tratar como zero"*. Com ele, `CPA < 20` **dispara sem conversão nenhuma** e escala o orçamento |
+| **B** — operador invertido | `PAUSAR se ROAS < 1` passa a **pausar a campanha BOA** (ROAS 4) |
+| **C** — teto sem fail-closed | *"se não tem teto, deixa aumentar"*. Medido: **100 → 248,83 em 5 execuções** |
+
+✅ E o par negativo de A é o que mais informa: com `>` o colapso erra para o
+lado SEGURO — **é por isso que o defeito era mudo**, e só o `<` gastava dinheiro.
+
+#### `secretsMatch` — a asserção tem de ser ESTRUTURAL
+
+⛔ Medido: a comparação curto-circuitada devolve **o mesmo booleano em todos os
+5 casos** testados. **Nenhuma asserção de valor a distinguiria** da versão em
+tempo constante — e medir tempo num teste mediria a máquina, não o código.
+
+Então o que se congela é o **uso de `timingSafeEqual`** e a ausência de `===`
+entre os segredos. É uma guarda de texto, e o limite está escrito nela.
+
+#### Fuso — a asserção não pode depender da máquina
+
+O plantio "dia do processo" divergiu **0h** aqui, porque **esta máquina está em
+São Paulo** — que é exatamente por que o defeito é mudo em dev e aparece só na
+Vercel (`TZ=UTC`). A divergência ficou como **linha impressa**, não asserção.
+
+✅ O que virou asserção é a propriedade independente de máquina: `dayStart`
+**respeita o `tz`** — UTC e SP dão instantes separados por 3h. Uma implementação
+que ignorasse o parâmetro daria 0.
+
+> ### ⚠️ E A TRIAGEM ERROU DUAS VEZES — as duas registradas
+> `evaluateRule` e os de fuso foram parar no balde **"outros"** pelo
+> classificador automático; `getImpostoAnunciosPct` entrou nas "puras" sendo
+> `async` com acesso a banco. **Um instrumento de triagem também erra o alvo**, e
+> o número dele não vale mais que a conferência função a função.
