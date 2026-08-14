@@ -1484,3 +1484,48 @@ para três pares diferentes. É a regra do **último separador** que garante iss
 que não existe em `FORCA_MATCH`). Corrigida lendo os mapas reais — e virou
 asserção o **empate deliberado** entre `payload` e `ip` (ambos 4), para ele não
 ser "consertado" sem alguém decidir qual ganha.
+
+### 11 · `donoDoEvento` / `traffikEnvia` — a partição que impede a contagem dobrada
+
+**`test:donos-evento`, 39 asserções, 5 eventos × 4 donos.**
+
+O defeito que esta partição impede é **mudo por natureza**: a Meta só junta dois
+envios do mesmo evento quando trazem o mesmo `event_id`, e com o gateway isso é
+impossível — o `eid` dele é um UUID do navegador dele, ausente de todo campo do
+webhook (verificado em 167 payloads). **Medido em produção em 31/07/2026: 1
+venda real, o Gerenciador marcando 2.**
+
+⛔ O custo não é número feio: é a Meta **otimizando contra dado inflado**. Ela
+mira o público que "converte o dobro", e o dinheiro vai atrás de um fantasma.
+
+**A propriedade congelada não é a identidade do dono — é a PARTIÇÃO:** para cada
+um dos 5 eventos, `traffikEnvia` é verdadeiro para **exatamente um** dos 4
+estados. Se dois enviassem, a duplicata voltaria.
+
+**Dois plantios, os dois consertos plausíveis:**
+
+| | |
+|---|---|
+| **A** aceitar qualquer string como dono | um typo (`traffick`) vira dono válido, e o `Purchase` **para de ir à Meta** em silêncio |
+| **B** `traffikEnvia` como *"o dono não é o gateway"* | parece equivalente e faz `navegador`/`ninguem` **enviarem** |
+
+✅ **O par negativo de B é o achado:** nos dois estados que alguém testaria à mão
+(`traffik` e `gateway`) as duas versões **concordam**. Elas divergem exatamente
+em `navegador` e `ninguem` — e no `PageView`, cujo padrão é `navegador`, o
+plantio **traz a duplicata de volta**.
+
+> ### 🔴 ACHADO NÃO CORRIGIDO: dado corrompido RELIGA o envio
+>
+> Medido: com `eventOwners` corrompido de cinco formas plausíveis (valor
+> numérico, objeto, chave em minúscula, dono com espaço, dono em maiúscula),
+> `donoDoEvento` cai no PADRÃO — que para o `Purchase` é **`traffik`**.
+>
+> ⛔ Ou seja: **uma corrupção do JSON gravado religa o envio de um evento que o
+> usuário desligou**, e a contagem dobrada volta sem nada acusar. Cair no padrão
+> é razoável para um mapa ausente; para um mapa PRESENTE e ilegível, é
+> desfazer uma escolha explícita.
+>
+> ⚠️ **Registrado, não corrigido** — mudar isso é decisão de produto (falhar
+> fechado significaria parar de enviar quando o dado está ruim, e isso apaga
+> conversão real). As asserções congelam o comportamento de hoje para a decisão
+> ficar visível.
