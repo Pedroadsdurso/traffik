@@ -4427,6 +4427,81 @@ o seed não acompanhou aquelas vendas de checkout. Em produção quem decide é 
 
 ---
 
+# 🪟 A VISIBILIDADE DA JANELA NÃO É ALCANÇÁVEL DE DENTRO DO NAVEGADOR — SEIS caminhos, todos falharam
+
+> **14/08/2026.** Registrado por ordem do dono, depois de a última tentativa
+> (lançar o Chrome pelo SO) também falhar. **Pare de tentar em sessão nova sem
+> ler isto** — a lista existe para ninguém regastar as seis.
+
+`requestAnimationFrame` não dispara em aba oculta, e `document.hidden` fica
+`true` em **três** situações distintas: janela minimizada, janela totalmente
+ocluída (o *occlusion tracking* do Windows), e aba em segundo plano dentro de
+uma janela visível.
+
+> ## Nada que se alcance de dentro do navegador levanta uma janela no nível do SISTEMA OPERACIONAL. O CDP dirige a PÁGINA; ele não dirige o gerenciador de janelas.
+
+### 🔎 OS SEIS CAMINHOS, e o que cada um mediu
+
+| # | caminho | desfecho |
+|---|---|---|
+| 1 | esperar visibilidade em laço (4s · 6s · 8s) | oculta o tempo todo |
+| 2 | **clique sintético do CDP** em ponto inerte | o clique acontece na página; a janela **não sobe** |
+| 3 | **screenshot** (hipótese: ele ativa a aba) | hipótese **refutada**; depois passou a dar *timeout* |
+| 4 | **aba nova** no grupo existente (`tabs_create_mcp`) | nasce `hidden` |
+| 5 | fechar o grupo e forçar **janela nova** (`tabs_context_mcp{createIfEmpty}`) | nasce `hidden` |
+| 6 | 🆕 **lançar `chrome.exe` pelo SO** com `--new-window --window-position=0,0 --window-size=1280,900` | o Chrome veio para frente, e a janela do MCP **continuou oculta** — `innerWidth` seguiu **2560**, ou seja o MCP vive em OUTRA janela, não na lançada |
+
+⛔ **O 6 é o que fecha a família.** Ele é o único que age fora do navegador, e
+ainda assim não resolve: o processo do Chrome ganha foreground, mas **qual
+janela sobe não é escolha de quem lançou**, e o grupo do MCP é criado noutra.
+
+### ✅ O QUE FUNCIONA COM A ABA OCULTA — e é mais do que parece
+
+Esta é a metade útil, e ela evita sessão perdida:
+
+| | |
+|---|---|
+| ✅ ler o DOM, `getComputedStyle`, `getBoundingClientRect` | funciona |
+| ✅ **clicar** (trocar período, abrir menu, marcar caixa) | funciona |
+| ✅ injetar instrumento, armar `visibilitychange`, `setInterval` | funciona |
+| ⛔ **`requestAnimationFrame`** | não dispara |
+| ⛔ **`setTimeout` longo** | estrangulado a ~1/minuto depois de 5 min de aba oculta |
+| ⛔ screenshot | *timeout* |
+
+**Então prepare tudo com a aba oculta e deixe ARMADO.** Foi o que se fez: a aba
+fica no estado certo (período aplicado, `modoEdicao: false`, 28/28 com gancho) e
+a varredura dispara sozinha no `visibilitychange`.
+
+⛔ **Não gaste a sessão tentando levantar a janela.** Gaste-a preparando o
+estado e escrevendo o que não depende de pintura.
+
+> ### ⚠️ E O `Runtime.evaluate` CONGELA COM `await` EM ABA OCULTA
+> Já estava escrito que ele é síncrono; o que faltava era a CAUSA. Com a aba
+> oculta o `setTimeout` é estrangulado, então um `await new Promise(r =>
+> setTimeout(r, 1200))` dentro do `evaluate` leva até **60s** e estoura o
+> *timeout* de 45s. Aconteceu de novo em 14/08.
+>
+> **Em aba possivelmente oculta, use script SÍNCRONO.** O ida-e-volta entre duas
+> chamadas dá o tempo que o `await` daria.
+
+### 🔬 O par que DISTINGUE as três causas — e ele economiza a investigação
+
+```js
+({ hidden: document.hidden, hasFocus: document.hasFocus() })
+```
+
+| `hidden` | `hasFocus` | leitura |
+|---|---|---|
+| `true` | **`true`** | janela **minimizada ou totalmente ocluída** — o documento tem foco e não é composto |
+| `true` | `false` | janela em segundo plano, **ou** aba em segundo plano dentro dela |
+| `false` | `false` | ✅ visível sem foco — **dá para medir**, com `rAF` estrangulado (medido: 22 fps) |
+| `false` | `true` | ✅ visível e focada (medido: 165 fps) |
+
+⚠️ **`hasFocus: true` com `hidden: true` foi o que nomeou o bloqueio** desta
+sessão. Sem esse par, "oculta" é um diagnóstico que não diz o que fazer.
+
+---
+
 # 🫥 PROMESSA QUE NÃO ASSENTA É PIOR QUE EXCEÇÃO — e `rAF` não roda em aba oculta
 
 > **Medido em 13/08/2026**, ao tentar rodar o `naTela` nas quatro larguras.
