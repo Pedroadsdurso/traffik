@@ -23,7 +23,50 @@
  *   npm run test:desenho
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import React from "react";
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   🔬 GUARDA GENÉRICA DE INSTRUMENTO — asserção sobre GEOMETRIA prova primeiro
+   que LEU geometria.
+
+   ## O padrão que ela fecha, e ele já mordeu três vezes nesta base
+
+   | caso | o proxy medido | por que ficou verde |
+   |---|---|---|
+   | `test:contraste` | pares de token no `globals.css` | não vê `opacity`, então a cor pintada nunca entrou na conta |
+   | `naTela` no jsdom | `scrollWidth`/`clientWidth` | jsdom não tem motor de layout e devolve `0`; `0 ≤ 0` passa |
+   | a asserção da fita | o `d=` dos `<path>` do markup | a fita esconde geometria atrás de `largura > 0`, e no servidor não há layout: **0 caminhos**, `"" === ""` |
+
+   Nos três o instrumento mede um PROXY, o verde vira atestado, e o defeito real
+   fica coberto. Não é falta de atenção: é que a saída de "medi e está certo" é
+   idêntica à de "não consegui medir".
+
+   ⛔ A saída NÃO é escrever asserções melhores uma a uma — é a extração ficar
+   impossível de usar sem a prova. Por isso `geometria()` **lança** quando a
+   entrada é vazia, com o nome do que faltou. Ela não devolve `[]` para o
+   chamador comparar: `[]` compara igual a `[]`, que é exatamente o buraco.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* 🪦 `geometria(entrada, oQue)` VIVEU AQUI e foi REMOVIDA em 14/08/2026.
+ *
+ * Ela era a guarda "INSTRUMENTO VAZIO" para a asserção de geometria da FITA — e
+ * essa asserção **não pode existir neste arquivo**, pelo motivo que a tabela
+ * acima já registra: a fita esconde a geometria atrás de `largura > 0`, e no
+ * `renderToStaticMarkup` não há layout. A guarda ficou definida e **nunca
+ * chamada**, o que é proteção morta: quem lesse o arquivo veria uma guarda de
+ * instrumento vazio e concluiria que a geometria da fita estava coberta.
+ *
+ * ⛔ Não a reintroduza "para usar nas outras". As asserções de Donut, Sparkline
+ * e Medidor já carregam a própria linha de base (`assert.ok(area, …)`,
+ * `assert.ok(linha, …)`) e comparam contra número diferente de zero — nenhuma
+ * delas passa com markup vazio.
+ *
+ * ✅ A partição da fita — o que os imports `calcularFluxo`/`segmentosDaFita`
+ * anunciavam e nunca mediram — é asserida em `scripts/teste-particao-fita.mjs`,
+ * contra as funções PURAS, que é onde ela de fato vive.
+ */
+
 import { renderToStaticMarkup } from "react-dom/server";
 import { interpolarNaoMedidas } from "@/components/tk/FitaFunil";
 import { ehBuracoImpossivel } from "@/components/dashboard/catalogoRender";
@@ -377,11 +420,56 @@ const COM_COBERTURA = (fracao, extra = {}) => ({
   cobertura: { fracao, pct: "32,8%", perdidos: "820 cliques perdidos", ...extra },
 });
 
+/* 🔴 O RÓTULO DIZ "DA META", e a palavra é a informação — não é enfeite.
+   A razão tem `DailyAdMetric.clicks` no denominador, que só cobre a Meta. Um
+   rótulo que diga só "dos cliques" faz o número parecer cobrir o tráfego
+   inteiro, e ele cobre o pedaço que tem denominador. Ancorar aqui é o que
+   impede a palavra de cair fora num "ajuste de microcópia". */
+const ROTULO_COBERTURA = "dos cliques da Meta rastreados";
+
 checar("a cobertura renderiza o número E o que se perdeu", () => {
   const html = renderToStaticMarkup(React.createElement(FitaFunil, COM_COBERTURA(0.328)));
   assert.ok(html.includes("32,8%"), "a porcentagem de cobertura não saiu");
   assert.ok(html.includes("820 cliques perdidos"), "o número de perdidos não saiu");
-  assert.ok(html.includes("dos cliques rastreados"), "o rótulo do que o número significa não saiu");
+  assert.ok(html.includes(ROTULO_COBERTURA), "o rótulo do que o número significa não saiu");
+});
+
+checar("a cobertura declara as OUTRAS ORIGENS em contagem, e sem percentual", () => {
+  /* 🔴 A razão e a contagem são grandezas DIFERENTES, de propósito. Estas
+     sessões não têm denominador nesta base — não existe "cliques do Google" —,
+     então um percentual sobre elas seria inventado.
+
+     ⚠️ A asserção é DIFERENCIAL: o mesmo fixture nos dois estados, e o que se
+     mede é o que o estado tem PERMISSÃO de acrescentar. Um `includes` literal
+     passaria também se alguém trocasse a contagem por um percentual. */
+  const semOutras = renderToStaticMarkup(React.createElement(FitaFunil, COM_COBERTURA(0.328)));
+  const comOutras = renderToStaticMarkup(
+    React.createElement(FitaFunil, COM_COBERTURA(0.328, { outrasOrigens: "20 sessões de outras origens" })),
+  );
+  /* Linha de base: sem ela, "não achei percentual" passaria com markup vazio. */
+  assert.ok(semOutras.length > 1000, "linha de base: a fita não renderizou");
+  assert.ok(!semOutras.includes("outras origens"), "a linha apareceu sem ninguém pedir");
+  assert.ok(comOutras.includes("20 sessões de outras origens"), "a contagem não saiu");
+  /* O estado só pode ACRESCENTAR contagem — nunca uma segunda porcentagem. */
+  const pcts = (h) => (h.match(/\d+,\d%/g) ?? []).length;
+  assert.equal(
+    pcts(comOutras),
+    pcts(semOutras),
+    "as outras origens acrescentaram uma PORCENTAGEM — elas não têm denominador",
+  );
+});
+
+checar("a JANELA só é declarada quando as duas pontas não se cobrem", () => {
+  /* ⚠️ Declarar sempre viraria ruído que se aprende a ignorar, e aí a linha não
+     denunciaria o dia em que a divergência importasse. O par positivo/negativo
+     é o que prova que ela é condicional em vez de decorativa. */
+  const sem = renderToStaticMarkup(React.createElement(FitaFunil, COM_COBERTURA(0.328)));
+  const com = renderToStaticMarkup(
+    React.createElement(FitaFunil, COM_COBERTURA(0.328, { janela: "cliques 30/07–12/08 · sessões 04/08–07/08" })),
+  );
+  assert.ok(sem.length > 1000, "linha de base: a fita não renderizou");
+  assert.ok(!sem.includes("cliques 30/07"), "a janela saiu sem haver desencontro");
+  assert.ok(com.includes("cliques 30/07–12/08 · sessões 04/08–07/08"), "a janela não saiu");
 });
 
 checar("abaixo do limiar a cobertura ganha COR DE ATENÇÃO", () => {
@@ -414,7 +502,13 @@ checar("sem a prop de cobertura, nada de cobertura é desenhado", () => {
   const html = renderToStaticMarkup(
     React.createElement(FitaFunil, { etapas: ETAPAS_FALSAS }),
   );
-  assert.ok(!html.includes("dos cliques rastreados"), "a faixa de cobertura saiu sem ninguém pedir");
+  /* ⚠️ LINHA DE BASE antes da negação. Sem ela, esta asserção passaria com
+     markup vazio — e passaria também se alguém trocasse o texto do rótulo, que
+     é exatamente o que acabou de acontecer: a âncora era `"dos cliques
+     rastreados"` e o rótulo virou `"dos cliques da Meta rastreados"`. A
+     negativa continuou verde afirmando o contrário do que mede. */
+  assert.ok(html.length > 1000, "linha de base: a fita não renderizou");
+  assert.ok(!html.includes(ROTULO_COBERTURA), "a faixa de cobertura saiu sem ninguém pedir");
 });
 
 checar("a pílula de perda mostra só o NÚMERO — não há mais rótulo de perda", () => {
@@ -480,7 +574,151 @@ checar("etapa não medida com valor POSITIVO não é interpolada", () => {
   assert.deepEqual(interpolarNaoMedidas(etapas), [100, 40, 40]);
 });
 
+/* ⚠️ TUDO QUE VIER DEPOIS DO `process.exit` LÁ EMBAIXO NÃO EXECUTA, e o total
+   no rodapé sobe do mesmo jeito. Asserção nova entra ACIMA dele. */
 
+checar("razão ACIMA DE 1 não é impressa como taxa — ela nomeia a causa", () => {
+  /* 🔴 Uma taxa de conversão pressupõe numerador SUBCONJUNTO do denominador.
+     Quando ela passa de 100% a premissa quebrou, e o número não tem intervalo
+     válido — imprimir "150,0%" ali afirma que mais gente comprou do que chegou.
+
+     O caso medido no dev em 13/08/2026: `ICs` sai da tabela `Click` (nosso
+     script) e `Vendas Inic.` sai do gateway. 57 contra 38 = 150%. */
+  const crescente = renderToStaticMarkup(
+    React.createElement(FitaFunil, {
+      etapas: [
+        { label: "ICs", valor: 38, valorFmt: "38", fonte: "Nosso script" },
+        { label: "Vendas Inic.", valor: 57, valorFmt: "57", fonte: "Gateway" },
+      ],
+    }),
+  );
+  assert.ok(crescente.length > 1000, "linha de base: a fita não renderizou");
+  assert.ok(crescente.includes("fontes diferentes"), "a guarda não nomeou a causa");
+  assert.ok(!crescente.includes("150,0%"), "a razão acima de 1 foi impressa como taxa");
+
+  /* O LADO NEGATIVO, e sem ele a guarda passaria tingindo tudo: uma razão que
+     cabe em [0,1] continua sendo taxa, e continua sendo impressa como taxa. */
+  const normal = renderToStaticMarkup(
+    React.createElement(FitaFunil, {
+      etapas: [
+        { label: "Sessões", valor: 57, valorFmt: "57", fonte: "Nosso script" },
+        { label: "ICs", valor: 38, valorFmt: "38", fonte: "Nosso script" },
+      ],
+    }),
+  );
+  assert.ok(normal.includes("66,7%"), "a taxa legítima deixou de ser impressa");
+  assert.ok(!normal.includes("fontes diferentes"), "a guarda disparou sobre uma taxa válida");
+});
+
+checar("as três parcelas do nó de ICs moram em UMA linha, e ela FECHA o total", () => {
+  /* 🔴 A regressão que esta asserção impede é a de 13/08/2026, e ela nasceu de
+     uma correção: com o nó valendo 14 (só o navegador), os 35 "sem jornada"
+     deixaram de ser complemento do número exibido — viraram complemento de um
+     38 que não está escrito em lugar nenhum. Com a pílula acima, a linha
+     embaixo e o número no meio, o nó tinha TRÊS ancoragens e o leitor precisava
+     compor 14 + 24 + 35 sozinho.
+
+     ⛔ Por isso a asserção é sobre a ARITMÉTICA do texto, não sobre a presença
+     das palavras: um texto que liste as três parcelas e não feche a conta
+     passaria num `includes`. */
+  const composicao = "14 vistos no navegador · 24 derivados da venda · 35 sem jornada = 73 checkouts";
+  const html = renderToStaticMarkup(
+    React.createElement(FitaFunil, {
+      etapas: [
+        { label: "Sessões", valor: 57, valorFmt: "57" },
+        { label: "ICs", valor: 14, valorFmt: "14", composicao, mede: "deteccao" },
+      ],
+    }),
+  );
+  assert.ok(html.length > 1000, "linha de base: a fita não renderizou");
+
+  /* 1 · UMA ancoragem: a pílula de entrada lateral não existe mais. */
+  assert.ok(!html.includes("sem jornada</"), "a pílula voltou — o nó tem duas ancoragens de novo");
+
+  /* 2 · A linha fecha a conta, e os números batem. */
+  assert.ok(html.includes(composicao), "a composição não saiu inteira");
+  const nums = [...composicao.matchAll(/(\d+) (?:vistos|derivados|sem)/g)].map((m) => +m[1]);
+  const total = +composicao.match(/= (\d+) checkouts/)[1];
+  assert.ok(nums.length === 3, "linha de base: a composição não tem três parcelas");
+  assert.equal(
+    nums.reduce((a, b) => a + b, 0),
+    total,
+    "a composição NÃO fecha: as parcelas não somam o total declarado",
+  );
+});
+
+checar("a queda até uma etapa de DETECÇÃO não é rotulada como perda", () => {
+  /* 🔴 Das 43 sessões que não chegaram aos ICs, 24 fizeram checkout — o snippet
+     é que não viu. `−43` afirma que 43 pessoas deixaram o funil, e manda o
+     gestor otimizar a oferta quando o problema e a instalação. Mesmo erro de
+     categoria que tirou `Cliques` da fita, um nível abaixo. */
+  const par = (mede) =>
+    renderToStaticMarkup(
+      React.createElement(FitaFunil, {
+        etapas: [
+          { label: "Sessões", valor: 57, valorFmt: "57" },
+          { label: "ICs", valor: 14, valorFmt: "14", ...(mede ? { mede } : {}) },
+        ],
+      }),
+    );
+  const deteccao = par("deteccao");
+  const comportamento = par(null);
+
+  assert.ok(deteccao.length > 1000, "linha de base: a fita não renderizou");
+  /* A linha de base do PAR: sem `mede`, a pílula continua sendo perda com menos. */
+  assert.ok(comportamento.includes("−43"), "linha de base: a pílula de perda sumiu do caso comum");
+  assert.ok(!comportamento.includes("não detectados"), "o rótulo de detecção vazou para o caso comum");
+
+  /* E com `mede: deteccao`, some o menos e entra a palavra certa. */
+  assert.ok(deteccao.includes("não detectados"), "a queda de detecção não foi rotulada");
+  assert.ok(!deteccao.includes("−43"), "o sinal de menos sobreviveu — ele afirma saída do funil");
+});
+
+checar("a etapa da fita NÃO soma a entrada lateral antes de chegar ao componente", () => {
+  /* 🔴 SÃO DUAS REGRESSÕES DIFERENTES, e a asserção acima só pega uma.
+     Ela prova que a `FitaFunil` não dobra a entrada lateral na espessura. Mas o
+     caminho histórico do defeito é OUTRO: a soma vivia rio acima, e a fita
+     recebia o total já somado. Medido: plantando
+     `valor: e.value + (e.entradaLateral ?? 0)` no `catalogoRender`, a suíte
+     inteira seguiu VERDE — porque a fixture do teste monta as etapas à mão e
+     nunca passa por `ETAPAS_PARA_FITA`.
+
+     ⚠️ Por isso esta guarda lê a FONTE. A costura é o `valor:` do
+     `ETAPAS_PARA_FITA`, e o que ela proíbe é ele mencionar a entrada lateral. */
+  const bruto = readFileSync(
+    new URL("../src/components/dashboard/catalogoRender.tsx", import.meta.url),
+    "utf8",
+    /* ⚠️ 402 arquivos desta base estão em CRLF, e âncora com `\n` falha em
+       silêncio neles — devolve "não achei" com a cara de "está tudo certo". */
+  ).replace(/\r\n/g, "\n");
+
+  /* ⛔ APAGA COMENTÁRIO ANTES DE MEDIR. Sexta ocorrência da família nesta base:
+     o arquivo explica a entrada lateral em prosa, e a prosa contém o nome do
+     campo justamente por estar explicando. Preserva a quebra de linha para o
+     número reportado continuar sendo o do arquivo. */
+  const codigo = bruto
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+    .replace(/\/\/[^\n]*/g, "");
+
+  const linhasValor = codigo
+    .split("\n")
+    .map((l, i) => [i + 1, l])
+    .filter(([, l]) => /^\s*valor:/.test(l));
+
+  /* LINHA DE BASE: sem ela, "nenhuma linha ofensora" passaria também com a
+     âncora quebrada — e âncora quebrada e código correto dão o mesmo verde. */
+  assert.ok(
+    linhasValor.length > 0,
+    "linha de base: nenhuma linha `valor:` no catalogoRender — a âncora quebrou",
+  );
+
+  const ofensoras = linhasValor.filter(([, l]) => /entradaLateral/.test(l));
+  assert.deepEqual(
+    ofensoras,
+    [],
+    "a entrada lateral foi somada ao valor da etapa antes de chegar à fita",
+  );
+});
 
 console.log(
   falhas.length

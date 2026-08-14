@@ -19,6 +19,20 @@ Queixas medidas na tela em 12/08, na versão que está em produção:
 
 As seis têm **duas** causas, não seis.
 
+> ### ✅ AS SEIS ESTÃO ZERADAS — 13/08/2026, com a F4 fechada
+>
+> | # | queixa | quem fechou | conferido |
+> |---|---|---|---|
+> | 1 | 11 métricas para 8 vagas | **F5** — um catálogo só, sem teto (31 blocos) | 12 métricas na tela, nenhuma vaga reservada |
+> | 2 | não dá para diminuir bloco | **F1** — `w × h` em células, alça nos dois eixos | slot de 176px medido, alça em 12 colunas |
+> | 3 | conteúdo reposiciona, não escala | **F3** + **F2** | 0 vazamentos a 1280 e 2260; deriva 12→8→4→1 |
+> | 4 | Vendas por país muda ao alternar | **F1** — a altura é do slot, não do conteúdo | §7.1 |
+> | 5 | vazio dentro do card e buraco entre eles | **F3** + **C6** | vão com `+N` = 0; vão sem `+N` é altura escolhida |
+> | 6 | os gráficos parecem amadores | **F4** (C1–C8) | eixo Y nos quatro gráficos, rótulos inteiros, número que não trunca |
+>
+> ⚠️ **O que NÃO está fechado:** a §7.2 (varredura de vazio em 5×3 faixas) e a
+> §7.6 continuam na **F6**. E o shell em viewport estreito é frente própria.
+
 ---
 
 ## 2. Diagnóstico
@@ -79,18 +93,69 @@ Se a altura do card é função do que está dentro, então:
 
 Defeitos visíveis nos prints, um a um:
 
-| # | onde | o que está errado |
-|---|---|---|
-| C1 | card ROAS | a série vira **fragmentos soltos**: buracos na série desenhados como segmentos órfãos de ~8px. Observação isolada deve virar **ponto**, não traço |
-| C2 | Vendas por dia | rótulos do eixo x cortados (`07-1`, `08-`) — o eixo não reduz a densidade de ticks quando falta largura |
-| C3 | Lucro por horário | barras sem eixo Y, sem rótulo de valor e sem linha de zero declarada; lê como erro de renderização |
-| C4 | Vendas por posicionamento e Formas de pagamento | a barra atrás do texto não está ancorada no maior valor da lista e sobra retângulo fora da coluna |
-| C5 | Taxa de aprovação | três medidores radiais em tamanho fixo, um deles com `0 de 1`, ocupando 400px de altura |
-| C6 | Produtos, Vendas por país, Alertas | 180–400px de vazio contínuo dentro do card |
-| C7 | modo de edição | títulos truncados (`Vendas ...`, `Faturam...`, `Ticket ...`) porque o chip tem largura fixa |
-| C8 | Vendas por horário | barras de largura fixa: com 24 buckets viram fios; com 6, tarjas |
+> ### 🔴🔴 ESTA LISTA É INFERÊNCIA LIDA DE SCREENSHOT — E 4 DOS 8 NÃO REPRODUZEM
+>
+> **Medido bloco a bloco em 13/08/2026, na tela, antes de consertar qualquer um.**
+> A coluna *"o que está errado"* abaixo foi escrita em 12/08 olhando prints, sem
+> medir o componente. O resultado:
+>
+> | | |
+> |---|---|
+> | descreviam conserto **que já existia** | C1 (desde `db98cf2`, 06/08) |
+> | **RISCADOS** — consertados por outra fase, com o commit citado | C4 · C8 |
+> | **parcialmente** certos | C3 (o eixo Y faltava; a linha de zero EXISTIA) · C7 |
+> | certos, com o NÚMERO errado | C6 (121px, não "180–400") |
+>
+> ⛔ **Nenhuma prescrição desta lista entra em código sem reprodução na tela
+> antes.** Foi por isso que o C1 quase virou um conserto do que já estava
+> consertado — a segunda vez nesta fase que uma prescrição descreveu o passado.
+>
+> ### 🔴🔴 E EU RISQUEI O C2 ERRADO — a lição é sobre o INSTRUMENTO, não sobre a lista
+>
+> Na primeira passada eu dei o C2 como *"não reproduz"* e quase o apaguei. **Ele
+> era real.** A medição tinha pegado o `LineChart` (o `receita-gasto`), que usa
+> `dd/MM` e reduz ticks corretamente — e o C2 vive no `SerieTemporal`, cujos
+> rótulos `07-15`/`08-04` são **literalmente** o `07-1`/`08-` que a lista
+> descreve.
+>
+> ⚠️ **Riscar é tão perigoso quanto acumular.** A lista que só cresce vira a
+> família das 17 linhas; a lista riscada por medição do elemento errado APAGA um
+> defeito real e o deixa em produção com atestado de saúde. As duas falham pela
+> mesma porta: **medir sem confirmar QUAL elemento se mediu.**
+>
+> 🔎 O sinal barato, e ele custa uma linha: antes de concluir, imprima o que a
+> medição pegou — largura, classe, texto. Foi `larguraCard: 1432` num bloco que
+> mede 369 que deveria ter me parado, e não parou.
 
-Nenhum deles é questão de gosto. São todos "o desenho não sabe o tamanho que tem".
+| # | onde | o que estava escrito | 🔬 medido em 13/08 |
+|---|---|---|---|
+| C1 | card ROAS | série vira fragmentos órfãos de ~8px; isolado deve virar ponto | 🔴 **prescrição errada.** O `<circle>` existe desde `db98cf2` (06/08) e a série do ROAS tem **zero buracos**. O defeito real era outro — sparkline a 0,1px pintando um sublinhado. ✅ **corrigido** |
+| C2 | Vendas por dia | eixo x cortado (`07-1`, `08-`); não reduz densidade de ticks | ✅ **REAL, e corrigido** (`36bccdc`). ⚠️ Eu o dei como "não reproduz" medindo o `LineChart`; ele vive no `SerieTemporal`. A causa não era densidade: o rótulo mora numa célula de `1/n` com `overflow: hidden`, e 36px não cabem em 7px por menos rótulos que se desenhe |
+| C3 | Lucro por horário | sem eixo Y, sem rótulo de valor, **sem linha de zero** | ✅ **corrigido** (`36bccdc`) — mas só a **metade certa**: a linha de zero já EXISTIA. O que faltava era o eixo Y, e ele veio unificado com o `LineChart` em `lib/grafico/eixo.ts` |
+| ~~C4~~ | ~~Posicionamento e Formas de pagamento~~ | ~~barra não ancorada no maior valor~~ | 🗑️ **RISCADO.** Consertado em **`1d8be69`** (23/07), que é onde `barWidth` passou a ser `total / prodMax`. Medido em 13/08 para confirmar: maior barra = **exatamente 100%**, **0** fora do pai e **0** fora do card |
+| ~~C5~~ | ~~Taxa de aprovação~~ | ~~medidores em tamanho fixo, 400px~~ | 🗑️ **RISCADO.** Consertado pela **F3** (`c0f5254`) |
+| C6 | Produtos, Vendas por país, Alertas | **180–400px** de vazio contínuo | ✅ **corrigido no que era defeito.** Medido: `produtos` 121 · `alertas` 81 · `top-campanhas` 56 — e **nenhum deles esconde nada**. Só `atividade` tinha `+32`, e o rodapé dele agora ancora no fim: vão **0** |
+| C7 | modo de edição | títulos de chip truncados por largura fixa | ✅ **corrigido**, e o achado maior foi ao lado: o **número** do KPI era truncado em 34px. Hoje ele encolhe até caber, com piso, e a moldura devolveu 37px ao slot |
+| ~~C8~~ | ~~Vendas por horário~~ | ~~largura fixa: 24 buckets viram fios~~ | 🗑️ **RISCADO.** Consertado pela **F3** (`c0f5254`), que removeu `--tk-b-barras`. Medido em 13/08: a barra é sempre **50% do passo** — 35,8 / 21,6 / 13,6 / 9,1 / 6,6px conforme o card vai de 900 a 200 |
+
+> ### 🔴 O ACHADO QUE NÃO ESTAVA NA LISTA: no MODO DE EDIÇÃO o NÚMERO é truncado
+>
+> Medido junto do C7: na moldura de edição os cards de KPI ficam com **132px**, e
+> `R$ 7.058,65` sai cortado — `scrollWidth` excede `clientWidth` em **34px**;
+> `R$ -2.441,54` em **49px**.
+>
+> ⛔ **Isto viola a ordem de sacrifício** que o dono fixou em 13/08 (número →
+> rótulo → variação → sparkline → base): o número é o que NUNCA pode ser cortado,
+> e é justamente ele que está sendo. O `06` já registra a mesma família — *"o que
+> encolhe primeiro tem de ser o APOIO, nunca a resposta"* — e ali ela foi
+> resolvida para o rótulo, não para o número.
+>
+> 🔜 **Não consertado nesta sessão.** É trabalho do C7, e entra com o chip.
+
+⚠️ **O que a lista acertou como diagnóstico geral continua valendo:** o que
+sobrou (C3, C6, C7) é sempre *"o desenho não sabe o tamanho que tem"*. O que ela
+errou foi supor que os oito ainda estavam lá — **a F1, a F3 e a F5 consertaram
+quatro deles de passagem, e ninguém voltou para riscar a lista.**
 
 ---
 
@@ -316,12 +381,22 @@ devem ser mencionadas de novo até a fase fechar.
 |---|---|---|
 | **F0b** | **MEDIR** a altura renderizada de cada bloco no layout padrão a 12 colunas | a migração e a tabela da §3. ⚠️ **só é possível com a grade ainda em `auto`** |
 | ~~F0~~ | **deixou de ser fase — virou CONDIÇÃO de renderização.** Ver abaixo | — |
-| F1 | grade de células: `--tk-row`, `span w/h`, `min-width/min-height: 0`, altura fora do conteúdo | queixas 2, 4, 5 |
-| F2 | mínimos no catálogo + derivação por viewport | queixa 1 (parcial) e responsividade |
-| F3 | container queries por família, na ordem KPI → série → tabela → medidor → funil → mapa | queixa 3 |
+| F1 | ✅ grade de células: `--tk-row`, `span w/h`, `min-width/min-height: 0`, altura fora do conteúdo | queixas 2, 4, 5 |
+| F2 | ✅ mínimos no catálogo + derivação por viewport | queixa 1 (parcial) e responsividade |
+| F3 | ✅ container queries por família, na ordem KPI → série → tabela → medidor → funil → mapa | queixa 3 |
 | F4 | acabamento dos gráficos: C1–C8 | queixa 6 |
-| F5 | fim das zonas: um catálogo só, sem teto | queixa 1 |
+| F5 | ✅ fim das zonas: um catálogo só, sem teto | queixa 1 |
 | F6 | asserções §7 e varredura de vazio | — |
+
+> ### ⚠️ A F5 RODOU ANTES DA F4, e a ordem da tabela deixou de descrever o que
+> ### aconteceu — ela ficou porque descreve o que DESTRAVA o quê
+>
+> A execução real foi **F0b → F1 → F3 → F5 → F2**. A F5 não dependia da F4 (o
+> acabamento dos gráficos é independente do modelo de layout, como o inventário
+> já tinha medido), e a F2 veio depois dela porque derivar uma grade com três
+> zonas exigiria derivar três vezes.
+>
+> ⛔ Sobra a **F4** (C1–C8, menos o C5 que a F3 já resolveu) e a **F6**.
 
 > ### ⛔ F0 NÃO É FASE — é condição, e o colapso é POR BLOCO
 >
@@ -427,6 +502,357 @@ de `n` — e `n` é um número que CSS não conhece.
 ⚠️ O segundo é o caro: ele mediu "defeito" por duas leituras seguidas, então a
 regra das duas leituras **não o teria pego**. O que o pegou foi o print
 contradizendo o número.
+
+## ✅ F5 — executada em 12/08/2026: as três zonas viraram uma grade
+
+`hero` (sempre 4), `faixa` (até 8) e `paineis` eram **três estruturas separadas
+com três regras**, e os dois tetos eram a queixa 1: onze métricas disputando oito
+vagas. Nenhum dos dois números tinha razão de produto — eles existiam porque os
+três grupos eram três componentes.
+
+| | |
+|---|---|
+| catálogo | **31 blocos** — 16 painéis + 15 métricas, sem vaga reservada |
+| `KpiHero` + `MetricStrip` | viraram **`BlocoMetrica`**; o segundo foi deletado |
+| envelope | **v5**, com `blocos` numa lista só |
+| padrões | KPI de destaque **3×2**, métrica comum **3×1**, painel mantém a F0b |
+| `useArrasto` | uma carga, um destino — `zonaAceita` e o tipo `Zona` **apagados** |
+| operações do hook | `moverBloco` · `inserirBloco` · `removerBloco` · `redimensionar`. Saíram `trocarHero`, `moverMetrica`, `inserirFaixa`, `removerFaixa`, `faixaCheia` |
+
+### 🔑 A hierarquia NÃO morreu — ela mudou de dono
+
+O argumento que sustentava os quatro heros continua inteiro: *doze números do
+mesmo tamanho não respondem pergunta nenhuma*. O que decide o peso agora é a
+**altura do slot** — o padrão dá 2 células aos quatro principais e 1 ao resto, e
+uma container query de ALTURA (`.tk-kpi`, `max-height: 130px`) troca a leitura.
+
+⛔ **Não há prop `variante`, e não deve haver.** Uma prop seria uma segunda
+verdade sobre o mesmo retângulo, e divergiria do slot no primeiro arrasto.
+
+### 🔴 A MIGRAÇÃO: "ninguém muda de lugar", e a única exceção declarada
+
+A conversão zonas → grade tem **um ponto único** (`deZonasParaGrade`), por onde
+passam v1, v2, v3 e v4 — duas rotas até a mesma grade divergiriam em silêncio.
+
+A promessa é dura: *quem já tem layout salvo encontra os cards onde deixou*. O
+que a garante é as fileiras de métrica **fecharem 12**:
+
+| métricas | fileiras | larguras |
+|---|---|---|
+| 4 (o hero) | 1 | 3 3 3 3 |
+| 8 (o teto da faixa) | 2 | 3 3 3 3 · 3 3 3 3 |
+| 7 (a faixa padrão) | 2 | 3 3 3 3 · 4 4 4 |
+| 1 | 1 | 12 — que é o que a faixa de um item já era |
+
+⚠️ **A EXCEÇÃO DECLARADA é essa segunda linha**: a faixa de oito passa de UMA
+fileira para DUAS, porque em 12 colunas não existe largura inteira que mantenha
+oito lado a lado. Qualquer outro deslocamento é defeito — e é por isso que a
+fileira precisa FECHAR: uma que deixasse sobra permitiria um painel estreito
+SUBIR para o grupo de métricas, movendo um card sem que ninguém notasse.
+
+⛔ **A altura vem da ZONA, não do catálogo.** Uma métrica de destaque que o
+usuário tinha arrastado para o Resumo volta com `h = 1`, onde ela estava. O
+catálogo decide o tamanho de quem NASCE agora; a migração mede o que já existia.
+
+### 🕸️ A SEGUNDA REDE — `hero`/`faixa` atravessam o envelope v5
+
+`{hero, faixa, paineis} → blocos` é **irreversível**, pelo mesmo motivo do
+`linhas → h` da F1: da lista única não se recupera qual métrica era hero. A
+altura diz isso no instante da conversão e deixa de dizer no primeiro arrasto — e
+a conversão roda sozinha, em produção, sobre um arranjo que o usuário montou.
+
+Então o v5 grava `hero` e `faixa` como legado. **Nada os lê para desenhar**, e há
+asserção sobre as duas metades: que eles sobrevivem, e que não reinjetam métrica
+na grade.
+
+## ✅ F2 — executada em 12/08/2026: a derivação por viewport
+
+`layout/derivar.ts`, puro. `derivar(salvo, 12) === salvo` (§7.4), e em 8/4/1
+nenhum bloco passa da grade, a ordem é preservada e `h` também (§7.5).
+
+> ### 🔴 O INSTRUMENTO É O VIEWPORT, E NÃO O CONTÊINER — contra o hábito da base
+>
+> Esta base prefere medir o contêiner, com razão. **Aqui é o contrário, e o
+> motivo é o catálogo.** Os `colMin` foram calculados contra uma referência
+> declarada: *"uma janela de 1440px com o rail aberto: coluna ≈ 82px"*. Nessa
+> janela o contêiner mede ~1160px — que cairia na faixa de 8. A tela de
+> referência do catálogo inteiro passaria a ser derivada, e todo `colMin` do
+> arquivo estaria descrevendo uma largura que a grade não usa mais.
+>
+> ⚠️ Limiar e instrumento vêm em par. Trocar um sem o outro é o erro do
+> `getBoundingClientRect` clipado: o número continua saindo, medindo outra coisa.
+
+⛔ **A EDIÇÃO É SEMPRE 12 COLUNAS.** Ela opera sobre o layout SALVO; a derivação
+é leitura. Numa grade derivada, a alça mediria contra 4 colunas e o
+`redimensionar` gravaria "4" num campo que significa doze avos — o arranjo do
+usuário corrompido pelo tamanho da janela dele. Há guarda sobre isso.
+
+### 👁️ O que foi VISTO e o que foi MEDIDO
+
+| | |
+|---|---|
+| 12 colunas | ✅ **visto** (modo de edição) |
+| 8 colunas | ✅ **visto** — a janela do dev tem `innerWidth` 1132, e a tela derivou sozinha |
+| ⛔ 4 e 1 coluna | **não vistos** — só as asserções puras. Exigiria janela mais estreita, e o `resize_window` mente |
+| vazamento | ✅ **0 fugas em 55 células**, `rolagem: 0`, nos dois temas |
+| contraste | ✅ **medido**: rótulo 6,49/6,58 · número 17,85/16,11 · legenda e base 4,97/5,20 |
+
+### 🐛 Os quatro defeitos que só a tela mostrou
+
+Nenhum deles aparece em `tsc`, `lint`, `build` ou nas 46 asserções da grade.
+
+| | |
+|---|---|
+| 🔴 **a container query media a caixa ERRADA** | a célula é `container-type: size`, mas na edição a moldura come ~37px. Célula **176**, corpo **139**, e o KPI ficou com **99** pedindo **119** — o rótulo cortado inteiro (`altura 0`) em todos os cards. O corpo do `ItemEdicao` virou contêiner |
+| **o rótulo encolhia a 4px** | numa coluna flex sob pressão todo filho cede, e quem cedia era o texto que diz QUAL métrica é. `flex: none` no rótulo, no número e na legenda — o que cede é o sparkline |
+| **o sparkline era cortado** | ele encolhia a caixa e mantinha `height={38}`: a §7.8 acontecendo dentro do componente. Passou a `100%` |
+| **a base da razão reprovava no contraste** | `opacity: 0.85` levava a **3,70:1** no claro e **4,15** no escuro. ⚠️ O `test:contraste` mede PARES DE TOKEN e nunca pegaria isto — a opacidade é aplicada no componente, em cima do par |
+
+## Estado em 13/08/2026
+
+> **Medido, não inferido.** Os três comandos do topo do `CLAUDE.md` foram
+> rodados; o que segue é a saída deles, e não uma cópia do estado anterior.
+
+### Fases
+
+| fase | estado |
+|---|---|
+| **F0b** · **F1** · **F3** | ✅ verdes, e **em produção** |
+| **F5** · **F2** | ✅ verdes, **só locais** |
+| **F4** | ✅ **FECHADA em 13/08.** C1 C2 C3 C6 C7 corrigidos · C4 C5 C8 riscados, com o commit que os consertou |
+| **F6** | ⛔ aberta |
+| 🚧 **shell estreito** | frente PRÓPRIA, fora da F4 — ver a seção acima |
+
+### Onde cada coisa está
+
+| | Medido em **13/08/2026**, ao abrir a sessão da F4 |
+|---|---|
+| branch | `redesign/dashboard` |
+| HEAD | **`f2b03e8`** — o commit de doc que criou esta seção |
+| `origin/redesign/dashboard` | **`f107392`** — a branch está **2 commits à frente** (`0ff5e97`, `f2b03e8`) |
+| `origin/main` | **`36b52a1`**, empurrada em **12/08/2026 23:27** — *"merge: F1 + F3"* |
+| a branch × a `main` | **4 à frente e 1 ATRÁS** |
+
+> ### ⚠️ ESTA TABELA NASCEU ERRADA EM TRÊS LINHAS — e o motivo vale mais que a correção
+>
+> A versão anterior dizia HEAD `0ff5e97`, **1** commit à frente do remoto e **3**
+> à frente da `main`. Os três estavam errados **no instante em que foram
+> commitados**: a seção foi escrita antes do `git commit` que a contém, então o
+> commit que a grava já a desmente. Estado fotografado envelhece **antes de
+> chegar ao disco**.
+>
+> ⛔ E o **"1 ATRÁS"** nunca esteve escrito: é o merge `36b52a1` da `main`, que a
+> branch não tem. Contar só um lado de `A...B` transforma "divergiram" em
+> "estou à frente" — e é a diferença entre um push e um push que perde trabalho.
+>
+> ### 🔎 A MEDIÇÃO, e ela custa 10 segundos
+> ```bash
+> git rev-list --left-right --count HEAD...origin/main   # os DOIS lados
+> git rev-list --left-right --count HEAD...origin/redesign/dashboard
+> ```
+> ⛔ **Nunca leia os números acima como estado atual.** Rode as duas linhas.
+
+🔴 **F1 e F3 estão no ar para os testadores** — a `main` as levou em 12/08 23:27,
+e a produção segue a `main` (conferido: `curl` em `/login` devolve `tk-auth`).
+**F5 e F2 não.** As doze telas do redesign veem hoje a grade de células com o
+conteúdo cabendo no slot, e **ainda com as três zonas**.
+
+⛔ **Não afirme o estado do remoto a partir deste arquivo.** Ele envelhece
+sozinho — rode os três comandos.
+
+### ✅ AS DERIVAÇÕES DE 4 E 1 COLUNA FORAM VISTAS — 13/08/2026, e o instrumento existe
+
+**Esta seção dizia que elas nunca tinham sido vistas, e que o motivo era falta de
+instrumento.** A segunda metade estava errada: o instrumento existe, é o CDP, e
+ninguém tinha tentado.
+
+| coluna | como foi verificada |
+|---|---|
+| 12 | ✅ **vista** — modo de edição |
+| 8 | ✅ **vista** — a janela do dev tem `innerWidth` 1132 e a tela derivou sozinha |
+| **4** | ✅ **VISTA a 900px** — 4 colunas, `grid-auto-rows: 80px`, 28 blocos |
+| **1** | ✅ **VISTA a 600px** — 1 coluna, `rolagemDaPagina: 0` |
+
+> ### 🔑 O INSTRUMENTO DE LARGURA — CDP, e ele funciona com a janela MAXIMIZADA
+>
+> ```
+> emulate      viewport: "1440x1000x1"   ← ESTE. Sobrevive a reload. Preferir sempre.
+> resize_page  width/height               ← perde a emulação em SILÊNCIO num reload,
+>                                            e depois falha com "Restore window to
+>                                            normal state before setting content size"
+> ```
+>
+> Os dois são CDP e os dois fazem **override de métricas**, não redimensionam a
+> janela: medido, `innerWidth` foi a **900** e a **1440** com `screen.availWidth`
+> em **2560** o tempo todo.
+>
+> 🔴 **A INSTRUÇÃO DE DESMAXIMIZAR A JANELA FOI APAGADA DESTE PROJETO.** Ela
+> nasceu de uma causa que nunca foi isolada (`a23844e`, 31/07, dizia só *"não
+> pegam com a janela do Chrome…"*), endureceu por cópia até virar requisito, e
+> custou **duas sessões** ao dono fazendo a parte dele corretamente. Estas
+> medições são o contraexemplo: **a maximização nunca foi o problema — a
+> ferramenta era outra.**
+>
+> ⛔ **Reconfira `innerWidth` depois de qualquer navegação**, com `emulate`
+> também. Um print tirado depois de um reload pode ser um print de 2560, e isso
+> quase creditou a esta fase um conserto que era só a janela ter voltado a ser
+> larga.
+
+### 🚧 FRENTE PRÓPRIA — o SHELL não responde a viewport estreito
+
+> **Decisão do dono, 13/08/2026: isto NÃO é F4 e não entra na fase.** Fica
+> registrado como frente separada, com o medido, para não voltar a ser descoberto.
+
+A grade deriva certo; a moldura em volta dela, não.
+
+| medido a 600px | |
+|---|---|
+| rail | **236px abertos** — 39% da tela, e a grade fica com **292px** |
+| saudação | *"Boa tarde, [DEV]"* colide com a busca do header — o "B" fica atrás dela |
+| subtítulo | quebra **uma palavra por linha** |
+| fugas horizontais dentro da grade | **14** — ⚠️ das quais **3 são falso positivo**: são rótulos `sr-only` com `clientWidth: 1` |
+
+⛔ **Isto não é F4 e não foi consertado.** É achado de SHELL, e o rail recolhível
+já existe — falta ele recolher sozinho abaixo de um limiar, que é decisão do
+dono. Registrado aqui para não voltar a ser descoberto.
+
+### ✅ C1 — executado em 13/08/2026, e o defeito NÃO era o que estava escrito
+
+**F4 — acabamento dos gráficos (C1–C8, menos o C5, que a F3 já resolveu).**
+Falta **C2, C3, C4, C6, C7, C8**.
+
+> ### 🔴 A PRESCRIÇÃO DO C1 DESCREVIA UM CONSERTO QUE JÁ EXISTIA HÁ SEIS DIAS
+>
+> Este bloco dizia: *"primeiro passo: no `Sparkline`, fazer observação isolada
+> renderizar `<circle>` em vez de um `<path>`"*. Medido:
+>
+> ```bash
+> git log -S "isolados" --format='%h %ad' --date=short -- src/components/tk/Sparkline.tsx | tail -1
+> # db98cf2  2026-08-06
+> ```
+>
+> O `<circle>` para trecho isolado entrou em **06/08**, e o C1 foi escrito em
+> **12/08** — a prescrição nasceu descrevendo o passado. Ela veio da leitura de um
+> print, não do componente.
+>
+> ⚠️ **E os "fragmentos soltos" não são reproduzíveis no dado de hoje:** medido
+> na tela, a série do ROAS a 30 dias tem `trechos: 1, circulos: 0` — **não há
+> buraco nenhum nela**. A hipótese não tinha como ser exercida.
+
+### 🐛 O que estava REALMENTE na tela: o sparkline do ROAS pintando um SUBLINHADO
+
+Medido a 1440px, no card de ROAS, com `Últimos 30 dias`:
+
+| | ROAS | Faturamento (controle) |
+|---|---|---|
+| caixa de conteúdo do card | 126px | 126px |
+| filhos rígidos + gaps | **121,9px** | 83,5px |
+| sobra para o sparkline (`flex: 0 1 32px`) | **4,1px** | 42,5px |
+| caixa pintada do SVG | **0,1px** | 32px |
+
+O `.tk-spark` é o **único filho encolhível** — rótulo, número, legenda e base são
+`flex: none`, e isso é deliberado (*"o que cede é o sparkline"*, F5). Ninguém
+escreveu **até onde** ele pode ceder. O ROAS tem uma linha a mais (a base
+`receita de todos os canais ÷ gasto da Meta`), ela quebra em **duas** linhas a
+231px de card, e o sparkline vai a zero — onde o traço de 1,5px, que é
+`non-scaling-stroke`, **continua sendo pintado**.
+
+> ## Sparkline esmagado não fica pequeno. Ele vira uma RETA — e uma reta sob um número lê como sublinhado: decoração se passando por dado, que é o defeito que esta base recusou no arco do globo.
+
+✅ **Provado pelo lado negativo, na tela:** escondendo o SVG, a linha sob "1,94x"
+**some**. Ela era o sparkline.
+
+⚠️ E o comentário do `Kpi.tsx:301` dizia que o ROAS *"pedia **5px** além do que
+tinha"* — verdade quando a base ocupava UMA linha. O número descrevia uma
+medição, não um contrato, e envelheceu sem que nada avisasse.
+
+### 🔬 O limiar é 4px, e ele foi MEDIDO no próprio componente
+
+Oscilação vertical pintada da linha, descontada a espessura do traço, na série
+real de Faturamento — que usa a banda inteira do `viewBox`, ou seja o **melhor
+caso possível**:
+
+| caixa | 2px | 3px | **4px** | 8px | 32px |
+|---|---|---|---|---|---|
+| oscilação | 0,13 | 0,94 | **1,75** | 5,00 | 24,50 |
+| ÷ espessura do traço | 0,1× | 0,6× | **1,2×** | 3,3× | 16,3× |
+
+Abaixo de 4px a linha oscila **menos que a própria espessura** — está inteira
+dentro do próprio traço, que é a definição mensurável de *"é uma reta"*. Como a
+medição usou o melhor caso, série mais achatada vira reta antes: **4px é piso, não
+estimativa.**
+
+E a conta fecha com a geometria: `banda útil = (A − 2·PY)/A = 26/32`, e o piso é
+o menor `h` em que a oscilação passa de **dois** traços →
+`ceil(2 × 1,5 ÷ (26/32)) = 4`.
+
+> ### ⛔ A GUARDA RECALCULA O LIMIAR, NUNCA O REPETE
+> `test:grade` lê `A`, `PY` e `strokeWidth` do próprio `Sparkline.tsx` e exige que
+> o número do CSS seja igual ao que a geometria produz. Mudar qualquer uma das
+> três derruba a asserção e cobra a remedição.
+>
+> ✅ **Provado pelo lado negativo:** trocando o piso para 6px, a suíte falha
+> dizendo *"o piso do CSS (6) divergiu da geometria do traço (4)"*.
+>
+> ⚠️ A primeira versão da âncora **não casou** e a linha de base a denunciou pelo
+> nome — a regra de sempre, agora paga também aqui.
+
+`.tk-spark` ganhou `container-type: size` e `@container (height < 4px)` esconde o
+conteúdo por `visibility` (não `display`), para o espaço seguir **reservado**.
+
+### 🔴 O QUE FICA ABERTO, e é decisão do dono
+
+O piso impede a tela de **afirmar** uma tendência que não desenhou. Ele **não
+conserta a origem** — o ROAS continua sem sparkline abaixo de ~231px de card. As
+duas saídas são de produto:
+
+| saída | custo |
+|---|---|
+| truncar a linha de base com reticências | ela existe para ser lida inteira — foi decisão de 07/08 |
+| dar `h: 3` ao bloco de ROAS no catálogo | ele fica mais alto que os outros três heros |
+
+⚠️ **Efeito colateral medido, e ele não é neutro:** `container-type: size` implica
+`contain: size`, e a caixa do sparkline nos outros KPIs foi de **32px para
+36,3px**. Nenhum defeito visível apareceu por isso, mas está registrado — quem
+mexer aqui de novo parte deste número, não de 32.
+
+### 🔬 O LIMITE DO `test:contraste` — ele não vê OPACIDADE
+
+> **Registrado como limite do INSTRUMENTO, não como defeito de um bloco.** Vale
+> para qualquer texto do projeto que carregue `opacity`.
+
+O `test:contraste` lê o `globals.css` e mede **pares de token**: uma cor de texto
+contra uma cor de fundo, as duas declaradas como variáveis. **Ele não vê o que o
+componente faz por cima do par** — e `opacity` é aplicada no componente.
+
+O caso que revelou: a linha de base da razão no `BlocoMetrica` tinha
+`opacity: 0.85` sobre `--tk-text-muted`. O PAR passa com folga; o pintado dava
+**3,70:1** no tema claro e **4,15:1** no escuro, abaixo do piso de 4,5. O teste
+estava verde o tempo todo, e estava certo — ele mediu o que sabe medir.
+
+| o instrumento | responde |
+|---|---|
+| `test:contraste` | *"os tokens da paleta formam pares legíveis?"* |
+| ⛔ **não responde** | *"a cor que chegou à tela é legível?"* |
+
+🔎 **O `grep` que acha os candidatos**, e ele é barato:
+
+```bash
+grep -rnE "opacity: 0?\.[0-9]" src/components/ --include=*.tsx
+```
+
+A pergunta por ocorrência é binária: *isto é TEXTO?* Opacidade em traço, hachura,
+sombra, ícone decorativo ou estado desabilitado não entra — o piso de 4,5 é sobre
+texto que alguém precisa ler.
+
+⛔ **Não "conserte" o teste para varrer opacidade.** Ele lê CSS, e a opacidade
+está no JSX; ensiná-lo a ler os dois seria a segunda implementação do mesmo
+cálculo em dois vocabulários. Quem responde a segunda pergunta é a medição da cor
+PINTADA (canvas 1×1, com o `globalAlpha` da opacidade, sobre o fundo REAL) — e
+ela é cara pelo mesmo motivo de sempre: exige navegador, servidor e sessão.
+
+⚠️ E é o mesmo buraco que o `06` já documenta para o CSS sem camada, agora com um
+caso medido em vez de uma suspeita.
 
 ## 🔎 O INVENTÁRIO — medido em 12/08/2026, e ele MUDOU a ordem
 

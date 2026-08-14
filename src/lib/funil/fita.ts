@@ -123,6 +123,13 @@ export interface Fluxo {
   guias: number[];
   /** Altura total disponível para a fita, em px. */
   faixa: number;
+  /**
+   * `cortes[i]` ⇒ a fonte muda ANTES da etapa `i` — a fita se parte ali.
+   *
+   * ⚠️ Tem o mesmo comprimento de `etapas`, e `cortes[0]` é sempre `false`: não
+   * existe troca de fonte antes da primeira.
+   */
+  cortes: boolean[];
 }
 
 /**
@@ -175,15 +182,43 @@ function guiaEntre(largura: number, margem: number, n: number, i: number): numbe
 
 export function calcularFluxo(
   valores: number[],
-  opcoes: { largura: number; faixa: number; margem?: number; piso?: number; naFita?: boolean[] },
+  opcoes: {
+    largura: number;
+    faixa: number;
+    margem?: number;
+    piso?: number;
+    naFita?: boolean[];
+    /**
+     * 🔴 `corte[i] === true` ⇒ **a fonte muda ANTES da etapa `i`**.
+     *
+     * Não é estilo: um corte declara que as duas etapas vizinhas saem de
+     * INSTRUMENTOS diferentes, e disso decorrem três coisas que nada mais
+     * garante — a fita não atravessa, a taxa fica `null`, e não há perda.
+     */
+    corte?: boolean[];
+  },
 ): Fluxo {
   const margem = opcoes.margem ?? 0;
   const etapas = calcularFita(valores, opcoes);
   const n = etapas.length;
+  const corte = (i: number) => opcoes.corte?.[i] === true;
 
   for (let i = 1; i < n; i++) {
     const ant = etapas[i - 1]!;
-    etapas[i]!.taxa = ant.valor > 0 ? etapas[i]!.valor / ant.valor : null;
+    /**
+     * 🔴 ATRAVESSANDO UM CORTE NÃO EXISTE TAXA — e `null` aqui é a mesma regra
+     * do denominador zero, aplicada à PROCEDÊNCIA em vez de ao valor.
+     *
+     * Uma taxa de conversão pressupõe que o numerador seja subconjunto do
+     * denominador. Quando o instrumento troca, isso não é verdade: `ICs` sai da
+     * nossa tabela `Click` e `Vendas Inic.` sai do gateway. A razão entre elas
+     * mede o quanto os dois sistemas discordam, não quanta gente passou.
+     *
+     * ⛔ Não devolva `0` nem o quociente "para a tela ter o que mostrar". O
+     * quociente foi o que imprimiu **150%** aqui, e `0` afirmaria que todo mundo
+     * caiu fora entre duas etapas que nem se medem.
+     */
+    etapas[i]!.taxa = corte(i) || ant.valor <= 0 ? null : etapas[i]!.valor / ant.valor;
   }
 
   const guias: number[] = [];
@@ -200,6 +235,11 @@ export function calcularFluxo(
     /* Perda entre uma etapa de fora e uma de dentro não é do funil — é a
        cobertura de rastreamento, e quem a mostra é a faixa acima. */
     if (!a.naFita || !b.naFita) continue;
+    /* 🔴 E através de um CORTE também não há perda. A diferença entre 38 ICs e
+       57 vendas não é gente que sumiu: são dois instrumentos contando coisas
+       diferentes. Uma pílula `−N` ali nomearia como abandono o que é
+       discordância de medição. */
+    if (corte(i + 1)) continue;
     perdas.push({
       de: i,
       valor: a.valor - b.valor,
@@ -208,7 +248,53 @@ export function calcularFluxo(
     });
   }
 
-  return { etapas, perdas, guias, faixa: opcoes.faixa };
+  return { etapas, perdas, guias, faixa: opcoes.faixa, cortes: etapas.map((_, i) => corte(i)) };
+}
+
+/**
+ * 🧩 OS SEGMENTOS CONTÍGUOS DA FITA — um `<path>` por segmento.
+ *
+ * ## Por que a fita se PARTE em vez de as etapas saírem
+ *
+ * Decisão do dono, 13/08/2026, e ela é a terceira saída — nenhuma das duas
+ * óbvias servia:
+ *
+ * | saída | por que não |
+ * |---|---|
+ * | deixar a fita atravessar, com pílula declarando | **forma se lê antes de texto.** A silhueta já disse "cresceu" para quem bateu o olho; a pílula só conserta para quem parou e leu |
+ * | tirar `Vendas` da geometria, como `Cliques` saiu | joga fora o **82,5%**, que é declínio REAL entre duas etapas do MESMO gateway — e deixa a fita com um segmento só, que já não é funil |
+ *
+ * Partindo, nenhuma fita engorda e os dois percentuais legítimos continuam
+ * desenhados: `66,7%` dentro do nosso rastreamento e `82,5%` dentro do gateway.
+ *
+ * ⚠️ **A regra é estrutural, não sobre estes números.** O rastreamento é dono
+ * de clique/sessão/checkout; a venda vem do webhook do gateway, que é outro
+ * dono. Semana que vem os valores mudam e a junção continua sendo troca de
+ * instrumento. Uma declaração que precisa ser reescrita a cada período não é
+ * declaração — é remendo.
+ *
+ * ⛔ Etapas fora da fita (`naFita: false`) não entram em segmento nenhum: elas
+ * não têm geometria, só nome e número.
+ */
+export function segmentosDaFita(fluxo: Fluxo): EtapaFita[][] {
+  const segs: EtapaFita[][] = [];
+  let atual: EtapaFita[] = [];
+  fluxo.etapas.forEach((e, i) => {
+    if (!e.naFita) {
+      /* Etapa fora da fita também encerra o segmento: a fita não pode saltar
+         por cima de uma coluna que não participa da escala. */
+      if (atual.length) segs.push(atual);
+      atual = [];
+      return;
+    }
+    if (fluxo.cortes[i] && atual.length) {
+      segs.push(atual);
+      atual = [];
+    }
+    atual.push(e);
+  });
+  if (atual.length) segs.push(atual);
+  return segs;
 }
 
 /**

@@ -29,10 +29,26 @@
  * `100vw`/`100dvh`, `@container` ancorado em outro elemento, e teclado virtual.
  */
 
-/** O cromo do shell (rail + paddings), MEDIDO uma vez. Ver `naTela`. */
+/**
+ * O cromo do shell (rail + paddings), MEDIDO uma vez e MEMORIZADO.
+ *
+ * 🔴 ELE ERA REMEDIDO A CADA CHAMADA, e isso é um defeito medido em 13/08/2026.
+ * A segunda chamada media `innerWidth − grade` com a grade **já encolhida pela
+ * primeira**, então o cromo crescia a cada rodada e a largura pedida encolhia
+ * junto: pedir 2260 devolveu **1660**, com toda a cara de medição.
+ *
+ * ⛔ É a família *a medição não acertou o alvo* dentro do próprio instrumento —
+ * e o que a denunciou foi a guarda publicar `viewportEfetivo` ao lado do
+ * pedido. Sem esse par, 1660 é um número perfeitamente plausível para uma grade.
+ */
 window.__cromoDoShell = () => {
-  const g = window.__grade();
-  return Math.round(window.innerWidth - g.getBoundingClientRect().width);
+  if (window.__cromo != null) return window.__cromo;
+  const alvo = window.__grade().parentElement;
+  if (alvo.style.width) {
+    throw new Error("cromo nao medido e a grade ja esta encolhida — limpe a largura antes");
+  }
+  window.__cromo = Math.round(window.innerWidth - window.__grade().getBoundingClientRect().width);
+  return window.__cromo;
 };
 
 /**
@@ -49,6 +65,33 @@ window.__grade = () =>
     .pop();
 
 window.naTela = async (viewport) => {
+  /**
+   * 🔴 ABA DE FUNDO NÃO MEDE — e o modo de falha era MUDO.
+   *
+   * Medido em 13/08/2026: com `document.hidden`, o navegador **não dispara
+   * `requestAnimationFrame`**. A espera de duas passagens de quadro abaixo
+   * nunca resolve, a promessa fica pendente para sempre, e não há exceção —
+   * `naTela(2260)` devolveu uma promessa que jamais assentou, com o `catch`
+   * vazio e o resultado `null`.
+   *
+   * ⛔ Isso é indistinguível de "ainda está rodando", que é a pior forma de
+   * silêncio: quem chamou conclui que a medição demora, não que ela não vai
+   * acontecer. É a mesma família do teste que passa sem examinar nada — a saída
+   * de "não consegui" é igual à de "estou quase".
+   *
+   * ⚠️ Não troque a espera por `setTimeout` puro "para funcionar em aba de
+   * fundo". A dupla passagem de quadro existe porque ler logo depois de mexer
+   * no layout devolve o valor ANTERIOR com cara de medição — foi o que produziu
+   * "13 descendentes vazando" nesta base. Em aba oculta não há repintura para
+   * esperar, então a medição **não é possível**, e o certo é dizer isso.
+   */
+  if (document.hidden) {
+    throw new Error(
+      "ABA OCULTA: requestAnimationFrame não dispara em aba de fundo, e a espera " +
+        "de repintura nunca resolveria. Traga esta aba para a frente e rode de novo. " +
+        "⛔ Sem isto a chamada ficaria pendente para sempre, sem erro.",
+    );
+  }
   const g0 = window.__grade();
   const alvo = g0.parentElement;
   if (viewport) {
@@ -87,9 +130,30 @@ window.naTela = async (viewport) => {
     };
   });
 
+  const larguraDaGrade = Math.round(base.width);
   return {
+    /* ⛔ A GUARDA — o ALVO, e a conclusão só vale depois de alguém conferir que
+       é o alvo. Saída plausível não é evidência de que o instrumento mediu o
+       que se pediu.
+
+       `viewportEfetivo` é o par que denuncia: o caso errado o faz DIVERGIR do
+       pedido, e foi assim que o cromo remedido apareceu (2260 pedido → 1660
+       efetivo). Um número sozinho não tem como acusar nada.
+
+       `semGancho` e `blocosExaminados` são o DENOMINADOR — a metade mais
+       esquecida. Este detector já examinou 16 de 28 blocos e deu veredito como
+       se fossem 28. */
+    alvo: {
+      viewportPedido: viewport ?? null,
+      viewportEfetivo: larguraDaGrade + (window.__cromo ?? 0),
+      confere: viewport ? larguraDaGrade + window.__cromo === viewport : true,
+      innerWidth: window.innerWidth,
+      celulasNaGrade: g.children.length,
+      blocosExaminados: blocos.filter((b) => b.estouro !== null).length,
+      semGancho: blocos.filter((b) => b.estouro === null).map((b) => b.bloco),
+    },
     viewport: viewport ?? window.innerWidth,
-    larguraDaGrade: Math.round(base.width),
+    larguraDaGrade,
     /* Linha de base: sem ela, "0 estouros" é indistinguível de "não havia o que
        examinar" — a grade pode ter renderizado vazia. */
     blocosExaminados: blocos.length,

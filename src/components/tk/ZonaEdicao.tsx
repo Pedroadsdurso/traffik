@@ -5,13 +5,21 @@ import * as React from "react";
 /**
  * ZONA DE EDIÇÃO — o contorno que aparece só no modo de edição.
  *
- * 🔴 O RÓTULO DIZ A REGRA, NÃO O NOME. "Principais" sozinho não informa nada
- * acionável; **"Principais — sempre 4"** responde antes da pergunta por que o ✕
- * não aparece, por que adicionar virou trocar, e por que a fileira não muda de
- * tamanho. A regra é a única coisa que o usuário não consegue descobrir olhando.
+ * 🔴 O RÓTULO DIZ A REGRA, NÃO O NOME. "Principais" sozinho não informava nada
+ * acionável; **"Principais — sempre 4"** respondia antes da pergunta por que o ✕
+ * não aparecia e por que adicionar virava trocar. A regra é a única coisa que o
+ * usuário não consegue descobrir olhando.
  *
- * ⚠️ O contador (`6 de 8`) fica ao lado da regra, e só onde existe teto. Numa
- * zona sem limite ele seria um número que não informa decisão nenhuma.
+ * ### ⛔ ERAM TRÊS ZONAS, E SOBROU UMA — F5, 12/08/2026
+ *
+ * `Principais — sempre 4` e `Resumo — até 8` deixaram de existir junto com os
+ * tetos, e o `contador` (`6 de 8`) saiu com elas: ele só fazia sentido onde
+ * havia limite, e num lugar sem limite seria um número que não informa decisão
+ * nenhuma. Sobrou a grade, cuja regra é sobre o GESTO, não sobre quantidade.
+ *
+ * ⚠️ O componente FICOU com o nome de zona, e é honesto: ele continua sendo o
+ * contorno que aparece só na edição, com um destino de soltura no fim. O que
+ * mudou é que existe um.
  *
  * ### 🔴 O DESTINO VÁLIDO ACENDE; O INCOMPATÍVEL APAGA — durante o gesto
  *
@@ -32,7 +40,6 @@ import * as React from "react";
 export function ZonaEdicao({
   titulo,
   regra,
-  contador,
   arrastando = false,
   aceita = false,
   destino,
@@ -41,8 +48,6 @@ export function ZonaEdicao({
   titulo: string;
   /** A REGRA da zona, em uma linha. Vai junto do título, não numa tooltip. */
   regra: string;
-  /** `"6 de 8"`. Só onde há teto. */
-  contador?: string;
   /** Há um arrasto em curso na tela. */
   arrastando?: boolean;
   /** Esta zona aceita a carga que está sendo arrastada. */
@@ -73,14 +78,6 @@ export function ZonaEdicao({
       <header style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
         <span className="text-label text-text">{titulo}</span>
         <span className="text-caption text-text-secondary">— {regra}</span>
-        {contador && (
-          <span
-            className="text-caption text-text-muted"
-            style={{ marginLeft: "auto", fontVariantNumeric: "tabular-nums" }}
-          >
-            {contador}
-          </span>
-        )}
       </header>
 
       {children}

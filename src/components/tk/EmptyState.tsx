@@ -37,6 +37,22 @@ export function EmptyState({
 }) {
   return (
     <div
+      /* 🔎 O GANCHO QUE A §7.2 PROCURA — e ele existe para SEPARAR duas filas,
+         não para medir.
+
+         A varredura de vazio (`scripts/vazio-na-tela.js`) reprova região vazia
+         contígua > 32px dentro do card. O estado vazio tem vão por DESENHO:
+         ele centra o texto na altura sobrando, então quase todo bloco vazio
+         acusa — e acusa por um motivo que não é o da §7.2.
+
+         ⛔ Sem esta marca as duas filas se misturam, e a lista da §7.2 fica
+         dominada por blocos sem dado: o `07` diz que o vazio do bloco entra na
+         F3 como item nomeado, e que "vazamento medido sobre o estado vazio é
+         medição do estado errado". A mesma frase vale para o vão.
+
+         ⚠️ Isto NÃO diz que o vão do estado vazio está certo — diz que ele é
+         outra pergunta, com outro dono. */
+      data-tk-vazio=""
       style={{
         flex: 1,
         display: "flex",

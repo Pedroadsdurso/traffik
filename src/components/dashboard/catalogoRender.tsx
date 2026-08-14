@@ -24,7 +24,10 @@ import { TabelaCampanhas } from "@/components/tk/TabelaCampanhas";
 import { brl0 } from "@/lib/format";
 import { corFinanceira } from "@/lib/financeiro";
 
-import type { IdBloco } from "./catalogo";
+import { BlocoMetrica, type DadosKpi } from "@/components/tk/Kpi";
+
+import type { IdBloco, IdPainel } from "./catalogo";
+import { idDaMetrica, METRICAS, type ChaveDeMetrica, type IdMetrica } from "./metricas";
 import { ROTULO_HEAT, type CtxBlocos } from "./dadosDosBlocos";
 import type { TraffikView } from "./useTraffikState";
 
@@ -76,6 +79,22 @@ interface BaseBloco {
   /** O controle do cabeçalho do card (`06` §14.1). Vai para o slot `acao`. */
   acao?: (v: TraffikView, c: CtxBlocos) => React.ReactNode;
   render: (v: TraffikView, c: CtxBlocos) => React.ReactNode;
+  /**
+   * 🔴 O BLOCO DESENHA A PRÓPRIA SUPERFÍCIE — sem `<Card>` em volta.
+   *
+   * É o caso das métricas: elas já são um card (fundo, borda, raio, sombra) com
+   * um cabeçalho que NÃO é o do `Card` — o rótulo de uma métrica é pequeno e
+   * apagado, acima de um número grande, e o `titulo` do `Card` é `text-title`,
+   * acima de um corpo. Enfiar uma dentro do outro daria dois cabeçalhos e duas
+   * bordas.
+   *
+   * ⛔ **Isto não é uma exceção para "blocos especiais".** É a única pergunta
+   * que a tela faz sobre o tipo do bloco, e ela é sobre MOLDURA, não sobre
+   * categoria: um painel que um dia precise desenhar a própria superfície marca
+   * isto e a tela não muda. A alternativa era a tela perguntar "é métrica?", que
+   * é a zona voltando com outro nome.
+   */
+  semCard?: true;
 }
 
 /** O caso comum: pode não haver dado, e então há um estado vazio para mostrar. */
@@ -209,10 +228,22 @@ const ETAPAS_DO_FUNIL = (v: TraffikView) => v.funnelStages;
  * ⛔ A etapa NÃO some quando isso acontece. Etapa que desaparece muda a forma
  * do funil em silêncio, e a forma é o que a pessoa compara entre períodos.
  */
-const AVISO_SEM_PIXEL =
-  "Nenhum Initiate Checkout veio do navegador neste período: todos foram " +
-  "deduzidos das vendas. Sem o pixel na página de checkout esta etapa apenas " +
-  "repete “Vendas iniciadas”, e a conversão entre as duas não foi medida.";
+/* ⛔ `AVISO_SEM_PIXEL` VIVIA AQUI E FOI DELETADO em 13/08/2026 — não movido,
+   não comentado. Ele dizia:
+
+     "Nenhum IC veio do navegador: todos foram deduzidos das vendas. Sem o pixel
+      esta etapa apenas repete 'Vendas iniciadas'."
+
+   🔴 A frase descrevia comportamento que MUDOU. A etapa deixou de somar os
+   checkouts derivados da venda — hoje ela é só `icsNavegador` —, então ela não
+   tem mais como repetir "Vendas iniciadas". Mantê-la instruiria o próximo leitor
+   a reintroduzir a soma que a correção tirou, e ela é BEM ESCRITA, que é o que
+   torna essa família cara.
+
+   ✅ O caso que ela cobria não ficou órfão: com a etapa valendo só o navegador,
+   "nenhum IC do navegador" agora é literalmente `ICs = 0`, e quem fala é
+   `ehBuracoImpossivel` + `AVISO_BURACO` — que já nomeia o pixel ausente. Uma
+   guarda a menos, e a que sobrou é a que pode disparar. */
 
 /**
  * ⚠️ A perda `Cliques → Sessões` é PERDA DE RASTREAMENTO, não abandono. A etapa
@@ -268,8 +299,6 @@ const AVISO_BURACO =
 
 const ETAPAS_PARA_FITA = (v: TraffikView): EtapaEntradaFita[] => {
   const etapas = ETAPAS_DO_FUNIL(v);
-  const ics = etapas.find((e) => e.chaveInfo === "checkouts");
-  const semPixel = ics != null && ics.value > 0 && (ics.doNavegador ?? 0) === 0;
   /* ⚠️ Só as etapas DA FITA entram na conta do buraco. `Cliques` está fora da
      geometria (outro instrumento), e incluí-lo faria a etapa 1 contar como
      "posterior" de si mesma na hora de olhar a forma. */
@@ -287,18 +316,76 @@ const ETAPAS_PARA_FITA = (v: TraffikView): EtapaEntradaFita[] => {
     /* A composição só aparece quando há DUAS origens de verdade. Com tudo do
        gateway quem fala é a hachura; com tudo do navegador não há o que
        decompor. */
+    /**
+     * 🔴 A COMPOSIÇÃO DO NÓ DE ICs — UMA ancoragem, e ela FECHA o total.
+     *
+     * ## Por que as três populações moram numa linha só
+     *
+     * Elas já estiveram em três lugares do mesmo nó: o número (14), esta linha
+     * (os 24) e uma pílula acima (os 35). O leitor tinha de compor
+     * `14 + 24 + 35 = 73` sozinho — e os 35 nem eram complemento do número
+     * exibido: eram complemento de um 38 que não estava escrito em lugar nenhum.
+     *
+     * ⛔ Três ancoragens num nó é pior que o problema que a separação
+     * consertou. Hoje o texto fecha a conta: cada parcela com o nome do que é, e
+     * o total no fim.
+     *
+     * | parcela | por que não desenha |
+     * |---|---|
+     * | vistos no navegador | 🟦 **desenha** — é a única independente da venda |
+     * | derivados da venda | circulares: só existem porque a venda chegou |
+     * | sem jornada | `PixelEvent` sem `clickId` — disjunto de `Sessões` |
+     *
+     * ⚠️ Só aparece quando há mais de uma parcela. Com tudo medido no navegador
+     * não há composição, e uma linha dizendo "0 derivados · 0 sem jornada"
+     * viraria ruído sobre a boa notícia.
+     */
     composicao:
-      e.chaveInfo === "checkouts" && (e.doNavegador ?? 0) > 0 && (e.doNavegador ?? 0) < e.value
-        ? `${e.value.toLocaleString("pt-BR")} ICs · ${(e.doNavegador ?? 0).toLocaleString("pt-BR")} do navegador`
+      e.chaveInfo === "checkouts" && ((e.derivadosDaVenda ?? 0) > 0 || (e.entradaLateral ?? 0) > 0)
+        ? (() => {
+            const der = e.derivadosDaVenda ?? 0;
+            const sem = e.entradaLateral ?? 0;
+            const n = (x: number) => x.toLocaleString("pt-BR");
+            const partes = [`${n(e.value)} vistos no navegador`];
+            if (der > 0) partes.push(`${n(der)} derivados da venda`);
+            if (sem > 0) partes.push(`${n(sem)} sem jornada`);
+            return `${partes.join(" · ")} = ${n(e.value + der + sem)} checkouts`;
+          })()
         : undefined,
-    /* Duas razões diferentes para o MESMO estado, e a ordem importa: o buraco é
-       a afirmação mais forte (a etapa não existe), então ele vence o aviso de
-       pixel (a etapa existe e é derivada). */
-    trechoNaoMedido: buracos.has(e.chaveInfo)
-      ? AVISO_BURACO
-      : e.chaveInfo === "checkouts" && semPixel
-        ? AVISO_SEM_PIXEL
-        : undefined,
+    /**
+     * 🔬 O QUE A ETAPA MEDE — e daqui sai o rótulo da queda até ela.
+     *
+     * `ICs` mede DETECÇÃO: das sessões que não chegaram nela, 24 fizeram
+     * checkout e o snippet não viu. "Perda" ali afirmaria abandono onde houve
+     * cegueira do instrumento, e mandaria o gestor mexer na oferta.
+     *
+     * ⛔ Declarado na FONTE, não como caso especial no desenho: se amanhã outra
+     * etapa medir detecção, ela herda o rótulo certo sem ninguém lembrar.
+     */
+    mede: e.chaveInfo === "checkouts" ? ("deteccao" as const) : undefined,
+    /**
+     * ✂️ ONDE O RASTREAMENTO ENTREGA O FUNIL AO GATEWAY — e a fita se parte.
+     *
+     * 🔴 É DECISÃO DE ARQUITETURA, não ajuste para estes números. O
+     * rastreamento é dono de clique, sessão e checkout iniciado; a venda chega
+     * por webhook do gateway, que é outro dono. A junção `ICs → Vendas Inic.`
+     * é troca de instrumento **por construção** — semana que vem os valores
+     * mudam e ela continua sendo.
+     *
+     * ⚠️ Por isso o corte é declarado aqui, na FONTE, e não derivado de "a
+     * etapa cresceu". Derivar do valor faria a fita se partir ou não conforme o
+     * período — e uma declaração que aparece e some com o dado não declara
+     * nada.
+     */
+    fonteMuda: e.chaveInfo === "iniciadas" ? "o gateway assume" : undefined,
+    /* ⛔ `entradaLateral` NÃO é mais passada à fita — os 35 vivem na
+       `composicao` acima, junto das outras duas parcelas. Ver a nota lá: três
+       ancoragens no mesmo nó custavam mais que a informação que davam.
+       O acessor do hook continua, porque é ele que alimenta a composição. */
+    /* ⚠️ Sobrou UMA razão, e é a que pode disparar. A segunda (`AVISO_SEM_PIXEL`)
+       saiu em 13/08/2026 junto com a soma que a tornava alcançável — ver a nota
+       no lugar dela. Ter duas, com uma inalcançável, era proteção morta. */
+    trechoNaoMedido: buracos.has(e.chaveInfo) ? AVISO_BURACO : undefined,
     /* 🔴 `Cliques` sai da GEOMETRIA da fita, mas continua sendo etapa: nome em
        cima, número embaixo. A perda dele para `Sessões` é instrumentação, não
        comportamento — quem a mostra é a faixa de cobertura. Ver `CoberturaFita`.
@@ -325,13 +412,42 @@ const ETAPAS_PARA_FITA = (v: TraffikView): EtapaEntradaFita[] => {
  * ⚠️ `null` quando não houve clique nenhum — não se divide por ausência, e
  * "0% rastreado" afirmaria falha onde não houve tráfego.
  */
+/**
+ * `"2026-08-04"` → `"04/08"`. Dia e mês é o que cabe na coluna estreita.
+ *
+ * ⛔ A ENTRADA É CHAVE DE DIA, NÃO `Date` — e a diferença já custou um erro de
+ * runtime. A versão anterior recebia `Date` e chamava `getDate()`; o valor
+ * atravessa `/api/dashboard` como JSON e chega STRING, então a tela quebrou com
+ * `jc.de.getTime is not a function` enquanto o `tsc` seguia verde.
+ *
+ * ⚠️ Fatiar a string é o certo aqui, e `new Date("2026-08-04")` seria o errado:
+ * o construtor interpreta a forma só-data como **UTC** e, num fuso a oeste, o
+ * `getDate()` local devolve o dia ANTERIOR. A janela declarada passaria a
+ * mentir por um dia — em silêncio, e só para quem está em Brasília.
+ */
+const diaMes = (chave: string) => `${chave.slice(8, 10)}/${chave.slice(5, 7)}`;
+
 const COBERTURA_DO_FUNIL = (v: TraffikView): CoberturaFita | undefined => {
-  const etapas = ETAPAS_DO_FUNIL(v);
-  const cliques = etapas.find((e) => e.chaveInfo === "cliques")?.value ?? 0;
-  const sessoes = etapas.find((e) => e.chaveInfo === "visitas")?.value ?? 0;
-  if (cliques <= 0) return undefined;
-  const fracao = sessoes / cliques;
-  const perdidos = Math.max(0, cliques - sessoes);
+  const c = v.funnelCobertura;
+  if (c.cliquesDaMeta <= 0) return undefined;
+
+  /* 🔴 AS DUAS PONTAS SÃO DA META — e é essa a mudança de 13/08/2026.
+     O numerador era `Sessões` INTEIRO contra um denominador que só cobre a
+     Meta. Medido no dev: 20 das 57 sessões (35%) vinham de google, organico e
+     tiktok — tráfego que não pode existir no denominador por construção. A
+     razão não ficava imprecisa: ela perdia o intervalo [0,1]. */
+  const fracao = c.sessoesDaMeta / c.cliquesDaMeta;
+  const perdidos = Math.max(0, c.cliquesDaMeta - c.sessoesDaMeta);
+
+  /* ⚠️ A janela só é DECLARADA quando as duas pontas não se cobrem. Dizer
+     sempre viraria ruído que se aprende a ignorar — e aí ela não denuncia o dia
+     em que a divergência importar. */
+  const jc = c.janelaCliques;
+  const js = c.janelaSessoes;
+  /* Comparação de STRING, e é ela que o tipo permite: chave de dia é
+     `YYYY-MM-DD`, então igualdade textual é igualdade de data. */
+  const desencontro = jc != null && js != null && (jc.de !== js.de || jc.ate !== js.ate);
+
   return {
     fracao,
     pct: `${(fracao * 100).toFixed(1).replace(".", ",")}%`,
@@ -340,6 +456,19 @@ const COBERTURA_DO_FUNIL = (v: TraffikView): CoberturaFita | undefined => {
     perdidos:
       perdidos > 0
         ? `${perdidos.toLocaleString("pt-BR")} ${perdidos === 1 ? "clique perdido" : "cliques perdidos"}`
+        : undefined,
+    /* 🔢 CONTAGEM, e sem percentual — não existe "cliques do Google" nesta base,
+       então qualquer denominador para elas seria inventado. Ausente quando todo
+       o tráfego veio da Meta: aí não há segunda população para declarar. */
+    outrasOrigens:
+      c.sessoesDeOutrasOrigens > 0
+        ? `${c.sessoesDeOutrasOrigens.toLocaleString("pt-BR")} ${
+            c.sessoesDeOutrasOrigens === 1 ? "sessão" : "sessões"
+          } de outras origens`
+        : undefined,
+    janela:
+      desencontro && jc && js
+        ? `cliques ${diaMes(jc.de)}–${diaMes(jc.ate)} · sessões ${diaMes(js.de)}–${diaMes(js.ate)}`
         : undefined,
     ajuda: PERDA_DE_RASTREAMENTO_AJUDA,
   };
@@ -362,7 +491,85 @@ const EXCLUSOES_DO_FUNIL = (v: TraffikView): ExclusaoFita[] => {
   return fora;
 };
 
-export const RENDERS: Record<IdBloco, RenderBloco> = {
+/* ══ AS MÉTRICAS ════════════════════════════════════════════════════════════
+   🔴 QUAL POPULAÇÃO ESTÁ EM CIMA E QUAL ESTÁ EMBAIXO.
+
+   O ROAS do Dashboard divide **toda** a receita aprovada (`metrics.ts:668`, sem
+   filtro de origem: orgânico, Google, TikTok, Meta) pelo `spend` do
+   `DailyAdMetric`, que é **só da Meta**. Medido no dev em 07/08/2026: a tela
+   mostra **3,54x** enquanto o ROAS real da Meta é **0,71x** — inflação de 5×,
+   cruzando o 1,0x que separa "se paga" de "dá prejuízo".
+
+   ⛔ **A CONTA NÃO FOI ALTERADA, por decisão do dono.** O que a tela ganhou é a
+   declaração da base, do mesmo jeito que o funil declara a cobertura de
+   rastreamento: o usuário não pode ler um número sem saber o que ele mede.
+
+   ⚠️ Ele MORAVA no `DashboardScreen` e veio para cá com a F5 — não por
+   arrumação: lá ele era lido por uma função que montava o hero e a faixa, e as
+   duas deixaram de existir. Aqui ele fica ao lado do render que o consome.
+
+   🔜 Reabrir quando existir a segunda plataforma de anúncio. Hoje "gasto" e
+   "Meta" são sinônimos nesta base, e é isso que torna o erro invisível. */
+const BASE_DECLARADA: Partial<Record<ChaveDeMetrica, string>> = {
+  roas: "receita de todos os canais ÷ gasto da Meta",
+};
+
+/**
+ * O render de UMA métrica. Ele é o mesmo para as quinze — o que muda é a chave.
+ *
+ * ⛔ **`sempreCheio`, e o motivo é a distinção central deste projeto.** Uma
+ * métrica zerada é uma MEDIÇÃO, não ausência de dado: `R$ 0,00` de faturamento é
+ * a resposta certa para um período sem venda, e um estado vazio no lugar dela
+ * afirmaria que não sabemos — quando sabemos. Quem não sabe já tem resposta
+ * própria e ela é `—`, produzida no hook pelo `div()` de denominador zero.
+ *
+ * ⚠️ O `?? null` cobre a métrica que o hook ainda não montou (o primeiro render,
+ * antes de o dado chegar). Ele desenha o rótulo com `—`, que é o mesmo que o
+ * `carregando` faz — e não um card em branco.
+ */
+function renderDeMetrica(chave: ChaveDeMetrica, rotulo: string): RenderBloco {
+  const dadosDe = (v: TraffikView, c: CtxBlocos): DadosKpi => {
+    const k = v.metricCards[chave];
+    return {
+      chave,
+      rotulo,
+      valor: k?.value ?? "—",
+      delta: k?.delta ?? null,
+      invertido: k?.invertido,
+      trendLabel: k?.trendLabel,
+      cor: k?.cor,
+      base: BASE_DECLARADA[chave],
+      /* Mesma janela do gráfico. ⚠️ A série do sparkline tem um bucket por
+         rótulo do gráfico — é o mesmo `buckets` do servidor —, então o índice
+         vale para as duas sem conversão. */
+      serie: (v.sparklines[chave] ?? []).slice(c.inicioAparado),
+    };
+  };
+
+  return {
+    sempreCheio: true,
+    porQue:
+      "Zero é uma MEDIÇÃO, não ausência de dado: 'R$ 0,00' de faturamento é a resposta certa para um período sem venda. Quando o número de fato não existe — denominador zero — o hook já devolve '—', que é a outra afirmação e ela é diferente.",
+    semCard: true,
+    render: (v, c) => <BlocoMetrica dados={dadosDe(v, c)} carregando={v.dashLoading} />,
+  };
+}
+
+/* 🔑 OS RENDERS DE MÉTRICA SAEM DA MESMA LISTA QUE O CATÁLOGO (`METRICAS`).
+   É isso que preserva a regra de entrada deste arquivo para elas: um id de
+   métrica não consegue existir num lado e faltar no outro, porque os dois lados
+   são o mesmo `map`. O `Record<IdPainel, …>` abaixo continua cobrando, pelo
+   compilador, a metade escrita à mão.
+
+   ⚠️ O `as` não é um buraco: as chaves são LITERALMENTE derivadas de `METRICAS`,
+   a mesma tupla de onde `IdMetrica` sai. Mas ele desliga a checagem, então a
+   cobertura dos DOIS lados tem asserção própria em `npm run test:blocos-vazios`
+   — que é a forma desta base de trocar "confie" por "prove". */
+const RENDERS_DE_METRICA = Object.fromEntries(
+  METRICAS.map((m) => [idDaMetrica(m.chave), renderDeMetrica(m.chave, m.rotulo)]),
+) as Record<IdMetrica, RenderBloco>;
+
+const RENDERS_DE_PAINEL: Record<IdPainel, RenderBloco> = {
   /* ── OS QUATRO ESTRUTURAIS ────────────────────────────────────────────────
      ⚠️ Eles vieram do JSX fixo do `DashboardScreen`. **Nenhum ganhou um render
      novo**: o corpo é o mesmo, agora com `temDado` e `vazio` como todos os
@@ -736,6 +943,15 @@ export const RENDERS: Record<IdBloco, RenderBloco> = {
     ),
   },
 };
+
+/**
+ * O catálogo de renders inteiro — painéis e métricas, num espaço de id só.
+ *
+ * ⚠️ A união é feita AQUI e não em dois consumidores: a tela pergunta
+ * `RENDERS[id]` sem saber de que metade o bloco veio, que é a F5 na camada de
+ * desenho. Se ela precisasse escolher a metade, a zona teria voltado.
+ */
+export const RENDERS: Record<IdBloco, RenderBloco> = { ...RENDERS_DE_PAINEL, ...RENDERS_DE_METRICA };
 
 /* ⛔ O `CATALOGO` (metadado + render juntos) foi DELETADO com a rota
    `/dashboard/blocos`, que era o único consumidor. Quem precisa dos dois hoje é

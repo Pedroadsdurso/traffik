@@ -35,8 +35,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync } from "node:fs";
 
 const { RENDERS, vazioDoBloco } = await import("../src/components/dashboard/catalogoRender.tsx");
-const { CATALOGO_META, ESTRUTURAIS } = await import("../src/components/dashboard/catalogo.ts");
+const { CATALOGO_META, ESTRUTURAIS, ehBlocoDeMetrica } = await import("../src/components/dashboard/catalogo.ts");
 const { layoutPadrao } = await import("../src/components/dashboard/layout/migrar.ts");
+const { METRICAS } = await import("../src/components/dashboard/metricas.ts");
 const { EmptyState } = await import("../src/components/tk/EmptyState.tsx");
 
 let ok = 0;
@@ -62,7 +63,19 @@ const secao = (t) => console.log(`\n\x1b[1m${t}\x1b[0m`);
 const VAZIA = {
   chartSerie: { labels: ["01-08", "02-08"], revenue: [0, 0], spend: [0, 0] },
   finance: { breakEven: null, unicasForaDoCalculo: 0 },
-  metricCards: {},
+  dashLoading: false,
+  /* 🔴 ZERO É UMA MEDIÇÃO. As métricas entraram no catálogo com a F5 e são
+     `sempreCheio`: `R$ 0,00` de faturamento é a resposta certa para um período
+     sem venda, e um estado vazio no lugar dela afirmaria que não sabemos —
+     quando sabemos. Por isso a vista VAZIA traz o registro CHEIO de zeros, e não
+     um `{}`: `{}` seria "o hook não montou", que é outro estado. */
+  metricCards: Object.fromEntries(
+    METRICAS.map((m) => [
+      m.chave,
+      { label: m.rotulo, value: "R$ 0,00", delta: null, invertido: false, trendLabel: "no período" },
+    ]),
+  ),
+  sparklines: {},
   /* ⚠️ `funnelStages` tem as CINCO etapas mesmo com o bloco mostrando quatro:
      a fixture reproduz o HOOK, não a tela. Quem filtra é o `ETAPAS_DO_FUNIL` do
      catalogoRender, e é justamente ele que se quer exercitar. */
@@ -73,6 +86,17 @@ const VAZIA = {
     { chaveInfo: "iniciadas", label: "Vendas iniciadas", curto: "Vendas Inic.", value: 0, fonte: "Gateway" },
     { chaveInfo: "aprovadas", label: "Vendas aprovadas", curto: "Vendas Apr.", value: 0, fonte: "Gateway" },
   ],
+  /* ⚠️ ZERADO, não ausente — pela mesma razão do `metricCards` acima: `{}` seria
+     "o hook não montou", que é outro estado. Com `cliquesDaMeta: 0` a faixa de
+     cobertura não é desenhada, e é isso que se quer no período vazio: não se
+     divide por ausência de clique. */
+  funnelCobertura: {
+    cliquesDaMeta: 0,
+    sessoesDaMeta: 0,
+    sessoesDeOutrasOrigens: 0,
+    janelaCliques: undefined,
+    janelaSessoes: undefined,
+  },
   bots: [],
   ambientesDeTeste: [],
   sources: [],
@@ -105,6 +129,16 @@ const CHEIA = {
   ...VAZIA,
   chartSerie: { labels: ["01-08", "02-08"], revenue: [500, 800], spend: [200, 300] },
   finance: { breakEven: 700, unicasForaDoCalculo: 0 },
+  metricCards: Object.fromEntries(
+    METRICAS.map((m) => [
+      m.chave,
+      { label: m.rotulo, value: "R$ 1.234,00", delta: 12.5, invertido: false, trendLabel: "vs. período anterior" },
+    ]),
+  ),
+  /* ⚠️ Série COM buraco: o `Sparkline` interrompe a linha num `null`, e a
+     métrica é o único bloco que o desenha. Uma série só de números nunca
+     exercitaria esse ramo. */
+  sparklines: Object.fromEntries(METRICAS.map((m) => [m.chave, [100, null, 300, 250]])),
   funnelStages: [
     { chaveInfo: "cliques", label: "Cliques no anúncio", curto: "Cliques", value: 1000, fonte: "Meta Ads" },
     { chaveInfo: "visitas", label: "Visita na página", curto: "Vis. Página", value: 700, fonte: "Nosso script" },
@@ -112,6 +146,18 @@ const CHEIA = {
     { chaveInfo: "iniciadas", label: "Vendas iniciadas", curto: "Vendas Inic.", value: 80, fonte: "Gateway" },
     { chaveInfo: "aprovadas", label: "Vendas aprovadas", curto: "Vendas Apr.", value: 50, fonte: "Gateway" },
   ],
+  /* 🔴 A FIXTURE PRECISA PRODUZIR OS ESTADOS NOVOS, senão o bloco renderiza sem
+     nunca exercitá-los — a família do gerador que entrega o estado que impede
+     de ver o que se ia verificar.
+     Os números reproduzem o dev medido em 13/08/2026: parte das sessões vem de
+     fora da Meta, e as duas janelas NÃO se cobrem. */
+  funnelCobertura: {
+    cliquesDaMeta: 1000,
+    sessoesDaMeta: 480,
+    sessoesDeOutrasOrigens: 220,
+    janelaCliques: { de: "2026-07-30", ate: "2026-08-12" },
+    janelaSessoes: { de: "2026-08-04", ate: "2026-08-07" },
+  },
   /* Com dado, a declaração do que saiu do cálculo TEM de aparecer — é ela que
      exercita o `EXCLUSOES_DO_FUNIL`. Com as duas listas vazias o contador não
      renderiza, e o teste passaria sem nunca ter visto a linha. */
@@ -171,23 +217,42 @@ const CTX_VAZIO = ctxDe(VAZIA);
 const CTX_CHEIO = ctxDe(CHEIA);
 
 /** Os ids que o layout padrão desenha, na ordem. É o que o usuário novo vê. */
-const IDS_PADRAO = layoutPadrao().paineis.map((p) => p.id);
+const IDS_PADRAO = layoutPadrao().blocos.map((p) => p.id);
 /** Os que PODEM ficar vazios — os `sempreCheio` não participam da contagem. */
 const IDS_COLAPSAVEIS = IDS_PADRAO.filter((id) => !("sempreCheio" in RENDERS[id]));
 
 /* ══════════════════════════════════════════════════════════════════════════ */
 secao("1. Com dado ZERADO, a grade continua com os MESMOS N itens");
 
-checar("o layout padrão tem painel para todo bloco do catálogo", () => {
+checar("o layout padrão tem lugar para todo PAINEL do catálogo", () => {
   /* 🔴 O PADRÃO É UMA LISTA ESCRITA À MÃO (o arranjo aprovado), e o catálogo é
      outra lista. Duas listas que precisam concordar — a família que esta base
-     já pagou várias vezes. Esta asserção é a ponte: um bloco novo no catálogo
+     já pagou várias vezes. Esta asserção é a ponte: um painel novo no catálogo
      que ninguém colocou no arranjo cai aqui, e a pergunta que ela força é
      "em que linha ele entra, e o que sai para caber?". */
-  const faltando = CATALOGO_META.map((b) => b.id).filter((id) => !IDS_PADRAO.includes(id));
+  const paineis = CATALOGO_META.filter((b) => !ehBlocoDeMetrica(b.id)).map((b) => b.id);
+  const faltando = paineis.filter((id) => !IDS_PADRAO.includes(id));
   assert.deepEqual(faltando, [], `no catálogo e fora do layout padrão: ${faltando.join(", ")}`);
-  assert.equal(IDS_PADRAO.length, CATALOGO_META.length, "o padrão tem bloco repetido");
-  assert.ok(IDS_PADRAO.length >= 10, `só ${IDS_PADRAO.length} painéis — a asserção seria fraca`);
+  assert.equal(new Set(IDS_PADRAO).size, IDS_PADRAO.length, "o padrão tem bloco repetido");
+  assert.ok(paineis.length >= 10, `só ${paineis.length} painéis — a asserção seria fraca`);
+});
+
+/* 🔑 E AS MÉTRICAS DE FORA SÃO EXATAMENTE ESTAS QUATRO — a mesma ponte, do outro
+   lado. Com a F5 as métricas entraram no catálogo, e o padrão passou a ser um
+   ARRANJO em vez de um inventário: quatro delas ficam de fora e aparecem no
+   catálogo lateral, com o contador de disponíveis.
+
+   ⛔ A asserção lista os ids em vez de contar. Contar 4 passaria se alguém
+   trocasse `roi` por `ticket` no padrão — e a pergunta que esta guarda existe
+   para forçar é qual métrica o produto SUGERE, não quantas. */
+checar("as métricas fora do padrão são uma escolha declarada, não sobra", () => {
+  const fora = CATALOGO_META.filter((b) => ehBlocoDeMetrica(b.id) && !IDS_PADRAO.includes(b.id)).map((b) => b.id);
+  assert.deepEqual(fora, ["metrica:liquido", "metrica:roi", "metrica:vendas", "metrica:chargeback"]);
+  /* Linha de base: a maioria ESTÁ no padrão. Sem ela, um catálogo em que
+     nenhuma métrica entrasse no arranjo passaria por uma lista casualmente
+     igual. */
+  const dentro = CATALOGO_META.filter((b) => ehBlocoDeMetrica(b.id) && IDS_PADRAO.includes(b.id));
+  assert.ok(dentro.length > fora.length, `${dentro.length} dentro × ${fora.length} fora`);
 });
 
 checar("TODA linha do layout padrão fecha 12 colunas", () => {
@@ -196,7 +261,7 @@ checar("TODA linha do layout padrão fecha 12 colunas", () => {
      aviso é ruído — e aí ele para de ser lido quando importa. */
   let linha = 0;
   const sobras = [];
-  for (const p of layoutPadrao().paineis) {
+  for (const p of layoutPadrao().blocos) {
     if (linha + p.col > 12) { sobras.push(`${12 - linha} livres antes de ${p.id}`); linha = 0; }
     linha += p.col;
     if (linha === 12) linha = 0;
@@ -209,7 +274,7 @@ checar("nenhum bloco do padrão nasce em 3 colunas", () => {
   /* Decisão do dono: 3 é o PISO para quem quer apertar, não um tamanho que o
      produto sugira. Sete blocos aceitam 3 — a asserção prova que a escolha foi
      deliberada e não coincidência do arranjo. */
-  const estreitos = layoutPadrao().paineis.filter((p) => p.col < 4).map((p) => p.id);
+  const estreitos = layoutPadrao().blocos.filter((p) => !ehBlocoDeMetrica(p.id) && p.col < 4).map((p) => p.id);
   assert.deepEqual(estreitos, [], `nasceram em menos de 4 colunas: ${estreitos.join(", ")}`);
   assert.ok(CATALOGO_META.some((b) => b.colMin === 3), "nenhum bloco aceita 3 — a asserção é vácuo");
 });
@@ -219,7 +284,7 @@ checar("os dois blocos que precisam de largura a receberam", () => {
      de `paises` não aparece (CQ em 640px úteis) e o `heatmap` fica no piso da
      célula. São as duas larguras do padrão que NÃO são preferência — são o que
      faz o recurso existir na primeira vez que a pessoa abre a tela. */
-  const col = (id) => layoutPadrao().paineis.find((p) => p.id === id)?.col;
+  const col = (id) => layoutPadrao().blocos.find((p) => p.id === id)?.col;
   assert.ok(col("paises") >= 8, `paises em ${col("paises")} col — o globo não apareceria`);
   assert.ok(col("heatmap") >= 8, `heatmap em ${col("heatmap")} col`);
 });
@@ -228,7 +293,7 @@ checar("os dois blocos que precisam de largura a receberam", () => {
 
    A versão óbvia deste teste era simular o que a tela faz:
 
-       const itens = (v, c) => layoutPadrao().paineis.map(...)
+       const itens = (v, c) => layoutPadrao().blocos.map(...)
        assert.equal(semDado.length, comDado.length)
 
    **Ela nunca poderia falhar.** A simulação seria uma reescrita do código já
@@ -237,28 +302,28 @@ checar("os dois blocos que precisam de largura a receberam", () => {
    na tela. É literalmente a asserção cujos dois desfechos produzem o mesmo
    valor observado.
 
-   O que o defeito era, estruturalmente: **`layout.paineis` chegando ao `.map()`
+   O que o defeito era, estruturalmente: **`layout.blocos` chegando ao `.map()`
    já filtrado.** Então é isso que se mede — no arquivo, não numa cópia dele.
 
    ⚠️ O LIMITE, escrito aqui porque guarda sem limite declarado é a próxima
    armadilha: ela pega o filtro reescrito de forma parecida (`.filter(` na mesma
-   expressão de `layout.paineis`), e NÃO pega alguém que filtre a lista três
+   expressão de `layout.blocos`), e NÃO pega alguém que filtre a lista três
    linhas antes, numa variável intermediária. Medir isso de verdade exigiria
    renderizar a tela com sessão e provedores — caro, e foi o mesmo cálculo que
    descartou medir cor pintada automaticamente. */
-checar("a tela NÃO filtra `layout.paineis` — o bug era um `.filter()` antes do `.map()`", () => {
+checar("a tela NÃO filtra `layout.blocos` — o bug era um `.filter()` antes do `.map()`", () => {
   const fonte = readFileSync(new URL("../src/components/dashboard/views/dashboard/DashboardScreen.tsx", import.meta.url), "utf8");
   /* Só o CÓDIGO: comentário citando o bug é o que se quer preservar, e ele fala
      de `.filter(… temDado …)` por extenso. */
   const codigo = fonte.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 
-  const filtros = [...codigo.matchAll(/layout\.paineis\s*\.?\s*\n?\s*\.filter\(/g)];
-  assert.deepEqual(filtros.map((m) => m[0]), [], "`layout.paineis` está sendo filtrada antes de desenhar");
+  const filtros = [...codigo.matchAll(/layout\.blocos\s*\.?\s*\n?\s*\.filter\(/g)];
+  assert.deepEqual(filtros.map((m) => m[0]), [], "`layout.blocos` está sendo filtrada antes de desenhar");
 
   /* E o positivo: ela realmente mapeia a lista inteira. Sem isto, apagar o
      bloco de render passaria — "não filtra" é verdade sobre código que não
      existe. */
-  assert.ok(/layout\.paineis\.map\(/.test(codigo), "a tela não mapeia `layout.paineis` — o desenho sumiu?");
+  assert.ok(/blocos\.map\(/.test(codigo), "a tela não mapeia `layout.blocos` — o desenho sumiu?");
 
   /* ⛔ E `temDado` não pode ser chamado direto na tela. Ele tem UM consumidor,
      o `vazioDoBloco`; foi a segunda chamada (uma no filtro da grade, outra no
@@ -271,7 +336,7 @@ checar("cada painel mantém a MESMA largura sem dado", () => {
   /* A posição é consequência da ordem e da largura — as duas asserções juntas
      são "o arranjo é o mesmo". Largura vem do layout e não passa por `temDado`;
      esta linha é o que impede alguém de reintroduzir a dependência. */
-  for (const p of layoutPadrao().paineis) {
+  for (const p of layoutPadrao().blocos) {
     const meta = CATALOGO_META.find((b) => b.id === p.id);
     assert.ok(p.col >= meta.colMin, `${p.id}: padrão ${p.col} abaixo do mínimo ${meta.colMin}`);
   }

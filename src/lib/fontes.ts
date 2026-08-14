@@ -57,3 +57,27 @@ export function nomeDaFonte(bruto: string | null | undefined): string {
   if (!limpo) return "Direto / Orgânico";
   return NOMES[limpo.toLowerCase()] ?? limpo;
 }
+
+/** O nome de exibição da Meta. Uma constante porque DOIS lugares a comparam. */
+export const NOME_META = "Meta Ads";
+
+/**
+ * A sessão veio de um anúncio da Meta?
+ *
+ * ## 🔴 Por que ela existe, e por que DERIVA de `nomeDaFonte`
+ *
+ * A faixa de cobertura do funil divide sessões por `DailyAdMetric.clicks`, que
+ * é **só da Meta**. Enquanto o numerador era `Click.length` inteiro, a razão
+ * somava tráfego que não pode existir no denominador: medido no dev em
+ * 13/08/2026, **20 das 57 sessões (35%)** vinham de `google`, `organico` e
+ * `tiktok`. A razão não era uma taxa ruim — era uma taxa **sem intervalo
+ * válido**, porque o numerador não é subconjunto do denominador.
+ *
+ * ⛔ **Não escreva uma segunda lista de aliases aqui.** `fb`, `facebook`,
+ * `meta`, `ig` e `instagram` já vivem em `NOMES`, e duas listas divergem no
+ * primeiro alias que alguém acrescentar de um lado só — com o defeito mudo, do
+ * jeito que esta base já pagou. Esta função **lê** o mapa; ela não o copia.
+ */
+export function ehFonteMeta(bruto: string | null | undefined): boolean {
+  return nomeDaFonte(bruto) === NOME_META;
+}

@@ -17,7 +17,7 @@ import { Card } from "@/components/tk/Card";
 import { DonutChart } from "@/components/tk/DonutChart";
 import { EmptyState } from "@/components/tk/EmptyState";
 import { Input } from "@/components/tk/Input";
-import { KpiHero, type DadosKpi } from "@/components/tk/Kpi";
+import { BlocoMetrica, type DadosKpi } from "@/components/tk/Kpi";
 import { ModalNovaCampanha } from "@/components/tk/ModalNovaCampanha";
 import { PainelInsights } from "@/components/tk/PainelInsights";
 import { Paginacao, type PorPagina } from "@/components/tk/Paginacao";
@@ -729,7 +729,7 @@ export function GerenciadorScreen({ v }: { v: TraffikView }) {
         <div style={{ display: "grid", gap: "var(--tk-gap-grid)", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))" }}>
           {kpis.map((k) => (
             <div key={k.chave} className="tk-medida" style={{ minWidth: 0, display: "flex" }}>
-              <KpiHero dados={k} carregando={carregando} />
+              <BlocoMetrica dados={k} carregando={carregando} />
             </div>
           ))}
         </div>

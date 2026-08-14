@@ -85,7 +85,12 @@ const CORES = {
 
 export default function GlobeView({ pontos, altura, tema }: Props) {
   const ref = React.useRef<GlobeMethods | undefined>(undefined);
-  const box = React.useRef<HTMLDivElement>(null);
+  /* ⛔ O NÓ EM ESTADO, ref CALLBACK. Aqui NÃO é zelo: `box` é montado em DOIS
+     caminhos de render (o atalho de `lado === 0` e o normal), então o nó TROCA
+     de identidade quando `lado` deixa de ser 0. Com useRef + deps [altura] o
+     observer continuava preso ao nó REMOVIDO, e o globo parava de responder a
+     resize para sempre — o mesmo terceiro estado do FitaFunil. */
+  const [box, setBox] = React.useState<HTMLDivElement | null>(null);
   const [lado, setLado] = React.useState(0);
   const c = CORES[tema];
 
@@ -134,7 +139,7 @@ export default function GlobeView({ pontos, altura, tema }: Props) {
      PRIMEIRA medida: ele depende de um disparo inicial que aqui não chegava.
      `useLayoutEffect` + `getBoundingClientRect` dá a medida antes da pintura. */
   React.useLayoutEffect(() => {
-    const el = box.current;
+    const el = box;
     if (!el) return;
     const medir = (largura: number) =>
       setLado(Math.max(0, Math.floor(Math.min(largura, altura))));
@@ -147,7 +152,7 @@ export default function GlobeView({ pontos, altura, tema }: Props) {
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [altura]);
+  }, [altura, box]);
 
   const [rodando, setRodando] = React.useState(!semMovimento);
   React.useEffect(() => {
@@ -200,11 +205,11 @@ export default function GlobeView({ pontos, altura, tema }: Props) {
      "controle que não controla nada", que é problema-raiz registrado nesta base.
      Quando houver o dado, isto volta como `ringsData` — nunca como arco. */
 
-  if (lado === 0) return <div ref={box} style={{ width: "100%", height: altura }} />;
+  if (lado === 0) return <div ref={setBox} style={{ width: "100%", height: altura }} />;
 
   return (
     <div
-      ref={box}
+      ref={setBox}
       style={{ width: "100%", height: altura, position: "relative", display: "grid", placeItems: "center" }}
       onMouseEnter={() => setRodando(false)}
       onMouseLeave={() => setRodando(!semMovimento && !document.hidden)}

@@ -1,38 +1,54 @@
 @AGENTS.md
 
-# 🔴🔴 O ESTADO DO GIT DESTE ARQUIVO ESTAVA ERRADO — E O REDESIGN ESTÁ EM PRODUÇÃO
+# 🔴🔴 ESTADO DE REMOTO NÃO SE REGISTRA. SE MEDE.
 
-> **Medido em 12/08/2026, 22h. Esta seção vence as ~17 linhas
-> "⛔ NADA FOI PARA O GITHUB" que aparecem nos ESTADO DA SESSÃO abaixo.**
-
-| | Medido |
-|---|---|
-| `origin/main` | **`492dcdb`** — avançada de `4e6aa9e` em **12/08/2026 16:35** |
-| `origin/redesign/dashboard` | **existe**, primeiro push em **12/08/2026 16:30** |
-| produção (`https://342dd-virid.vercel.app/login`) | serve `tk-auth` e `tk-auth-marca` |
-
-`tk-auth` **não existe** em `4e6aa9e` (0 ocorrências) e existe em `492dcdb` (3).
-Ou seja: **as doze telas do redesign estão no ar para os testadores desde
-12/08/2026 16:35.**
-
-> ### ⛔ AS LINHAS "NADA FOI PARA O GITHUB" ABAIXO NÃO SÃO MENTIRA — SÃO HISTÓRIA
+> **Esta seção NÃO CONTÉM HASH NENHUM, e a ausência é a decisão.** Ela vence
+> qualquer hash que ainda apareça em qualquer lugar deste arquivo.
 >
-> Cada uma era **verdadeira quando foi escrita**: até 12/08 16:30 a branch de
-> fato não existia no remoto. Elas não foram apagadas porque apagá-las
-> reescreveria o registro de sessões que aconteceram.
+> ✅ **As 18 afirmações "⛔ NADA FOI PARA O GITHUB" que os ESTADO DA SESSÃO
+> carregavam foram APAGADAS em 13/08/2026** — todas estavam falsas quando
+> medidas. Não foram atualizadas: um resultado correto hoje seria a mesma
+> armadilha amanhã. No lugar ficou o MÉTODO, uma vez só.
+
+## 🔎 OS TRÊS COMANDOS. Rode-os antes de qualquer afirmação sobre o remoto.
+
+```bash
+git ls-remote --heads origin                       # o que existe no remoto, AGORA
+git rev-list --left-right --count HEAD...origin/main               # os DOIS lados
+git rev-list --left-right --count HEAD...origin/redesign/dashboard # idem
+git reflog show origin/main --date=iso | head -3   # quando a main andou, e por quê
+curl -s https://342dd-virid.vercel.app/login | grep -c tk-auth     # o que a PRODUÇÃO serve
+```
+
+⛔ **`--left-right --count` com os DOIS lados, sempre.** Contar um lado só
+transforma "divergiram" em "estou à frente" — e essa é a diferença entre um push
+e um push que perde trabalho. Já aconteceu neste arquivo: uma tabela afirmava
+"4 à frente" quando o certo era "4 à frente **e 1 atrás**".
+
+> ### ⛔ POR QUE ESTA SEÇÃO PERDEU OS NÚMEROS QUE TINHA
 >
-> ⚠️ **O que elas não podem mais ser é lidas como estado atual.** Uma delas diz
-> "75 commits locais"; hoje são 0 à frente do remoto. Estado registrado envelhece
-> sozinho — foi exatamente por isso que a META-REGRA do topo pede PADRÃO e
-> MEDIÇÃO em vez de fotografia.
+> Ela já foi reescrita **duas vezes** por estar errada, e as duas versões
+> anteriores erraram do mesmo jeito: **fotografaram um hash**.
 >
-> ### 🔎 A MEDIÇÃO, e ela custa 10 segundos
-> ```bash
-> git ls-remote --heads origin            # o que existe no remoto, agora
-> git reflog show origin/main --date=iso | head -3   # quando main andou
-> curl -s https://342dd-virid.vercel.app/login | grep -c tk-auth   # o que a produção serve
-> ```
-> ⛔ **Nunca afirme o estado do remoto a partir deste arquivo.** Rode as três.
+> | escrito | medido depois |
+> |---|---|
+> | `origin/main` em `4e6aa9e` | tinha andado para `492dcdb` |
+> | `origin/main` em `492dcdb` | tinha andado para `36b52a1` |
+>
+> A segunda versão foi escrita PARA CORRIGIR a primeira, com "Medido em
+> 12/08/2026, 22h" no cabeçalho — e envelheceu em **menos de um dia**. Não é
+> descuido de quem escreveu: é que a `main` anda sem passar por este arquivo.
+>
+> ## Um hash aqui não é informação — é uma armadilha com data de validade e sem etiqueta.
+>
+> ⚠️ E é a mesma doença de *N CÓPIAS NÃO SÃO N CONFIRMAÇÕES*: cada cópia estava
+> certa quando nasceu, e a repetição fez parecer conferido o que era uma única
+> medição envelhecendo.
+
+⚠️ **O que continua verdade e NÃO é hash:** a produção segue a `main`, a `main`
+já foi avançada para dentro do redesign mais de uma vez sem ninguém decidir
+lançar, e a trava de push é local e parcial (ver a seção própria). Isso é
+PADRÃO, e padrão não envelhece — por isso fica escrito. O resto se mede.
 
 ### ⚠️ A CONSEQUÊNCIA QUE MUDA DECISÃO, não só o registro
 
@@ -86,8 +102,26 @@ Sob a premissa "ninguém vê", isso era uma escolha de limpeza. Sob o estado rea
 era **perder o layout de cada testador na primeira abertura, sem volta**.
 
 ✅ O dono pediu a conferência antes do push, o campo **não** estava preservado, e
-a rede entrou (`3417c03`). Medido: `492dcdb` — o que a produção serve — tem
-**zero** referência a `migrarAlturaDoLayout`, então a migração nunca rodou lá.
+a rede entrou (`3417c03`).
+
+⛔ **Aqui havia uma frase dizendo que a produção NÃO tinha a migração, ancorada
+num hash.** Ela era verdadeira quando escrita — e **deixou de ser**: medido em
+13/08/2026, `origin/main` tem `migrarAlturaDoLayout` em 2 arquivos. A `main`
+andou para o merge da F1+F3 e **a migração irreversível está no ar**.
+
+```bash
+git grep -c migrarAlturaDoLayout $(git rev-parse origin/main) -- src/ || echo 0
+git merge-base --is-ancestor 3417c03 origin/main && echo "a rede foi junto"
+```
+
+✅ **A rede foi junto** (conferido: `3417c03` é ancestral de `origin/main`, e o
+`linhas` está declarado como PRESERVADO no arquivo que a `main` serve). Então a
+migração roda para os testadores e **não descarta o campo original** — que era
+exatamente o cenário que a conferência do dono evitou.
+
+⚠️ **A lição é a frase, não o desfecho:** ela afirmava um estado de produção e
+virou mentira sem ninguém tocar nela. O desfecho bom foi sorte de a rede ter
+entrado no mesmo merge — não consequência do registro.
 
 ⚠️ **No banco de dev ela já rodou e o `linhas` daquela linha se perdeu.** É a
 demonstração do que a rede evita, e é por isso que ela fica registrada aqui em
@@ -147,6 +181,147 @@ exceção à regra — é o escopo dela.**
 > "isto parece novo": é uma consulta com resposta binária, e ela existe
 > justamente para que a dúvida não seja resolvida pela conveniência de quem está
 > com o arquivo aberto.
+
+# 🚧 A TRAVA DE PUSH NA `main` É PARCIAL, E É POR MÁQUINA
+
+> **12/08/2026.** Registrado porque uma trava que parece resolvida é pior que
+> nenhuma: ela faz parar de olhar.
+
+## O que existe hoje, e as duas são config LOCAL deste clone
+
+| Config | Bloqueia |
+|---|---|
+| `branch.main.pushremote = no_push` | `git push` puro estando na `main` |
+| `remote.origin.push = refs/heads/main:refs/heads/__bloqueado__` | `git push origin main` — o alvo vira `__bloqueado__` |
+
+**Medido por `--dry-run`:** `git push origin main` → `main -> __bloqueado__`;
+`git push` na `main` → falha; `git push origin redesign/dashboard` → **funciona**,
+que é o que se quer.
+
+## ⛔ O QUE ELAS NÃO COBREM — e é a maior parte
+
+| | |
+|---|---|
+| 🔴 **outra máquina** | um clone novo não tem nenhuma das duas. `git config` não viaja no repositório |
+| 🔴 **outro clone aqui mesmo** | idem |
+| 🔴 **a interface do GitHub** | merge de PR pelo botão não passa por `git push` |
+| 🔴 **quem apagar a config** | uma linha, sem rastro no repositório |
+| ⚠️ **`git push origin main:main`** | refspec completo na linha de comando; não testado |
+
+> ### 🔴 A TRAVA QUE VALE É `branch protection` NO GITHUB, exigindo PR na `main`
+>
+> **É decisão do dono, no painel do GitHub — não minha, e não deste arquivo.**
+> Enquanto ela não existir, a `main` está protegida **apenas neste clone, apenas
+> contra as duas formas medidas acima**.
+>
+> ⛔ **Não trate a proteção como resolvida.** É exatamente a família da
+> *proteção acidental*: o que segurava a `main` até 12/08 não era a trava — era
+> ninguém ter digitado a outra forma. Eu digitei, sem saber que havia trava, e
+> passei.
+
+⚠️ E o motivo de a trava existir está registrado logo acima: em 12/08 16:35 a
+`main` foi avançada e **publicou o redesign inteiro sem decisão de ninguém**. A
+trava local reduz a chance de repetir; ela não a elimina.
+
+---
+
+# 🧮 N CÓPIAS NÃO SÃO N CONFIRMAÇÕES — SÃO UMA MEDIÇÃO, REPLICADA
+
+> **Formulação do dono, 12/08/2026, depois de a mesma mecânica aparecer em dois
+> casos no mesmo dia.** Está aqui em cima porque ela governa como se LÊ este
+> arquivo — inclusive a META-REGRA logo abaixo.
+
+| O registro | Aparecia em | O que era |
+|---|---|---|
+| *"⛔ NADA FOI PARA O GITHUB"* | **17 lugares** | **uma** medição, de 05/08, copiada de sessão em sessão |
+| *"o `linhas` não é regravado; o v4 só tem `h`"* | **3 arquivos** | **uma** decisão minha, repetida como se fosse conferida |
+
+> ## Nos dois, a repetição parecia consenso. Nos dois, a primeira ocorrência era a única que tinha olhado alguma coisa — e nos dois ela estava errada.
+
+### 🔴 POR QUE A REPETIÇÃO ENGANA MAIS QUE O ERRO SOZINHO
+
+Um registro isolado é lido como afirmação de alguém, e se pesa. Dezessete cópias
+são lidas como fato estabelecido: ninguém revisa o que "todo mundo já sabe".
+E o custo é proporcional — a premissa da branch sustentou **três semanas** de
+decisões de fase, e o descarte do `linhas` quase levou o layout de cada testador
+na primeira abertura, **numa conversão sem volta**.
+
+⚠️ **A cópia não mente**: cada uma das 17 era verdadeira quando escrita. O que
+falha é o leitor tratar `N` como amostra independente, quando `N` é a mesma
+observação passando adiante.
+
+> ### ⛔ A DISCIPLINA
+>
+> **Antes de tratar um registro repetido como estabelecido, ache a PRIMEIRA
+> ocorrência e veja o que ELA mediu.** Se ela não mediu nada — se era inferência,
+> decisão ou fotografia de um estado —, as outras `N−1` não acrescentam
+> evidência nenhuma.
+>
+> ```bash
+> grep -rn "<a frase>" . --include=*.md --include=*.ts | head -1   # a mais antiga do arquivo
+> git log --diff-filter=A -S "<a frase>" --format='%h %ad %s' --date=short | tail -1
+> ```
+>
+> A segunda linha é a que responde: ela acha o commit que **introduziu** a frase,
+> e a mensagem dele diz se houve medição ou se foi decisão.
+
+⚠️ **Isto vale para o `CLAUDE.md` inteiro**, que hoje tem muita coisa replicada —
+inclusive regras que eu repeti de seções anteriores sem reconferir. Um número
+citado em três seções continua sendo um número medido uma vez.
+
+## 🔎 A VARREDURA DE 13/08/2026 — o que ela achou, e onde ela cega
+
+⚠️ **O comando que o dono propôs não mede.** `git log --diff-filter=A -S` filtra
+o commit que **criou** o arquivo; num `CLAUDE.md` que já existia ele devolve
+vazio para tudo. A forma que acha quem introduziu a frase é:
+
+```bash
+git log -S "<frase>" --format='%h %ad %s' --date=short -- CLAUDE.md | tail -1
+```
+
+| Afirmação | Nx | 1ª ocorrência | O que ela mediu | Desfecho |
+|---|---|---|---|---|
+| `pixelConfigIds` é dimensão de filtro aprovada | 9 | `c4db658` · 28/07 | 🔴 **nada** — decisão, com "não reabrir" | ✅ reescrita, e virou a regra acima |
+| cookie do NextAuth é `httpOnly` → headless impossível | 4 | `0f97ed3` · 29/07 | 🔴 **outro cookie** (`fb_oauth_ws`, do OAuth) | ✅ item (d) foi de "bloqueado" para **NÃO TENTADO** |
+| `resize_window` "mente" / "precisa desmaximizar" | 16 | `a23844e` · 31/07 | ⚠️ *"não pegam com a janela do Chrome…"* — falha observada, causa **não isolada** | ✅ as duas afirmações endurecidas saíram |
+| plano Hobby só aceita cron diário | 3 | `89cb87f` · 24/07 | ✅ **mediu** — o deploy foi rejeitado | ⏸️ **fica.** ⚠️ Fato sobre produto de TERCEIRO, medido em **24/07/2026** e nunca reconferido. A Vercel muda limite de plano sem avisar este arquivo |
+| `controle inerte` | 7 | `7273008` · 06/08 | — é **padrão nomeado**, não afirmação factual | ⏸️ sai da lista: as 7 são aplicações do conceito, não cópias de uma medição |
+
+> ### ⛔ O LIMITE DESTA VARREDURA É O QUE ELA MAIS ENSINA
+>
+> Ela varreu **"frase que eu lembrei de procurar"** — que é, literalmente, a
+> fraqueza que esta regra descreve. Não é amostra: é o mesmo viés, um nível
+> acima. Cinco achados não dizem que há cinco.
+>
+> ### 🔬 O CRITÉRIO MECÂNICO QUE FALTA — registrado, NÃO implementado
+>
+> > **Toda afirmação FACTUAL SOBRE O MUNDO precisa de DATA e de COMO FOI
+> > MEDIDA. As que não tiverem são candidatas automáticas.**
+>
+> Factual sobre o mundo é o que poderia ser diferente sem ninguém mexer neste
+> repositório:
+>
+> | Classe | Exemplo daqui |
+> |---|---|
+> | o que uma FERRAMENTA faz | `resize_window`, `getComputedStyle`, jsdom, CDP |
+> | o que um PLANO/serviço permite | cron do Hobby, PITR do Supabase Free, limite da Graph API |
+> | o que um CAMPO tem | "0 leitores", "51 de 115 payloads", "402 arquivos em CRLF" |
+> | o que o REMOTO/produção está | `origin/main` em X, "a branch não existe lá" |
+>
+> ⚠️ **O que NÃO entra:** padrão nomeado, decisão de produto e regra de estilo.
+> Eles não descrevem o mundo — são escolhas, e escolhas não envelhecem por conta
+> própria. Confundir os dois faria a varredura acusar metade do arquivo e
+> desacreditar a lista, que é o erro do critério largo demais.
+>
+> ⛔ Não implementado de propósito. O critério vale como leitura antes de
+> escrever: **acabei de afirmar algo sobre o mundo? então a linha leva data e o
+> comando que a remede.**
+
+⚠️ E é a mesma doença de *"está morto" registrado como ESTADO* (o
+`Workspace.sources`, declarado morto e com 21 referências): estado registrado
+envelhece sozinho, e **replicado, envelhece sem deixar rastro de que envelheceu**.
+
+---
 
 # 🧭 META-REGRA — COMO REGISTRAR UM ACHADO, PARA QUE ELE SIRVA
 
@@ -501,7 +676,9 @@ Ordem recomendada do roteiro: 1 → 9,10,11,12,13 → 2 → 3,4 → 5 → 6,7 �
   `?sslmode=require&uselibpqcompat=true`.
 - **BullMQ → cron externo** (serverless não roda worker). Foi Vercel Cron até
   descobrirmos que o plano Hobby só aceita cron diário e **rejeita o deploy inteiro**
-  com `*/15`. Hoje o agendamento vive em `.github/workflows/cron.yml` (GitHub Actions):
+  com `*/15`. ⚠️ **Medido em 24/07/2026** (o deploy foi rejeitado de
+  verdade) e **nunca reconferido**: é fato sobre produto de TERCEIRO, e a Vercel
+  muda limite de plano sem avisar este arquivo. Hoje o agendamento vive em `.github/workflows/cron.yml` (GitHub Actions):
   `sync-facebook` e `run-rules` a cada 15min, `reports` de hora em hora. As rotas
   `/api/cron/*` seguem protegidas por `CRON_SECRET`. Ver a seção de deploy.
 - **Atribuição venda→campanha/criativo é "best-effort"** por `utm_campaign` = nome
@@ -769,7 +946,10 @@ funil · hachura do heatmap a `rgba(0,0,0,0)` · este traço).
 > 2. varrer os elementos desenhados em vez de uma lista de tokens.
 >
 > ⚠️ O custo já foi levantado e é alto: navegador headless + dev server +
-> sessão, e o cookie do NextAuth é `httpOnly`.
+> sessão. ⛔ **Aqui dizia "e o cookie do NextAuth é `httpOnly`" como se isso
+> fechasse a porta — nunca foi medido contra o cookie de sessão** (13/08/2026).
+> Custo alto é motivo para adiar; impedimento é outra afirmação, e essa não
+> existe. Ver o item (d).
 
 ⚠️ **Prima disto, em outra camada:** uma asserção do piso da fita usava
 `[100, 0, 5]`, cujo valor já dava 6,5px — acima do piso, que portanto nunca
@@ -1105,8 +1285,9 @@ WCAG 1.4.1 obrigou a ter.
 > gargalo do funil": a coisa está no DOM, correta em teoria, e errada na tela.
 >
 > **Medir a cor PINTADA automaticamente é caro** — navegador headless + dev server
-> + sessão, e o cookie do NextAuth é `httpOnly` (o mesmo bloqueio que travou o
-> item (d)). O que é barato é o **guarda estático**: reprovar quando o
+> + sessão. ⛔ **Dizia "o mesmo bloqueio que travou o item (d)", e o item (d) não
+> está travado: está NÃO TENTADO** (13/08/2026). O `httpOnly` nunca foi exercido
+> contra o cookie de sessão — ver o item (d). O que é barato é o **guarda estático**: reprovar quando o
 > `globals.css` declarar `color` em seletor de elemento fora de `@layer`. Mede a
 > causa estrutural em vez do sintoma, e é ~15 linhas sem dependência nova.
 >
@@ -1142,11 +1323,26 @@ aqui), dá para exercitar o CÓDIGO em vez do tamanho: mover o gatilho para a bo
 com `position:fixed` prova o clamp do popover sem precisar de janela estreita.
 → `docs/design/05-MOCKUPS-VS-TOKENS.md`
 
-### Nunca confie na mensagem de sucesso do `resize_window`
+### Nunca confie na mensagem de sucesso do `resize_window` — CONFIRA o resultado
 
-Com a janela maximizada ele reporta êxito e **não redimensiona**. Depois de
-qualquer resize, leia `innerWidth` e compare. `innerWidth === screen.availWidth`
-é o indício de maximizada.
+Ele já **reportou êxito sem redimensionar** cinco vezes nesta base. Depois de
+qualquer resize, leia `innerWidth` e compare.
+
+> ⛔ **A CONDIÇÃO NÃO FOI ISOLADA — corrigido em 13/08/2026.**
+> Este parágrafo afirmava *"com a janela maximizada"* e *"`innerWidth ===
+> screen.availWidth` é o indício"*. A primeira ocorrência (`a23844e`, 31/07)
+> disse só *"não pegam com a janela do Chrome…"*: uma falha observada, sem
+> variável isolada. As cópias seguintes endureceram para "ele MENTE" e para "a
+> janela precisa estar desmaximizada" — e **ninguém mediu a maximização como
+> causa**.
+>
+> ⚠️ Duas sessões foram gastas pedindo ao dono que desmaximizasse a janela, com
+> base nessa causa não medida. O que é fato: o retorno dele não descreve o
+> resultado. O que é hipótese: por quê.
+>
+> 🔜 Isolar custa uma sessão: redimensionar com a janela restaurada e com ela
+> maximizada, lendo `innerWidth` nas duas. Até lá, "ele mente" e "precisa estar
+> desmaximizada" **não são afirmações deste arquivo**.
 
 > ### ⛔ E a ORDEM importa: crie a ABA primeiro, desmaximize DEPOIS
 > Descoberto em 05/08/2026, depois de duas tentativas frustradas em que o usuário
@@ -1405,11 +1601,25 @@ O raciocínio completo de cada item está em **`docs/FILA.md`**.
 > descendentes vazando). E o **método** — e os dois limites dele — está registrado
 > em `docs/FILA.md`, pronto para ser reusado nos componentes novos.
 
-> ### ⚠️ O bloqueio do item (d) é de AMBIENTE, não de código
-> `resize_window` mentiu duas vezes (última em 05/08: disse `560x900`,
-> `innerWidth` ficou **2560**). O CDP não substitui — `chrome-devtools-mcp` roda
-> num browser **separado e não autenticado**, e o cookie de sessão do NextAuth é
-> `httpOnly`, então não há como transplantá-lo.
+> ### ⚠️ O item (d) está NÃO TENTADO, não impedido — corrigido em 13/08/2026
+> `resize_window` **falhou** duas vezes (última em 05/08: pediu `560x900`,
+> `innerWidth` ficou **2560**).
+>
+> ⛔ **A frase seguinte dizia que o CDP "não substitui" porque o cookie do
+> NextAuth é `httpOnly` e "não há como transplantá-lo". Isso nunca foi medido.**
+> A varredura de 13/08 achou a primeira ocorrência de `httpOnly` neste arquivo:
+> `0f97ed3`, 29/07, sobre o `fb_oauth_ws` do OAuth do Facebook — **outro cookie,
+> outro assunto**. O bloqueio herdou a palavra e virou impedimento estabelecido
+> sem nunca ter sido exercido contra o cookie de SESSÃO.
+>
+> ⚠️ **Não é que dê certo — é que ninguém tentou.** Transplantar cookie
+> `httpOnly` entre navegadores é rotina de automação (`Network.setCookie` do
+> CDP existe exatamente para isso). Pode falhar por outro motivo; o que não
+> existe é a medição.
+>
+> 🔜 O item sai de "bloqueado por ambiente" para **"não tentado"**. Quem for
+> tentar: uma sessão de dev, `Network.setCookie` com o cookie do NextAuth, e o
+> desfecho registrado — qualquer que seja.
 >
 > ✅ A metade que não dependia de viewport **foi feita**: os condicionais da
 > gaveta de Integrações › Anúncios (erro de perfil, conta Desabilitada + backoff,
@@ -1562,6 +1772,44 @@ arquivo local, de propósito.
   "remover o controle".** É **descobrir por que gravamos algo que ninguém lê**:
   um dos dois lados está errado, e remover o controle escolheria um lado sem
   medir. Decisão do dono, 12/08/2026.
+
+  ### 🔴 A PRIMEIRA OCORRÊNCIA DELE NÃO MEDIU NADA — e se declarou fechada
+
+  Varredura de 13/08/2026. `git log -S "pixelConfigIds" -- CLAUDE.md | tail -1`
+  devolve **`c4db658`, 28/07/2026**, e a linha introduzida é:
+
+  > *"**Decisões registradas para não serem reabertas**: webhookIds e
+  > pixelConfigIds aprovados como dimensões de filtro"*
+
+  Nenhuma referência contada, nenhum consumidor procurado — uma **decisão**,
+  apresentada como assunto encerrado. Ela sustentou o campo por **quinze dias**
+  e por 9 cópias, até a contagem de 12/08 achar **0 leitores**.
+
+  E o reenquadramento de 12/08 vai além: `pixelConfigIds` **não é coluna órfã
+  solitária — é um lado inteiro de um par partido**. `preverExclusaoDaArea` lê
+  `<Recurso>.workspaceId`; o formulário de Áreas escreve `Workspace.*Ids`. Os
+  dois vínculos não se enxergam, e a consequência foi OBSERVADA na tela: uma
+  área com 1 conta e 1 webhook aparece **vazia** para a prévia de exclusão, e o
+  aviso de promoção de escopo não dispara num fluxo irreversível.
+
+  > ### ⛔ REGRA: NENHUM REGISTRO SE DECLARA FECHADO PARA REVISÃO
+  >
+  > ## O que fecha um assunto é MEDIÇÃO NOVA — nunca a idade da entrada, nunca a frase "não reabrir".
+  >
+  > *"Decisões registradas para não serem reabertas"* é o formato, e o formato é
+  > o defeito: ele transforma o registro em algo que **desencoraja exatamente a
+  > conferência que o desmentiria**. Uma decisão pode e deve ser registrada; o
+  > que ela não pode é vir com blindagem.
+  >
+  > ⚠️ Este projeto inteiro é feito de reaberturas que valeram: o ⛔ da sombra do
+  > `Card`, o `DE_PARA` que proibia três entradas que voltaram, a definição de
+  > "estrutural", o `minHeight: 120` do `EmptyState` que não era vinculante, o
+  > descarte do `linhas`. Nenhuma teria acontecido sob "não reabrir".
+  >
+  > ⛔ **Ao encontrar "decidido", "não reabrir", "assunto encerrado" ou "já
+  > discutido" neste arquivo, isso não é resposta — é sinal para procurar a
+  > medição.** Se não houver uma, a entrada é candidata, e a idade dela conta
+  > contra, não a favor.
 - **`DashboardLayout.workspaceId` nullable** — o NOT NULL entra num 2º deploy.
 - **`DashboardLayout.workspaceId` nullable** — o NOT NULL entra num 2º deploy.
 - **As ações em massa, o duplicar e o excluir nunca foram exercidos.** O
@@ -1726,9 +1974,23 @@ sacrifica quando as alternativas são piores.
 > Escrito para quem abre contexto limpo amanhã. **Esta seção é tudo que você tem
 > da sessão de 06/08.** Se ela contradisser algo acima, ela é mais nova.
 >
-> ⚠️ **Nada foi enviado ao GitHub.** Tudo é commit LOCAL na branch
-> `redesign/dashboard`. A `main` está intacta. O push é decisão do dono, e ele
-> não a tomou.
+> ### 📏 O ESTADO DO REMOTO NÃO SE REGISTRA NESTE ARQUIVO — ELE SE MEDE
+>
+> ```bash
+> git rev-list --left-right --count HEAD...origin/main               # os DOIS lados
+> git rev-list --left-right --count HEAD...origin/redesign/dashboard
+> ```
+>
+> ⛔ **Os dois lados, sempre.** Contar um só transforma "divergiram" em "estou à
+> frente" — e essa é a diferença entre um push e um push que perde trabalho.
+>
+> ⚠️ **Esta é a ÚNICA linha sobre o remoto no arquivo, e é de propósito.** Aqui
+> havia 18 afirmações de estado copiadas de sessão em sessão ("a `main` está em
+> `4e6aa9e`", "a branch não existe no remoto"). Todas foram apagadas em
+> 13/08/2026 porque **todas estavam falsas**: medido, `origin/main` tinha andado
+> e a branch existia no remoto havia dias. Cada cópia era verdadeira quando
+> nasceu; o que envelheceu foi o registro, e a repetição fez parecer conferido o
+> que era uma medição só. Método não envelhece — resultado, sim.
 
 ## ✅ O que ficou PRONTO
 
@@ -1788,7 +2050,7 @@ em arquivo local, de propósito. Quem responde é
 | **`Integrações › Visão geral` fora da sidebar** | a tela não existe (`integracoes/page.tsx` é `redirect`). Entra como PRIMEIRO filho no passo de Integrações |
 | **`/dashboard/integracoes/testes` fora da navegação** | decisão do `03`. Ela **morre** no passo de Integrações. ⛔ Não religue link para ela — ver a seção própria acima |
 | **Medidor de plano no rail** | não há backend de billing. Confirmado por `grep` no schema |
-| **Guarda estático de CSS sem camada** | proposto e **não construído**. Reprovaria o `test:contraste` quando o `globals.css` declarasse `color` em seletor de elemento fora de `@layer`. ~15 linhas, sem dependência. Medir a cor PINTADA automaticamente é caro (navegador + servidor + sessão `httpOnly`) e foi **descartado** |
+| **Guarda estático de CSS sem camada** | proposto e **não construído**. Reprovaria o `test:contraste` quando o `globals.css` declarasse `color` em seletor de elemento fora de `@layer`. ~15 linhas, sem dependência. ⚠️ Medir a cor PINTADA automaticamente foi **adiado por custo** (navegador + servidor + sessão) — a palavra era "descartado" por causa do `httpOnly`, que nunca foi medido |
 | **Item (d) — viewport estreito** | segue bloqueado por ambiente (`resize_window` mente) |
 
 ## ➡️ PRÓXIMO PASSO, e por quê
@@ -1853,9 +2115,6 @@ Depois do mapa, nesta ordem, que é do dono:
 
 > **Mais nova que tudo acima.** Se contradisser, ela vence.
 >
-> ⛔ **NADA FOI PARA O GITHUB.** `main` intacta, **60 commits locais** em
-> `redesign/dashboard` esperando decisão do dono. Ponto de corte da branch:
-> `4e6aa9e`, 05/08/2026.
 
 ## 🥇 A REGRA QUE GOVERNA O RESTO DO REDESIGN
 
@@ -1929,8 +2188,6 @@ dono corrigiu. **Não unifique os dois.**
 
 > **A mais nova. Se contradisser qualquer coisa acima, ela vence.**
 >
-> ⛔ **NADA FOI PARA O GITHUB.** `main` intacta, **11 commits locais** em
-> `redesign/dashboard`. O push é decisão do dono, e ele não a tomou.
 
 ## ✅ A PRÓXIMA SESSÃO CONSTRÓI O GERENCIADOR — e construiu, em 07–08/08
 
@@ -3608,8 +3865,6 @@ leva o que foi MEDIDO, para ninguém ter de medir de novo.
 
 > **A mais nova. Se contradisser qualquer coisa acima, ela vence.**
 >
-> ⛔ **NADA FOI PARA O GITHUB.** `main` intacta; tudo é commit LOCAL em
-> `redesign/dashboard`. O push é decisão do dono, e ele não a tomou.
 
 ## ✅ A QUARTA TELA EXISTE — Gerenciador / Campanhas
 
@@ -3709,9 +3964,6 @@ Medido em 08/08/2026, e os números foram para o `04`:
 | commits locais à frente da `main` | **75** |
 | árvore de trabalho | limpa |
 
-⛔ **NADA foi para o GitHub.** Os três commits de hoje são `c9bcc0e` (a tela),
-`a2a037e` (a barra flutuante + o `04`) e `bc03b87` (a passada visual). O push é
-decisão do dono, e ele não a tomou.
 
 ## ➡️ PRÓXIMO: UTM & SNIPPETS, a sétima — e as DUAS coisas que ela herda
 
@@ -3789,6 +4041,480 @@ existe.
 `Webhooks` 532) **continuam de pé e não auditadas de propósito** — vão ser
 reescritas, e auditar o que será deletado é trabalho que não sobrevive.
 
+# 🎯 A MEDIÇÃO NÃO ACERTOU O ALVO — a família, com TRÊS casos numa sessão só
+
+> **Formulação do dono, 13/08/2026, depois de a mesma mecânica morder três vezes
+> na mesma sessão, em três camadas diferentes.** Três instâncias tornam o padrão
+> inegável — e as três produziram número **plausível**.
+
+> ## Saída plausível não é evidência de que o instrumento mediu o ALVO.
+
+Esta base já tem muita regra sobre instrumento que MENTE (`resize_window`,
+`getComputedStyle` sem repintura, `getBoundingClientRect` clipado). Esta é
+outra: o instrumento funciona perfeitamente — **e está apontado para outra
+coisa**. Ele não erra o valor; erra o objeto.
+
+### Os três casos de 13/08/2026
+
+| # | O que eu medi | O que eu concluí | O sinal que estava na saída |
+|---|---|---|---|
+| 1 | o **`LineChart`** (`receita-gasto`) | *"o C2 não reproduz"* — e quase apaguei um defeito real do **`SerieTemporal`** | **`larguraCard: 1432`** num bloco que mede **369** |
+| 2 | envelopes com `versao: 4` — o campo é **`v`** | ia reportar a migração como robusta | **cinco entradas diferentes, saída IDÊNTICA** (27 blocos, mesmos ids) |
+| 3 | folhas com `!e.children.length` — **`<svg>` tem filhos** | 9 blocos reprovando a §7.2 | `Funil` **99px** e `Receita vs. gasto` **221px** de "vazio" em cima de um gráfico |
+
+> ### 🔴 SAÍDA IDÊNTICA PARA ENTRADAS DIFERENTES É SINAL DE INSTRUMENTO, NUNCA DE ROBUSTEZ
+>
+> E as duas **se parecem igual de fora**. No caso 2, "v4, v3, corrompido e lixo
+> todos viram um layout válido de 27 blocos" é exatamente o que se esperaria de
+> uma migração que sanea bem — foi a leitura que eu ia dar. A migração de
+> verdade devolve **15 / 13 / 10 / 27 / 27**, e o corrompido preserva os 10
+> blocos válidos em vez de descartar tudo.
+>
+> ⛔ **Ao ver entradas distintas convergirem, a primeira hipótese é o
+> instrumento**, não a qualidade do código. Robustez real produz saídas
+> DIFERENTES: ela preserva o que dá para preservar em cada caso.
+
+### 🔴 O QUE TORNA ESTA FAMÍLIA PIOR QUE A DO INSTRUMENTO QUE MENTE
+
+| | |
+|---|---|
+| instrumento que **mente** | devolve valor errado sobre o alvo certo — e o valor costuma ser absurdo |
+| instrumento **fora do alvo** | devolve valor **certo** sobre o objeto **errado** — e ele é plausível por construção |
+
+E ela ataca dos dois lados: no caso 1 **apagou** um defeito real com atestado de
+saúde; no caso 3 **inventou** dois defeitos que não existiam. Uma lista riscada
+por medição fora do alvo é tão cara quanto a lista que só cresce — as duas
+falham pela mesma porta.
+
+> ### ⛔ A GUARDA, e ela é uma linha
+>
+> **A medição IMPRIME o alvo — largura, classe, texto, contagem de elementos
+> examinados — e alguém confere que é o alvo ANTES de a conclusão valer.**
+>
+> Não é "prestar atenção": é acrescentar campos à saída. `larguraCard: 1432`
+> **já estava impresso** e passou; o que faltou foi a pergunta *"1432 é a
+> largura do bloco que eu quero?"*.
+>
+> ⚠️ E a contagem de examinados é a metade mais esquecida: um detector que olha
+> **16 de 28** e declara *"7 reprovam"* tem a mesma forma dos três acima. O
+> denominador vai na saída, sempre.
+
+⚠️ **Os três só apareceram porque algum número ficou estranho demais.** Não
+havia guarda nenhuma — foi sorte, e sorte três vezes na mesma sessão é o
+argumento de que a guarda precisa existir. As duas primeiras vieram de PEDIDO
+do dono feito sobre a minha conclusão, sem perguntar em qual componente a
+medição tinha sido feita: **a guarda vale para quem mede e para quem manda
+agir sobre a medição.**
+
+⚠️ Prima direta de *PRINT × MEDIÇÃO* e de *uma asserção precisa poder FALHAR
+pelo motivo que ela alega medir*. A diferença é que aqui a asserção pode falhar
+— ela só está falhando sobre outra coisa.
+
+## 📦 IMPORT NÃO CHAMADO DÁ APARÊNCIA DE COBERTURA — e o lint já sabia
+
+> **14/08/2026.** Mesma família: o instrumento não acertou o alvo. Aqui o
+> instrumento é o **arquivo de teste**, e o alvo é o que ele alega medir.
+
+`scripts/teste-desenho.mjs` importava `calcularFluxo` e `segmentosDaFita` e
+**não chamava nenhum dos dois**. A partição da fita entrou em `444ce75` (13/08)
+sem **uma única asserção** — e quem abrisse o arquivo veria os dois nomes na
+lista de imports e concluiria que a partição estava coberta.
+
+No mesmo arquivo, `geometria(entrada, oQue)` estava **definida e nunca
+chamada**: a guarda "INSTRUMENTO VAZIO" que existe para impedir asserção vazia,
+ela própria inerte.
+
+> ## Um símbolo importado e não chamado é uma AFIRMAÇÃO DE COBERTURA que nada sustenta — e ela é lida por humano, não por ferramenta.
+
+| | o que o leitor conclui |
+|---|---|
+| teste **ausente** | nada — a lacuna é visível |
+| teste com **import órfão** | 🔴 *"isto é testado"* — e o arquivo até nomeia o que ele não mede |
+
+### 🔎 A GUARDA, e ela já existia — estava sendo IGNORADA
+
+**`no-unused-vars` pega isto.** Os warnings estavam lá o tempo todo:
+
+```
+scripts/teste-desenho.mjs
+  57:10  warning  'geometria' is defined but never used
+  77:10  warning  'calcularFluxo' is defined but never used
+  77:25  warning  'segmentosDaFita' is defined but never used
+```
+
+⛔ **O achado não é o import — é que o lint saía com `0 errors, 12 warnings` e
+ninguém lia a segunda metade.** Um sinal que ninguém lê é um sinal que não
+existe, e é a mesma doença do teste que fica vermelho sozinho: ali o ruído
+envenena o alarme, aqui o alarme já toca e ninguém atende.
+
+```bash
+npx eslint . 2>&1 | grep -E "is (defined|assigned).*never used" | grep -iE "scripts/|teste-"
+```
+
+**A pergunta binária por acerto:** *este símbolo é do domínio que o arquivo diz
+testar?* Se for, a asserção que o usaria **não existe** — e a lacuna é do
+tamanho do que o nome dele promete.
+
+⚠️ E o remédio não é apagar o import: é **escrever a asserção que faltava**, ou
+mover a pergunta para onde ela é respondível. Aqui a partição virou
+`test:particao-fita` (14 asserções, contra as funções PURAS), porque no
+`renderToStaticMarkup` a geometria da fita mora atrás de `largura > 0` e não há
+layout — o import prometia uma medição que **naquele arquivo era impossível**.
+
+⚠️ Prima de *TESTE VERDE SOBRE CAMINHO MORTO* e de *AS TRÊS FORMAS DO MESMO
+SILÊNCIO*. A diferença: nas outras a suíte afirma cobertura pelo verde; nesta
+ela afirma pelo **cabeçalho de imports**, que ninguém executa.
+
+---
+
+## 🔁 O QUINTO CASO É DE OUTRO EIXO: o alvo estava certo, o MOMENTO não
+
+> **13/08/2026, na varredura da §7.2.** Os quatro anteriores erram QUAL objeto
+> se mediu. Este acerta o objeto e erra QUANDO — e por isso escapa de todas as
+> guardas que a família ganhou até aqui.
+
+Medi os 28 blocos logo depois de um **hot reload** do Next e obtive:
+
+```
+Funil              meio 112, meio 63     <- e o certo é  meio 39
+Receita vs. gasto  meio 48,  meio 44     <- e o certo é  não reprovar
+Taxa de aprovação  ausente               <- e o certo é  meio 58
+```
+
+Repeti a leitura. **Deu exatamente o mesmo.** Só depois de recarga limpa,
+período reaplicado e assentamento a lista bateu com o print — e aí ela também
+repetiu, agora no valor certo.
+
+> ## ⛔ A REGRA DAS DUAS LEITURAS COBRE RUÍDO, NÃO REMONTAGEM.
+>
+> Ela nasceu de leitura transitória (ler antes da repintura), e para isso serve.
+> Aqui os dois valores concordaram porque o estado estava **estável e errado**:
+> os gráficos ainda não tinham montado, e um componente que não montou não
+> oscila — ele fica parado no valor errado o tempo que for preciso.
+
+⚠️ **O sinal barato existia e estava na saída**: `svgSemTinta: 1` e um bloco
+acusando `fim 385` num card de 464 — ou seja, "o card inteiro está vazio". Um
+gráfico sem tinta nenhuma é sinal de INSTRUMENTO ou de MOMENTO, nunca de vazio.
+A guarda passou a publicar `svgSemTinta`, e ele anula o veredito como
+`semGancho` já anulava.
+
+> ### 🔎 A DISCIPLINA, e ela é uma sequência, não um cuidado
+>
+> | | |
+> |---|---|
+> | 1 | **recarga limpa** — não hot reload |
+> | 2 | **período reaplicado** — ele volta para `Hoje` a cada recarga, e `Hoje` está VAZIO no dev |
+> | 3 | **assentar**, e conferir na saída que os gráficos têm tinta |
+> | 4 | só então medir — e comparar com o print |
+>
+> ⚠️ O passo 2 é o mais fácil de perder: o dado do dev vive em 04–07/08 e a
+> janela padrão é `Hoje`. Medir sem reaplicar o período mede o estado vazio, que
+> o `07` já diz não exercitar nada.
+
+⛔ **E o `Runtime.evaluate` é SÍNCRONO.** Ele congelou **três vezes** (45s de
+timeout) com `await` dentro — inclusive com script curto. O instrumento da §7.2
+mudou de forma por causa disso: `__ajustar(w)` numa chamada, `vazioAgora()` na
+seguinte. O ida-e-volta entre as duas já dá o tempo de repintura.
+
+---
+
+# ⚖️ SÉRIE DE FONTE INDEPENDENTE DA VIZINHA: a razão não é conversão, é DISCORDÂNCIA ENTRE INSTRUMENTOS
+
+> **13/08/2026. É o CASO SIMÉTRICO da regra que já existe**, e faltava metade.
+> A registrada cobre *série que DERIVA da vizinha* (razão = tautologia). Esta
+> cobre o outro extremo: *série INDEPENDENTE da vizinha*.
+
+| relação entre A e B | a razão A/B é |
+|---|---|
+| **B deriva de A** | 🔴 tautologia com aparência de resultado — o funil de IC × Vendas |
+| **A e B independentes** | 🔴 **discordância entre instrumentos** com aparência de taxa |
+| A ⊂ B, mesmo instrumento | ✅ conversão de verdade |
+
+> ## Uma taxa de conversão pressupõe que o numerador seja SUBCONJUNTO do denominador. Quando as duas séries vêm de instrumentos diferentes, isso não é verdade — e a razão perde o intervalo [0,1].
+
+### 🔬 O TESTE, antes de dividir A por B
+
+**As duas vêm do mesmo instrumento, cobrem a mesma população e a mesma janela?**
+
+| | pergunta |
+|---|---|
+| **instrumento** | o mesmo sistema mediu as duas? (nosso script × a Meta × o gateway) |
+| **população** | tudo que pode estar em A pode estar em B? |
+| **janela** | as duas têm dado no mesmo intervalo de datas? |
+
+⛔ **Se qualquer uma falhar, a razão NÃO TEM INTERVALO VÁLIDO e não vai para a
+tela como taxa.** Ela pode passar de 100% e pode ir a quase zero, e nenhum dos
+dois é informação sobre o negócio.
+
+### O caso que produziu a regra — os três desencontros empilhados
+
+A faixa de cobertura do funil dividia `Cliques` por `Sessões`:
+
+| | Cliques | Sessões |
+|---|---|---|
+| instrumento | `DailyAdMetric` (a **Meta**) | tabela `Click` (**nosso script**) |
+| população | **só Meta** | **todo tráfego** |
+| janela com dado (dev) | 30/07 – 12/08 | 04/08 – 08/08 |
+
+**20 das 57 sessões (35%) vinham de `google`, `organico` e `tiktok`** — tráfego
+que não pode existir no denominador, por construção. A razão deu **0,9%** numa
+leitura e **251,7%** noutra: duas ordens de grandeza, nos dois sentidos.
+
+⚠️ E a etapa `ICs` tinha a mesma doença por dentro:
+`ICs = comJornada + semJornada`, e o `semJornada` é **disjunto de Sessões** por
+definição — o próprio código diz *"São somados porque são populações
+DISJUNTAS"*. Medido: 38 com jornada + 35 sem = 73, contra 57 sessões. A pílula
+saía **128,1%**, que é o impossível apresentado como ganho.
+
+> ### ⛔ O SINAL BARATO
+> **Uma razão que passa de 100%, ou que varia duas ordens de grandeza nos dois
+> sentidos, não é "dado estranho" — é a assinatura desta família.** A primeira
+> pergunta não é "o cálculo está certo?"; é *"esses dois números vêm do mesmo
+> lugar?"*.
+>
+> E ao desenhar: **etapa que cresce em relação à anterior é INCONSISTÊNCIA, não
+> ganho.** O lugar da pílula é dizer que as fontes divergem, não imprimir a
+> porcentagem.
+
+---
+
+# 🏭 FIXTURE QUE CRIA O REGISTRO FINAL DIRETO DEIXA O CAMINHO DE INGESTÃO SEM EXERCÍCIO
+
+> **Registrado em 13/08/2026 como PADRÃO**, não como nota do dia — é a terceira
+> aparição da mesma mecânica em duas sessões.
+
+> ## O estado final fica CERTO, a suíte fica verde, e o código que deveria tê-lo produzido nunca roda.
+
+| # | A fixture cria | O caminho que fica sem exercício |
+|---|---|---|
+| 1 | as etapas à mão, no `teste-desenho` | `ETAPAS_PARA_FITA` — plantei a soma indevida no `catalogoRender` e a suíte seguiu **verde** |
+| 2 | `Sale` direto, no `seed-dev` | `ingestSale` → `registrarCheckoutDoGateway` — **nunca roda em dev** |
+| 3 | `checkoutSource` escrito à mão | a decisão de `gerouCheckout` do payload do gateway |
+
+### 🔴 POR QUE ISTO É PIOR QUE FIXTURE COM DADO ERRADO
+
+Fixture com dado errado produz tela esquisita, e alguém desconfia. Esta produz o
+estado **exatamente certo** — e por isso ninguém olha. O caminho que falta é
+invisível dos dois lados: o teste não o chama, e a tela não tem como mostrar que
+ele não foi chamado.
+
+⚠️ E ela **contamina o que se lê do banco**: o dev tinha 24 `gateway` e 14
+`navegador`, que parecem medição de dois mecanismos e são carimbo de LOTE do
+gerador (06/08 → 35 vendas / 24 ICs; 08/08 → 22 / 14).
+
+> ### 🔎 A MEDIÇÃO QUE SERVE PARA QUALQUER CASO
+>
+> ## Por quais funções a fixture passa antes de chegar no estado que o teste observa?
+>
+> Se a resposta for "nenhuma — ela escreve o estado final", então **todo o
+> caminho de produção até aquele estado está sem cobertura**, por mais verde que
+> a suíte esteja.
+>
+> ```bash
+> # o que ESCREVE a coluna em produção…
+> grep -rn "checkoutAt\|checkoutSource" src/lib/ --include=*.ts | grep -v "select\|where"
+> # …e quem a fixture chama para chegar lá
+> grep -n "import\|await " scripts/seed-dev.mjs | head -30
+> ```
+> A pergunta binária por coluna: *o escritor de produção aparece na lista da
+> fixture?* Se não, aquele ramo nunca foi percorrido.
+
+⚠️ É prima de *O SEED PRODUZ ESTADO INCOMPLETO* e de *TESTE QUE CONSTRÓI A
+PRÓPRIA ENTRADA*. A diferença é o alvo: aquelas falam do DADO gerado; esta fala
+do CÓDIGO que deixou de rodar para gerá-lo.
+
+> ### ⛔ E O RECUO QUE ISTO PRODUZIU FICA REGISTRADO — não só a correção
+>
+> Eu medi 24/14 e reportei **"63% dos ICs são derivados da venda"** como fato
+> sobre o produto. É fato sobre o SEED. O número atravessou uma análise, uma
+> decisão de arquitetura e uma mensagem de commit antes de alguém perguntar de
+> onde ele vinha.
+>
+> ## Número de seed lido como número de produto é exatamente como afirmação falsa entra nesta base.
+>
+> Ele não chega como erro: chega como medição, com casas decimais e um `SELECT`
+> atrás. O que faltou não foi rigor na conta — foi a pergunta seguinte: *quem
+> escreveu esta linha, o produto ou o gerador?*
+>
+> ⚠️ O ponto estrutural sobreviveu ao recuo (dois escritores, um circular por
+> construção), e é por isso que a decisão de arquitetura continuou válida. **Mas
+> a proporção real em produção segue NÃO MEDIDA**, e nada neste arquivo deve
+> sugerir o contrário.
+
+---
+
+# 🧩 COBERTURA DO SNIPPET DE CHECKOUT — TRÊS SINTOMAS, UM DEFEITO
+
+> **Ligados em 13/08/2026 por ordem do dono.** Estavam em três lugares da fila
+> como se fossem três investigações. **São o mesmo buraco**, e separados cada um
+> volta a ser investigado do zero.
+
+> ## O snippet não está detectando o checkout, e o webhook do gateway tapa o rombo — em silêncio.
+
+| Sintoma | Onde estava | O que ele é |
+|---|---|---|
+| **checkout duplicado na Atividade Recente** | fila de atribuição | um do snippet, um do webhook — a dedup só funciona quando o snippet chegou primeiro |
+| **testador da Cakto sem `InitiateCheckout`** | fila de atribuição | o snippet não disparou ali |
+| **poucos ICs do navegador contra o total** | achado do funil, 13/08 | o resto é derivado da venda |
+
+⛔ **Não trate nenhum dos três como defeito de tela.** A tela do funil agora
+DECLARA o problema (a etapa vale só o que o navegador viu, e o resto vai
+declarado fora da geometria) — mas declarar não conserta. O defeito é o Bloco B.
+
+> ### 🔴 POR QUE O WEBHOOK TAPANDO O ROMBO É PIOR QUE O ROMBO
+>
+> `Click.checkoutAt` tem dois escritores, e o do gateway roda **porque a venda
+> chegou**. Então o buraco se preenche sozinho no lugar exato em que ele
+> importa: a conta fecha, o funil fica bonito, e a instalação quebrada nunca
+> aparece. É a mesma família do *número lisonjeiro* — erro que agrada não
+> provoca investigação.
+>
+> ### 🔎 A MEDIÇÃO, e ela vale para qualquer conta
+> ```sql
+> SELECT "checkoutSource", COUNT(*) FROM "Click"
+>  WHERE "userId"=$1 AND "checkoutAt" IS NOT NULL GROUP BY 1;
+> ```
+> A razão `navegador / (navegador + gateway)` **é a cobertura do snippet de
+> checkout**. Perto de zero significa que só o webhook está medindo.
+
+### ⚠️ O NÚMERO DO DEV NÃO SERVE DE EVIDÊNCIA — e eu já errei isso
+
+Medido em 13/08: 24 `gateway` e 14 `navegador`. **Os dois são artefato do
+`seed-dev`**, que insere `Sale` direto e escreve `checkoutSource` à mão — o
+`registrarCheckoutDoGateway` só roda pelo `ingestSale`, e o seed não passa por
+ele. Por dia: 06/08 → 35 vendas / 24 ICs; 08/08 → 22 vendas / 14 ICs. Os números
+são o LOTE, não o mecanismo.
+
+⛔ Eu apresentei 24/14 como "63% dos ICs são derivados da venda", e isso é
+verdade sobre o seed, não sobre o produto. **O ponto estrutural não depende
+disso** — dois escritores, um circular por construção — mas a proporção real em
+produção **NÃO FOI MEDIDA**.
+
+⚠️ E as **19 vendas sem checkout nenhum** (18 APROVADAS) são do mesmo artefato:
+o seed não acompanhou aquelas vendas de checkout. Em produção quem decide é o
+`gerouCheckout` do payload, e o dev não responde por ele.
+
+> ## 🔜 ITEM ABERTO — A PROPORÇÃO REAL NÃO FOI MEDIDA, E ELA É O DEFEITO
+>
+> **Não é pendência de tela.** A tela já declara o que sabe (a etapa vale só o
+> navegador, o resto vai declarado). O que falta é saber **quanto do checkout
+> real o snippet está vendo em produção** — e isso é o Bloco B.
+>
+> ### 🔎 A MEDIÇÃO, escrita, para rodar na PRIMEIRA CONTA REAL
+>
+> ```sql
+> SELECT "checkoutSource", COUNT(*)::int
+>   FROM "Click"
+>  WHERE "userId" = $1 AND "checkoutAt" IS NOT NULL
+>  GROUP BY 1;
+> ```
+>
+> **cobertura = `navegador / (navegador + gateway)`**
+>
+> | resultado | leitura |
+> |---|---|
+> | perto de 1 | o snippet está vendo o checkout — o webhook só complementa |
+> | perto de 0 | 🔴 **só o webhook está medindo**: a instalação não detecta checkout, e o funil só parece inteiro porque a venda tapa o buraco |
+>
+> ⛔ **NÚMERO DE DEV NÃO SERVE DE RESPOSTA PARA ESTE ITEM.** O `seed-dev` insere
+> `Sale` direto, nunca passa por `ingestSale`, e escreve `checkoutSource` à mão —
+> então o que se lê ali é o carimbo do gerador, não o comportamento. Já errei
+> isso uma vez: ver o recuo na seção *FIXTURE QUE CRIA O REGISTRO FINAL DIRETO*.
+>
+> ⚠️ E leve o DENOMINADOR junto ao registrar o resultado: `"cobertura de 12%"`
+> sem dizer sobre quantos checkouts é tão pouco auditável quanto `"0 fugas"` sem
+> o número de examinados.
+
+---
+
+# 🫥 PROMESSA QUE NÃO ASSENTA É PIOR QUE EXCEÇÃO — e `rAF` não roda em aba oculta
+
+> **Medido em 13/08/2026**, ao tentar rodar o `naTela` nas quatro larguras.
+
+Com `document.hidden`, o navegador **não dispara `requestAnimationFrame`**. Uma
+espera de repintura nunca resolve, a promessa fica pendente para sempre, e **não
+há exceção**: o `catch` não roda, o resultado fica `null`, e quem chamou conclui
+que a medição está demorando.
+
+> ## "Não vai acontecer" com a mesma cara de "está quase" é a pior forma de silêncio.
+
+⛔ **A saída não é trocar por `setTimeout`.** A dupla passagem de quadro existe
+porque ler logo depois de mexer no layout devolve o valor ANTERIOR — foi o que
+produziu "13 descendentes vazando" nesta base. Em aba oculta não há repintura
+para esperar: a medição **não é possível**, e o certo é dizer isso. Hoje
+`naTela` **lança nomeando**.
+
+### ✅ A VARREDURA DO QUE JÁ FOI ANOTADO — nenhum registro cai
+
+A pergunta certa: *alguma medição registrada saiu de aba oculta e foi lida como
+"zero fugas"?* **Não, e a razão é estrutural:** uma chamada pendurada não
+devolve `0` — ela não devolve NADA.
+
+| registro | o que o sustenta |
+|---|---|
+| `0 estouros a 1280 e 2260` | veio com **`16 blocos examinados`** |
+| `0 fugas, rolagem 0` (F5) | veio com **`55 células`** |
+| `13` / `14 fugas` | não-zero: a chamada completou |
+
+**Todo `0` registrado carrega um denominador positivo**, e denominador positivo
+é impossível numa promessa que não assentou.
+
+> ### ⛔ A REGRA QUE FICA
+> **Registro de varredura sem o número de itens EXAMINADOS não é verificável.**
+> `"0 fugas"` sozinho é indistinguível de `"não consegui medir"`. O denominador
+> não é detalhe do relatório — é o que permite auditá-lo depois.
+
+---
+
+# 👻 O TERCEIRO ESTADO — nem medido, nem vazio: o componente que fica em `largura === 0` PARA SEMPRE
+
+> **Medido em 13/08/2026, no `FitaFunil`.** É "proteção por TIMING, não por
+> ESTRUTURA" virando defeito permanente — e o modo de falha é MUDO.
+
+`FitaFunil` guarda toda a geometria **e os rótulos das etapas** atrás de
+`{largura > 0 && …}` (linhas 493 e 508), com `largura` vindo de um
+`ResizeObserver`. O `<svg>` fica **fora** da guarda.
+
+Resultado: existe um terceiro estado que o catálogo não declara.
+
+| estado | o que aparece |
+|---|---|
+| medido | a fita |
+| vazio (`temDado` falso) | o `EmptyState`, com causa e ação |
+| 🔴 **OCO** | `<svg>` presente, **zero desenhos**, zero rótulos — só título e subtítulo |
+
+### 🔴 A REPRODUÇÃO, e ela é o caminho NORMAL do usuário
+
+1. abrir o Dashboard — ele abre em **`Hoje`**;
+2. `Hoje` sem clique → bloco em **VAZIO** (correto);
+3. trocar para um período **com dado** → a resposta chega com `funnel` cheio;
+4. o bloco vai para **OCO — e não sai mais.**
+
+**Medido: não se recupera.** Não sai com o dado chegando (a resposta trouxe
+`cl:6508, vi:57, ck:73`), não sai rolando o bloco para dentro da tela, não sai
+redimensionando o contêiner — ou seja, **o `ResizeObserver` não está sequer
+ligado** naquela montagem. Só recarga com o dado já presente resolve.
+
+> ### ⛔ A REGRA
+> **Guarda de "ainda não medi" não pode ser a mesma coisa que "não há o que
+> mostrar".** Se um componente esconde conteúdo enquanto uma medição não chega,
+> ele precisa de um estado de CARREGAMENTO visível — ou de um piso que desenhe
+> sem a medição. Um `&&` que apaga tudo produz uma tela que não afirma nem nega:
+> o usuário vê um card com título e nada dentro, **e nada explica por quê**.
+>
+> 🔎 O `grep` que acha os candidatos:
+> ```bash
+> grep -rn "largura > 0 &&\|width > 0 &&\|medido &&\|altura > 0 &&" src/components/ --include=*.tsx
+> ```
+> A pergunta por ocorrência: *se essa medição nunca chegar, o que o usuário vê —
+> e ele consegue saber que algo falhou?*
+
+⚠️ É prima da **proteção por TIMING** e do **defeito acidentalmente invisível**:
+o que fazia o bloco funcionar era o observer disparar, e isso nunca esteve
+escrito em lugar nenhum. No dia em que a ordem de montagem mudou, sumiu.
+
+---
+
 # 🔬 `getComputedStyle` SEM REPINTURA CONFIRMADA MEDE O QUE ESTAVA, NÃO O QUE ESTÁ
 
 > **Registrado em 08/08/2026 porque quase virou um bug INVENTADO num arquivo
@@ -3853,8 +4579,6 @@ idênticas.
 
 > **A mais nova. Se contradisser qualquer coisa acima, ela vence.**
 >
-> ⛔ **NADA FOI PARA O GITHUB.** `main` intacta em `4e6aa9e`; tudo é commit LOCAL
-> em `redesign/dashboard`. O push é decisão do dono, e ele não a tomou.
 
 ## ✅ A SÉTIMA TELA EXISTE — e a ÚLTIMA legada que servia rota morreu
 
@@ -4103,8 +4827,6 @@ dela.
 
 # 📌 ESTADO DA SESSÃO — 11/08/2026 (parte 2: a gaveta do Pixel)
 
-> **A mais nova.** ⛔ **NADA FOI PARA O GITHUB.** `main` em `4e6aa9e`, **83
-> commits locais**, branch ausente no remoto.
 
 ## ✅ RESOLVIDO EM 11/08 (parte 3): a gaveta ganhou consumidor
 
@@ -4205,7 +4927,6 @@ ninguém verifica.
 
 > **A mais nova. Se contradisser qualquer coisa acima, ela vence.**
 >
-> ⛔ **NADA FOI PARA O GITHUB.** `main` em `4e6aa9e`, branch ausente no remoto.
 
 ## ✅ A GAVETA TEM CONSUMIDOR — e a passada visual achou o que o build não acha
 
@@ -4438,8 +5159,6 @@ mesma: **ler o valor, não afirmá-lo**. Hoje a faixa é medida por
 
 # 📌 ESTADO DA SESSÃO — 11/08/2026 (parte 4: o seed do pixel e o fechamento)
 
-> **A mais nova.** ⛔ **NADA FOI PARA O GITHUB.** `main` em `4e6aa9e`, branch
-> ausente no remoto.
 
 ## ✅ O SEED PAROU DE PRODUZIR ESTADO INCOMPLETO
 
@@ -4548,8 +5267,6 @@ dono**. Quando for feita, o `0px` de padrão garante que produção não muda.
 
 # 📌 ESTADO DA SESSÃO — 11/08/2026 (parte 5: o conserto do legado e o preparo de Webhooks)
 
-> **A mais nova.** ⛔ **NADA FOI PARA O GITHUB.** `main` em `4e6aa9e`, branch
-> ausente no remoto.
 
 ## ✅ AS CAMADAS LEGADAS FORAM CONSERTADAS — e eram DUAS linhas, não oito
 
@@ -4812,7 +5529,6 @@ errada. *O sinal de alerta é a teoria ficar boa cedo demais* — terceira vez.
 
 > **A mais nova. Se contradisser qualquer coisa acima, ela vence.**
 >
-> ⛔ **NADA FOI PARA O GITHUB.** `main` em `4e6aa9e`, branch ausente no remoto.
 
 ## ✅ A NONA TELA EXISTE — e a `WebhooksView` (532 linhas) morreu
 
@@ -5095,7 +5811,6 @@ que aqui o estado estava **correto** — só invisível pelo enquadramento.
 
 > **A mais nova. Se contradisser qualquer coisa acima, ela vence.**
 >
-> ⛔ **NADA FOI PARA O GITHUB.** `main` em `4e6aa9e`, branch ausente no remoto.
 
 ## ✅ A DÉCIMA TELA EXISTE — e a `CreativesView` morreu
 
@@ -5404,7 +6119,6 @@ quase sempre unidade ou referencial errado.
 
 > **A mais nova. Se contradisser qualquer coisa acima, ela vence.**
 >
-> ⛔ **NADA FOI PARA O GITHUB.** `main` em `4e6aa9e`, branch ausente no remoto.
 
 ## ✅ A TELA DE ENTRADA EXISTE — e as duas legadas de auth morreram
 
@@ -5663,7 +6377,6 @@ alcançável em alguns grupos), `PaymentMethod` na taxa de gateway, e os tipos d
 
 > **A mais nova. Se contradisser qualquer coisa acima, ela vence.**
 >
-> ⛔ **NADA FOI PARA O GITHUB.** `main` em `4e6aa9e`, branch ausente no remoto.
 
 ## ✅ A TELA EXISTE — e a `FeesView` (723 linhas) morreu
 
@@ -5870,7 +6583,6 @@ projeto já pagou nove vezes.
 
 # 📌 ESTADO DA SESSÃO — 12/08/2026 (parte 4: ÁREAS, construída e NÃO VISTA)
 
-> ⛔ **NADA FOI PARA O GITHUB.** `main` em `4e6aa9e`, branch ausente no remoto.
 
 ## ⚠️ A TELA EXISTE E NÃO FOI VISTA — a sessão de dev expirou
 
@@ -6121,7 +6833,6 @@ remoção impossível de avaliar.
 
 # 📌 ESTADO DA SESSÃO — 12/08/2026 (parte 5: NOTIFICAÇÕES, e as doze existem)
 
-> ⛔ **NADA FOI PARA O GITHUB.** `main` em `4e6aa9e`, branch ausente no remoto.
 
 ## ✅ AS DOZE TELAS EXISTEM
 
@@ -6235,8 +6946,6 @@ para quem for consertar.
 
 # 📌 ESTADO DA SESSÃO — 12/08/2026 (parte 6: encerramento)
 
-> ⛔ **NADA FOI PARA O GITHUB.** Conferido: `origin/main` em **`4e6aa9e`**,
-> `redesign/dashboard` **ausente no remoto**, árvore limpa.
 
 ## ✅ AS DOZE TELAS EXISTEM
 
@@ -6269,8 +6978,6 @@ inicial descrevia um caso, e o `grep` que generaliza achou 60% a mais.
 
 # 📌 ESTADO DA SESSÃO — 12/08/2026 (fechamento)
 
-> ⛔ **NADA FOI PARA O GITHUB.** `origin/main` em **`4e6aa9e`**,
-> `redesign/dashboard` **ausente no remoto**, árvore limpa.
 
 ## ✅ O QUE ESTA SESSÃO ENTREGOU
 

@@ -7,21 +7,21 @@ import { nomeDaFonte } from "@/lib/fontes";
 import { useRegistrarFaixaDeFiltros } from "@/components/tk/AppShell";
 import { Card } from "@/components/tk/Card";
 import { EmptyState } from "@/components/tk/EmptyState";
-import { KpiHero, MetricStrip, type DadosKpi } from "@/components/tk/Kpi";
-import { RENDERS, vazioDoBloco } from "../../catalogoRender";
-import { useDadosDosBlocos } from "../../dadosDosBlocos";
+import { RENDERS, vazioDoBloco, type RenderBloco } from "../../catalogoRender";
+import { useDadosDosBlocos, type CtxBlocos } from "../../dadosDosBlocos";
 import {
   ALTURA_CELULA,
   CATALOGO_META,
   COLUNAS_GRADE,
   celulasDePx,
+  ehBlocoDeMetrica,
   metaDoBloco,
   proximoPasso,
 } from "../../catalogo";
 import { useLayoutDashboard } from "../../layout/useLayoutDashboard";
 import { useArrasto, type Carga } from "../../layout/useArrasto";
 import { avisoDeSobra, linhasDaGrade } from "../../layout/grade";
-import { MAX_FAIXA } from "../../layout/migrar";
+import { colunasParaLargura, derivarLayout } from "../../layout/derivar";
 import { BarraEdicao } from "@/components/tk/BarraEdicao";
 import { CatalogoLateral } from "@/components/tk/CatalogoLateral";
 import { ItemEdicao } from "@/components/tk/ItemEdicao";
@@ -44,16 +44,33 @@ import type { TraffikView } from "../../useTraffikState";
  * mais funil e globo dividindo a dobra. Doze números do mesmo tamanho não
  * respondem pergunta nenhuma: a tela listava tudo e deixava a pessoa procurar.
  *
- * Aqui a hierarquia é o produto:
+ * Aqui a hierarquia é o produto.
  *
- *   4 KPIs HERO      Faturamento · Gasto · ROAS · Lucro, com sparkline e delta
- *   FAIXA COMPACTA   os outros sete, uma linha, sem card e sem sparkline
- *   PAINÉIS          TUDO o mais, na grade de 12 colunas, pelo layout do usuário
+ * ### 🔴🔴 AS TRÊS ZONAS ACABARAM — F5, 12/08/2026
  *
- * ⛔ Cinco cards iguais aqui e a tela volta a ser a grade de doze. A quantidade
- * de heros é fixa de propósito.
+ * Este cabeçalho descrevia três estruturas:
  *
- * ### 🔴 A TERCEIRA ZONA ABSORVEU O JSX FIXO — 07/08/2026
+ *     4 KPIs HERO      Faturamento · Gasto · ROAS · Lucro, com sparkline
+ *     FAIXA COMPACTA   os outros sete, uma linha, sem card
+ *     PAINÉIS          TUDO o mais, na grade de 12 colunas
+ *
+ * e dizia, em ⛔: *"cinco cards iguais aqui e a tela volta a ser a grade de doze;
+ * a quantidade de heros é fixa de propósito"*.
+ *
+ * **Os dois tetos caíram.** Eles eram a queixa 1 do `07`: onze métricas
+ * disputando oito vagas, e o resto sumindo — e nenhum dos dois números tinha
+ * razão de produto. Eles existiam porque os três grupos eram três componentes
+ * diferentes. Hoje há **uma grade**, e KPI hero, métrica compacta e painel são o
+ * mesmo objeto, diferindo por `colMin`/`colPadrao`/`hMin`/`hPadrao`.
+ *
+ * ⛔ **A hierarquia não morreu — ela mudou de dono, e isso é o contrário de
+ * afrouxar.** O argumento antigo continua inteiro: doze números do mesmo tamanho
+ * não respondem pergunta nenhuma. O que decide o peso agora é a ALTURA DO SLOT,
+ * e o layout padrão continua dando duas células aos quatro principais e uma ao
+ * resto. A diferença é que ela virou uma propriedade do arranjo — visível,
+ * editável e do usuário — em vez de um número escrito num componente.
+ *
+ * ### 🔴 A ZONA DE PAINÉIS ABSORVEU O JSX FIXO — 07/08/2026
  *
  * `Receita × gasto`, `Canais`, `Alertas`, `Top campanhas`, `Quando compram`,
  * `Vendas por país` e o rodapé eram markup cravado aqui, fora da grade, com
@@ -65,24 +82,15 @@ import type { TraffikView } from "../../useTraffikState";
  * pode ser ocultado". Hoje os sete estão no catálogo, e o que os quatro fixos
  * têm de diferente é uma coisa: **não têm ✕**.
  *
- * ⚠️ Sobrou pouca coisa fixa nesta tela, e é de propósito: filtros, os dois
- * blocos de métrica e a moldura de edição. Se um bloco novo aparecer aqui em
- * JSX solto, é regressão — o lugar dele é o catálogo.
+ * ⚠️ Sobrou pouca coisa fixa nesta tela, e a F5 tirou o que sobrava de bloco:
+ * filtros e a moldura de edição. **Não há mais JSX de bloco algum aqui** — os
+ * dois de métrica eram os últimos. Se um bloco novo aparecer nesta tela em JSX
+ * solto, é regressão: o lugar dele é o catálogo.
  *
  * ⚠️ ESTA TELA NÃO USA `.tk-tema`. Ela consome `--tk-*` e os primitivos de
  * `components/tk/` direto — a ponte existe só para as telas ainda não refeitas.
  */
 
-/* ⛔ AS CONSTANTES `HERO` e `FAIXA` SUMIRAM DAQUI. Elas viraram o layout PADRÃO
-   em `layout/migrar.ts`, e a tela agora lê o layout — que pode ser o do usuário.
-
-   ⚠️ A regra de "exatamente 4 heros" não afrouxou: ela migrou para a MIGRAÇÃO,
-   que completa o hero até 4 quando o salvo tem menos. Um hero com 3 quebra a
-   fileira, e o estado não pode nascer nem do banco. */
-
-/* A grade da zona 3 tem SEIS colunas, não doze: com seis, 1/3 são 2 e 1/2 são 3
-   — inteiros exatos. Com doze, um terço daria 4 e a conta ainda fecharia, mas a
-   grade aceitaria larguras que o catálogo não oferece, e alguém acabaria usando. */
 /**
  * 🔴 A GRADE — doze colunas, e a ALTURA VEM DO LAYOUT (F1, 12/08/2026).
  *
@@ -107,12 +115,15 @@ import type { TraffikView } from "../../useTraffikState";
  * ADIANTE na lista, e a ordem que o usuário arrastou deixaria de ser a ordem que
  * ele vê.
  */
-const GRADE: React.CSSProperties = {
+/* ⚠️ A contagem de colunas é PARÂMETRO desde a F2: a mesma grade desenha 12, 8,
+   4 ou 1 conforme o viewport, e quem decide é `colunasParaLargura`. O layout
+   salvo continua sendo só o de 12 — ver `layout/derivar.ts`. */
+const grade = (colunas: number): React.CSSProperties => ({
   display: "grid",
   gap: "var(--tk-gap-grid)",
-  gridTemplateColumns: `repeat(${COLUNAS_GRADE}, minmax(0, 1fr))`,
+  gridTemplateColumns: `repeat(${colunas}, minmax(0, 1fr))`,
   gridAutoRows: "var(--tk-row)",
-};
+});
 
 /**
  * A célula de um painel na grade.
@@ -240,44 +251,96 @@ function VazioMedido({
   medir: (id: string, el: HTMLElement | null) => void;
   children: React.ReactNode;
 }) {
-  const ref = React.useRef<HTMLDivElement>(null);
+  /* ⛔ O NÓ EM ESTADO, ref CALLBACK — regra do cabeçalho de useTamanho.ts. */
+  const [no, setNo] = React.useState<HTMLDivElement | null>(null);
 
   React.useEffect(() => {
-    const el = ref.current;
+    const el = no;
     if (!el) return;
     const remedir = () => medir(id, el);
     remedir();
     const obs = new ResizeObserver(remedir);
     obs.observe(el);
     return () => obs.disconnect();
-  }, [id, medir]);
+  }, [id, medir, no]);
 
-  return <div ref={ref}>{children}</div>;
+  return <div ref={setNo}>{children}</div>;
 }
 
 /**
- * 🔴 KPIs QUE SÃO RAZÃO ENTRE POPULAÇÕES DIFERENTES DECLARAM A BASE.
+ * 🔴 QUANTAS COLUNAS A GRADE TEM AGORA — F2, a derivação por viewport.
  *
- * O ROAS do Dashboard divide **toda** a receita aprovada (`metrics.ts:668`,
- * sem filtro de origem: orgânico, Google, TikTok, Meta) pelo `spend` do
- * `DailyAdMetric`, que é **só da Meta**. Medido no dev em 07/08/2026: a tela
- * mostra **3,54x** enquanto o ROAS real da Meta é **0,71x** — inflação de 5×,
- * cruzando o 1,0x que separa "se paga" de "dá prejuízo".
+ * ⛔ **NO MODO DE EDIÇÃO ELE DEVOLVE 12, SEMPRE.** A edição opera sobre o layout
+ * SALVO, que é de 12 colunas; a derivação é uma transformação de leitura. Se a
+ * grade de edição fosse derivada, a alça mediria contra 4 colunas e o
+ * `redimensionar` gravaria "4" num campo que significa doze avos — o arranjo do
+ * usuário seria corrompido pelo tamanho da janela dele.
  *
- * ⛔ **A CONTA NÃO FOI ALTERADA, por decisão do dono.** O redesign não muda
- * funcionalidade nem lógica — ver o topo do `CLAUDE.md`. O que a tela ganhou é
- * a declaração da base, do mesmo jeito que o funil declara a cobertura de
- * rastreamento: o usuário não pode ler um número sem saber o que ele mede.
+ * ⚠️ Sim, isso deixa a edição apertada numa tela estreita. É o preço certo: o
+ * modo de edição já exige uma coluna lateral de 300px, e um arranjo de 12
+ * colunas editado em 4 seria um editor que mostra outra coisa do que grava.
  *
- * 🔜 Reabrir quando existir a segunda plataforma de anúncio. Hoje "gasto" e
- * "Meta" são sinônimos nesta base, e é isso que torna o erro invisível.
+ * ### A hidratação
  *
- * ⚠️ O ROAS **por campanha** (`ads/overview.ts`) não tem este defeito — lá as
- * duas pontas são da mesma campanha. Não unifique os dois.
+ * Ele nasce em 12 no servidor E no primeiro render do cliente, e só então o
+ * efeito mede. Ler `window` durante o render daria HTML do servidor diferente do
+ * primeiro render do cliente — o mismatch que já derrubou a navegação de
+ * Integrações. A troca acontece depois da hidratação, num segundo quadro.
  */
-const BASE_DECLARADA: Record<string, string | undefined> = {
-  roas: "receita de todos os canais ÷ gasto da Meta",
-};
+function useColunasDaGrade(editando: boolean): number {
+  const [colunas, setColunas] = React.useState(COLUNAS_GRADE);
+
+  React.useEffect(() => {
+    const medir = () => setColunas(colunasParaLargura(window.innerWidth));
+    medir();
+    window.addEventListener("resize", medir);
+    return () => window.removeEventListener("resize", medir);
+  }, []);
+
+  return editando ? COLUNAS_GRADE : colunas;
+}
+
+/**
+ * 🔑 O CONTEÚDO DE UM BLOCO — o estado vazio ou o render. **Um ponto só.**
+ *
+ * ⛔ Ele existe porque a tela desenha a mesma lista em DOIS modos (edição e
+ * normal), e foi ter dois caminhos de desenho que deixou "colapsar" virar
+ * "sumir" em um deles e não no outro, em 07/08/2026. O que difere entre os dois
+ * é a MOLDURA — a moldura de edição ou o `Card` —, e não o que vai dentro dela.
+ *
+ * ⚠️ O `medir` só chega no modo normal: ele alimenta a condição F0, e no modo de
+ * edição o colapso não roda de propósito (o usuário está dimensionando o bloco).
+ * Sem ele o estado vazio desenha igual, só não é medido.
+ */
+function conteudoDoBloco(
+  id: string,
+  r: RenderBloco,
+  v: TraffikView,
+  ctx: CtxBlocos,
+  medir?: (id: string, el: HTMLElement | null) => void,
+): React.ReactNode {
+  const vazio = vazioDoBloco(r, v, ctx);
+  if (!vazio) return r.render(v, ctx);
+  /* ⛔ Sem `compacto`: o `EmptyState` completo é o mesmo que o usuário vai ver na
+     tela de verdade, e a edição existe para mostrar o resultado, não uma
+     aproximação. */
+  if (!medir) return <EmptyState {...vazio} />;
+  return (
+    <VazioMedido id={id} medir={medir}>
+      <EmptyState {...vazio} />
+    </VazioMedido>
+  );
+}
+
+/* ⛔ `BASE_DECLARADA` SAIU DAQUI — F5, 12/08/2026.
+
+   Ela dizia qual população está em cima e qual embaixo no ROAS do Dashboard, e
+   morava aqui porque era a tela que montava o hero e a faixa. As duas deixaram
+   de existir: quem monta o `DadosKpi` de uma métrica agora é o render dela, em
+   `catalogoRender.tsx`, e a declaração foi junto — para o lado do único
+   consumidor, não para um arquivo de constantes.
+
+   ⚠️ A conta segue INTOCADA, e o motivo está escrito lá. */
 
 export function DashboardScreen({ v }: { v: TraffikView }) {
   /* ── O CONTEXTO DOS BLOCOS ────────────────────────────────────────────────
@@ -287,44 +350,34 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
   /* ⚠️ `ctx`, e não `c`: `c` é o nome da CARGA nos callbacks de soltura logo
      abaixo, e o sombreamento passaria despercebido — `soltarNosPaineis(c, i)`
      compilaria com o contexto no lugar da carga se os tipos coincidissem. */
+  /* ⚠️ O `inicioAparado` era desestruturado aqui para o `kpi()` da tela cortar a
+     série do sparkline. Ele saiu com a F5: quem monta o `DadosKpi` de uma
+     métrica agora é o render dela, e ele lê o mesmo campo do `ctx` que já
+     recebe. Um acessor a mais aqui seria a segunda leitura do mesmo valor. */
   const ctx = useDadosDosBlocos(v);
-  const { inicioAparado } = ctx;
 
-  /* ── KPIs ─────────────────────────────────────────────────────────────────
-     `metricCards` e `sparklines` continuam vindo do hook — a camada de dados
-     não foi tocada. O que mudou é só quais aparecem grandes. */
-  const kpi = React.useCallback(
-    (chave: string): DadosKpi | null => {
-      const k = v.metricCards[chave as keyof typeof v.metricCards];
-      if (!k) return null;
-      return {
-        chave,
-        rotulo: k.label,
-        valor: k.value,
-        delta: k.delta ?? null,
-        invertido: k.invertido,
-        trendLabel: k.trendLabel,
-        cor: k.cor,
-        base: BASE_DECLARADA[chave],
-        /* Mesma janela do gráfico. ⚠️ A série do sparkline tem um bucket por
-           rótulo do gráfico — é o mesmo `buckets` do servidor —, então o índice
-           vale para as duas sem conversão. */
-        serie: (v.sparklines[chave] ?? []).slice(inicioAparado),
-      };
-    },
-    [v, inicioAparado],
-  );
-
-  /* 🔴 O LAYOUT SALVO É RESPEITADO, E AGORA É EDITÁVEL. Quem customizou no grid
+  /* 🔴 O LAYOUT SALVO É RESPEITADO, E É EDITÁVEL. Quem customizou no grid
      antigo vê o arranjo dele migrado; quem nunca customizou vê o padrão.
 
-     ⛔ TODAS as regras de zona moram no hook — hero com 4, teto da faixa,
-     largura só entre as declaradas. A tela desenha três listas parecidas, e se
-     as regras estivessem aqui a terceira acabaria sem a validação da primeira. */
+     ⛔ TODAS as regras moram no hook — mínimo de cada bloco, teto de altura,
+     recusa de remover um estrutural. A tela desenha; ela não valida de novo.
+
+     ⚠️ **Não há mais três listas.** O `hero` e o `faixa` sumiram do estado da
+     tela junto com as zonas: `layout.blocos` é a única, e as métricas estão
+     dentro dela como qualquer painel. */
   const ed = useLayoutDashboard(v.workspaceAtiva);
   const { layout, editando } = ed;
-  const heros = layout.hero.map(kpi).filter((k): k is DadosKpi => k !== null);
-  const faixa = layout.faixa.map(kpi).filter((k): k is DadosKpi => k !== null);
+
+  /* 🔴 A DERIVAÇÃO (F2) — uma transformação de LEITURA sobre o layout salvo.
+
+     ⚠️ `blocos` é o que a tela DESENHA; `layout.blocos` é o que ela GRAVA. Toda
+     operação do hook (mover, inserir, redimensionar) continua falando com o
+     segundo, e por índice — que a derivação preserva, porque ela mapeia a lista
+     sem reordenar. Se um dia ela filtrar ou reordenar, os índices deixam de
+     casar e o arrasto passa a mover o bloco errado, em silêncio. */
+  const colunas = useColunasDaGrade(editando);
+  const blocos = React.useMemo(() => derivarLayout(layout.blocos, colunas), [layout.blocos, colunas]);
+  const GRADE = React.useMemo(() => grade(colunas), [colunas]);
 
   /* A condição F0 — ver `useColapsoDoVazio`. Só o desenho, nunca o salvo. */
   const colapso = useColapsoDoVazio();
@@ -388,73 +441,38 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
     };
   }, []);
 
-  /* ── O que cada zona faz com o que foi solto ──────────────────────────────
+  /* ── O que a grade faz com o que foi solto ──────────────────────────
      ⚠️ Estas funções são a TRADUÇÃO do gesto para a operação do hook; a REGRA
-     continua lá. É por isso que soltar um hero no Resumo vira `trocarHero`: o
-     hero não pode ficar com 3, e a troca é a única leitura do gesto que respeita
-     isso sem recusar o que o usuário pediu. */
-  const soltarNoHero = React.useCallback(
+     continua lá.
+
+     ⛔ **Eram quatro, e viraram duas.** `soltarNoHero` e `soltarNaFaixa` existiam
+     para aplicar tetos — soltar um quinto KPI no hero virava TROCA porque a zona
+     não podia ficar com 3, e hero→faixa era uma troca em sentido inverso. Sem
+     teto não há troca: soltar é mover, e mover é mover. */
+  const soltarNaGrade = React.useCallback(
     (c: Carga, indice: number) => {
-      if (c.tipo !== "metrica") return;
-      if (c.origem === "hero") ed.moverMetrica("hero", c.indice, indice);
-      else ed.trocarHero(c.chave, indice);
+      if (c.origem === "grade") ed.moverBloco(c.indice, indice);
+      else ed.inserirBloco(c.id, indice);
     },
     [ed],
   );
 
-  const soltarNaFaixa = React.useCallback(
-    (c: Carga, indice: number) => {
-      if (c.tipo !== "metrica") return;
-      if (c.origem === "faixa") ed.moverMetrica("faixa", c.indice, indice);
-      else if (c.origem === "hero") {
-        /* Hero → Resumo é uma TROCA: quem estava no Resumo sobe para a vaga que
-           o hero abriria. Tirar sem repor deixaria Principais com 3. */
-        const entra = layout.faixa[indice];
-        if (entra) ed.trocarHero(entra, c.indice);
-      } else ed.inserirFaixa(c.chave, indice);
-    },
-    [ed, layout.faixa],
-  );
+  const soltarNoCatalogo = React.useCallback((c: Carga) => ed.removerBloco(c.id), [ed]);
 
-  const soltarNosPaineis = React.useCallback(
-    (c: Carga, indice: number) => {
-      if (c.tipo !== "painel") return;
-      if (c.origem === "paineis") ed.moverPainel(c.indice, indice);
-      else ed.inserirPainel(c.id, indice);
-    },
-    [ed],
-  );
+  /* ── O que ainda não está na grade ─────────────────────────────────
+     🔑 UMA LISTA, tirada do CATÁLOGO. Antes eram duas consultas a duas fontes
+     diferentes — as métricas saíam de `v.metricCards` (o registro do hook) e os
+     painéis do `CATALOGO_META`. Com a F5 as métricas estão no catálogo, e a
+     pergunta virou uma só: *"o que existe e não está no layout?"*.
 
-  const soltarNoCatalogo = React.useCallback(
-    (c: Carga) => {
-      if (c.tipo === "painel") ed.removerPainel(c.id);
-      else if (c.origem === "faixa") ed.removerFaixa(c.chave);
-    },
-    [ed],
-  );
-
-  /* ── O que ainda não está no painel ───────────────────────────────────────
-     ⚠️ A lista de métricas sai de `metricCards`, que é o catálogo REAL do hook —
-     não de uma lista escrita aqui. Uma segunda lista ofereceria a métrica que
-     alguém acrescentou lá e esqueceu de espelhar aqui, ou o contrário: oferecer
-     uma que não existe mais e não desenha nada.
-
-     ⛔ TUDO O QUE APARECE AQUI TEM DESTINO. Métrica vai para Principais ou
-     Resumo; painel vai para Painéis. Não existe item listado sem zona que o
-     receba — opção sem destino é a versão de catálogo do botão inerte. */
-  const rotuloMetrica = React.useCallback(
-    (chave: string) => v.metricCards[chave as keyof typeof v.metricCards]?.label ?? chave,
-    [v],
-  );
-  const metricasDisponiveis = Object.keys(v.metricCards)
-    .filter((c) => !layout.hero.includes(c) && !layout.faixa.includes(c))
-    .map((chave) => ({ chave, rotulo: rotuloMetrica(chave) }));
-  const paineisDisponiveis = CATALOGO_META.filter((b) => !layout.paineis.some((p) => p.id === b.id)).map((b) => ({
+     ⛔ TUDO O QUE APARECE AQUI TEM DESTINO — e agora o destino é o mesmo para
+     todos. Opção sem destino é a versão de catálogo do botão inerte. */
+  const disponiveis = CATALOGO_META.filter((b) => !layout.blocos.some((p) => p.id === b.id)).map((b) => ({
     id: b.id,
     titulo: b.titulo,
     descricao: b.descricao,
+    metrica: ehBlocoDeMetrica(b.id),
   }));
-
 
   const carregando = v.dashLoading;
   const filtrosVisiveis = useRegistrarFaixaDeFiltros();
@@ -548,166 +566,60 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
       </div>
       )}
 
-      {/* ── 4 KPIs hero ─────────────────────────────────────────────────────── */}
-      {editando ? (
-        <ZonaEdicao
-          titulo="Principais"
-          regra="sempre 4"
-          arrastando={arr.arrastando}
-          aceita={arr.carga?.tipo === "metrica"}
-        >
-          <div style={{ display: "grid", gap: "var(--tk-gap-grid)", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-            {heros.map((k, i) => (
-              <ItemEdicao
-                key={k.chave}
-                titulo={k.rotulo}
-                /* O card já escreve "Faturamento" logo abaixo — repetir no
-                   cabeçalho da moldura é a mesma palavra duas vezes em 40px. */
-                tituloVisivel={false}
-                /* ⛔ SEM ✕ NO HERO, e não é esquecimento: remover deixaria a zona
-                   com 3, que é o estado que a regra proíbe. Aqui só se TROCA. */
-                aoMover={(dir) => ed.moverMetrica("hero", i, i + dir)}
-                podeAntes={i > 0}
-                podeDepois={i < heros.length - 1}
-                arrastando={arr.carga?.tipo === "metrica" && arr.carga.origem === "hero" && arr.carga.indice === i}
-                alvo={arr.ehAlvo({ tipo: "zona", zona: "hero", indice: i })}
-                /* 🔴 A PRÉVIA DE QUEM SAI. Soltar um quinto KPI aqui troca pelo
-                   que está debaixo do cursor; sem dizer qual, o usuário descobre
-                   depois de ter acontecido. */
-                avisoAlvo={arr.carga?.tipo === "metrica" && arr.carga.origem !== "hero" ? `sai: ${k.rotulo}` : undefined}
-                aoIniciarArrasto={() =>
-                  arr.comecar({ tipo: "metrica", chave: k.chave, rotulo: k.rotulo, origem: "hero", indice: i })
-                }
-                aoTerminarArrasto={arr.terminar}
-                destino={arr.destino({ tipo: "zona", zona: "hero", indice: i }, (c) => soltarNoHero(c, i))}
-              >
-                <KpiHero dados={k} carregando={carregando} />
-              </ItemEdicao>
-            ))}
-          </div>
-        </ZonaEdicao>
-      ) : (
-        /* ⚠️ `.tk-medida` em cada card, e não na fileira: a fileira é
-           `auto-fit`, então a largura de UM card não é a dela dividida por
-           quatro — com o rail recolhido cabem quatro, com ele aberto e a janela
-           estreita cabem dois, e o card dobra de tamanho sem a fileira mudar.
-           Medir a fileira daria a mesma faixa para os quatro, sempre. */
-        <div className="tk-hero" style={{ display: "grid", gap: "var(--tk-gap-grid)", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
-          {heros.map((k) => (
-            <div key={k.chave} className="tk-medida" style={{ minWidth: 0, display: "flex" }}>
-              <KpiHero dados={k} carregando={carregando} />
-            </div>
-          ))}
-        </div>
-      )}
+      {/* ══ A GRADE — UMA SÓ, e é a F5 inteira ═══════════════════════════════
+          🔴🔴 TODOS OS BLOCOS DO LAYOUT APARECEM, COM DADO OU SEM.
 
-      {/* ── Faixa compacta ──────────────────────────────────────────────────── */}
-      {editando ? (
-        <ZonaEdicao
-          titulo="Resumo"
-          regra="até 8"
-          contador={`${layout.faixa.length} de ${MAX_FAIXA}`}
-          arrastando={arr.arrastando}
-          aceita={arr.carga?.tipo === "metrica"}
-          destino={arr.destino({ tipo: "zona", zona: "faixa", indice: layout.faixa.length }, (c) =>
-            soltarNaFaixa(c, layout.faixa.length),
-          )}
-        >
-          {faixa.length === 0 ? (
-            <p className="text-caption text-text-muted" style={{ margin: 0 }}>
-              O resumo está vazio. Arraste métricas para cá — ou salve assim, se a faixa não te serve.
-            </p>
-          ) : (
-            <div style={{ display: "grid", gap: 8, gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))" }}>
-              {faixa.map((k, i) => (
-                <ItemEdicao
-                  key={k.chave}
-                  titulo={k.rotulo}
-                  aoRemover={() => ed.removerFaixa(k.chave)}
-                  aoMover={(dir) => ed.moverMetrica("faixa", i, i + dir)}
-                  podeAntes={i > 0}
-                  podeDepois={i < faixa.length - 1}
-                  arrastando={arr.carga?.tipo === "metrica" && arr.carga.origem === "faixa" && arr.carga.indice === i}
-                  alvo={arr.ehAlvo({ tipo: "zona", zona: "faixa", indice: i })}
-                  avisoAlvo={arr.carga?.tipo === "metrica" && arr.carga.origem === "hero" ? `sobe: ${k.rotulo}` : undefined}
-                  aoIniciarArrasto={() =>
-                    arr.comecar({ tipo: "metrica", chave: k.chave, rotulo: k.rotulo, origem: "faixa", indice: i })
-                  }
-                  aoTerminarArrasto={arr.terminar}
-                  destino={arr.destino({ tipo: "zona", zona: "faixa", indice: i }, (c) => soltarNaFaixa(c, i))}
-                >
-                  {/* O valor, e não só o nome: escolher "ARPU" sem ver que ele
-                      está em R$ 0,00 neste período é escolher às cegas. */}
-                  <span className="text-metric-md" style={{ color: k.cor ?? "var(--tk-text)" }}>
-                    {carregando ? "—" : k.valor}
-                  </span>
-                </ItemEdicao>
-              ))}
-            </div>
-          )}
-        </ZonaEdicao>
-      ) : (
-        <MetricStrip itens={faixa} carregando={carregando} />
-      )}
-
-
-      {/* ── ZONA 3 — os painéis do layout ───────────────────────────────────
-          🔴🔴 TODOS OS PAINÉIS DO LAYOUT APARECEM, COM DADO OU SEM.
-
-          Este comentário dizia o contrário — *"SÓ os que TÊM DADO no período
-          aparecem"* — e era o bug mais caro desta tela. O bloco sem dado saía da
-          grade, os vizinhos subiam, a linha se refazia, e o arranjo que o
-          usuário montou virava outro. Ele não via "um bloco vazio": via a tela
+          Um comentário aqui já disse o contrário — *"SÓ os que TÊM DADO no
+          período aparecem"* — e era o bug mais caro desta tela. O bloco sem dado
+          saía da grade, os vizinhos subiam, a linha se refazia, e o arranjo que
+          o usuário montou virava outro. Ele não via "um bloco vazio": via a tela
           embaralhada, sem nada dizendo por quê.
 
-          E o argumento que sustentava a filtragem ("um painel corretamente vazio
-          parece defeito") tinha o sinal trocado: quem parece defeito é a grade
-          que se reorganiza sozinha. Sem dado é o estado NORMAL desta ferramenta
-          — os testadores rodam assim a maior parte do tempo.
+          ⛔ NÃO REINTRODUZA UM FILTRO AQUI. A lista desenhada é `layout.blocos`
+          inteira; quem responde "tem dado?" é o `vazioDoBloco`, e a resposta
+          muda o CONTEÚDO da célula, nunca a existência dela.
 
-          ⚠️ O que colapsa é a ALTURA, e só ela: `celulaDaGrade` não aplica o
-          piso escolhido pelo usuário no estado vazio. Posição e largura são
-          dele.
+          ⚠️ O que colapsa é a ALTURA, e só ela: posição e largura são do usuário.
 
-          ⚠️ A largura vem do LAYOUT, e o layout só carrega larguras que o bloco
-          declarou — a migração garante isso. A tela não valida de novo: duas
-          validações da mesma regra divergem, e a de cá não tem como avisar. */}
-      {editando ? (
+          ### 🔴 UM `map` PARA OS DOIS MODOS, e a duplicação que morreu com ele
+
+          Havia DOIS blocos de JSX quase iguais — um dentro do modo de edição,
+          outro fora — mais dois de métrica, quatro no total. Foi ter dois
+          caminhos de desenho que deixou "colapsar" virar "sumir" em um deles e
+          não no outro, em 07/08/2026. Hoje é uma função: o que muda entre os
+          modos é a MOLDURA, e ela é um parâmetro. */}
+      {layout.blocos.length === 0 ? (
+        editando ? (
+          <ZonaEdicao titulo="Painel" regra="arraste um bloco da lista ao lado" arrastando={arr.arrastando} aceita
+            destino={arr.destino({ tipo: "grade", indice: 0 }, (c) => soltarNaGrade(c, 0))}>
+            <p className="text-caption text-text-muted" style={{ margin: 0 }}>
+              Nenhum bloco. Arraste um da lista ao lado — ou salve assim: a escolha de não ter nenhum é respeitada.
+            </p>
+          </ZonaEdicao>
+        ) : null
+      ) : editando ? (
         <ZonaEdicao
-          titulo="Painéis"
-          regra="arraste o canto para redimensionar"
+          titulo="Painel"
+          /* ⚠️ A regra fala do GESTO, não de quantidade. As duas zonas que
+             falavam de quantidade ("sempre 4", "até 8") sumiram com os tetos. */
+          regra="arraste para mover · o canto redimensiona"
           arrastando={arr.arrastando}
-          aceita={arr.carga?.tipo === "painel"}
-          destino={arr.destino({ tipo: "zona", zona: "paineis", indice: layout.paineis.length }, (c) =>
-            soltarNosPaineis(c, layout.paineis.length),
+          aceita
+          destino={arr.destino({ tipo: "grade", indice: layout.blocos.length }, (c) =>
+            soltarNaGrade(c, layout.blocos.length),
           )}
         >
-          {layout.paineis.length === 0 ? (
-            <p className="text-caption text-text-muted" style={{ margin: 0 }}>
-              Nenhum painel. Arraste um da lista ao lado — ou salve assim: a escolha de não ter nenhum é respeitada.
-            </p>
-          ) : (
-            /* 🔴 A GRADE DE 12 COLUNAS. `grid-auto-rows` na altura da linha e
-               `span` em colunas e linhas: quem cabe na mesma fileira fica, e o
-               que não couber desce. Quem acomoda é o CSS, não uma conta nossa —
-               reimplementar empacotamento em JS seria a terceira fonte de
-               verdade sobre onde cada bloco está.
-
-               ⛔ NÃO use `grid-auto-flow: dense`. Ele preenche buracos com
-               blocos de MAIS ADIANTE na lista, e aí a ordem que o usuário
-               arrastou deixa de ser a ordem que ele vê. */
-            <div ref={gradeRef} style={GRADE}>
-              {/* 🔴 O AVISO DE SOBRA é o que separa "você escolheu assim" de
-                  "quebrou". Sem ele, uma linha que não soma 12 é indistinguível de
-                  defeito — e agora que todas as colunas existem, fechar a linha
-                  é só arrastar. O texto diz quanto falta. */}
-              {linhasDaGrade(layout.paineis.map((p) => p.col)).flatMap((linha) => [
-                ...linha.indices.map((i) => {
-                const p = layout.paineis[i]!;
+          <div ref={gradeRef} style={GRADE}>
+            {/* 🔴 O AVISO DE SOBRA é o que separa "você escolheu assim" de
+                "quebrou". Sem ele, uma linha que não soma 12 é indistinguível de
+                defeito — e agora que todas as colunas existem, fechar a linha
+                é só arrastar. O texto diz quanto falta. */}
+            {linhasDaGrade(blocos.map((p) => p.col)).flatMap((linha) => [
+              ...linha.indices.map((i) => {
+                const p = blocos[i]!;
                 const r = RENDERS[p.id as keyof typeof RENDERS];
                 const meta = metaDoBloco(p.id);
                 if (!r || !meta) return null;
-                const vazio = vazioDoBloco(r, v, ctx);
                 return (
                   <div
                     key={p.id}
@@ -719,47 +631,46 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
                   >
                     <ItemEdicao
                       titulo={meta.titulo}
+                      /* O bloco de métrica já escreve o próprio rótulo logo
+                         abaixo — repetir no cabeçalho da moldura é a mesma
+                         palavra duas vezes em 40px. */
+                      tituloVisivel={!r.semCard}
+                      /* 🔑 O bloco que desenha a própria superfície não leva o
+                         padding da moldura: dois paddings somavam 40px de casca
+                         dupla, e num slot de UMA célula isso é metade do que
+                         existe. Medido na passada visual — ver `corpoDoItem`. */
+                      semPadding={r.semCard}
                       /* 🔴 SEM ✕ NO ESTRUTURAL, com o selo `Fixo` e o motivo do
                          CATÁLOGO. Um ✕ apagado é um controle que existe e não
                          funciona; a ausência dele é uma afirmação sobre o
                          produto. ⚠️ A guarda de verdade está no hook — a
                          ausência do botão não fecha o caminho do arrasto. */
                       fixo={meta.estrutural}
-                      aoRemover={meta.estrutural ? undefined : () => ed.removerPainel(p.id)}
-                      aoMover={(dir) => ed.moverPainel(i, i + dir)}
+                      aoRemover={meta.estrutural ? undefined : () => ed.removerBloco(p.id)}
+                      aoMover={(dir) => ed.moverBloco(i, i + dir)}
                       podeAntes={i > 0}
-                      podeDepois={i < layout.paineis.length - 1}
-                      arrastando={arr.carga?.tipo === "painel" && arr.carga.origem === "paineis" && arr.carga.indice === i}
-                      alvo={arr.ehAlvo({ tipo: "zona", zona: "paineis", indice: i })}
+                      podeDepois={i < layout.blocos.length - 1}
+                      arrastando={arr.carga?.origem === "grade" && arr.carga.indice === i}
+                      alvo={arr.ehAlvo({ tipo: "grade", indice: i })}
                       aoIniciarArrasto={() =>
-                        arr.comecar({ tipo: "painel", id: p.id, rotulo: meta.titulo, origem: "paineis", indice: i })
+                        arr.comecar({ id: p.id, rotulo: meta.titulo, origem: "grade", indice: i })
                       }
                       aoTerminarArrasto={arr.terminar}
-                      destino={arr.destino({ tipo: "zona", zona: "paineis", indice: i }, (c) => soltarNosPaineis(c, i))}
+                      destino={arr.destino({ tipo: "grade", indice: i }, (c) => soltarNaGrade(c, i))}
                       redimensionar={{
                         aoArrastar: (larguraPx, alturaPx) => {
                           const g = paraGrade(larguraPx, alturaPx);
                           ed.redimensionar(p.id, g.col, g.h);
                         },
                         /* O teclado anda em PASSO, não em pixel: é o que ele sabe
-                           expressar. O encaixe do hook recebe `col + dCol` e
-                           devolve o passo permitido mais próximo — então uma seta
-                           pode pular de 4 para 6 quando não há 5. Isso é o
-                           correto: o intermediário não existe na grade. */
+                           expressar. */
                         /* 🔴 `proximoPasso`, NÃO `p.col + dCol`. A soma direta
-                           não movia NADA: `4 + 1 = 5`, e o encaixe devolvia 4 de
-                           volta pelo desempate para baixo. As setas existiam e
-                           eram inertes — visto na tela, não no build, e com
-                           `tsc`/`lint`/`build` verdes. O teclado anda por ÍNDICE
-                           na lista de passos do bloco; a alça anda em pixel. As
-                           duas entradas falam línguas diferentes. */
-                        /* 🔴 AS SETAS VERTICAIS DEIXARAM DE SER INERTES PARA A
-                           MAIORIA DOS BLOCOS. Antes, `encaixarLinhas` devolvia
-                           `undefined` para quem não fosse `alturaAjustavel` — 6
-                           dos 16 —, e ↑/↓ na alça daqueles blocos não fazia
-                           nada. Todo bloco tem altura agora.
-
-                           ⚠️ O `?? meta.hPadrao` cobre o bloco ainda não
+                           não movia NADA quando as larguras eram uma lista
+                           curada: `4 + 1 = 5`, e o encaixe devolvia 4 de volta
+                           pelo desempate. As setas existiam e eram inertes —
+                           visto na tela, não no build, e com `tsc`/`lint`/`build`
+                           verdes. */
+                        /* ⚠️ O `?? meta.hPadrao` cobre o bloco ainda não
                            migrado: sem `h`, a primeira seta parte do padrão em
                            vez de partir de `0` e ser puxada para o `hMin` — o
                            que faria a seta para BAIXO aumentar o bloco. */
@@ -771,78 +682,40 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
                           ),
                       }}
                     >
-                      {/* ⚠️ O MESMO ESTADO VAZIO DE FORA DA EDIÇÃO. Antes eram
-                          dois textos diferentes — aqui uma frase curta, lá o
-                          bloco sumindo — e a divergência era o bug: o usuário
-                          via o painel na edição e não via depois de salvar.
-
-                          ⛔ Sem `compacto`: o `EmptyState` completo é o mesmo
-                          que ele vai ver na tela de verdade, e a edição existe
-                          para mostrar o resultado, não uma aproximação. */}
-                      {vazio ? <EmptyState {...vazio} /> : r.render(v, ctx)}
+                      {conteudoDoBloco(p.id, r, v, ctx)}
                     </ItemEdicao>
                   </div>
                 );
-                }),
-                /* ⛔ TEXTO, e não área pontilhada. Pontilhado no fim da linha é
-                   lido como alvo de soltura, e ali não se solta nada: o arrasto
-                   insere na ORDEM da lista, não numa coordenada. Seria
-                   affordance mentindo — o mesmo defeito do cursor de ponteiro
-                   sobre o globo que não respondia.
+              }),
+              /* ⛔ TEXTO, e não área pontilhada. Pontilhado no fim da linha é
+                 lido como alvo de soltura, e ali não se solta nada: o arrasto
+                 insere na ORDEM da lista, não numa coordenada. Seria
+                 affordance mentindo.
 
-                   ⚠️ Ele é um ITEM DA GRADE, e isso é de propósito: se a simulação
-                   de `linhasDaGrade` errar, o aviso aparece na linha errada, à
-                   vista de quem edita. Guarda que falha em silêncio não é guarda. */
-                avisoDeSobra(linha.livres) ? (
-                  <span
-                    key={`sobra-${linha.indices[0]}`}
-                    className="text-caption text-text-muted"
-                    style={{
-                      gridColumn: `span ${linha.livres}`,
-                      alignSelf: "center",
-                      textAlign: "right",
-                      paddingRight: 2,
-                      minWidth: 0,
-                    }}
-                  >
-                    {avisoDeSobra(linha.livres)}
-                  </span>
-                ) : null,
-              ])}
-            </div>
-          )}
+                 ⚠️ Ele é um ITEM DA GRADE, e isso é de propósito: se a simulação
+                 de `linhasDaGrade` errar, o aviso aparece na linha errada, à
+                 vista de quem edita. Guarda que falha em silêncio não é guarda. */
+              avisoDeSobra(linha.livres) ? (
+                <span
+                  key={`sobra-${linha.indices[0]}`}
+                  className="text-caption text-text-muted"
+                  style={{
+                    gridColumn: `span ${linha.livres}`,
+                    alignSelf: "center",
+                    textAlign: "right",
+                    paddingRight: 2,
+                    minWidth: 0,
+                  }}
+                >
+                  {avisoDeSobra(linha.livres)}
+                </span>
+              ) : null,
+            ])}
+          </div>
         </ZonaEdicao>
-      ) : null}
-
-      {/* ⛔ A ZONA "SEMPRE VISÍVEIS" FOI REMOVIDA — 07/08/2026.
-
-          Ela listava os quatro estruturais em molduras VAZIAS, fora de qualquer
-          grade, porque o conteúdo deles estava em JSX fixo noutro ponto da tela.
-          Era a materialização do erro de definição: "não removível" tinha virado
-          "fora do layout".
-
-          Hoje eles estão na zona Painéis, com conteúdo, alça e selo `Fixo`. Não
-          existe mais um lugar onde procurá-los — eles estão onde sempre
-          estiveram na tela. */}
-
-      {/* 🔴🔴 O SÍTIO DO BUG DO ITEM 9 — a linha que filtrava era esta.
-
-          Era `layout.paineis.filter(… temDado(v))`. Um bloco sem dado no período
-          não entrava na lista, e a grade se refazia sem ele: os vizinhos subiam
-          de linha, a largura relativa mudava, e o arranjo salvo virava outro
-          arranjo. Sem nada na tela dizendo por quê.
-
-          ⛔ NÃO REINTRODUZA UM FILTRO AQUI. A lista desenhada é `layout.paineis`
-          inteira; quem responde "tem dado?" é o `vazioDoBloco`, e a resposta
-          muda o CONTEÚDO da célula, nunca a existência dela.
-
-          ⚠️ `layout.paineis.length === 0` continua devolvendo `null`, e é outra
-          coisa: é o usuário ter removido todos os opcionais. Com os estruturais
-          repostos pela migração isso só acontece num layout corrompido — mas
-          `null` para lista vazia é honesto de qualquer jeito. */}
-      {!editando && layout.paineis.length > 0 && (
+      ) : (
         <div style={GRADE}>
-          {layout.paineis.map((p, i) => {
+          {blocos.map((p, i) => {
             const r = RENDERS[p.id as keyof typeof RENDERS];
             const meta = metaDoBloco(p.id);
             if (!r || !meta) return null;
@@ -859,32 +732,60 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
                   ["--tk-i" as string]: i,
                 }}
               >
-                {/* `preencher` + `distribuir`: os blocos de uma linha esticam
-                    até a altura do MAIOR (é o `stretch` do grid), e o menor
-                    distribui o conteúdo em vez de deixar o vazio embaixo. */}
-                <Card
-                  preencher
-                  distribuir
-                  /* A célula da grade já tem `containerType: inline-size` — é o
-                     contêiner que a escala mede. Ver o ⛔ da prop no `Card`. */
-                  escala
-                  titulo={meta.titulo}
-                  descricao={meta.descricao}
-                  /* ⚠️ O CONTROLE SOME NO ESTADO VAZIO, e o título fica. Um
-                     `Diário|Semanal` sobre uma caixa sem série é um controle que
-                     não controla nada — a família que este projeto persegue.
-                     O título continua porque é ele que diz QUAL bloco está
-                     vazio; sem ele o usuário vê uma caixa anônima. */
-                  acao={vazio === null ? r.acao?.(v, ctx) : undefined}
-                >
-                  {vazio ? (
-                    <VazioMedido id={p.id} medir={colapso.medir}>
-                      <EmptyState {...vazio} />
-                    </VazioMedido>
-                  ) : (
-                    r.render(v, ctx)
-                  )}
-                </Card>
+                {/* 🔑 A MOLDURA É O QUE MUDA ENTRE UM BLOCO E OUTRO, e a
+                    pergunta é sobre MOLDURA — não sobre categoria. Um bloco que
+                    desenha a própria superfície (a métrica) entra cru; o resto
+                    entra num `Card`. Perguntar "é métrica?" aqui seria a zona
+                    voltando com outro nome. */}
+                {r.semCard ? (
+                  r.render(v, ctx)
+                ) : (
+                  /* `preencher`: o bloco estica até a altura do slot.
+
+                     ⛔ **SEM `distribuir`, e a ausência é a decisão.** Medido em
+                     13/08/2026, na varredura da §7.2: ele **não cria vazio —
+                     realoca**. Desligando-o nos 28 blocos, o vão não diminuiu;
+                     ele voltou inteiro para o fim:
+
+                       Produtos          meio 117 + fim 100  ->  fim 199
+                       Quando compram    meio 113 + fim  94  ->  fim 187
+                       Estado do sistema meio  57 + fim  40  ->  fim  80
+                       Top campanhas     meio  41 + fim  36  ->  fim  59
+
+                     E isso PIORA a leitura, pela regra do `CLAUDE.md` (*vão
+                     dentro de um card promete conteúdo*): vão no FIM lê como "o
+                     card acabou"; vão no MEIO, entre o cabeçalho e o conteúdo,
+                     lê como "aqui cabia algo que não veio". O `distribuir`
+                     convertia um caso do C6 num caso de promessa não cumprida.
+
+                     ⚠️ O comentário que ficava aqui dizia *"o menor distribui o
+                     conteúdo em vez de deixar o vazio embaixo"*, e ele descrevia
+                     o mundo PRÉ-F1 — quando a linha da grade igualava pela
+                     altura do maior e o vazio embaixo era acidente do vizinho.
+                     Com a altura vindo do slot, o vazio embaixo é o tamanho que
+                     o bloco tem, e escondê-lo no meio não o remove. Cicatriz que
+                     virou anatomia.
+
+                     ⛔ Não reponha `distribuir` para "centrar melhor". O que
+                     resolve o vão é o conteúdo crescer até o slot (origem A) ou
+                     a caixa parar de reservar altura que não pinta (origem B) —
+                     nunca mudar de lugar o que sobrou. */
+                  <Card
+                    preencher
+                    /* A célula da grade já tem `containerType: size` — é o
+                       contêiner que a escala mede. Ver o ⛔ da prop no `Card`. */
+                    escala
+                    titulo={meta.titulo}
+                    descricao={meta.descricao}
+                    /* ⚠️ O CONTROLE SOME NO ESTADO VAZIO, e o título fica. Um
+                       `Diário|Semanal` sobre uma caixa sem série é um controle que
+                       não controla nada. O título continua porque é ele que diz
+                       QUAL bloco está vazio. */
+                    acao={vazio === null ? r.acao?.(v, ctx) : undefined}
+                  >
+                    {conteudoDoBloco(p.id, r, v, ctx, colapso.medir)}
+                  </Card>
+                )}
               </div>
             );
           })}
@@ -913,18 +814,11 @@ export function DashboardScreen({ v }: { v: TraffikView }) {
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 300px", gap: "var(--tk-gap-grid)", alignItems: "start" }}>
           <div style={coluna}>{conteudo}</div>
           <CatalogoLateral
-            metricas={metricasDisponiveis}
-            paineis={paineisDisponiveis}
-            faixaCheia={ed.faixaCheia}
+            blocos={disponiveis}
             arrastando={arr.arrastando}
             ehAlvo={arr.ehAlvo({ tipo: "catalogo" })}
             destino={arr.destino({ tipo: "catalogo" }, soltarNoCatalogo)}
-            aoArrastarMetrica={(chave, rotulo) =>
-              arr.comecar({ tipo: "metrica", chave, rotulo, origem: "catalogo", indice: -1 })
-            }
-            aoArrastarPainel={(id, titulo) =>
-              arr.comecar({ tipo: "painel", id, rotulo: titulo, origem: "catalogo", indice: -1 })
-            }
+            aoArrastar={(id, titulo) => arr.comecar({ id, rotulo: titulo, origem: "catalogo", indice: -1 })}
             aoTerminarArrasto={arr.terminar}
           />
         </div>

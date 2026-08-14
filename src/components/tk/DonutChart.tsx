@@ -52,17 +52,23 @@ export function DonutChart({
    * é uma coluna de N linhas de texto), e `ch` é a altura do slot.
    */
   const { ref: raiz, largura: cw, altura: ch } = useTamanho<HTMLDivElement>();
-  const refLegenda = React.useRef<HTMLDivElement>(null);
+  /* ⛔ O NÓ VIVE EM ESTADO, e a `ref` é CALLBACK — não troque por `useRef`.
+     É a regra que `dashboard/ui/useTamanho.ts` documenta no cabeçalho dele, e
+     este arquivo a violava: `useRef` + `useEffect(…, [])` roda UMA vez, e se o
+     nó ainda não existe naquele instante o observer nunca é ligado — a legenda
+     fica com altura 0 para sempre, sem erro e sem sintoma que aponte para cá.
+     Com o nó em estado, o effect re-roda quando ele aparece OU muda. */
+  const [legenda, setLegenda] = React.useState<HTMLDivElement | null>(null);
   const [hLegenda, setHLegenda] = React.useState(0);
   React.useEffect(() => {
-    const el = refLegenda.current;
-    if (!el) return;
-    const medir = () => setHLegenda((a) => (Math.abs(a - el.offsetHeight) < 1 ? a : el.offsetHeight));
+    if (!legenda) return;
+    const medir = () =>
+      setHLegenda((a) => (Math.abs(a - legenda.offsetHeight) < 1 ? a : legenda.offsetHeight));
     medir();
     const obs = new ResizeObserver(medir);
-    obs.observe(el);
+    obs.observe(legenda);
     return () => obs.disconnect();
-  }, []);
+  }, [legenda]);
 
   /* Ao LADO enquanto a legenda cabe (ela tem `min-width: 180`); embaixo depois. */
   const legendaAoLado = cw >= 180 + GAP + 132;
@@ -228,7 +234,7 @@ export function DonutChart({
         </div>
       </div>
 
-      <div ref={refLegenda} style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minWidth: 180 }}>
+      <div ref={setLegenda} style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minWidth: 180 }}>
         {arcos.map((a) => (
           <div
             key={a.nome}

@@ -25,14 +25,15 @@
  * tem opinião sobre.
  */
 
-/**
- * Onde o bloco pode viver.
- *
- * ⚠️ Uma métrica vive em `hero` ou `faixa`; um painel, em `paineis`. O arrasto
- * **acende o destino compatível e apaga o resto** — a rejeição aparece antes de
- * soltar, não depois.
- */
-export type Zona = "hero" | "faixa" | "paineis";
+/* ⛔ `Zona` FOI APAGADA — F5, 12/08/2026. Ela dizia que um bloco só podia viver
+   num de três lugares (`hero` | `faixa` | `paineis`), e as três zonas deixaram
+   de existir: há **uma grade**, e KPI hero, métrica compacta e painel são o
+   mesmo objeto, diferindo por `colMin`/`colPadrao`/`hMin`/`hPadrao`.
+
+   ⚠️ O tipo não foi mantido "por compatibilidade" nem renomeado: enquanto ele
+   existisse, o arrasto teria uma regra de compatibilidade para aplicar, e a
+   próxima pessoa a ler o arquivo encontraria a categoria que a F5 dissolveu
+   ainda descrita como se valesse. Proibição que muda é apagada. */
 
 /**
  * ⛔ NÃO EXISTE LISTA DE PASSOS DE LARGURA. Um bloco aceita **qualquer inteiro**
@@ -47,6 +48,8 @@ export type Zona = "hero" | "faixa" | "paineis";
  * empate. Ela era consequência da lista, não uma decisão de produto — e enquanto
  * existiu produziu um controle inerte (as setas da alça).
  */
+
+import { chaveDoId, idDaMetrica, METRICAS, type IdMetrica, type MetaMetrica } from "./metricas";
 
 /** Colunas da grade. Doze porque é o único número que divide por 2, 3, 4 e 6. */
 export const COLUNAS_GRADE = 12;
@@ -100,7 +103,6 @@ export interface MetaBloco {
   titulo: string;
   /** Uma linha dizendo o que o bloco responde. Vai para o painel de escolha. */
   descricao: string;
-  zona: Zona;
   /**
    * 🔴 BLOCO ESTRUTURAL É O QUE NÃO PODE SER **OCULTADO**. Nada além disso.
    *
@@ -198,10 +200,21 @@ export interface MetaBloco {
   hPadrao: number;
 }
 
-/* ⚠️ Hero e faixa NÃO estão aqui: são listas de MÉTRICA, não de bloco, e o
-   catálogo delas é o `metricCards` do hook. Misturar os dois faria o painel de
-   escolha oferecer "Faturamento" e "Vendas por país" na mesma lista. */
-export const CATALOGO_META = [
+/* 🔴 ESTE COMENTÁRIO DIZIA O CONTRÁRIO, E A F5 O DERRUBOU (12/08/2026).
+   Ele afirmava: *"Hero e faixa NÃO estão aqui: são listas de MÉTRICA, não de
+   bloco. Misturar os dois faria o painel de escolha oferecer 'Faturamento' e
+   'Vendas por país' na mesma lista."*
+
+   É exatamente o que o painel de escolha faz agora, e é o pedido: **uma grade
+   só, um catálogo só, sem vaga reservada.** A premissa que sustentava a
+   separação era que métrica e painel tinham naturezas diferentes — e não têm:
+   os dois ocupam um retângulo da grade, os dois declaram mínimo e padrão, os
+   dois são arrastáveis. O que os separava eram os TETOS (4 heros, 8 na faixa),
+   e os tetos caíram.
+
+   ⚠️ A lista abaixo é só a metade dos PAINÉIS. O `CATALOGO_META`, logo depois,
+   é a união dela com as métricas — e é ele que a tela e o arrasto consomem. */
+const PAINEIS_META = [
   /* ── OS QUATRO ESTRUTURAIS ────────────────────────────────────────────────
      Eles vêm PRIMEIRO na lista porque a ordem daqui é a do layout padrão de
      conta nova, e a leitura da tela começa por eles. ⚠️ Não é uma segunda
@@ -212,7 +225,6 @@ export const CATALOGO_META = [
     hPadrao: 3,
     titulo: "Receita vs. gasto",
     descricao: "As duas séries no tempo, com a linha de break-even",
-    zona: "paineis",
     /* 4 → ~318px. Cabe o cabeçalho (título ~120px + `Diário|Semanal` ~130px) e
        uma linha com ~5 rótulos de eixo. Abaixo disso o eixo vira uma régua de
        datas cortadas, e a série deixa de dizer QUANDO. */
@@ -226,7 +238,6 @@ export const CATALOGO_META = [
     hPadrao: 4,
     titulo: "Alertas",
     descricao: "O que exige ação agora",
-    zona: "paineis",
     /* 3 → ~237px. A linha é círculo de 28px (§13) + texto: sobram ~200px para o
        título do alerta, que quebra em duas linhas sem perder nada. Lista de
        texto é o formato que menos sofre com largura. */
@@ -240,7 +251,6 @@ export const CATALOGO_META = [
     hPadrao: 4,
     titulo: "Vendas por país",
     descricao: "De onde vem o faturamento",
-    zona: "paineis",
     /* 🔴 4, E ANTES ERA A TELA INTEIRA — este é o bloco que motivou a correção
        da definição de "estrutural".
 
@@ -258,7 +268,6 @@ export const CATALOGO_META = [
     hPadrao: 3,
     titulo: "Estado do sistema",
     descricao: "Integrações, regras, taxas e última atualização",
-    zona: "paineis",
     /* 3 → ~237px. O `StatusFooter` já é `auto-fit minmax(200px, 1fr)`: ele
        reflui para uma coluna sozinho. 200px é o piso do próprio componente. */
     colMin: 3,
@@ -277,7 +286,6 @@ export const CATALOGO_META = [
        descrevendo o mesmo dado, e o errado era o que prometia a coisa mais
        simples do que ela é. */
     descricao: "Cliques → sessões → checkouts → vendas iniciadas e aprovadas",
-    zona: "paineis",
     /* 🔴 4 é o mínimo do CABEÇALHO, não o da fita — e a distinção custou caro.
        A container query esconde `.tk-fita-desenho` abaixo de 360px úteis, e 4
        colunas dão ~318px numa janela de 1440. **No padrão antigo (`colPadrao:
@@ -297,7 +305,6 @@ export const CATALOGO_META = [
        rosca e lista da mesma coisa. Não é uma junção de coisas parecidas: era
        um dado só, exibido duas vezes na mesma tela. */
     descricao: "De qual canal veio o faturamento",
-    zona: "paineis",
     /* 3 → ~237px. Sem coluna de contagem: nome ~90 + receita 78 + % 44 + folgas
        ~25 = 237. E o `%` sai por container query abaixo de 320px úteis, o que dá
        folga real. A rosca é quadrada e cabe em qualquer largura. */
@@ -310,7 +317,6 @@ export const CATALOGO_META = [
     hPadrao: 3,
     titulo: "Produtos",
     descricao: "Quais produtos faturaram mais",
-    zona: "paineis",
     /* 3 → ~237px, com o `%` já fora pela container query: nome ~90 + vendas 54
        + receita 78 + folgas 20 = 242. É o limite exato, e é por isso que o `%`
        precisa sair antes — coluna de APOIO sai, a que responde fica. */
@@ -323,7 +329,6 @@ export const CATALOGO_META = [
     hPadrao: 3,
     titulo: "Formas de pagamento",
     descricao: "Como os compradores pagaram",
-    zona: "paineis",
     colMin: 3, // mesma conta de `produtos` — mesmo componente, mesmas colunas
     colPadrao: 4,
   },
@@ -337,7 +342,6 @@ export const CATALOGO_META = [
        como `v.placements` desde sempre — eram **6 leitores e nenhuma tela**, que
        é o mesmo padrão do `Sale.apiCredentialId`. */
     descricao: "Feed, Stories, Reels — onde o anúncio converteu",
-    zona: "paineis",
     colMin: 3, // mesma conta de `produtos`
     colPadrao: 4,
   },
@@ -347,7 +351,6 @@ export const CATALOGO_META = [
     hPadrao: 3,
     titulo: "Vendas por dia",
     descricao: "Quantas vendas e quanto faturou em cada dia",
-    zona: "paineis",
     /* 4 → ~318px. Com 30 dias dá ~10px por passo, que ainda desenha barra com
        folga. Abaixo disso as barras ficam mais finas que o raio de 6px do §4 e
        o gráfico vira uma serrilha. */
@@ -360,7 +363,6 @@ export const CATALOGO_META = [
     hPadrao: 3,
     titulo: "Vendas por horário",
     descricao: "As 24 horas do período filtrado",
-    zona: "paineis",
     colMin: 4, // 24 barras em ~318px = 13px de passo
     colPadrao: 6,
   },
@@ -370,7 +372,6 @@ export const CATALOGO_META = [
     hPadrao: 3,
     titulo: "Lucro por horário",
     descricao: "Receita menos a fatia de custo daquela hora",
-    zona: "paineis",
     colMin: 4, // idem `vendas-por-hora`
     colPadrao: 6,
   },
@@ -380,7 +381,6 @@ export const CATALOGO_META = [
     hPadrao: 3,
     titulo: "Taxa de aprovação",
     descricao: "Quanto de cada forma de pagamento é aprovado",
-    zona: "paineis",
     /* 3 → ~237px. São medidores radiais lado a lado; o componente já é
        `auto-fit`, então com três formas ele quebra em duas linhas em vez de
        espremer. Medidor não tem texto longo — encolhe bem. */
@@ -393,7 +393,6 @@ export const CATALOGO_META = [
     hPadrao: 4,
     titulo: "Atividade recente",
     descricao: "Os últimos eventos de venda e rastreamento",
-    zona: "paineis",
     /* 3 → ~237px, com a origem já fora pela container query abaixo de 320px. */
     colMin: 3,
     colPadrao: 4,
@@ -404,7 +403,6 @@ export const CATALOGO_META = [
     hPadrao: 4,
     titulo: "Top campanhas",
     descricao: "As que mais faturaram no período",
-    zona: "paineis",
     /* 🔴 ERA LARGURA CHEIA E NÃO PRECISAVA — quatro colunas de número e duas
        linhas ocupando 12 colunas.
 
@@ -421,7 +419,6 @@ export const CATALOGO_META = [
     hPadrao: 5,
     titulo: "Quando compram",
     descricao: "Média por hora, por dia da semana",
-    zona: "paineis",
     /* 🔴 5 → ~400px, e o número desceu de "largura cheia" porque **a célula
        deixou de ser 18px fixos**. Ela agora é fluida entre 11 e 30px, derivada
        da largura do bloco — a régua é 24 células + 24 folgas de 3px + o rótulo
@@ -436,8 +433,74 @@ export const CATALOGO_META = [
   },
 ] as const satisfies readonly MetaBloco[];
 
-/** Os ids válidos, derivados da lista. É o que o `Record` dos renders exige. */
-export type IdBloco = (typeof CATALOGO_META)[number]["id"];
+/* ══ AS MÉTRICAS COMO BLOCO — F5, 12/08/2026 ════════════════════════════════
+   🔴 ELAS SÃO DERIVADAS, NÃO ESCRITAS. Quinze entradas copiadas à mão aqui
+   seriam quinze lugares para o próximo commit esquecer — e o esquecimento é
+   mudo: a métrica sai do catálogo lateral e o usuário conclui que ela não
+   existe mais. Derivar de `METRICAS` faz a lista não poder divergir de si mesma.
+
+   ⚠️ **O `render` também é derivado da MESMA lista** (`catalogoRender.tsx`), e é
+   isso que preserva a regra de entrada do topo deste arquivo: um id de métrica
+   não consegue existir aqui sem existir lá, porque os dois saem do mesmo `map`.
+   O `Record<IdBloco, …>` continua cobrando a metade escrita à mão — os painéis.
+   Há asserção de cobertura sobre os DOIS em `npm run test:blocos-vazios`.
+
+   ### ⛔ POR QUE `colMin: 2`, e não o `wMin: 1` da §3 do `07`
+
+   Uma coluna dá ~42px úteis numa janela de 1440 com o rail aberto. Não cabe
+   "Faturamento" nem "R$ 12.345,00": o bloco quebraria numa largura que ele
+   próprio DECLARA, que é a definição de mínimo mentiroso deste catálogo. Duas
+   colunas dão ~140px, que é o `minWidth: 132` que a faixa de Resumo usava — o
+   número medido de onde a leitura compacta ainda funciona.
+
+   ### As duas leituras, e o que decide qual aparece
+
+   | `hPadrao` | Como desenha |
+   |---|---|
+   | 2 (destaque) | rótulo, número grande, pílula, sparkline, legenda |
+   | 1 | rótulo, número, pílula — e nada mais cabe em 80px |
+
+   ⛔ Não é um campo `variante`. Quem decide é a ALTURA DO SLOT, por container
+   query: esticar uma métrica comum para 2 células dá o sparkline, e encolher um
+   destaque para 1 dá a leitura compacta. Um campo separado seria uma segunda
+   verdade sobre o mesmo retângulo, e ela divergiria no primeiro arrasto. */
+/* ⚠️ O alargamento para `readonly MetaMetrica[]` é o mesmo caso do `ESTRUTURAIS`
+   de antes da F5: o `as const` faz de `METRICAS` uma tupla de tipos LITERAIS, e
+   `destaque` só existe em quatro membros. Sem ele, ler a propriedade num membro
+   que não a tem é erro de tipo — mesmo sendo `?` na interface. */
+const METRICAS_META: readonly MetaBloco[] = (METRICAS as readonly MetaMetrica[]).map((m) => ({
+  id: idDaMetrica(m.chave),
+  titulo: m.rotulo,
+  descricao: m.descricao,
+  colMin: 2,
+  colPadrao: 3,
+  /* ⚠️ `hMin: 1` é o único mínimo de altura honesto de toda a base: a leitura
+     compacta CABE em uma célula, e há container query que a produz. É o
+     contraste com os painéis, cujo `hMin` é a medição F0b justamente porque
+     eles ainda não têm versão compacta — ver o campo `hMin` acima. */
+  hMin: 1,
+  hPadrao: m.destaque ? 2 : 1,
+}));
+
+/**
+ * 🔴 O CATÁLOGO INTEIRO — painéis e métricas na MESMA lista, sem vaga reservada.
+ *
+ * A ordem é painéis primeiro porque é a ordem em que este arquivo sempre foi
+ * lido; ela **não** decide o layout padrão (quem decide é `PADRAO_DA_GRADE`, em
+ * `layout/migrar.ts`) nem a ordem do catálogo lateral, que separa os dois grupos
+ * por uma razão de escolha, não de estrutura.
+ */
+export const CATALOGO_META: readonly MetaBloco[] = [...PAINEIS_META, ...METRICAS_META];
+
+/** Os ids de painel — a metade escrita à mão, e a que o `Record` dos renders cobra. */
+export type IdPainel = (typeof PAINEIS_META)[number]["id"];
+/** Todo id de bloco: painel ou métrica. */
+export type IdBloco = IdPainel | IdMetrica;
+
+/** `true` quando o bloco é uma métrica. Quem responde é o prefixo do id. */
+export function ehBlocoDeMetrica(id: string): boolean {
+  return chaveDoId(id) !== undefined;
+}
 
 export function metaDoBloco(id: string): MetaBloco | undefined {
   return CATALOGO_META.find((b) => b.id === id);
@@ -510,11 +573,12 @@ export function encaixarAltura(bruto: number | undefined, meta: MetaBloco): numb
  * ⚠️ **Só o `estrutural` decide.** Não existe lista de ids em lugar nenhum;
  * marcar um bloco é acrescentar a frase, e desmarcar é apagá-la.
  */
-/* ⚠️ O `as readonly MetaBloco[]` não é preguiça: o `as const` faz de
-   `CATALOGO_META` uma tupla de tipos LITERAIS, e `estrutural` só existe em
-   quatro deles. Sem o alargamento, ler a propriedade num membro que não a tem é
-   erro de tipo — mesmo sendo `?` na interface. */
-export const ESTRUTURAIS = (CATALOGO_META as readonly MetaBloco[]).filter((b) => b.estrutural);
+/* ⚠️ O `as readonly MetaBloco[]` que havia aqui saiu junto com a F5: o
+   `CATALOGO_META` deixou de ser tupla literal (ele é a união de duas listas) e
+   já chega alargado. Manter o `as` seria um cast que não converte nada — e cast
+   inútil é o tipo de coisa que a próxima pessoa lê como "aqui tem uma sutileza"
+   e preserva por medo. */
+export const ESTRUTURAIS = CATALOGO_META.filter((b) => b.estrutural);
 
 /**
  * Garante que os estruturais estejam presentes numa lista de painéis, **sem

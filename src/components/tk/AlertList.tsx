@@ -191,6 +191,11 @@ export function AlertList({
             justifyContent: "center",
             gap: 5,
             width: "100%",
+            /* 🔴 C6 — o `+N` fica ANCORADO NO FIM do card, como o do `FeedVendas`.
+               Um "+3 alertas" colado na última linha, com vão morto embaixo, diz
+               "não coube mais" logo acima do espaço que sobrou. */
+            marginTop: "auto",
+            flex: "none",
             background: "none",
             border: 0,
             cursor: "pointer",

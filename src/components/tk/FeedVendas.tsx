@@ -117,7 +117,17 @@ export function FeedVendas({ itens, limite = 12 }: { itens: ItemFeed[]; limite?:
         /* ⚠️ O `+N` diz quantos FICARAM DE FORA, e não "mostrando X de Y". A
            segunda forma obriga o leitor a subtrair para saber se vale procurar o
            resto — e é a pergunta que ele tem ao ver a lista cortada. */
-        <p className="text-caption text-text-muted" style={{ margin: "8px 0 0", flex: "none" }}>
+        /* 🔴 C6 — `marginTop: auto` ANCORA O RODAPÉ NO FIM DO CARD.
+           Sem ele o `+N` ficava colado na última linha e sobrava vão morto
+           embaixo — medido em 13/08/2026: **29px** no `atividade`, num bloco que
+           tinha `+32` eventos escondidos.
+
+           ⛔ E a distinção é a regra do dono: vão com `+N` é DEFEITO (a tela
+           afirma que não cabe mais e deixa espaço sobrando); vão SEM `+N` fica,
+           porque é a altura que o usuário escolheu na alça e a lista acabou.
+           `produtos`, `alertas` e `top-campanhas` mostram tudo que têm — o vão
+           deles não é nosso para consertar. */
+        <p className="text-caption text-text-muted" style={{ margin: "8px 0 0", marginTop: "auto", flex: "none" }}>
           + {itens.length - visiveis} {itens.length - visiveis === 1 ? "evento" : "eventos"} — aumente o bloco para ver mais
         </p>
       )}

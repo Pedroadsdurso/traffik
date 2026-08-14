@@ -91,8 +91,8 @@ export async function loadLayoutZonas(workspaceId?: string | null): Promise<unkn
   return row?.layout ?? null;
 }
 
-/** O painel como o envelope v4 o guarda. */
-export interface PainelSalvo {
+/** O bloco como o envelope v5 o guarda. **Métrica e painel usam a mesma forma.** */
+export interface BlocoSalvo {
   id: string;
   col: number;
   /** Altura em CÉLULAS de 96px. Ver `layout/migrar.ts`. */
@@ -111,10 +111,26 @@ export interface PainelSalvo {
   linhas?: number;
 }
 
-export type LayoutSalvo = { hero: string[]; faixa: string[]; paineis: PainelSalvo[] };
+/**
+ * O envelope v5 — **uma lista só**.
+ *
+ * 🔴 `hero` e `faixa` continuam aqui, e não são zonas: são a REDE da conversão
+ * da F5, exatamente como `linhas` é a da F1. `{hero, faixa, paineis} → blocos`
+ * também é irreversível — da lista única não se recupera qual métrica era hero,
+ * porque a altura diz isso só no instante da conversão. E ela roda sozinha, em
+ * produção, sobre um arranjo que o usuário montou.
+ *
+ * ⛔ Nada os lê para desenhar. Quem desenha é `blocos`, na ordem, sempre.
+ */
+export type LayoutSalvo = { blocos: BlocoSalvo[]; hero?: string[]; faixa?: string[] };
 
-/** ⚠️ `v: 4` desde 12/08/2026 (F1). Era `v: 3` com altura em `linhas` de 44px. */
-const VERSAO = 4;
+/**
+ * ⚠️ `v: 5` desde 12/08/2026 (F5) — a grade única.
+ *
+ * A linhagem: `v: 2` largura por rótulo · `v: 3` colunas + `linhas` de 44px ·
+ * `v: 4` altura em células de 96px (F1) · `v: 5` métrica e painel na mesma lista.
+ */
+const VERSAO = 5;
 
 export async function saveLayoutZonas(layout: LayoutSalvo, workspaceId?: string | null): Promise<{ ok: true }> {
   const userId = await requireUserId();
