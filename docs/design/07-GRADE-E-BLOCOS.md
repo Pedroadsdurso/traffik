@@ -1663,3 +1663,111 @@ mesmo, a Meta conta em dobro"*.
 > O lint acusou no primeiro comando — é a família *import não chamado dá
 > aparência de cobertura*, pega em segundos **porque o piso era zero**. Com oito
 > warnings de ruído, ela teria passado.
+
+---
+
+# 🧪 Cobertura de 14/08/2026 (2ª rodada) — sete funções puras, e seis achados
+
+> **A janela continuou indisponível.** Medido no fim da sessão: aba nova em
+> grupo novo nasce `hidden: true` · `hasFocus: false` · `innerWidth 2560 =
+> availWidth`. Os quatro itens de `## Estado` (bandas, origem A, origem B, `h`
+> do vazio) **seguem NÃO MEDIDOS** — nada aqui os toca.
+
+A fila era `despesaVale` → `encryptSecret`/`isEncrypted` →
+`combinaStatus`/`estaArquivado` → os quatro de fuso → `estadoDoToken` →
+`calcularFunil` → `intervalosDoEixoY`.
+
+| suíte | asserções | o que congela |
+|---|---|---|
+| `test:despesa-vale` | 16 | a divergência confinada a **uma** entrada |
+| `test:segredos` | 53 | ida-e-volta · idempotência · IV aleatório |
+| `test:status-ads` | 31 | complementaridade · contenção · disjunção · **não-partição** |
+| `test:fuso-calendario` | 34 | as derivações **não dependem do `TZ` do processo** |
+| `test:token-estado` | 47 | partição · a costura do `ceil` · cor ⟺ explicação |
+| `test:modulos-orfaos` | 22 | 3 órfãos em 124, nos **dois** sentidos |
+| `test:eixo-y` | 47 | **o `1` não existe** · limiar derivado · monotonia |
+
+`tsc` 0 · `lint` 0 erros **e 0 warnings** · `npm test` exit 0, **2.058 asserções
+em 68 scripts**. Cada suíte entrou no agregado no mesmo commit, e cada plantio
+foi feito **no arquivo real**, não só simulado.
+
+## 🔴 OS SEIS ACHADOS — todos MEDIDOS, nenhum corrigido
+
+| # | achado | onde vive a asserção |
+|---|---|---|
+| 1 | `despesaVale` (30/07) e `whereDespesasDaArea` (04/08) **discordam em `workspaceId: null`**, e o comentário entre as duas as chama de equivalentes. Segura só porque `despesaVale` **não tem consumidor** | `test:despesa-vale` |
+| 2 | `encryptSecret("")` produz envelope que `decryptSecret` **recusa** — e `decryptSecretSafe` acusa *"a ENCRYPTION_KEY mudou?"*, a causa errada e a mais assustadora num módulo sem rotação. Inalcançável por **guarda de chamador**, não do módulo | `test:segredos` |
+| 3 | o cabeçalho de `token.ts` afirma que `DIAS_ATENCAO` (30) é *"o mesmo limiar do `/api/cron/manutencao`"*. **O cron usa 14** | `test:token-estado` §7a |
+| 4 | 🔴 o `where` do cron é `tokenExpiresAt: { not: null }` — o grupo que o próprio módulo chama de **"o mais perigoso da base"** nunca gera notificação. Só a tela o alcança, e é a tela que o cabeçalho diz que *"o usuário pode nunca abrir"* | `test:token-estado` §7b |
+| 5 | 🔴 `faltamTaxas` perdeu o último consumidor na reescrita de Taxas (`9608704`, 12/08). O `precedencia.ts` a documenta como **A** mitigação de um risco que ele pinta de vermelho — área sem imposto calcula lucro maior que a realidade — e termina em *"Se o aviso sair, o risco volta inteiro"* | `test:modulos-orfaos` §3 |
+| 6 | o C3 unificou **metade** do eixo: `escalaArredondada` segue reimplementada em linha no `LineChart` (106–109), e o comentário do `SerieTemporal` afirma que os dois a usam. **As duas concordam hoje** — e é a concordância que faz a segunda fonte sobreviver | `test:eixo-y` §7 |
+
+> ### ⛔ POR QUE NENHUM FOI CORRIGIDO, item a item
+> **1, 2, 3, 4** são código anterior a `4e6aa9e` — congelado. **5 e 6** são
+> código do redesign, e portanto livres — mas religar o aviso de taxas e
+> unificar `escalaArredondada` são mudanças de TELA, e a tela não é mensurável
+> nesta máquina. *Um aviso que ninguém vê disparar é o controle inerte que esta
+> base persegue* — é o mesmo critério que deixou o alerta de dono corrompido
+> pendente na rodada anterior.
+
+## 🔑 O QUE ESTA RODADA ACRESCENTA COMO MÉTODO
+
+**1 · O `TZ` deixou de ser propriedade da máquina.** O `## Estado` registrava
+que o plantio "dia do processo" divergiu 0h por esta estação estar em São Paulo,
+e ficou como **linha impressa**. Aqui ele roda em **processo filho com `TZ`
+forçado**, com linha de base provando que o `TZ` chega (offset `0` × `−3`).
+
+> ### 🔴 E a medição achou o que não estava escrito: os dois plantios de fuso são mudos em ambientes OPOSTOS.
+>
+> | plantio | mudo em | quebra em |
+> |---|---|---|
+> | `setHours(0,0,0,0)` | `America/Sao_Paulo` (o dev) | `UTC` (a Vercel) |
+> | `new Date(chave)` + `setDate` | `UTC` (a Vercel) | `America/Sao_Paulo` (o dev) |
+>
+> *"Rodei em dev e está certo"* e *"rodei em produção e está certo"* são as duas
+> metades de uma verificação. **Não existe ambiente seguro em que conferir fuso.**
+
+**2 · A fila pedia `calcularFunil`, e ele está MORTO.** `src/lib/funnel.ts` não
+tem importador nenhum; `EtapaCalculada`, `ResumoFunil`, `taxaVsAnterior` e
+`perdaValor` têm zero ocorrências fora dele.
+
+> ## Asserção verde sobre órfão não é cobertura — é a GARANTIA FALSA que esta base nomeou em 07/08/2026.
+>
+> No lugar entrou a **varredura**, que é o que a meta-regra pede: 3 órfãos em
+> 124 módulos, de três categorias (lápide deliberada · superado · proteção que
+> perdeu o consumidor), reprovando nos **dois** sentidos. Foi ela que achou o §5.
+
+**3 · Guarda de texto medindo prosa, 7ª e 8ª ocorrências** — e as duas foram
+minhas: a contagem de consumidores do `despesaVale` casaria com o comentário do
+vizinho, e a varredura de órfãos contou **o próprio teste** como consumidor. A
+regra já estava escrita: não é *"alguém importa?"*, é **"alguém ALÉM DO TESTE
+importa?"**.
+
+## ⚠️ CINCO ERROS MEUS, e os cinco foram pegos pela asserção que IMPRIME o alvo
+
+Registrados porque a taxa é o dado: **cinco instrumentos fora do alvo em uma
+sessão**, e nenhum foi pego por atenção.
+
+| erro | o que o denunciou |
+|---|---|
+| `globSync` devolve `\` no Windows — o filtro não casou e o próprio módulo entrou na contagem | a asserção **imprimia a lista**, não só o número |
+| afirmei *"o erro é de um DIA INTEIRO"*; lidas no fuso do usuário as duas fronteiras caem no mesmo dia | a asserção reprovou — o erro é o **deslocamento** (21h), não o rótulo |
+| congelei o **valor** `30` em duas asserções de token | plantei o conserto legítimo e li a mensagem que saía |
+| escrevi *"o zero está sempre na régua"* — propriedade que a função **não tem** | o fuzz devolveu `[-7832,-7018] → [-8000,-7000]` |
+| a linha de base do fuzz do eixo reprovou (27 de 600 abaixo do limiar) | corrigi o **gerador**, enviesando a distribuição — não a barra |
+
+> ⛔ **Uma asserção minha nasceu com `|| true`** e foi reescrita, não apagada em
+> silêncio. É o defeito que este arquivo existe para não cometer, e ele saiu de
+> mim na mesma sessão em que o registro dele foi lido.
+
+## 🔎 A ABA FICOU VIVA E MARCADA
+
+`document.title = "★ MEDIR AQUI ★"`, em `/dashboard`. É a técnica registrada
+para desfazer a ambiguidade *PRINT × MEDIÇÃO* quando há mais de uma janela: um
+identificador que o humano lê na barra vale mais que qualquer descrição de qual
+janela é qual.
+
+⚠️ **O passo 1 da sequência está satisfeito** (a aba existe). Se o dono
+desmaximizar a janela que a contém, a próxima sessão mede as bandas, as duas
+origens da §7.2 e o `h` do vazio. ⛔ Se a aba fechar, o grupo é auto-removido e
+o passo 1 recomeça.
