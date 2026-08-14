@@ -13,7 +13,7 @@ import type { PixelEventType, PurchaseSendMode, PurchaseValueMode } from "@/gene
  * na página de vendas. É o único modo que funciona quando o checkout é hospedado
  * pelo gateway (pay.kirvano.com), onde o cliente não consegue instalar script.
  */
-import { lerDonos, type MapaDeDonos } from "@/lib/pixel/donos";
+import { lerDonos, donosCorrompidos, type DonoCorrompido, type MapaDeDonos } from "@/lib/pixel/donos";
 import { assinaturaDetectores, avisoDeVersao, diferencasDeDetectores } from "@/lib/pixel/detectores";
 import { EVENTOS_DO_PIXEL, donoDoEvento } from "@/lib/pixel/donos";
 import { PRESET_PADRAO, donosDoPreset, lerPreset, type PresetPixel } from "@/lib/pixel/preset";
@@ -52,6 +52,21 @@ export interface PixelConfigDTO {
    * qualquer caso — o funil e o Dashboard contam do nosso banco.
    */
   eventOwners: MapaDeDonos;
+  /**
+   * 🔴 AS ENTRADAS DE `eventOwners` QUE NÃO PUDERAM SER LIDAS — aditivo,
+   * 14/08/2026. Nenhum campo existente mudou de valor.
+   *
+   * ⛔ Até aqui a corrupção MORRIA NESTA LINHA: `lerDonos` descarta o ilegível
+   * e devolve um mapa limpo, então nenhuma tela tinha como saber que a escolha
+   * do usuário havia sido perdida. O dono cai no PADRÃO — que para `Purchase`
+   * é `traffik` —, ou seja **o envio é RELIGADO** e a contagem dobrada na Meta
+   * volta, sem nada acusar.
+   *
+   * A direcao NAO muda (falhar fechado apagaria conversao real). O que muda e
+   * que ela deixa de ser muda: o bloco de Alertas nomeia o evento e o dono
+   * assumido, e o usuario decide.
+   */
+  donosCorrompidos: DonoCorrompido[];
   /**
    * Respostas do preset. Pixel anterior à coluna vem **inferido** do estado
    * atual, nunca vazio — ver `lib/pixel/preset.ts`.
@@ -115,6 +130,9 @@ function toDTO(px: {
     name: px.name,
     enabled: px.enabled,
     eventOwners: lerDonos(px.eventOwners),
+    /* ⚠️ Do BRUTO, não do saneado — se viesse de `lerDonos` seria sempre vazio,
+       que é a definição de guarda que nunca dispara. */
+    donosCorrompidos: donosCorrompidos(px.eventOwners),
     // A regra de IC entra porque `ondeSePaga` é inferível dela para os pixels
     // anteriores ao campo — ver `lerPreset`.
     preset: lerPreset(px.setup, px.eventOwners, detIC?.tipo ?? null),

@@ -179,3 +179,89 @@ export const EXPLICACAO_DONO: Record<DonoDoEvento, string> = {
  * Se um evento voltar a precisar de nota, ela pertence ao lado do controle que
  * o usuário deve mexer — a pergunta —, nunca ao lado do que ele não deve.
  */
+
+/**
+ * # 🔴 O DONO CORROMPIDO — o mesmo desfecho, mas NÃO MAIS MUDO
+ *
+ * `lerDonos` descarta valor que não casa com nenhum dos quatro estados, e
+ * `donoDoEvento` cai no PADRÃO. Para `Purchase` o padrão é `traffik` — ou seja,
+ * **uma corrupção do JSON gravado RELIGA o envio de um evento que o usuário
+ * desligou**, e a contagem dobrada volta.
+ *
+ * ⛔ **A direção não muda, e é decisão do dono (14/08/2026).** Falhar fechado
+ * — parar de enviar quando o dado está ruim — apagaria conversão REAL, que é
+ * pior. O problema nunca foi para que lado ele falha:
+ *
+ * > ## O problema é falhar sem nada acusar.
+ *
+ * Esta função é a metade que faltava. Ela não muda comportamento nenhum: ela
+ * ENUMERA as corrupções para o bloco de Alertas nomear o evento e o dono
+ * assumido, e o usuário decidir.
+ *
+ * ⚠️ Ela olha só as chaves que SÃO eventos conhecidos com valor ilegível. Chave
+ * desconhecida (`{ EventoInventado: "gateway" }`) não entra: não há evento a
+ * nomear, e alertar sobre ela seria ruído sobre dado que nunca foi usado.
+ *
+ * ⚠️ E chave em caixa errada (`purchase` em vez de `Purchase`) TAMBÉM não entra
+ * por este caminho — para o leitor ela é uma chave desconhecida. O que a
+ * denuncia é o par: o evento conhecido fica sem entrada, e a chave estranha
+ * fica sobrando. Ver `sobrando`.
+ */
+export type DonoCorrompido = {
+  /** O evento conhecido cujo valor não casou, ou a chave estranha encontrada. */
+  chave: string;
+  /** O que estava gravado, já em texto, para o alerta poder mostrar. */
+  bruto: string;
+  /** O dono que a ferramenta ASSUMIU no lugar. */
+  assumido: DonoDoEvento;
+};
+
+/**
+ * Lista as entradas de `eventOwners` que não puderam ser lidas.
+ *
+ * ⛔ Devolve `[]` para mapa AUSENTE (`null`, `undefined`) — ausência não é
+ * corrupção, e alertar sobre ela dispararia em toda conta que nunca abriu a
+ * gaveta do Pixel. É a distinção central deste projeto: não medido ≠ medido e
+ * ruim.
+ */
+export function donosCorrompidos(bruto: unknown): DonoCorrompido[] {
+  if (bruto == null) return [];
+
+  /* Um `eventOwners` que não é objeto é corrupção do registro inteiro, e vale
+     UMA linha — não uma por evento. */
+  if (typeof bruto !== "object" || Array.isArray(bruto)) {
+    return [{ chave: "eventOwners", bruto: textoCurto(bruto), assumido: "traffik" }];
+  }
+
+  const obj = bruto as Record<string, unknown>;
+  const fora: DonoCorrompido[] = [];
+
+  /* 1 — evento conhecido com valor ilegível. */
+  for (const evento of EVENTOS_DO_PIXEL) {
+    if (!(evento in obj)) continue;
+    const v = obj[evento];
+    if (typeof v === "string" && DONOS_VALIDOS.includes(v)) continue;
+    fora.push({ chave: evento, bruto: textoCurto(v), assumido: padraoDoEvento(evento) });
+  }
+
+  /* 2 — chave que não é evento conhecido. É o que denuncia caixa errada
+     (`purchase`) e nome trocado, que o laço acima não enxerga. */
+  for (const k of Object.keys(obj)) {
+    if ((EVENTOS_DO_PIXEL as readonly string[]).includes(k)) continue;
+    fora.push({ chave: k, bruto: textoCurto(obj[k]), assumido: padraoDoEvento(k) });
+  }
+
+  return fora;
+}
+
+/** Texto curto e seguro do valor gravado, para caber num alerta. */
+function textoCurto(v: unknown): string {
+  if (typeof v === "string") return v.length > 40 ? v.slice(0, 40) + "…" : v;
+  if (v === undefined) return "ausente";
+  try {
+    const s = JSON.stringify(v);
+    return s.length > 40 ? s.slice(0, 40) + "…" : s;
+  } catch {
+    return String(v);
+  }
+}

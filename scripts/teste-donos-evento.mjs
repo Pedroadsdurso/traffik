@@ -144,6 +144,68 @@ ok("linha de base: há eventos para examinar", EVENTOS_DO_PIXEL.length >= 5, EVE
   }
 }
 
+/* ═══ 4b · 🔴 A CORRUPÇÃO DEIXA DE SER MUDA — `donosCorrompidos` ═════════
+ *
+ * Decisão do dono, 14/08/2026: **a direção não muda** (falhar fechado apagaria
+ * conversão real), mas o silêncio acaba. Cada corrupção vira alerta nomeando o
+ * evento e o dono assumido.
+ *
+ * ⛔ A exigência literal: **as cinco formas já medidas produzem alerta.** */
+{
+  const { donosCorrompidos } = await import("@/lib/pixel/donos");
+
+  const CINCO = [
+    ["valor virou número", { Purchase: 1 }],
+    ["valor virou objeto", { Purchase: { dono: "gateway" } }],
+    ["chave em minúscula", { purchase: "gateway" }],
+    ["dono com espaço", { Purchase: " gateway" }],
+    ["dono em maiúscula", { Purchase: "GATEWAY" }],
+  ];
+
+  for (const [nome, bruto] of CINCO) {
+    const alertas = donosCorrompidos(bruto);
+    ok(`✅ ${nome} PRODUZ alerta`, alertas.length >= 1, JSON.stringify(alertas));
+    ok(
+      `   …e o alerta NOMEIA a chave e o dono assumido`,
+      alertas.every((a) => a.chave && a.assumido && a.bruto !== undefined),
+      alertas.map((a) => a.chave + "→" + a.assumido).join(", "),
+    );
+  }
+
+  /* ⛔ LINHA DE BASE DO PAR — sem ela, a guarda passaria numa função que alerta
+     SEMPRE, e aí ela seria ruído em toda conta. */
+  eq("mapa VÁLIDO não produz alerta nenhum", donosCorrompidos({ Purchase: "gateway", Lead: "ninguem" }), []);
+  eq("mapa VAZIO não produz alerta", donosCorrompidos({}), []);
+
+  /* ⛔ AUSÊNCIA NÃO É CORRUPÇÃO — é a distinção central do projeto. Alertar
+     sobre `null` dispararia em toda conta que nunca abriu a gaveta do Pixel. */
+  eq("`null` não produz alerta (ausência ≠ corrupção)", donosCorrompidos(null), []);
+  eq("`undefined` idem", donosCorrompidos(undefined), []);
+
+  /* Corrupção do registro INTEIRO vale uma linha, não uma por evento. */
+  {
+    const a = donosCorrompidos("gateway");
+    ok("string no lugar do mapa vira UMA linha", a.length === 1 && a[0].chave === "eventOwners", JSON.stringify(a));
+    ok("array idem", donosCorrompidos(["Purchase"]).length === 1);
+  }
+
+  /* O dono assumido é o que a ferramenta DE FATO usa — senão o alerta mentiria. */
+  {
+    const [a] = donosCorrompidos({ Purchase: 1 });
+    ok(
+      "⛔ o `assumido` do alerta É o que `donoDoEvento` devolve",
+      a.assumido === donoDoEvento({ Purchase: 1 }, "Purchase"),
+      a.assumido,
+    );
+    const [pv] = donosCorrompidos({ PageView: 99 });
+    ok(
+      "…inclusive no `PageView`, cujo padrão é `navegador`",
+      pv.assumido === "navegador",
+      pv.assumido,
+    );
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
  * 5 · PLANTIOS
  * ═════════════════════════════════════════════════════════════════════ */

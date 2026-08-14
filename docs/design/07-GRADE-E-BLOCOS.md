@@ -1529,3 +1529,46 @@ plantio **traz a duplicata de volta**.
 > fechado significaria parar de enviar quando o dado está ruim, e isso apaga
 > conversão real). As asserções congelam o comportamento de hoje para a decisão
 > ficar visível.
+
+### 12 · A corrupção do `eventOwners` deixa de ser MUDA
+
+**Decisão do dono, 14/08/2026:** a direção **não muda** — falhar fechado
+apagaria conversão real. O que acaba é o silêncio.
+
+> ## O problema nunca foi para que lado ele falha. É falhar sem nada acusar.
+
+`donosCorrompidos(bruto)` — função pura em `lib/pixel/donos.ts` — enumera as
+entradas ilegíveis com **a chave, o valor bruto e o dono ASSUMIDO**.
+
+⛔ **Onde a informação morria:** `PixelConfigDTO.eventOwners` vinha de
+`lerDonos`, que **descarta o ilegível e devolve um mapa limpo**. Nenhuma tela
+tinha como saber que a escolha do usuário se perdera. Por isso o campo novo lê
+o **bruto**, não o saneado — ler o saneado seria uma guarda que nunca dispara.
+
+**As cinco formas medidas, todas produzindo alerta:**
+
+| corrupção | alerta |
+|---|---|
+| valor virou número | `Purchase → traffik` |
+| valor virou objeto | `Purchase → traffik` |
+| chave em minúscula | `purchase → traffik` |
+| dono com espaço | `Purchase → traffik` |
+| dono em maiúscula | `Purchase → traffik` |
+
+✅ **E o par que impede o ruído:** mapa válido, mapa vazio, `null` e `undefined`
+produzem **zero** alertas. ⛔ Ausência **não** é corrupção — alertar sobre `null`
+dispararia em toda conta que nunca abriu a gaveta do Pixel.
+
+✅ O `assumido` do alerta **é** o que `donoDoEvento` devolve — asserido, senão o
+alerta mentiria sobre o próprio efeito. Inclusive no `PageView`, cujo padrão é
+`navegador`.
+
+> ### 🔜 O ÚLTIMO SALTO FICA PENDENTE, e o motivo está escrito
+> O campo existe no DTO e a função é asserida. **Falta o Dashboard consumi-lo**:
+> o construtor de alertas (`dadosDosBlocos.tsx:154`) hoje só recebe
+> `fbConnected`, `adProfiles`, `perfisCrus`, `metricCards` e `chartSerie` — **os
+> pixels não chegam lá**, e plumbá-los é mudança de estado do Dashboard que eu
+> não conseguiria verificar em tela nesta máquina.
+>
+> ⛔ Registrado em vez de feito às cegas: um alerta que eu não vejo disparar é
+> exatamente o "controle inerte" que esta base persegue.
