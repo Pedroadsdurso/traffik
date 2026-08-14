@@ -1572,3 +1572,49 @@ alerta mentiria sobre o próprio efeito. Inclusive no `PageView`, cujo padrão �
 >
 > ⛔ Registrado em vez de feito às cegas: um alerta que eu não vejo disparar é
 > exatamente o "controle inerte" que esta base persegue.
+
+### 13 · O alerta de dono corrompido — MEDIDO, e o veredito é "pendente de tela"
+
+A pergunta que o dono pôs decide sozinha: *"se os outros alertas têm cobertura
+sem tela, este também tem"*.
+
+**Medido: nenhum tem.** `grep` por `dadosDosBlocos`, `gasto-sem-conversao` e
+`roi-caiu` em `scripts/teste-*.mjs` devolve **zero arquivos** — os **cinco**
+alertas do Dashboard nascem dentro de um `React.useMemo` num `.tsx`, que é a
+mesma razão estrutural que deixava a `composicaoDoNoDeICs` sem cobertura.
+
+⛔ **Então o campo fica pronto e a ligação fica pendente**, pelo critério do
+próprio dono. ⚠️ E o que destravaria os cinco de uma vez é o mesmo movimento de
+sempre: **extrair o construtor de alertas para uma função pura**. Não foi feito
+aqui por ser refatoração do Dashboard sem tela para conferir.
+
+### 14 · `deZonasParaGrade` — a conversão sem volta
+
+**`test:zonas-grade`, 20 asserções.** Ela roda **uma vez por testador**, ao
+abrir o Dashboard, e o que produz é gravado: se embaralhar a ordem, o arranjo
+vira outro e **não há de onde recuperar**.
+
+**As duas propriedades congeladas — não o resultado:**
+
+| | |
+|---|---|
+| 1 | **bloco válido nunca muda de posição relativa** — e a ordem das zonas é hero → faixa → painéis |
+| 2 | **entrada ruim preserva os válidos** — métrica desconhecida some, as vizinhas ficam |
+
+⚠️ A contagem esperada é **derivada de `fileirasDeMetricas`**, não escrita à mão:
+uma lista fixa de métricas aqui envelheceria no primeiro nome que mudasse, e o
+teste passaria a medir a lista em vez da conversão.
+
+**Fuzz de 200 com semente fixa**, afirmando contagem e ordem. Linhas de base
+impressas: **146** casos com métrica inválida, **181** com painel.
+
+**Dois plantios, os dois consertos plausíveis:**
+
+| | |
+|---|---|
+| **A** *"se tem lixo, melhor não migrar nada"* | devolve **zero blocos** — o usuário perde o arranjo inteiro por uma chave |
+| **B** ordenar a saída "para ficar organizado" | troca a sequência escolhida pela alfabética |
+
+✅ E `heroLegado`/`faixaLegado` têm asserção própria: são a **procedência**, e
+perdê-los é a família *"excluir configuração não pode apagar a procedência"* —
+aqui sem volta.
