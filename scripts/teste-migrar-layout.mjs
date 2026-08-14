@@ -483,6 +483,93 @@ console.log("\n\x1b[1mO envelope v5 — a grade única\x1b[0m");
   eq("v5 preserva o `linhas` legado da F1", v5({ blocos: [{ id: "funil", col: 6, h: 5, linhas: 5 }] }).blocos.find((p) => p.id === "funil").linhasLegado, 5);
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   🔀 AS TRÊS ENTRADAS DO v4→v5, LADO A LADO — e o que se mede é a DIVERGÊNCIA
+
+   🔴 POR QUE ELAS SÃO TESTADAS JUNTAS, e não uma por bloco
+
+   Em 13/08/2026 uma medição destas mesmas entradas devolveu **saída IDÊNTICA
+   para todas** — 27 blocos, mesmos ids. A leitura natural foi "a migração sanea
+   bem". Era o instrumento: os envelopes tinham `versao: 4` e o campo é `v`,
+   então `versaoDe` devolvia `null` e TUDO caía no padrão.
+
+   ## ⛔ Entradas distintas convergindo é sinal de INSTRUMENTO, nunca de robustez.
+
+   Robustez real produz saídas DIFERENTES: ela preserva o que dá para preservar
+   em cada caso. Por isso a asserção central aqui não é sobre nenhum número
+   isolado — é sobre os quatro serem **distintos entre si**. Uma regressão que
+   reintroduza "tudo vira padrão" faz esta asserção cair mesmo que ninguém tenha
+   previsto os valores novos.
+   ══════════════════════════════════════════════════════════════════════════ */
+{
+  const PADRAO = layoutPadrao().blocos.length;
+
+  /* 1 · v4 REAL — o arranjo de quem usou o produto: 4 hero, 2 na faixa, 5 painéis. */
+  const v4Real = migrarLayout({
+    v: 4,
+    hero: ["roas", "cpa", "ctr", "arpu"],
+    faixa: ["ticket", "margem"],
+    paineis: [
+      { id: "funil", col: 6, h: 5 },
+      { id: "receita-gasto", col: 6, h: 4 },
+      { id: "paises", col: 12, h: 6 },
+      { id: "alertas", col: 4, h: 3 },
+      { id: "rodape", col: 12, h: 2 },
+    ],
+  });
+
+  /* 2 · v3 de conta que NUNCA ABRIU o Dashboard — envelope gravado, nada escolhido. */
+  const v3Virgem = migrarLayout({ v: 3, hero: [], faixa: [], paineis: [] });
+
+  /* 3a · CORROMPIDO sem nada aproveitável. */
+  const lixoTotal = migrarLayout({ v: 5, blocos: "x" });
+
+  /* 3b · CORROMPIDO PARCIAL — e é o caso que separa sanear de descartar. */
+  const lixoParcial = migrarLayout({
+    v: 4,
+    hero: null,
+    faixa: "z",
+    paineis: [{ id: "funil", col: 6 }, 1, null, { semId: true }],
+  });
+
+  /* ── A asserção central: as quatro divergem ─────────────────────────────── */
+  const tamanhos = [v4Real, v3Virgem, lixoTotal, lixoParcial].map((r) => r.blocos.length);
+  eq("linha de base: as quatro entradas migraram", tamanhos.every((n) => n > 0), true);
+  eq(
+    "entradas DIFERENTES produzem saídas DIFERENTES (não convergem no padrão)",
+    new Set(tamanhos).size,
+    4,
+  );
+
+  /* ── E cada uma preserva o que lhe cabe ─────────────────────────────────── */
+  const ids = (r) => r.blocos.map((b) => b.id);
+
+  /* v4 real: o arranjo do usuário sobrevive inteiro, e NÃO vira o padrão. */
+  eq("v4 real NÃO cai no padrão", v4Real.blocos.length === PADRAO, false);
+  eq("v4 real mantém os 5 painéis escolhidos",
+     ["funil", "receita-gasto", "paises", "alertas", "rodape"].every((id) => ids(v4Real).includes(id)), true);
+  eq("v4 real mantém a ORDEM dos KPIs do hero",
+     ids(v4Real).slice(0, 4), ["roas", "cpa", "ctr", "arpu"].map(idDaMetrica));
+  eq("v4 real: todo bloco sai com altura em CÉLULAS", v4Real.blocos.every((b) => typeof b.h === "number"), true);
+
+  /* v3 virgem: respeita o vazio E repõe os estruturais — nem padrão, nem tela oca. */
+  eq("v3 virgem NÃO vira o padrão inteiro", v3Virgem.blocos.length === PADRAO, false);
+  eq("v3 virgem repõe TODOS os estruturais", temTodosEstruturais(v3Virgem), true);
+  eq("v3 virgem repõe o hero padrão", ids(v3Virgem).slice(0, 4).every((id) => ehBlocoDeMetrica(id)), true);
+  eq("v3 virgem NÃO inventa painel opcional", opcionais(v3Virgem).length, 0);
+
+  /* Corrompido total: nada a salvar, o padrão é a resposta certa. */
+  eq("corrompido sem nada aproveitável cai no padrão", lixoTotal.blocos.length, PADRAO);
+
+  /* 🔴 Corrompido PARCIAL: preserva o que dá. É aqui que "sanear" se distingue
+     de "descartar", e era exatamente isto que a medição errada escondia. */
+  eq("corrompido parcial PRESERVA o painel válido", ids(lixoParcial).includes("funil"), true);
+  eq("corrompido parcial NÃO cai no padrão", lixoParcial.blocos.length === PADRAO, false);
+  eq("corrompido parcial descarta os itens inválidos",
+     lixoParcial.blocos.every((b) => typeof b.id === "string" && b.id.length > 0), true);
+  eq("corrompido parcial repõe os estruturais", temTodosEstruturais(lixoParcial), true);
+}
+
 console.log(
   falhas === 0
     ? `\n\x1b[1m\x1b[32m${ok} asserções passaram, 0 falharam.\x1b[0m\n`
