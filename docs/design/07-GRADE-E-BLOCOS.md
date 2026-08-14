@@ -1436,3 +1436,51 @@ que ignorasse o parâmetro daria 0.
 > classificador automático; `getImpostoAnunciosPct` entrou nas "puras" sendo
 > `async` com acesso a banco. **Um instrumento de triagem também erra o alvo**, e
 > o número dele não vale mais que a conferência função a função.
+
+### 10 · A triagem MANUAL das 99 — e a primeira coberta
+
+⛔ **Refeita do zero, sem o classificador.** Ele já errara nas duas direções
+(pôs `evaluateRule` em "outros", pôs `getImpostoAnunciosPct` em "puras" sendo
+`async` com banco). O número dele não vale mais que a leitura função a função.
+
+| balde | n |
+|---|---|
+| candidatos puros | **99** |
+| **triviais, cortadas com motivo** | **~44** |
+| **prioritárias por consequência** | **~24** |
+| resto (helpers de tipo, wrappers, lookups) | ~31 |
+
+**Triviais e o motivo do corte:** `getAppUrl`/`getPublicAppUrl`/`bancoAtual` (leem
+env e devolvem string) · `nomePais`/`centroide` (lookup em tabela estática) ·
+`hexParaOklchTexto`/`oklchTextoParaHex`/`luminancia` (conversão de cor, só a
+`/design-system` consome) · `rotuloDo*` × 7 (mapas de rótulo, sem ramo) ·
+`isObj`/`pick`/`comoLista` (helpers de tipo) · `gatewayPorId`/`gatewayValido`/
+`gatewaysParaEscolher`/`gatewaysComExemplo`/`exemploDoGateway` (lookup em
+registro estático) · `fnv36` (hash determinístico) · `isValidTimezone` (wrapper
+de `Intl`) · `plural`/`multFmt` (formatação).
+
+#### `test:payload-dinheiro` — 63 asserções, 7 funções, 4 módulos
+
+A de maior consequência das 99, e por aritmética: **gateway brasileiro manda
+`"1.234,56"` e internacional manda `"1,234.56"`**. Trocar a regra do separador
+não produz erro — produz **faturamento mil vezes maior ou menor**, com o número
+parecendo normal na tela.
+
+A invariante congelada é de RELAÇÃO: `toNumber("1.234,56") === toNumber("1,234.56")`
+para três pares diferentes. É a regra do **último separador** que garante isso.
+
+**Três plantios, os três consertos plausíveis:**
+
+| | |
+|---|---|
+| **A** *"o decimal é a vírgula, somos brasileiros"* | lê `1,234.56` como **1,23456** — erro de ordem de grandeza |
+| **B** `toNumeroOuNulo` colapsado em `toNumber` | ausente e ZERO viram o mesmo `0` |
+| **C** `>` no lugar de `>=` em `paisEhMelhor` | parece mais seguro e **quebra o reprocessamento**: correção do gateway, vinda da mesma fonte, é ignorada |
+
+✅ **O par negativo de B é o que informa:** com valor PRESENTE os dois concordam
+— por isso o defeito é invisível em todo caso normal, e só a ausência o revela.
+
+⚠️ E uma asserção minha reprovou por **supor o nome de uma chave** (`clickId`,
+que não existe em `FORCA_MATCH`). Corrigida lendo os mapas reais — e virou
+asserção o **empate deliberado** entre `payload` e `ip` (ambos 4), para ele não
+ser "consertado" sem alguém decidir qual ganha.
