@@ -142,8 +142,12 @@ const DTO = {
   /* ── PLANTIO: `donos` esquecido no retorno. É o campo mais fácil de perder,
      porque ele não tem par no `rules` — ele vem de `px.eventOwners`, sozinho. */
   {
+    /* ⚠️ `{ donos: _, ...resto }` e não `{ donos, ...resto }`: o segundo deixa
+       um binding sem uso e quebra o piso de ZERO WARNINGS do lint — que é o
+       que faz o próximo warning ser sinal. Ele passou no commit anterior e o
+       lint acusou depois. */
     const semDonos = (px) => {
-      const { donos, ...resto } = dtoParaForm(px);
+      const { donos: _, ...resto } = dtoParaForm(px);
       return { ...resto, donos: {} };
     };
     const inputPlantio = formParaInput(semDonos(DTO));
