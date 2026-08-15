@@ -215,7 +215,13 @@ function prefixoComum(vs: string[]): number {
  * começo; `cliente1..3` compartilham sete caracteres.
  */
 function pareceHashes(valores: string[]): boolean {
-  if (valores.some((v) => !/^[a-z0-9]{6,14}$/.test(v) || !/\d/.test(v))) return false;
+  /* ⛔ CHAMA `pareceHashUnico`, e não uma cópia do regex.
+     Até 14/08/2026 a condição estava duplicada aqui, letra por letra. As duas
+     cópias concordavam — e concordância não aparece em lugar nenhum, então ela
+     é o que faz a segunda fonte sobreviver até o commit que mexe num lado só.
+     Foi exatamente o que aconteceu: endurecer só o `pareceHashUnico` deixaria a
+     SUGESTÃO propondo famílias que o BLOQUEIO depois ignoraria. */
+  if (valores.some((v) => !pareceHashUnico(v))) return false;
   return prefixoComum(valores) <= 1;
 }
 
@@ -310,9 +316,65 @@ export function lerPadroes(bruto: unknown): PadraoAprovado[] {
   return out;
 }
 
-/** Um único segmento parece hash gerado? Mesmo critério do `pareceHashes`. */
+/**
+ * Um único segmento parece hash gerado?
+ *
+ * ### 🔴 A ASSIMETRIA QUE ESTA FUNÇÃO TINHA — fechada em 14/08/2026
+ *
+ * Havia **dois** testes de "isto é hash?" neste módulo, e o mais fraco estava
+ * no caminho irreversível:
+ *
+ * | | onde | testava |
+ * |---|---|---|
+ * | `pareceHashes` | `familiasDePreview` — **SUGERE**, e espera aprovação | formato **+ prefixo comum** |
+ * | esta | `casaPadrao` — **BLOQUEIA** na ingestão, sem volta | só o formato |
+ *
+ * ⛔ O de sugestão era o rigoroso; o que decide o bloqueio irreversível era o
+ * frouxo — o inverso da ordem que se esperaria. Medido: `loja2024`,
+ * `verao2026`, `black2024`, `promo2025` e `cliente1` passavam como hash, e um
+ * deploy real com esse nome ficava **fora da CAPI, para sempre**.
+ *
+ * ### ⛔ POR QUE A SAÍDA NÃO FOI DAR O TESTE DE PREFIXO A ESTA FUNÇÃO
+ *
+ * Duas razões, e a segunda é a que decide:
+ *
+ * 1. **O chamador não tem os irmãos.** A ingestão (`api/pixel/event`) recebe
+ *    UMA url e a lista de padrões aprovados — os outros hosts da família não
+ *    estão ali, e buscá-los seria uma consulta no caminho quente de todo
+ *    evento.
+ * 2. 🔴 **O teste de prefixo não resolveria o caso.** Ele protege contra
+ *    irmãos que compartilham COMEÇO (`cliente1`, `cliente2`, `cliente3`). Um
+ *    `verao2026` sozinho, no meio de hashes de verdade, não compartilha
+ *    prefixo com ninguém e passaria igual.
+ *
+ * ### ✅ O DISCRIMINADOR QUE SERVE, e ele não precisa de irmão nenhum
+ *
+ * **Hash gerado tem dígito no meio; `palavra + número` tem todos no fim.**
+ *
+ * ```
+ * ahuhuv5fb  ralhb1gzf  ppxn74d34  4i5mg0sx2   <- dígito interleavado: hash
+ * loja2024   verao2026  cliente1   producao2   <- letras e depois números
+ * ```
+ *
+ * É estrutural, não palpite sobre hospedeiro — a mesma régua que o resto do
+ * módulo exige. **Medido em 14/08/2026: zero hashes reais perdidos, e 7 de 8
+ * segmentos legítimos deixaram de ser bloqueados**, inclusive o `cliente1` que
+ * só o teste de prefixo pegava.
+ *
+ * ⚠️ **Ele erra para o lado SEGURO, e isso é a escolha.** Um preview de
+ * verdade cujo hash termine em dígitos (`abcdef12`) deixa de ser bloqueado — o
+ * evento vai para a CAPI. Poluir um número é reversível com um `UPDATE`;
+ * bloquear não é. É o mesmo critério que o cabeçalho do módulo já usa para
+ * preferir MARCAR a descartar.
+ *
+ * ⚠️ `v2loja` continua passando: o dígito está no meio, e não há como
+ * distingui-lo de um hash sem palpite. **Registrado, não fechado** — a régua é
+ * estrutural, e forçá-la aqui viraria a heurística que este módulo recusa.
+ */
 export function pareceHashUnico(v: string): boolean {
-  return /^[a-z0-9]{6,14}$/.test(v) && /\d/.test(v);
+  if (!/^[a-z0-9]{6,14}$/.test(v) || !/\d/.test(v)) return false;
+  // `palavra + número` — nome de campanha com ano cabia inteiro no teste antigo.
+  return !/^[a-z]+[0-9]+$/.test(v);
 }
 
 /**

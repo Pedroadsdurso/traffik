@@ -69,31 +69,57 @@ const { lerPadroes, pareceHashUnico, casaPadrao, familiasDePreview } =
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
- * 2 · 🔴 O PAR NEGATIVO — segmento LEGÍTIMO que passa como hash
+ * 2 · ✅ O PAR NEGATIVO — o que passava indevidamente, e o que ainda passa
  *
- * O critério é `[a-z0-9]{6,14}` **com ao menos um dígito**. Nome de campanha
- * com ano cabe nele inteiro.
+ * ⛔ Esta seção congelava o DEFEITO até 14/08/2026: ela afirmava que 6 de 6
+ * segmentos legítimos passavam como hash. O discriminador de `palavra+número`
+ * fechou 5 deles, e o que fica é UM — registrado, não escondido.
  * ═════════════════════════════════════════════════════════════════════ */
 {
-  console.log("\n2 · 🔴 o que passa indevidamente");
+  console.log("\n2 · ✅ o que deixou de passar, e o que ainda passa");
 
-  const LEGITIMOS = ["loja2024", "verao2026", "black2024", "promo2025", "cliente1", "v2loja"];
+  const LEGITIMOS = ["loja2024", "verao2026", "black2024", "promo2025", "cliente1", "producao2"];
   const passam = LEGITIMOS.filter(pareceHashUnico);
 
   ok(
-    "🔴 " + passam.length + " de " + LEGITIMOS.length + " segmentos legítimos passam como hash",
-    passam.length >= 5,
-    passam.join(", ") + " — nome de campanha com ano cabe no formato inteiro",
+    "✅ nenhum `palavra+ano` passa mais como hash",
+    passam.length === 0,
+    passam.length ? "AINDA PASSAM: " + passam.join(", ") : LEGITIMOS.join(", ") + " — todos recusados",
   );
   ok(
-    "e `producao` só escapa por não ter DÍGITO",
-    pareceHashUnico("producao") === false && pareceHashUnico("producao2") === true,
-    "o exemplo do cabeçalho do módulo é seguro por um caractere",
+    "e o discriminador é o DÍGITO NO FIM, não o comprimento",
+    pareceHashUnico("loja2024") === false && pareceHashUnico("a1b2c3") === true,
+    "`loja2024` e `a1b2c3` cabem os dois no formato; o que separa é onde os dígitos estão",
   );
 
-  /* ⚠️ O alcance NÃO é o mundo: o host precisa casar um padrão APROVADO pelo
-     usuário, com a mesma contagem de segmentos e todos os fixos idênticos.
-     Sem isso a §2 seria alarme falso — e alarme falso desacredita a lista. */
+  /* ⚠️ O QUE AINDA PASSA, e por quê. Dígito no MEIO é indistinguível de hash
+     sem palpite sobre o hospedeiro — que é o que este módulo recusa. */
+  ok(
+    "⚠️ `v2loja` AINDA passa — o dígito está no meio",
+    pareceHashUnico("v2loja") === true,
+    "registrado, não fechado: separá-lo de um hash exigiria heurística",
+  );
+
+  /* ⛔ E a linha de base do outro lado: os hashes de verdade continuam
+     reconhecidos. Sem isto, endurecer o teste até desligá-lo passaria. */
+  const HASHES = ["ahuhuv5fb", "ralhb1gzf", "ppxn74d34", "4i5mg0sx2", "a1b2c3", "x1y2z3a4b5"];
+  const perdidos = HASHES.filter((h) => !pareceHashUnico(h));
+  ok(
+    "🔑 ZERO hashes reais foram perdidos no endurecimento",
+    perdidos.length === 0,
+    perdidos.join(", ") || HASHES.length + " de " + HASHES.length + " continuam reconhecidos",
+  );
+
+  /* ⚠️ E o custo do endurecimento, medido e nomeado: um preview de verdade cujo
+     hash termine em dígitos deixa de ser bloqueado. É o lado SEGURO — poluir um
+     número é reversível com um `UPDATE`; bloquear não é. */
+  ok(
+    "⚠️ o custo: um hash terminado em dígitos deixa de bloquear",
+    pareceHashUnico("abcdef12") === false,
+    "o evento vai para a CAPI — erro para o lado reversível, que é a escolha",
+  );
+
+  /* O alcance continua sendo o padrão aprovado, e não o mundo. */
   {
     const APROVADO = "moldes-*-noahvivaryder3s-projects.vercel.app";
     ok(
@@ -101,76 +127,117 @@ const { lerPadroes, pareceHashUnico, casaPadrao, familiasDePreview } =
       casaPadrao("moldes-ahuhuv5fb-noahvivaryder3s-projects.vercel.app", APROVADO) === true,
     );
     ok(
-      "🔴 e casa TAMBÉM um segmento legítimo com ano",
-      casaPadrao("moldes-verao2026-noahvivaryder3s-projects.vercel.app", APROVADO) === true,
-      "um deploy real com esse nome ficaria fora da CAPI, irreversivelmente",
+      "✅ e NÃO casa mais o deploy legítimo com ano",
+      casaPadrao("moldes-verao2026-noahvivaryder3s-projects.vercel.app", APROVADO) === false,
+      "antes de 14/08 este evento ficava fora da CAPI, irreversivelmente",
     );
     ok(
-      "…mas não casa host de outro projeto",
-      casaPadrao("loja-verao2026-noahvivaryder3s-projects.vercel.app", APROVADO) === false,
-      "o alcance é o padrão aprovado, não o mundo",
+      "…e segue não casando host de outro projeto",
+      casaPadrao("loja-ahuhuv5fb-noahvivaryder3s-projects.vercel.app", APROVADO) === false,
     );
     ok(
       "…nem com contagem de segmentos diferente",
-      casaPadrao("moldes-verao2026-extra-noahvivaryder3s-projects.vercel.app", APROVADO) === false,
+      casaPadrao("moldes-ahuhuv5fb-extra-noahvivaryder3s-projects.vercel.app", APROVADO) === false,
     );
   }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
- * 3 · 🔴 A ASSIMETRIA — o caminho IRREVERSÍVEL usa a guarda MAIS FRACA
+ * 3 · ✅ A ASSIMETRIA — o caso que só o teste de PREFIXO pegava agora é pego
+ *     pelos DOIS caminhos
  *
- * O módulo tem dois testes de "isto é hash?":
+ * O módulo tem dois testes de "isto é hash?", e o de sugestão sempre teve uma
+ * exigência a mais (prefixo comum entre os irmãos). Essa exigência é
+ * IRREDUTÍVEL a um valor só — ela fala de um conjunto.
  *
- * | | onde | testa |
- * |---|---|---|
- * | `pareceHashes` (privado) | `familiasDePreview` — SUGERE, e espera aprovação | formato **+ prefixo comum** |
- * | `pareceHashUnico` (export) | `casaPadrao` — BLOQUEIA na ingestão | só o formato |
+ * ⛔ O que era o defeito não é a assimetria em si: era o caso que ela deixava
+ * passar. `cliente1..3` — multi-tenant legítimo — a SUGESTÃO recusava e o
+ * BLOQUEIO aceitava. Agora o discriminador de `palavra+número` o pega no
+ * caminho de valor único também.
  *
- * ⛔ O de sugestão é o mais rigoroso; o que decide o bloqueio irreversível é o
- * mais frouxo. É o inverso da ordem que se esperaria.
+ * ✅ E as duas funções passaram a compartilhar a fonte: `pareceHashes` chama
+ * `pareceHashUnico` em vez de repetir o regex. Endurecer um lado só faria a
+ * sugestão propor famílias que o bloqueio ignoraria.
  * ═════════════════════════════════════════════════════════════════════ */
 {
-  console.log("\n3 · 🔴 a guarda forte está no caminho reversível");
+  console.log("\n3 · ✅ os dois caminhos concordam sobre o multi-tenant");
 
   const MULTITENANT = [
     "app-cliente1-escopo.vercel.app",
     "app-cliente2-escopo.vercel.app",
     "app-cliente3-escopo.vercel.app",
   ];
+  const FAMILIA = [
+    "moldes-ahuhuv5fb-escopo.vercel.app",
+    "moldes-ralhb1gzf-escopo.vercel.app",
+    "moldes-ppxn74d34-escopo.vercel.app",
+  ];
 
   ok(
     "linha de base: a detecção automática ACHA famílias de verdade",
-    familiasDePreview([
-      "moldes-ahuhuv5fb-escopo.vercel.app",
-      "moldes-ralhb1gzf-escopo.vercel.app",
-      "moldes-ppxn74d34-escopo.vercel.app",
-    ]).length === 1,
-    "senão a asserção seguinte passaria com o detector desligado",
+    familiasDePreview(FAMILIA).length === 1,
+    "senão as asserções seguintes passariam com o detector desligado",
+  );
+  ok(
+    "linha de base: e o padrão aprovado bloqueia essa família",
+    FAMILIA.every((h) => casaPadrao(h, "moldes-*-escopo.vercel.app")),
+    "senão o bloqueio estaria desligado, não corrigido",
   );
 
   ok(
-    "✅ a SUGESTÃO protege o multi-tenant: `cliente1..3` não vira família",
+    "a SUGESTÃO segue protegendo o multi-tenant",
     familiasDePreview(MULTITENANT).length === 0,
-    "o teste de prefixo comum barra — `cliente` é começo compartilhado",
+    "aqui quem barra é o prefixo comum — `cliente` é começo compartilhado",
   );
   ok(
-    "🔴 mas o padrão APROVADO bloqueia cada um deles",
-    MULTITENANT.every((h) => casaPadrao(h, "app-*-escopo.vercel.app")),
-    "o mesmo trio que a detecção recusa, a regra de ingestão barra",
+    "✅ e o BLOQUEIO passou a proteger também",
+    MULTITENANT.every((h) => !casaPadrao(h, "app-*-escopo.vercel.app")),
+    "antes de 14/08 o mesmo trio que a detecção recusava, a ingestão barrava",
   );
   ok(
-    "…e a diferença é só o teste de PREFIXO COMUM, que o `pareceHashUnico` não tem",
-    pareceHashUnico("cliente1") && pareceHashUnico("cliente2") && pareceHashUnico("cliente3"),
-    "os três passam sozinhos; juntos, o `pareceHashes` os recusaria",
+    "…pelo discriminador de valor único, não pelo prefixo",
+    MULTITENANT.every((h) => !pareceHashUnico(h.split("-")[1])),
+    "`cliente1` sozinho já é recusado — o prefixo não precisou entrar aqui",
   );
 
-  console.log(
-    "\n   \x1b[33m⚠️  REGISTRADO, NÃO CORRIGIDO. Fechar exigiria o teste de prefixo\n" +
-      "      no `casaPadrao`, e ele não tem os irmãos à mão — o padrão aprovado\n" +
-      "      chega sozinho na ingestão. É decisão de produto: hoje o usuário\n" +
-      "      aprova o molde e assume o alcance dele.\x1b[0m",
+  /* ⚠️ A assimetria RESTANTE é irredutível, e a asserção a nomeia para não
+     parecer esquecimento: o teste de prefixo fala de um CONJUNTO, e a ingestão
+     recebe um host de cada vez. */
+  ok(
+    "⚠️ o teste de prefixo continua sendo só do caminho de conjunto",
+    familiasDePreview(["a-aaaaaa1-z.app", "a-aaaaaa2-z.app", "a-aaaaaa3-z.app"]).length === 0 &&
+      pareceHashUnico("aaaaaa1") === false,
+    "irredutível: prefixo comum exige irmãos, e a ingestão vê um host por vez",
   );
+
+  /* ✅ E a fonte é UMA: `pareceHashes` chama `pareceHashUnico`. */
+  {
+    const { readFileSync } = await import("node:fs");
+    const fonte = readFileSync("src/lib/pixel/ambiente.ts", "utf8")
+      .replace(/\r\n/g, "\n")
+      .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+      .replace(/\/\/[^\n]*/g, "");
+    ok("linha de base: sobrou código depois de apagar comentário", /function pareceHashes/.test(fonte));
+    /* ⚠️ A âncora mede o CORPO da função, recortado entre a declaração e a
+       chave de fechamento. A primeira versão usava uma janela de 200
+       caracteres e reprovou: o apagador de comentário substitui a prosa por
+       ESPAÇOS, preservando as quebras — então o comentário de seis linhas
+       continua ocupando distância. Janela fixa mede o comprimento do
+       comentário, não a chamada. */
+    const corpo = fonte.slice(fonte.indexOf("function pareceHashes"));
+    const soPareceHashes = corpo.slice(0, corpo.indexOf("\n}"));
+    ok("linha de base: o corpo de `pareceHashes` foi recortado", soPareceHashes.includes("prefixoComum"));
+    ok(
+      "✅ `pareceHashes` CHAMA `pareceHashUnico`",
+      soPareceHashes.includes("pareceHashUnico(v)"),
+      "e não uma cópia do regex — endurecer um lado só as separaria",
+    );
+    ok(
+      "⛔ e o regex de formato existe UMA vez no arquivo",
+      (fonte.match(/\[a-z0-9\]\{6,14\}/g) ?? []).length === 1,
+      "duas cópias concordariam hoje, e é a concordância que faz a duplicata sobreviver",
+    );
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════

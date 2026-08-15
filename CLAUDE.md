@@ -4315,6 +4315,68 @@ sem binding é não desestruturar — `({ ...dtoParaForm(px), donos: {} })`.
 
 ---
 
+# 🗄️ TESTE DE FUNÇÃO PURA ATRÁS DE REQUISITO DE BANCO É COBERTURA QUE QUASE NINGUÉM EXECUTA
+
+> **14/08/2026.** Mesma consequência do *órfão saudável*, por uma porta
+> diferente: lá o arquivo não era invocado; aqui ele é — só que pelo agregado
+> que exige infraestrutura.
+
+Esta base tem dois agregados, e a separação é **certa**:
+
+| | |
+|---|---|
+| `npm test` | puro. Roda em máquina limpa, e por isso roda |
+| `test:banco` | exige Postgres de dev. Separado de propósito — *"um agregado que exige banco não roda em máquina limpa, e aí ninguém roda o agregado"* |
+
+⛔ **O defeito não é a separação: é uma função PURA cuja única asserção mora do
+lado de lá.** Ela é pura — não precisa de banco — e mesmo assim só é exercida
+por quem tiver o banco à mão.
+
+### 🔴 O CASO QUE NOMEOU A FAMÍLIA
+
+`podeIrParaCapi` decide se um IP vai **em claro** para a Meta. O cabeçalho dela
+diz o custo de errar: a Meta recusa `client_ip_address` hasheado, e mandar um
+hash *"degrada em silêncio a correspondência de todo `Purchase`"*.
+
+```
+test:match no npm test   ->  false
+test:match no test:banco ->  true
+```
+
+Ela tinha asserção. Em `teste-match-ip.mjs`, que exige banco. E
+`ehIpAnonimizado` — que decide o que a purga PULA, e cujo falso positivo deixa
+um IP em claro para sempre — **não tinha asserção em lugar nenhum**, apesar de
+ser chamada por duas funções que têm.
+
+> ## Cobertura que exige infraestrutura é cobertura condicional. O `npm test` é o que roda; o resto é o que roda quando alguém lembra.
+
+### ⛔ A GUARDA
+
+> **Função PURA tem asserção no `npm test` — mesmo que também exista no
+> `test:banco`.**
+
+Não é para MOVER o teste de banco: ele exercita o caminho completo (a consulta,
+o `where`, a linha real) e isso não se substitui. É para a parte pura ter uma
+asserção do lado que sempre roda. **Os dois convivem, e medem coisas
+diferentes.**
+
+### 🔎 COMO ACHAR OS OUTROS
+
+```bash
+# funções citadas SÓ pelos testes de banco
+comm -13 \
+  <(grep -ohE "\b[a-zA-Z_][a-zA-Z0-9_]*\(" $(node -e "…lista do npm test…") | sort -u) \
+  <(grep -ohE "\b[a-zA-Z_][a-zA-Z0-9_]*\(" scripts/teste-{match-ip,efeitos,pedidos}.mjs | sort -u)
+```
+
+A pergunta binária por função: **ela precisa de banco para ser exercida?** Se
+não precisa e só o `test:banco` a cita, a asserção está do lado errado.
+
+⚠️ E o sinal barato é o import: um `teste-*.mjs` do `test:banco` que importa de
+`lib/` sem tocar no `prisma` naquela linha está exercitando algo puro.
+
+---
+
 # 🕸️ GUARDA QUE LÊ ARQUIVO ALHEIO É DEPENDÊNCIA INVISÍVEL
 
 > **14/08/2026.** Ela não aparece no `git diff` do arquivo que você mudou, e é
