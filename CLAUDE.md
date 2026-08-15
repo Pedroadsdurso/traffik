@@ -4481,6 +4481,58 @@ no módulo. Duas guardas para a mesma condição são duas fontes — e as duas
 sumiriam no dia de um terceiro chamador. A correção foi a mesma: **uma só, no
 lugar certo.**
 
+
+## 🏷️ MENSAGEM DE COMMIT QUE AFIRMA FECHAMENTO NÃO É EVIDÊNCIA DE QUE O EIXO VIZINHO FICOU FECHADO
+
+> **14/08/2026.** É a família *comentário que afirma um efeito*, na camada do
+> histórico — e ela engana mais, porque a mensagem de commit é o que se lê
+> quando alguém pergunta *"isso já foi resolvido?"*.
+
+O commit `147d4a9` (01/08/2026) se chama, literalmente:
+
+> `feat(pixel): padrão aprovado bloqueia na ingestão — fecha a assimetria`
+
+E ele **fechou** uma assimetria de verdade: o Netlify bloqueava preventivamente
+(formato reservado) enquanto o Vercel só era pego retroativamente, então um
+preview novo já tinha ido para a CAPI antes de qualquer coisa marcá-lo. O
+commit resolveu isso.
+
+⛔ **E abriu outra, no mesmo movimento.** Ao levar o bloqueio para a ingestão,
+ele passou a decidir com `pareceHashUnico` — que testa só o formato — enquanto
+o caminho de SUGESTÃO seguia com `pareceHashes`, que testa formato **e prefixo
+comum**. O caminho irreversível ficou com a guarda mais fraca, e assim ficou por
+duas semanas.
+
+> ## Quem procurasse por "essa assimetria já foi tratada?" acharia um commit dizendo que sim.
+
+### ⛔ A GUARDA — e ela é sobre o MOMENTO, não sobre a redação
+
+**Ao fechar um eixo, meça os DOIS.** Uma correção que move uma decisão de lugar
+(do retroativo para o preventivo, do chamador para o módulo, da tela para o
+servidor) troca também QUAL guarda decide — e a guarda do destino raramente é a
+mesma do ponto de partida.
+
+| pergunte, depois de mexer num eixo | |
+|---|---|
+| **reversibilidade** | o caminho novo desfaz? O antigo desfazia? |
+| **força da guarda** | quem decide agora é o mesmo teste de antes, ou um vizinho mais frouxo? |
+
+⚠️ **O sinal barato:** duas funções com nomes irmãos (`pareceHashes` ×
+`pareceHashUnico`, `whereDespesasDaArea` × `despesaVale`, `paisesSobrescreviveis`
+× `paisEhMelhor`). Nome irmão quase sempre é a mesma pergunta em duas formas —
+e quando uma delas migra para o caminho irreversível, é preciso conferir se ela
+é a forte.
+
+```bash
+# candidatos: exports que compartilham raiz no mesmo arquivo
+grep -oE "export function [a-zA-Z]+" src/lib/**/*.ts | sort | uniq -c
+```
+
+⛔ **E não conserte lendo a mensagem do commit anterior.** Ela descreve o que
+quem escreveu acreditava ter fechado, no dia em que escreveu — é o mesmo
+estatuto de *"⛔ decidido, não reabrir"*, com a autoridade extra de estar no
+histórico.
+
 ---
 
 # ⚖️ SÉRIE DE FONTE INDEPENDENTE DA VIZINHA: a razão não é conversão, é DISCORDÂNCIA ENTRE INSTRUMENTOS
