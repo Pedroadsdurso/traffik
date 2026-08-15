@@ -29,7 +29,7 @@
  * |---|---|
  * | `ads/escopo.ts` | ✅ **lápide deliberada** — `export {}` com o aviso de não reintroduzir |
  * | `funnel.ts` | ⚠️ **superado** pela reescrita do funil, sem lápide |
- * | `areas/taxas.ts` | 🔴 **proteção que perdeu o consumidor** — ver a §3 |
+ * | ~~`areas/taxas.ts`~~ | ✅ **RELIGADO em 14/08** — saiu da lista. Ver a §3 |
  *
  * ⚠️ E a lista é um REGISTRO, não uma permissão: a varredura reprova nos dois
  * sentidos — órfão novo que aparece, e órfão registrado que ganha consumidor.
@@ -61,8 +61,6 @@ const ACEITOS = {
     "SUPERADO pela reescrita do funil (`lib/funil/fita.ts`, com 4 suítes). Sem lápide, e a regra de percentual " +
     "dele ('vs. maior etapa', com teto em 100) NÃO é a do funil vivo — revivê-lo troca a conta em silêncio. " +
     "Se for deletado, apague esta entrada.",
-  "src/lib/areas/taxas.ts":
-    "🔴 PROTEÇÃO QUE PERDEU O CONSUMIDOR — ver a §3. Se ganhar consumidor, o aviso voltou: apague esta entrada.",
 };
 
 const semCom = (s) =>
@@ -216,7 +214,7 @@ const orfaos = libs.filter((f) => temImportador(f) === null);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
- * 3 · 🔴 `faltamTaxas` — A PROTEÇÃO SAIU, E O RISCO ESTÁ DOCUMENTADO EM VERMELHO
+ * 3 · ✅ `faltamTaxas` — A PROTEÇÃO SAIU E VOLTOU. O QUE FICA É A CICATRIZ.
  *
  * `precedencia.ts` (30/07/2026) diz, no cabeçalho do `despesaVale`:
  *
@@ -226,9 +224,10 @@ const orfaos = libs.filter((f) => temImportador(f) === null);
  *   > (`faltamTaxas`), transformando erro silencioso em erro visível.
  *   > **Se o aviso sair, o risco volta inteiro.**
  *
- * ⛔ **O aviso saiu.** `faltamTaxas` nasceu em `8b9b162` (30/07), no MESMO
- * commit que o `despesaVale`, e perdeu o último consumidor em `9608704`
- * (12/08) — a reescrita da tela de Taxas, que deletou a `FeesView`.
+ * ⛔ **Ele saiu, e ficou fora por dois dias e meio.** `faltamTaxas` nasceu em
+ * `8b9b162` (30/07), no MESMO commit que o `despesaVale`, e perdeu o último
+ * consumidor em `9608704` (12/08) — a reescrita de Taxas, que deletou a
+ * `FeesView`. **Religado em 14/08** no construtor de alertas do Dashboard.
  *
  * ### ⚠️ E ELE ESCAPOU DA GUARDA QUE A PRÓPRIA SESSÃO DE 12/08 CRIOU
  *
@@ -240,13 +239,21 @@ const orfaos = libs.filter((f) => temImportador(f) === null);
  *
  * > ## A conferência de escrita cobre o que a tela GRAVA. Nada cobria o que a tela AVISA.
  *
- * ⛔ **NÃO RELIGADO, e o motivo é o mesmo do alerta de dono corrompido (§13 do
- * `07`):** um aviso que eu não vejo disparar é o "controle inerte" que esta
- * base persegue, e a tela não é mensurável nesta máquina — o instrumento de
- * janela está registrado como INDISPONÍVEL em 14/08/2026.
+ * ### ⛔ POR QUE ESTA SEÇÃO NÃO FOI APAGADA JUNTO COM A ENTRADA
+ *
+ * A entrada em `ACEITOS` saiu — o módulo tem consumidor e a varredura o
+ * trataria como órfão revivido, que é o aviso funcionando. Mas o **caminho de
+ * volta** não é o mesmo do de ida: quem for reescrever a tela de Taxas de novo
+ * precisa saber que essa função já sumiu uma vez, por deleção de tela, sem
+ * nada acusar. Apagar a seção deixaria só o estado bom e perderia a razão de
+ * ele estar sob guarda.
+ *
+ * ⚠️ Hoje quem segura é `test:alertas` §6b/§6c: o par dispara/não-dispara e a
+ * asserção de que a tela **passa o campo e filtra `active`**. As de baixo
+ * cobrem o outro lado — que a função continua fazendo o que se espera dela.
  * ═════════════════════════════════════════════════════════════════════ */
 {
-  console.log("\n3 · 🔴 faltamTaxas — a proteção que perdeu o consumidor");
+  console.log("\n3 · ✅ faltamTaxas — religado, e a cicatriz fica registrada");
 
   const prec = readFileSync("src/lib/areas/precedencia.ts", "utf8").replace(/\r\n/g, "\n");
   const taxas = readFileSync("src/lib/areas/taxas.ts", "utf8").replace(/\r\n/g, "\n");
@@ -269,34 +276,52 @@ const orfaos = libs.filter((f) => temImportador(f) === null);
     "é exatamente o caso que faz o lucro sair maior que a realidade",
   );
 
-  /* 🔴 E ninguém a chama. */
+  /* ✅ E AGORA ELA TEM CONSUMIDOR — a asserção inverteu de lado.
+     Ela era `consumidor === null` com a saída escrita ("se reprovar porque a
+     tela voltou a avisar, apague a entrada"). Foi exatamente o que aconteceu:
+     a guarda reprovou nomeando o módulo, e a entrada saiu. Registrado assim,
+     e não reescrito em silêncio, porque o que valida a varredura é ela ter
+     mudado de veredito por uma mudança real. */
   const consumidor = temImportador("src/lib/areas/taxas.ts");
   ok(
-    "🔴 `faltamTaxas` NÃO tem consumidor — a mitigação está desligada",
-    consumidor === null,
-    "SE ESTA REPROVAR porque a tela voltou a avisar, apague esta seção e a entrada em ACEITOS: o risco foi remitigado",
+    "✅ `faltamTaxas` voltou a ter consumidor de produção",
+    consumidor !== null,
+    "importado por " + consumidor,
+  );
+  ok(
+    "e o consumidor é o construtor de alertas do Dashboard",
+    consumidor === "src/lib/dashboard/alertas.ts",
+    consumidor + " — é ele que decide se o aviso aparece",
   );
 
-  /* E a tela de Taxas, que é onde ele viveu, não avisa mais nada disso. */
+  /* ⚠️ O AVISO MUDOU DE CASA, e isso é decisão, não acidente.
+     Ele voltou no DASHBOARD, não na tela de Taxas. É onde o número mentiroso
+     é lido: quem abre Taxas já está indo cadastrar; quem abre o Dashboard está
+     lendo um Lucro inflado sem saber. A tela de Taxas segue sem mencioná-lo, e
+     a asserção registra isso para não parecer esquecimento. */
   const telaTaxas = globSync("src/components/dashboard/views/taxas/*.tsx")
     .map((f) => f.replace(/\\/g, "/"))
     .map((f) => semCom(readFileSync(f, "utf8")))
     .join("\n");
   ok("linha de base: a tela de Taxas foi lida", telaTaxas.length > 5000, telaTaxas.length + " bytes de código");
   ok(
-    "e ela não menciona `faltamTaxas`",
+    "a tela de Taxas NÃO é quem avisa — o Dashboard é",
     !/faltamTaxas/.test(telaTaxas),
-    "a reescrita de 12/08 deletou a `FeesView`, que era o único consumidor",
+    "o aviso vale onde o número inflado é LIDO, não onde ele é configurado",
   );
 }
 
 console.log(
-  "\n\x1b[33m  ⚠️  ACHADO REGISTRADO, NÃO CORRIGIDO: `faltamTaxas` perdeu o último" +
-    "\n      consumidor na reescrita de Taxas (`9608704`, 12/08). O `precedencia.ts`" +
-    "\n      documenta essa função como A mitigação de um risco que ele mesmo pinta" +
-    "\n      de vermelho — área sem imposto calcula lucro maior que a realidade, com" +
-    "\n      número plausível e nada denunciando." +
-    "\n      Religar é escrever aviso de tela, e a tela não é mensurável nesta" +
-    "\n      máquina: um aviso que ninguém vê disparar é controle inerte.\x1b[0m",
+  "\n\x1b[32m  ✅ `faltamTaxas` FOI RELIGADO em 14/08/2026 — no construtor de alertas" +
+    "\n      do Dashboard, não na tela de Taxas: o aviso vale onde o número inflado" +
+    "\n      é LIDO, não onde ele é configurado." +
+    "\n" +
+    "\n      Ele ficou 2 dias e meio sem consumidor, entre a reescrita de Taxas" +
+    "\n      (`9608704`, 12/08) e agora. Quem segura hoje é `test:alertas` §6b/§6c —" +
+    "\n      o par dispara/não-dispara e a asserção de que a TELA passa o campo." +
+    "\n" +
+    "\x1b[33m      ⚠️  A §3 fica mesmo com o defeito resolvido: quem reescrever Taxas de" +
+    "\n      novo precisa saber que esta função já sumiu uma vez, por deleção de" +
+    "\n      tela, sem nada acusar.\x1b[0m",
 );
 console.log("\n\x1b[32m" + n + " asserções, 0 falha(s).\x1b[0m\n");

@@ -1,4 +1,5 @@
 import type { Alerta } from "@/components/tk/AlertList";
+import { faltamTaxas } from "@/lib/areas/taxas";
 import { donosCorrompidos } from "@/lib/pixel/donos";
 import { detalheDoToken, estadoDoToken, rotuloDoToken, tokenPedeAtencao } from "@/lib/integracoes/token";
 
@@ -48,6 +49,30 @@ export interface EntradaDeAlertas {
    * o silêncio acaba aqui.
    */
   pixels?: readonly { id: string; name: string; donosCorrompidos: readonly { chave: string; bruto: string; assumido: string }[] }[];
+  /**
+   * 🔴 OS TIPOS DE DESCONTO **ATIVOS** DA ÁREA — religados em 14/08/2026.
+   *
+   * `faltamTaxas` existia desde `8b9b162` (30/07) e perdeu o último consumidor
+   * em `9608704` (12/08), quando a reescrita de Taxas deletou a `FeesView`.
+   * Ficou **dois dias e meio sem ninguém**, e o `precedencia.ts` a documenta
+   * como *A* mitigação de um risco que ele pinta de vermelho:
+   *
+   * > uma área sem taxa de gateway ou sem imposto cadastrado calcula lucro
+   * > **sem eles** — número maior que a realidade, e plausível. […] **Se o
+   * > aviso sair, o risco volta inteiro.**
+   *
+   * ⛔ **`active` é filtrado por quem monta esta lista, e não é detalhe.**
+   * `metrics.ts` desconta apenas `active: true`, e `listExpenses` devolve as
+   * inativas junto. Contá-las aqui faria uma taxa DESLIGADA calar o aviso sem
+   * ser descontada — o defeito exato que o aviso existe para impedir, agora
+   * disfarçado de configuração completa.
+   *
+   * ⚠️ E o recorte por área não é feito aqui porque já veio: `listExpenses`
+   * aplica a MESMA `whereDespesas` que o `metrics.ts` usa no lucro. Refiltrar
+   * criaria a segunda implementação do mesmo filtro, que é a família que esta
+   * base já pagou com o lucro descontando `R$ 0,00`.
+   */
+  tiposDeDespesa?: readonly string[];
 }
 
 /**
@@ -133,6 +158,40 @@ export function montarAlertas(e: EntradaDeAlertas): Alerta[] {
     });
   }
 
+  /* ── 🔴 CUSTOS NÃO CADASTRADOS — o aviso que tinha sumido ───────────────
+     Ele não denuncia um erro: denuncia uma AUSÊNCIA que faz o número mentir
+     para cima. Sem a taxa do gateway, o Lucro do painel é maior do que o
+     dinheiro que entrou na conta — e nada na tela sugere que falta algo.
+
+     ⛔ O PORTÃO É A RECEITA, e não "tem despesa cadastrada?". Os quatro
+     descontos incidem sobre venda: sem faturamento no período eles valeriam
+     zero, e o Lucro não está inflado por nada. Alertar ali seria gritar em
+     toda conta nova — é o mesmo raciocínio do `gasto-sem-conversao`, que exige
+     `gastoTotal > 0`, e da regra desta base de que alarme sem motivo envenena
+     o único sinal que existe.
+
+     ⛔ E é UM alerta com a lista dentro, não um por tipo: quatro linhas quase
+     iguais afogariam os outros, exatamente como no `donos-`. */
+  if (e.tiposDeDespesa) {
+    /* `receitaTotal` é a MESMA soma que o `gasto-sem-conversao` usa, logo
+       acima — reduzir de novo criaria duas contas do mesmo número no mesmo
+       arquivo, que é literalmente a família que esta sessão passou o dia
+       medindo. */
+    const faltando = faltamTaxas([...e.tiposDeDespesa]);
+    if (faltando.length > 0 && receitaTotal > 0) {
+      lista.push({
+        id: "faltam-taxas",
+        severidade: "warning",
+        titulo:
+          faltando.length === 1
+            ? `Falta cadastrar ${faltando[0]} nesta área`
+            : `Faltam ${faltando.length} custos cadastrados nesta área`,
+        detalhe: `Sem ${faltando.join(", ")}, o Lucro aparece maior do que é.`,
+        href: "/dashboard/taxas",
+      });
+    }
+  }
+
   /* ── 🔴 DONO DE EVENTO ILEGÍVEL — o alerta que faltava ──────────────────
      A escolha do usuário sobre QUEM envia o evento à Meta se perdeu, e a
      ferramenta assumiu o padrão. Para `Purchase` o padrão é a Trackhub — ou
@@ -157,4 +216,4 @@ export function montarAlertas(e: EntradaDeAlertas): Alerta[] {
 }
 
 /** Reexportado para quem monta a entrada a partir do bruto do banco. */
-export { donosCorrompidos };
+export { donosCorrompidos, faltamTaxas };

@@ -1,5 +1,12 @@
 /**
- * OS ALERTAS DO DASHBOARD — os cinco originais, e o sexto que faltava.
+ * OS ALERTAS DO DASHBOARD — os cinco originais, o sexto que faltava, e o
+ * SÉTIMO, que existia e tinha perdido o consumidor.
+ *
+ * ⚠️ O sétimo (`faltam-taxas`, §6b) não é recurso novo: `faltamTaxas` era de
+ * 30/07 e ficou **dois dias e meio sem ninguém** depois que a reescrita de
+ * Taxas deletou a `FeesView`. A §6c existe porque o campo que o alimenta é
+ * OPCIONAL — esquecer de passá-lo o apagaria em silêncio, que é o estado do
+ * qual ele acabou de sair.
  *
  * 🔴 NENHUM DELES TINHA ASSERÇÃO ATÉ 14/08/2026
  *
@@ -174,6 +181,115 @@ ok("linha de base: entrada saudável não produz alerta nenhum", ids(limpa()).le
   ok("6 · …e o detalhe lista as CINCO", cinco[0].donosCorrompidos.every((d) => lista[0].detalhe.includes(d.chave)), lista[0].detalhe.slice(0, 90));
 }
 
+/* ═══ 6b · `faltam-taxas` — o aviso RELIGADO em 14/08/2026 ════════
+
+   `faltamTaxas` nasceu em `8b9b162` (30/07) e perdeu o último consumidor em
+   `9608704` (12/08), quando a reescrita de Taxas deletou a `FeesView`. O
+   `precedencia.ts` a documenta como A mitigação de um risco que ele pinta de
+   vermelho, e termina em: **"Se o aviso sair, o risco volta inteiro."**
+
+   ⚠️ O que ele denuncia não é um erro — é uma AUSÊNCIA que faz o número mentir
+   PARA CIMA. Sem a taxa do gateway, o Lucro do painel é maior que o dinheiro
+   que entrou na conta, e nada na tela sugere que falta algo. */
+{
+  const QUATRO = ["TAXA_GATEWAY", "COPRODUCAO", "IMPOSTO", "CUSTO_PRODUTO"];
+  const comTipos = (tipos, o = {}) => limpa({ tiposDeDespesa: tipos, ...o });
+
+  ok(
+    "6b · `faltam-taxas` dispara com os quatro custos ausentes",
+    ids(comTipos([])).includes("faltam-taxas"),
+    ids(comTipos([])).join(" · "),
+  );
+  ok(
+    "6b · …e SOME com os quatro cadastrados",
+    !ids(comTipos(QUATRO)).includes("faltam-taxas"),
+  );
+
+  /* ⚠️ O campo é OPCIONAL: quem não tem despesa para informar não alerta.
+     Isso mantém a linha de base do arquivo em zero — e é por isso que a §6c
+     confere que a tela PASSA o campo. Sem ela, esquecer de passar apagaria o
+     alerta em silêncio, que é o controle inerte de novo. */
+  ok("6b · sem o campo, nada dispara", !ids(limpa()).includes("faltam-taxas"));
+
+  /* ⛔ O PORTÃO É A RECEITA — e este é o par que o justifica.
+     Os quatro descontos incidem sobre venda: sem faturamento no período eles
+     valeriam ZERO, e o Lucro não está inflado por nada. A MESMA entrada, só
+     mudando a receita, liga e desliga o alerta. */
+  const semReceita = comTipos([], { chartSerie: { spend: [10, 20], revenue: [0, 0] } });
+  const comReceita = comTipos([], { chartSerie: { spend: [10, 20], revenue: [0, 50] } });
+  ok(
+    "6b · ⛔ sem receita no período NAO alerta — não há o que inflar",
+    !ids(semReceita).includes("faltam-taxas"),
+    "alertar aqui gritaria em toda conta nova",
+  );
+  ok(
+    "6b · …e a MESMA entrada com receita alerta",
+    ids(comReceita).includes("faltam-taxas"),
+    "← o par prova que quem decide é a receita, não outra coisa",
+  );
+
+  /* UM alerta com a lista dentro, nunca quatro — mesmo motivo do `donos-`. */
+  const so = montarAlertas(comTipos([])).filter((a) => a.id === "faltam-taxas");
+  ok("6b · ⛔ quatro ausências viram UM alerta", so.length === 1, so.length + " alertas");
+  ok(
+    "6b · …e o detalhe lista as QUATRO",
+    ["gateway", "coprodução", "imposto", "custo de produto"].every((r) => so[0].detalhe.includes(r)),
+    so[0].detalhe,
+  );
+  ok("6b · e diz a consequência: o Lucro aparece MAIOR", /maior do que é/.test(so[0].detalhe));
+  ok("6b · leva para a tela de Taxas", so[0].href === "/dashboard/taxas", so[0].href);
+
+  /* A ausência de UM só também dispara, e o título muda de número.
+     ⚠️ O imposto é o caso nomeado no `precedencia.ts`. */
+  const soImposto = montarAlertas(comTipos(["TAXA_GATEWAY", "COPRODUCAO", "CUSTO_PRODUTO"]))
+    .filter((a) => a.id === "faltam-taxas");
+  ok("6b · faltando SÓ o imposto, dispara igual", soImposto.length === 1);
+  ok("6b · …e o título nomeia o que falta", /imposto/.test(soImposto[0].titulo), soImposto[0].titulo);
+  ok("6b · …sem dizer \"4 custos\"", !/\d+ custos/.test(soImposto[0].titulo));
+
+  /* Tipo fora dos quatro descontos não conta como nenhum deles — uma despesa
+     recorrente cadastrada não substitui a taxa do gateway. */
+  ok(
+    "6b · `DESPESA_RECORRENTE` não cala o aviso",
+    ids(comTipos(["DESPESA_RECORRENTE"])).includes("faltam-taxas"),
+    "ela não é um dos quatro descontos do Líquido",
+  );
+}
+
+/* ═══ 6c · A TELA PASSA O CAMPO — e filtra `active` ══════════════
+
+   ⛔ Sem esta seção o alerta seria "implementado e desligado": o campo é
+   opcional, então esquecer de passá-lo o apaga sem nada acusar — que é
+   exatamente o estado do qual ele acabou de sair.
+
+   ⚠️ As âncoras miram SINTAXE e o arquivo é lido com a quebra normalizada:
+   402 arquivos desta base estão em CRLF, e âncora multilinha com `
+` falha
+   neles em silêncio. */
+{
+  const { readFileSync } = await import("node:fs");
+  const TELA = readFileSync("src/components/dashboard/dadosDosBlocos.tsx", "utf8").replace(/\r\n/g, "\n");
+
+  const i = TELA.indexOf("tiposDeDespesa:");
+  ok("6c · linha de base: a tela MENCIONA o campo", i > 0, "âncora em " + i);
+
+  ok(
+    "6c · a tela PASSA `tiposDeDespesa` para o construtor",
+    /tiposDeDespesa:\s*\(v\.despesasCruas/.test(TELA),
+    "sem isso o alerta nasce desligado e nada acusa",
+  );
+  ok(
+    "6c · ⛔ e filtra `active` — `metrics.ts` desconta só as ativas",
+    /\.filter\(\(d\) => d\.active\)/.test(TELA),
+    "uma taxa DESLIGADA calaria o aviso sem ser descontada",
+  );
+  ok(
+    "6c · e `despesasCruas` está nas deps do `useMemo`",
+    /v\.despesasCruas, agora\]/.test(TELA),
+    "sem ela o alerta congelaria no primeiro valor",
+  );
+}
+
 /* ═══ 7 · A COMPOSIÇÃO — os seis convivem, e a ordem é de chegada ═══════ */
 {
   const tudo = limpa({
@@ -192,6 +308,25 @@ ok("linha de base: entrada saudável não produz alerta nenhum", ids(limpa()).le
     "← é esta a prova de que o move não perdeu nada",
   );
   ok("7 · nenhum id se repete", new Set(lista).size === lista.length);
+
+  /* ⛔ `faltam-taxas` e `gasto-sem-conversao` são MUTUAMENTE EXCLUSIVOS por
+     construção: um exige receita > 0, o outro exige receita === 0. Não é
+     coincidência da fixture — é a resposta certa. Sem venda no período os
+     quatro descontos valeriam zero, então o que importa é o gasto sem
+     conversão; avisar de taxa ali seria ruído em cima do alerta que custa
+     dinheiro. Por isso os SEIS, e não sete, nesta composição. */
+  const comTaxas = ids({ ...tudo, tiposDeDespesa: [] });
+  ok(
+    "7 · ⛔ com receita ZERO, `faltam-taxas` não entra nem passando o campo",
+    !comTaxas.includes("faltam-taxas") && comTaxas.includes("gasto-sem-conversao"),
+    comTaxas.join(" · "),
+  );
+  const comVenda = ids({ ...tudo, tiposDeDespesa: [], chartSerie: { spend: [100], revenue: [50] } });
+  ok(
+    "7 · …e com receita a troca é EXATA: um sai, o outro entra",
+    comVenda.includes("faltam-taxas") && !comVenda.includes("gasto-sem-conversao") && comVenda.length === lista.length,
+    comVenda.join(" · "),
+  );
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -234,4 +369,4 @@ ok("linha de base: entrada saudável não produz alerta nenhum", ids(limpa()).le
 }
 
 console.log("\n\x1b[32m" + n + " asserções, 0 falha(s).\x1b[0m");
-console.log("   denominador: 6 alertas, cada um com o par dispara/não-dispara\n");
+console.log("   denominador: 7 alertas, cada um com o par dispara/não-dispara\n");

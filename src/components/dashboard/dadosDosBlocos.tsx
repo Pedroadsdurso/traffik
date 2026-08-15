@@ -171,8 +171,24 @@ export function useDadosDosBlocos(v: TraffikView) {
            QUEM envia o evento à Meta se perdia em silêncio: a corrupção cai no
            padrão, o envio é RELIGADO, e a Meta volta a contar em dobro. */
         pixels: v.pixels,
+        /* 🔴 RELIGADO EM 14/08/2026 — `faltamTaxas` ficou sem consumidor desde
+           a reescrita de Taxas (`9608704`, 12/08), e o `precedencia.ts` a
+           documenta como A mitigação de um risco que ele pinta de vermelho:
+           área sem imposto calcula lucro MAIOR que a realidade, com número
+           plausível e nada denunciando. O cabeçalho dele termina em "Se o
+           aviso sair, o risco volta inteiro" — e ele tinha saído.
+
+           ⛔ `active` é filtrado AQUI porque `metrics.ts` desconta só as
+           ativas. Sem este filtro, uma taxa DESLIGADA calaria o aviso sem ser
+           descontada — o defeito que o aviso existe para impedir, disfarçado
+           de configuração completa.
+
+           ⚠️ Nada de recortar por área aqui: `listExpenses` já aplicou a MESMA
+           `whereDespesas` que o lucro usa. Um segundo filtro seria a segunda
+           implementação do mesmo recorte. */
+        tiposDeDespesa: (v.despesasCruas ?? []).filter((d) => d.active).map((d) => d.type),
       }),
-    [v.fbConnected, v.adProfiles, v.perfisCrus, v.metricCards.roi, v.chartSerie, v.pixels, agora],
+    [v.fbConnected, v.adProfiles, v.perfisCrus, v.metricCards.roi, v.chartSerie, v.pixels, v.despesasCruas, agora],
   );
 
   /* ── Rodapé de estado ────────────────────────────────────────────────────── */
