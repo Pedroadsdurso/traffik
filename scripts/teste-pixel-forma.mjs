@@ -142,14 +142,15 @@ const DTO = {
   /* ── PLANTIO: `donos` esquecido no retorno. É o campo mais fácil de perder,
      porque ele não tem par no `rules` — ele vem de `px.eventOwners`, sozinho. */
   {
-    /* ⚠️ `{ donos: _, ...resto }` e não `{ donos, ...resto }`: o segundo deixa
-       um binding sem uso e quebra o piso de ZERO WARNINGS do lint — que é o
-       que faz o próximo warning ser sinal. Ele passou no commit anterior e o
-       lint acusou depois. */
-    const semDonos = (px) => {
-      const { donos: _, ...resto } = dtoParaForm(px);
-      return { ...resto, donos: {} };
-    };
+    /* ⚠️ NADA de desestruturar para descartar — este lint não tem
+       `varsIgnorePattern`, então tanto `{ donos, ...resto }` quanto
+       `{ donos: _, ...resto }` deixam binding sem uso e quebram o piso de ZERO
+       WARNINGS. Errei as duas vezes, e na segunda ainda commitei dizendo que
+       estava resolvido: eu li o exit do `eslint` (que é 0 com warnings) em vez
+       de ler a SAÍDA. É a mesma família do exit de wrapper, uma camada abaixo.
+
+       O jeito sem binding é sobrescrever a chave. */
+    const semDonos = (px) => ({ ...dtoParaForm(px), donos: {} });
     const inputPlantio = formParaInput(semDonos(DTO));
     ok(
       "PLANTIO: sem `donos`, o form abre com o mapa VAZIO",
