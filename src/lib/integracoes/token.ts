@@ -29,10 +29,25 @@ export type EstadoToken =
 /**
  * A partir de quantos dias restantes a tela deve tratar como ATENÇÃO.
  *
- * 30 é o mesmo limiar do `/api/cron/manutencao`, de propósito: a tela e a
- * notificação têm de concordar sobre o que é urgente. Se divergirem, o usuário
- * recebe um e-mail dizendo "expira em breve" e abre uma tela que diz que está
- * tudo bem — e passa a não confiar em nenhum dos dois.
+ * A tela e a notificação têm de concordar sobre o que é urgente. Se
+ * divergirem, o usuário recebe um aviso dizendo "expira em breve" e abre uma
+ * tela que diz que está tudo bem — e passa a não confiar em nenhum dos dois.
+ *
+ * ### 🔴 ESTA FRASE JÁ FOI UMA AFIRMAÇÃO, E ELA ERA FALSA
+ *
+ * Até 14/08/2026 ela dizia *"30 é o mesmo limiar do `/api/cron/manutencao`, de
+ * propósito"*. **Não era:** o cron tinha um `AVISO_TOKEN_DIAS = 14` local, de
+ * `ec9891c` (28/07). Entre o 15º e o 30º dia a tela pintava atenção e nenhuma
+ * notificação saía — e a documentação jurava que os dois estavam alinhados.
+ *
+ * ⛔ **A correção não foi trocar o número lá: foi apagar a segunda fonte.** O
+ * cron **importa esta constante**, então concordar deixou de ser uma promessa
+ * escrita e virou uma propriedade do grafo de imports. Documentação que LÊ o
+ * valor não envelhece; a que o AFIRMA, sim — e esta afirmava.
+ *
+ * ⚠️ O alinhamento foi para CIMA (30, não 14) pela regra de desempate do dono:
+ * *o que não corta informação do usuário vence*. Baixar a tela para 14 apagaria
+ * o aviso de metade da janela.
  */
 export const DIAS_ATENCAO = 30;
 

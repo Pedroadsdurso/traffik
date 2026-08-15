@@ -8,11 +8,29 @@ import { RETENCAO_DIAS, anonimizarIp } from "@/lib/geo/anonimizarIp";
 // que uma entrega antiga sumiu da lista, e precisa do MESMO número. Duas cópias
 // divergiriam em silêncio — a purga apagando em 30 dias e a tela prometendo 90.
 import { DIAS_LOG_FALHA, DIAS_LOG_SUCESSO } from "@/lib/webhooks/retencao";
+/**
+ * ⛔ O LIMIAR DO TOKEN E A DERIVAÇÃO DELE VÊM DE `token.ts`, e isto é a MESMA
+ * correção que a linha acima já fizera para os prazos de log — só que aqui ela
+ * levou mais tempo para acontecer, e o custo apareceu.
+ *
+ * 🔴 **Havia um `AVISO_TOKEN_DIAS = 14` local**, enquanto a tela pinta atenção
+ * a partir de `DIAS_ATENCAO = 30`. E o cabeçalho de `token.ts` afirmava, por
+ * escrito, que os dois eram *"o mesmo limiar, de propósito"* — a segunda fonte
+ * não só divergia: ela divergia com a documentação jurando o contrário.
+ *
+ * ### ✅ ALINHADO EM 30, e a regra que decidiu é a de desempate do dono
+ *
+ * *"O que não corta informação do usuário vence."* Baixar a tela para 14
+ * apagaria o aviso entre o 15º e o 30º dia — informação que hoje existe.
+ * Subir o cron para 30 não apaga nada.
+ *
+ * ⚠️ **A consequência é volume**, e ela fica registrada: a janela de aviso vai
+ * de ≤14 para ≤30 notificações por perfil (o `jaAvisado` abaixo limita a uma
+ * por dia). O nag para no instante em que o usuário reconecta.
+ */
+import { DIAS_ATENCAO, detalheDoToken, estadoDoToken, rotuloDoToken, tokenPedeAtencao } from "@/lib/integracoes/token";
 
 export const maxDuration = 60;
-
-/** A partir de quantos dias do vencimento do token avisar o usuário. */
-const AVISO_TOKEN_DIAS = 14;
 
 /**
  * Manutenção diária: retenção de logs + aviso de token do Facebook vencendo.
@@ -67,16 +85,41 @@ async function executar(req: NextRequest) {
     await prisma.click.update({ where: { id: c.id }, data: { ip: anonimizarIp(c.ip!) } });
   }
 
-  // Tokens vencendo ou já vencidos.
-  const limite = new Date(agora.getTime() + AVISO_TOKEN_DIAS * 864e5);
+  /* ── Tokens vencendo, já vencidos, ou de DATA DESCONHECIDA ──────────────
+     🔴 O `where` era `{ tokenExpiresAt: { not: null, lt: limite } }`, e aquele
+     `not: null` excluía da notificação exatamente o grupo que o `token.ts`
+     chama de **"o mais perigoso da base"**: os perfis conectados antes de a
+     coluna existir — os mais antigos, logo os mais prováveis de já estarem
+     vencidos.
+
+     ⛔ O efeito era o pior arranjo possível: só a TELA os mostrava, e o
+     cabeçalho do `token.ts` diz, sobre a tela, que *"o usuário pode nunca
+     abri-la"*. O aviso existia e não alcançava ninguém.
+
+     ⚠️ A consulta é um pré-filtro GROSSO de propósito: quem decide é
+     `tokenPedeAtencao`, logo abaixo. Um `where` um pouco mais largo que o
+     necessário é inofensivo; um mais estreito perde linha em silêncio — que é
+     o que acabou de acontecer aqui. */
+  const limite = new Date(agora.getTime() + DIAS_ATENCAO * 864e5);
   const perfis = await prisma.adProfile.findMany({
-    where: { tokenExpiresAt: { not: null, lt: limite } },
+    where: { OR: [{ tokenExpiresAt: null }, { tokenExpiresAt: { lt: limite } }] },
     select: { id: true, name: true, userId: true, tokenExpiresAt: true },
   });
 
   let avisos = 0;
+  let emRisco = 0;
   for (const p of perfis) {
-    const vencido = p.tokenExpiresAt! < agora;
+    /* ⛔ A DERIVAÇÃO NÃO É FEITA AQUI. `estadoDoToken` é a fonte única, e é a
+       MESMA que a tela de Integrações e o Dashboard usam — sem isso, "vencido"
+       teria três definições em três lugares.
+
+       ⚠️ E o `p.tokenExpiresAt! < agora` que estava nesta linha não sobrevive à
+       inclusão dos nulos: o `!` era uma promessa que o `where` fazia e deixou
+       de fazer. */
+    const estado = estadoDoToken(p.tokenExpiresAt, agora);
+    if (!tokenPedeAtencao(estado)) continue;
+    emRisco++;
+    const vencido = estado.tipo !== "expira";
     // Um aviso por perfil por dia — sem isto, um cron diário viraria uma
     // notificação nova a cada execução até o usuário reconectar.
     const inicioDoDia = new Date(agora.getTime() - (agora.getTime() % 864e5));
@@ -90,10 +133,19 @@ async function executar(req: NextRequest) {
       data: {
         userId: p.userId,
         type: "SISTEMA",
-        title: vencido ? `🔴 Token expirado — ${p.name}` : `🟡 Token expirando — ${p.name}`,
-        content: vencido
-          ? `A conexão com o Facebook do perfil ${p.name} expirou. A sincronização parou: reconecte em Integrações › Anúncios.`
-          : `A conexão do perfil ${p.name} expira em ${p.tokenExpiresAt!.toLocaleDateString("pt-BR")}. Reconecte para não interromper a sincronização.`,
+        /* ⛔ O TEXTO SAI DE `token.ts`, não é escrito aqui.
+           A tela e a notificação passam a dizer a MESMA frase para o mesmo
+           estado — que é a propriedade que o cabeçalho daquele módulo exige e
+           que este arquivo vinha quebrando.
+
+           ✅ E isso mata de graça um defeito de FUSO: a versão anterior
+           formatava a data com `toLocaleDateString("pt-BR")` **no fuso do
+           processo**, que na Vercel é UTC. Um token vencendo às 02h UTC era
+           anunciado com a data do dia seguinte para quem está em Brasília. A
+           frase de `rotuloDoToken` é relativa ("Expira em N dias") e não tem
+           como escorregar de dia. */
+        title: `${vencido ? "🔴" : "🟡"} ${rotuloDoToken(estado)} — ${p.name}`,
+        content: `${p.name}: ${detalheDoToken(estado) ?? "Reconecte em Integrações › Anúncios."}`,
       },
     });
     avisos++;
@@ -109,7 +161,12 @@ async function executar(req: NextRequest) {
     ipsRestantes: aAnonimizar.length === 5000,
     retencaoIpDias: RETENCAO_DIAS,
     tokensAvisados: avisos,
-    perfisEmRisco: perfis.length,
+    /* ⛔ O DENOMINADOR É QUEM PASSOU NA GUARDA, não quem a consulta trouxe.
+       `perfis.length` era o pré-filtro grosso, e reportar ele superestimaria o
+       risco — um número plausível e maior que o real, que é a pior forma de
+       errar num relatório de operação. */
+    perfisEmRisco: emRisco,
+    perfisConsultados: perfis.length,
   });
 }
 

@@ -17,15 +17,22 @@
  *   4. **acordo**        `detalheDoToken` explica exatamente quando pede atenção
  *   5. **`agora` é parâmetro**, não `Date.now()` de dentro
  *
- * ### 🔴 E DUAS AFIRMAÇÕES DO CABEÇALHO SÃO FALSAS — medidas na §7
+ * ### ✅ AS DUAS AFIRMAÇÕES FALSAS DO CABEÇALHO — CORRIGIDAS EM 14/08/2026
  *
- * O módulo afirma que o `DIAS_ATENCAO = 30` é *"o mesmo limiar do
- * `/api/cron/manutencao`"*. **Não é: lá são 14.** E o grupo que este mesmo
- * arquivo chama de *"o mais perigoso da base"* — os tokens de data desconhecida
- * — é excluído da consulta do cron por um `not: null`, então **nunca gera
- * notificação nenhuma**.
+ * O módulo afirmava que o `DIAS_ATENCAO = 30` era *"o mesmo limiar do
+ * `/api/cron/manutencao`"*. **Não era: lá havia um `AVISO_TOKEN_DIAS = 14`
+ * local.** E o grupo que este mesmo arquivo chama de *"o mais perigoso da
+ * base"* — os tokens de data desconhecida — era excluído da consulta do cron
+ * por um `not: null`, então nunca gerava notificação nenhuma.
  *
- * ⛔ Registrado, não corrigido. Ver a §7.
+ * ⛔ **A correção do primeiro não foi trocar o número: foi apagar a segunda
+ * fonte.** O cron importa a constante, e por isso a §7a congela a AUSÊNCIA de
+ * um limiar local — não o valor `30`. Duas cópias que concordam hoje são
+ * exatamente o que sobrevive até o commit que mexe num lado só.
+ *
+ * ⚠️ Alinhado para CIMA pela regra de desempate do dono (*o que não corta
+ * informação do usuário vence*), e o custo é volume: a janela de notificação
+ * vai de ≤14 para ≤30 por perfil. Ver a §7.
  */
 
 import assert from "node:assert/strict";
@@ -343,73 +350,139 @@ const emDias = (d) => new Date(AGORA.getTime() + d * DIA);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
- * 7 · 🔴 DUAS AFIRMAÇÕES DO CABEÇALHO SÃO FALSAS — medidas, NÃO corrigidas
+ * 7 · ✅ AS DUAS AFIRMAÇÕES FALSAS DO CABEÇALHO — CORRIGIDAS EM 14/08/2026
+ *
+ * Esta seção congelava um estado ruim e carregava a saída escrita nela. As
+ * duas correções chegaram, e o que entra no lugar não é "agora está certo":
+ * é a asserção de que **existe uma fonte só**.
  * ═════════════════════════════════════════════════════════════════════ */
 {
-  console.log("\n7 · 🔴 o cabeçalho × o cron");
+  console.log("\n7 · ✅ o cabeçalho e o cron, agora por IMPORT");
 
   const cron = readFileSync("src/app/api/cron/manutencao/route.ts", "utf8").replace(/\r\n/g, "\n");
   const tok = readFileSync("src/lib/integracoes/token.ts", "utf8").replace(/\r\n/g, "\n");
-
-  /* ── 7a: o limiar. O cabeçalho de `token.ts` diz, literal:
-     "30 é o mesmo limiar do /api/cron/manutencao, de propósito: a tela e a
-      notificação têm de concordar sobre o que é urgente."
-     Medido: o cron usa 14. */
-  const m = cron.match(/const AVISO_TOKEN_DIAS = (\d+);/);
-  ok("linha de base: o limiar do cron foi LIDO do arquivo", !!m, m ? m[0] : "âncora não casou");
-  const doCron = Number(m[1]);
+  /* ⚠️ Comentário APAGADO antes de medir: este arquivo agora documenta, em
+     prosa, tudo o que a guarda procura — inclusive o `AVISO_TOKEN_DIAS = 14`
+     que deixou de existir. É a família "guarda por texto medindo PROSA", que
+     esta base já pagou oito vezes. */
+  const semCom = (x) =>
+    x.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " ")).replace(/\/\/[^\n]*/g, "");
+  const cronCodigo = semCom(cron);
 
   ok(
-    "linha de base: o cabeçalho AFIRMA que os dois são o mesmo limiar",
-    /mesmo limiar do `\/api\/cron\/manutencao`/.test(tok),
+    "linha de base: sobrou CÓDIGO no cron depois de apagar comentário",
+    /prisma\.adProfile\.findMany/.test(cronCodigo),
+    "senão toda negação abaixo passaria sobre um arquivo em branco",
   );
-  /* ⛔ ESTA ASSERÇÃO CONGELA UM ESTADO RUIM, e a saída dela está escrita:
-     ela reprova de DOIS jeitos, e eles pedem correções opostas.
 
-       · se reprovar porque alguém UNIFICOU os dois números, o cabeçalho voltou
-         a ser verdade — a correção é APAGAR esta asserção e a §7a inteira;
-       · se continuar passando, a divergência segue de pé e o cabeçalho segue
-         mentindo.
+  /* ═══ 7a · O LIMIAR — a seção mudou de veredito ═══════════════════════
+     A versão anterior congelava a divergência (tela 30 × cron 14) e dizia:
+     *"se esta reprovar porque os dois foram unificados, apague a §7a — o
+     cabeçalho virou verdade"*. Foi o que aconteceu.
 
-     Sem esta nota ela seria um registro que se declara fechado — o formato que
-     o CLAUDE.md proíbe por nome. */
+     ⛔ E o que entra NÃO é `doCron === 30`. Congelar o número deixaria a
+     segunda fonte poder voltar com o mesmo valor — e duas cópias que
+     concordam hoje são exatamente o que sobrevive até o commit que mexe num
+     lado só. O que se congela é a AUSÊNCIA da segunda fonte. */
   ok(
-    "🔴 e eles DIVERGEM: tela " + DIAS_ATENCAO + " × cron " + doCron,
-    doCron !== DIAS_ATENCAO,
-    "entre " +
-      (doCron + 1) +
-      " e " +
-      DIAS_ATENCAO +
-      " dias a tela pinta atenção e nenhum e-mail sai" +
-      " · SE ESTA REPROVAR porque os dois foram unificados, apague a §7a: o cabeçalho virou verdade",
+    "7a · ⛔ o cron NÃO tem limiar próprio",
+    !/AVISO_TOKEN_DIAS\s*=/.test(cronCodigo),
+    "um literal local aqui é a segunda fonte voltando",
+  );
+  ok(
+    "7a · …ele IMPORTA `DIAS_ATENCAO` de `token.ts`",
+    /import \{[^}]*DIAS_ATENCAO[^}]*\} from "@\/lib\/integracoes\/token"/.test(cronCodigo),
+    "concordar deixou de ser promessa escrita e virou propriedade do grafo de imports",
+  );
+  ok(
+    "7a · e a janela da consulta é DERIVADA dele",
+    /DIAS_ATENCAO \* 864e5/.test(cronCodigo),
+    "sem isto o import existiria sem efeito — importado e não chamado",
+  );
+  /* ⛔ AQUI HAVIA UMA NEGAÇÃO, E ELA REPROVOU MEDINDO PROSA — 9ª ocorrência
+     desta família nesta base, e a segunda minha nesta sessão.
+
+     Eu asserira `!/30 é o mesmo limiar do .../.test(tok)`, esperando provar que
+     o cabeçalho parou de AFIRMAR a igualdade. Ela casou — porque o cabeçalho
+     novo **cita a frase antiga** para registrar que ela era falsa. Apagar
+     comentário antes de medir não resolve: o arquivo inteiro é comentário.
+
+     ⛔ E a negação não tinha como funcionar de jeito nenhum: "afirmar" e
+     "citar para desmentir" contêm o MESMO texto. Não existe âncora que separe
+     os dois — só a leitura separa.
+
+     ✅ O que segura de verdade é a §7a acima: o cron IMPORTA a constante. A
+     verdade do cabeçalho passou a ser consequência do grafo de imports, e não
+     algo que uma guarda de texto precise conferir. */
+  ok(
+    "7a · o cabeçalho REGISTRA que a afirmação antiga era falsa",
+    /AVISO_TOKEN_DIAS = 14/.test(tok) && /ela era falsa|Não era/.test(tok),
+    "afirmação que muda é apagada, e o motivo fica no lugar dela",
   );
 
-  /* ── 7b: e este é o pior dos dois. O mesmo arquivo chama os tokens de data
-     desconhecida de "o grupo mais perigoso da base" — e o `where` do cron os
-     exclui com `not: null`. Eles NUNCA geram notificação. */
+  /* ═══ 7b · O GRUPO NULO — era excluído da consulta ════════════════════
+     O `where` era `{ tokenExpiresAt: { not: null, lt: limite } }`. O grupo que
+     o próprio módulo chama de "o mais perigoso da base" não gerava aviso
+     nenhum — só a tela o mostrava, e é a tela que o cabeçalho diz que o
+     usuário pode nunca abrir. */
   ok(
     "linha de base: o módulo chama o desconhecido de o mais perigoso",
     /mais perigoso da base/.test(tok),
   );
   ok(
-    "🔴 o cron EXCLUI `tokenExpiresAt` nulo da consulta",
-    /tokenExpiresAt:\s*\{\s*not:\s*null/.test(cron),
-    "o grupo 'mais perigoso' recebe ZERO avisos — só a tela o mostra",
+    "7b · ⛔ o cron NÃO exclui mais o nulo",
+    !/tokenExpiresAt:\s*\{\s*not:\s*null/.test(cronCodigo),
+    "o `not: null` era o que apagava o grupo inteiro",
   );
   ok(
-    "e a tela é o único lugar que os alcança",
+    "7b · …e a consulta INCLUI o ramo nulo explicitamente",
+    /OR:\s*\[\{ tokenExpiresAt: null \}/.test(cronCodigo),
+    "pré-filtro grosso de propósito — quem decide é `tokenPedeAtencao`",
+  );
+  ok(
+    "7b · e quem decide passou a ser `token.ts`, não o `where`",
+    /tokenPedeAtencao\(estado\)/.test(cronCodigo) &&
+      /estadoDoToken\(p\.tokenExpiresAt, agora\)/.test(cronCodigo),
+    "o `p.tokenExpiresAt! < agora` não sobrevive à inclusão dos nulos",
+  );
+  ok(
+    "7b · …e o desconhecido de fato pede atenção",
     tokenPedeAtencao(estadoDoToken(null, AGORA)) === true,
-    "que é exatamente a tela que o cabeçalho diz que 'o usuário pode nunca abrir'",
+    "então ele agora ATRAVESSA a guarda do cron, em vez de nunca chegar nela",
+  );
+  ok(
+    "7b · o denominador da saída é quem PASSOU na guarda",
+    /perfisEmRisco: emRisco/.test(cronCodigo) && /perfisConsultados: perfis\.length/.test(cronCodigo),
+    "`perfis.length` é o pré-filtro; reportá-lo superestimaria o risco",
+  );
+
+  /* ═══ 7c · E o texto matou um defeito de FUSO de graça ════════════════
+     A versão anterior formatava a data com `toLocaleDateString("pt-BR")` no
+     fuso do PROCESSO, que na Vercel é UTC: um token vencendo às 02h UTC era
+     anunciado com a data do dia seguinte para quem está em Brasília. */
+  ok(
+    "7c · ✅ a notificação não formata mais data no fuso do processo",
+    !/toLocaleDateString/.test(cronCodigo),
+    "o rótulo é relativo (`Expira em N dias`) e não tem como escorregar de dia",
+  );
+  ok(
+    "7c · …e o texto vem de `token.ts`",
+    /rotuloDoToken\(estado\)/.test(cronCodigo) && /detalheDoToken\(estado\)/.test(cronCodigo),
+    "tela e notificação dizem a MESMA frase para o mesmo estado",
   );
 }
 
 console.log(
-  "\n\x1b[33m  ⚠️  DOIS ACHADOS REGISTRADOS, NÃO CORRIGIDOS:" +
-    "\n      (a) o cabeçalho afirma que DIAS_ATENCAO (30) é o mesmo limiar do" +
-    "\n          cron, e o cron usa 14 (`ec9891c`, 28/07 — congelado)." +
-    "\n      (b) o cron exclui `tokenExpiresAt` NULO, então o grupo que o" +
-    "\n          próprio módulo chama de mais perigoso nunca gera notificação." +
-    "\n      Corrigir qualquer um dos dois muda quem recebe e-mail: é decisão" +
-    "\n      de produto, não passagem de commit de cobertura.\x1b[0m",
+  "\n\x1b[32m  ✅ OS DOIS ACHADOS DE 14/08 FORAM CORRIGIDOS:" +
+    "\n      (a) o cron tinha `AVISO_TOKEN_DIAS = 14` local enquanto a tela usa 30," +
+    "\n          com o cabeçalho jurando que eram o mesmo. Agora ele IMPORTA a" +
+    "\n          constante — concordar virou propriedade do grafo de imports." +
+    "\n      (b) o `not: null` do `where` apagava o grupo de data desconhecida," +
+    "\n          que o próprio módulo chama de o mais perigoso da base." +
+    "\n\x1b[33m      ⚠️  Alinhado para CIMA (30): a regra de desempate do dono diz que o" +
+    "\n      que não corta informação vence. O custo é VOLUME — a janela vai de" +
+    "\n      ≤14 para ≤30 notificações por perfil, uma por dia, e para na" +
+    "\n      reconexão.\x1b[0m",
 );
+
 console.log("\n\x1b[32m" + n + " asserções, 0 falha(s).\x1b[0m\n");
