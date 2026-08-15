@@ -62,13 +62,15 @@ const PREFIXO = "trkenc.v1.";
 /**
  * Segredos com a forma dos de verdade, mais os casos de borda.
  *
- * ⛔ **A string VAZIA não está aqui, e não é esquecimento** — ela quebra a ida e
- * volta. O achado tem seção própria (§1b) e é congelado.
+ * ✅ **A string VAZIA voltou para a lista em 14/08/2026.** Ela ficou fora
+ * enquanto a ida e volta quebrava nela (§1b); com a guarda corrigida no
+ * módulo, ela é só mais um segredo.
  */
 const SEGREDOS = [
   "EAAG1ZBv8ZCkQBO9ZBxZAxZDZD",                    // token da Meta
   "sk_live_51H8xKzJq2mNpQr7T",                     // chave de gateway
   "a",                                             // 1 caractere
+  "",                                              // vazio — ver a §1b
   "x".repeat(4096),                                // token longo
   "chave com espaço e acentuação: coração",        // utf-8 multibyte
   "linha1\nlinha2\ttab",                           // controle
@@ -101,11 +103,22 @@ const SEGREDOS = [
 {
   console.log("\n1 · ida e volta");
 
-  const falharam = SEGREDOS.filter((s) => decryptSecret(encryptSecret(s)) !== s);
+  /* ⛔ O `try` não é zelo: sem ele, um `decryptSecret` que LANÇA derruba o
+     arquivo com uma exceção crua, e a suíte reprova sem dizer QUAL segredo.
+     Medido plantando a guarda antiga de volta: a saída era `Error: Segredo
+     encriptado malformado.` e nada mais. A regra da casa é reprovar NOMEANDO —
+     quem for consertar precisa da entrada, não do sintoma. */
+  const falharam = SEGREDOS.filter((s) => {
+    try {
+      return decryptSecret(encryptSecret(s)) !== s;
+    } catch {
+      return true;
+    }
+  });
   ok(
     "os " + SEGREDOS.length + " segredos voltam idênticos",
     falharam.length === 0,
-    JSON.stringify(falharam),
+    falharam.length ? "NÃO voltaram: " + JSON.stringify(falharam) : "",
   );
 
   /* Fuzz de 200, semente FIXA: aleatório de verdade dá teste que falha uma vez
@@ -113,10 +126,12 @@ const SEGREDOS = [
   let semente = 7;
   const rnd = () => ((semente = (semente * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
   let quebrou = null;
-  /* `1 +` no comprimento: o vazio é o caso da §1b, e deixá-lo cair aqui faria o
-     fuzz reprovar por um defeito que já está medido e nomeado noutro lugar. */
+  /* ⚠️ O comprimento voltou a poder ser ZERO. Ele foi `1 + …` enquanto o vazio
+     quebrava a ida e volta — uma exclusão que era honesta na época (o defeito
+     estava medido e nomeado na §1b) e que teria virado cegueira permanente se
+     ninguém a revisitasse ao consertar o módulo. */
   for (let i = 0; i < 200 && !quebrou; i++) {
-    const len = 1 + Math.floor(rnd() * 120);
+    const len = Math.floor(rnd() * 120);
     let s = "";
     for (let j = 0; j < len; j++) s += String.fromCodePoint(32 + Math.floor(rnd() * 0x2000));
     if (decryptSecret(encryptSecret(s)) !== s) quebrou = s;
@@ -125,73 +140,97 @@ const SEGREDOS = [
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
- * 1b · 🔴 ACHADO: O SEGREDO VAZIO PRODUZ UM ENVELOPE QUE NÃO SE LÊ
+ * 1b · ✅ O SEGREDO VAZIO — o envelope que o próprio módulo recusava
  *
  * Medido em 14/08/2026, e ele apareceu **porque o `""` estava na lista da §1**.
+ * Antes da correção:
  *
  *   encryptSecret("")  ->  "trkenc.v1.<iv>.<tag>."      <- ciphertext VAZIO
  *   isEncrypted(...)   ->  true                          <- parece válido
  *   decryptSecret(...) ->  LANÇA "Segredo encriptado malformado."
  *
- * A causa é uma guarda de forma que confunde ausente com vazio:
+ * A causa era uma guarda de forma que confundia ausente com vazio:
  * `if (!ivB64 || !tagB64 || !ctB64)` — e `""` é falsy. Um ciphertext vazio é a
- * codificação **correta** de um texto claro vazio, e a guarda o lê como
+ * codificação **correta** de um texto claro vazio, e a guarda o lia como
  * envelope truncado. É a distinção central deste projeto (ausência × zero) na
  * camada de string.
  *
- * ### 🔴 O CUSTO REAL NÃO É A EXCEÇÃO — É A MENSAGEM
+ * ### 🔴 O CUSTO NÃO ERA A EXCEÇÃO — ERA A MENSAGEM
  *
- * `decryptSecretSafe` engole e registra:
+ * `decryptSecretSafe` engolia e registrava *"a ENCRYPTION_KEY mudou?"*: a
+ * causa errada, e a mais assustadora que existe neste módulo — não há rotação
+ * de chave, então "a chave mudou" se lê como *todo segredo do banco está
+ * ilegível*. Alguém seguiria essa pista por horas.
  *
- *   > [secrets] falha ao decriptar — a ENCRYPTION_KEY mudou?
+ * ### ✅ CORRIGIDO NO MÓDULO, e não no chamador
  *
- * ⛔ **Ela acusa a causa errada**, e acusa a mais assustadora que existe neste
- * módulo: não há rotação de chave, então "a chave mudou" se lê como *"todo
- * segredo do banco está ilegível"*. Alguém seguiria essa pista por horas.
+ * A guarda passou a **contar as partes** (`partes.length !== 3`) e a exigir
+ * verdade só de `iv` e `tag`, que têm tamanho fixo e nunca são vazios. Só o
+ * ciphertext pode legitimamente medir zero.
  *
- * ### ✅ POR QUE ISTO NÃO ESTÁ EM PRODUÇÃO — e por que é ASSERÇÃO, não nota
+ * ⚠️ **Antes disso, o que segurava era PROTEÇÃO ACIDENTAL:** os dois
+ * chamadores guardavam o vazio cada um do seu jeito (a chave é gerada; o token
+ * passa por um ternário). Nenhuma das duas era propriedade do módulo, e as
+ * duas sumiriam no dia de um terceiro chamador. As asserções de guarda de
+ * chamador **ficam** — não porque ainda sejam necessárias, mas porque uma
+ * regressão nelas continua sendo sinal de que alguém mexeu na forma como o
+ * segredo chega aqui.
  *
- * Os dois únicos chamadores de produção guardam o vazio, cada um do seu jeito:
+ * ### 🎁 E A CORREÇÃO FECHOU UM BURACO QUE NINGUÉM PROCURAVA
  *
- *   apiCredentials.ts  key = `trk_live_${randomBytes(24)…}`   <- nunca vazio
- *   pixels.ts          token ? encryptSecret(token) : null    <- ternário
- *
- * ⛔ Isso é **proteção acidental**: o que segura não é uma propriedade do
- * módulo, é uma circunstância escrita nos chamadores — e ela some no dia em que
- * aparecer um terceiro. Por isso as guardas viram asserção: um chamador novo
- * sem guarda reprova aqui, em vez de gravar no banco um segredo que ninguém
- * consegue ler de volta.
- *
- * ⛔ **NÃO CORRIGIDO.** `secrets.ts` é de `51362f2`, 24/07/2026 — anterior a
- * `4e6aa9e`, congelado. MEDE · REGISTRA · AVISA.
+ * A guarda antiga desestruturava as três primeiras partes e **ignorava o
+ * resto**: `trkenc.v1.aa.bb.cc.dd` passava por ela. Contar as partes recusa.
  * ═════════════════════════════════════════════════════════════════════ */
 {
-  console.log("\n1b · 🔴 o segredo VAZIO quebra a ida e volta");
+  console.log("\n1b · ✅ o segredo VAZIO faz ida e volta");
 
   const vazio = encryptSecret("");
   ok("o vazio produz um envelope", vazio.startsWith(PREFIXO), JSON.stringify(vazio));
   ok("e ele TERMINA em ponto — o ciphertext é vazio", vazio.endsWith("."));
   ok("`isEncrypted` diz que é válido", isEncrypted(vazio) === true);
+
+  /* ✅ A ASSERÇÃO INVERTEU DE LADO. Ela era "mas `decryptSecret` LANÇA
+     'malformado'", congelando o defeito. O módulo foi corrigido, e o que se
+     congela agora é a propriedade que faltava: o que este módulo PRODUZ, ele
+     LÊ de volta. */
   ok(
-    "mas `decryptSecret` LANÇA 'malformado'",
-    (() => { try { decryptSecret(vazio); return false; } catch (e) { return /malformado/.test(e.message); } })(),
+    "✅ e `decryptSecret` devolve a string vazia de volta",
+    decryptSecret(vazio) === "",
+    "o que o módulo produz, o módulo lê",
   );
-  ok("e `decryptSecretSafe` devolve null", decryptSecretSafe(vazio) === null);
+  ok("`decryptSecretSafe` idem, sem acusar a chave", decryptSecretSafe(vazio) === "");
 
-  /* A mensagem que o `Safe` imprime acusa a chave. Congelada como texto porque
-     é ELA o custo — se alguém a melhorar, este teste é onde se vê o porquê. */
-  {
-    const fonte = readFileSync("src/lib/crypto/secrets.ts", "utf8").replace(/\r\n/g, "\n");
-    ok(
-      "linha de base: a mensagem enganosa está no arquivo",
-      fonte.includes("a ENCRYPTION_KEY mudou?"),
-      "ela é impressa para um caso que NÃO é chave trocada",
-    );
-  }
+  /* ⛔ E A GUARDA NÃO FICOU FROUXA — as quatro formas realmente malformadas
+     continuam recusadas, inclusive a que a versão ANTIGA aceitava. */
+  const lanca = (v) => {
+    try { decryptSecret(v); return false; } catch { return true; }
+  };
+  const MALFORMADOS = [
+    PREFIXO,                        // nenhuma parte
+    PREFIXO + "aa",                 // uma parte
+    PREFIXO + "aa.bb",              // duas partes
+    PREFIXO + ".bb.cc",             // iv vazio — nunca acontece num envelope real
+    PREFIXO + "aa..cc",             // tag vazia — idem
+  ];
+  const passaram = MALFORMADOS.filter((v) => !lanca(v));
+  ok(
+    "os " + MALFORMADOS.length + " envelopes malformados continuam sendo recusados",
+    passaram.length === 0,
+    JSON.stringify(passaram),
+  );
 
-  /* ── AS DUAS GUARDAS DE CHAMADOR, que é o que torna isto inalcançável hoje.
-     ⚠️ Miram SINTAXE, não palavra solta: os dois arquivos citam `encryptSecret`
-     na prosa, e uma âncora de nome pegaria o comentário. */
+  /* 🎁 O buraco que a correção fechou sem ninguém procurar: a guarda antiga
+     desestruturava as três primeiras partes e ignorava o resto. */
+  const quatroPartes = PREFIXO + "aa.bb.cc.dd";
+  ok(
+    "🎁 envelope com PARTES A MAIS agora é recusado",
+    lanca(quatroPartes),
+    "a guarda antiga o aceitava — ela olhava as 3 primeiras e ignorava o resto",
+  );
+
+  /* ── AS GUARDAS DE CHAMADOR ficam, e o motivo mudou.
+     ⚠️ Elas miram SINTAXE, não palavra solta: os dois arquivos citam
+     `encryptSecret` na prosa, e uma âncora de nome pegaria o comentário. */
   {
     const semComentario = (s) =>
       s.replace(/\r\n/g, "\n")
@@ -206,7 +245,7 @@ const SEGREDOS = [
     ok(
       "GUARDA: `pixels.ts` só encripta o token quando ele é truthy",
       /token\s*\?\s*encryptSecret\(token\)\s*:\s*null/.test(pixels),
-      "sem o ternário, um token em branco gravaria envelope ilegível",
+      "não é mais o que impede o defeito — mas mudar isto muda o que chega ao módulo",
     );
 
     const cred = semComentario(readFileSync("src/lib/actions/apiCredentials.ts", "utf8"));
@@ -220,8 +259,8 @@ const SEGREDOS = [
       "chave gerada não tem como ser vazia",
     );
 
-    /* E o denominador: se aparecer um terceiro chamador, ele não passou por
-       guarda nenhuma acima — e a contagem é o que denuncia. */
+    /* E o denominador: um chamador novo é informação, mesmo agora que o módulo
+       se protege sozinho. */
     const { globSync } = await import("node:fs");
     /* ⚠️ `globSync` devolve `\` no Windows. Sem normalizar, o filtro por
        `crypto/secrets.ts` não casa e o PRÓPRIO módulo entra na contagem — foi o
@@ -232,7 +271,7 @@ const SEGREDOS = [
       .filter((f) => !f.includes("generated") && !f.endsWith("lib/crypto/secrets.ts"))
       .filter((f) => /encryptSecret\(/.test(semComentario(readFileSync(f, "utf8"))));
     ok(
-      "os chamadores de produção continuam sendo os DOIS guardados",
+      "os chamadores de produção continuam sendo DOIS",
       chamadores.length === 2,
       chamadores.join(" · "),
     );

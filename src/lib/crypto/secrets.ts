@@ -70,8 +70,40 @@ export function encryptSecret(plain: string): string {
 export function decryptSecret(stored: string): string {
   if (!isEncrypted(stored)) return stored;
 
-  const [ivB64, tagB64, ctB64] = stored.slice(PREFIX.length).split(".");
-  if (!ivB64 || !tagB64 || !ctB64) throw new Error("Segredo encriptado malformado.");
+  /**
+   * ⛔ A GUARDA CONTA AS PARTES; ELA NÃO PERGUNTA SE CADA UMA É "VAZIA".
+   *
+   * 🔴 Ela era `if (!ivB64 || !tagB64 || !ctB64)`, e `""` é falsy. Um
+   * ciphertext vazio é a codificação **correta** de um texto claro vazio — o
+   * envelope de `encryptSecret("")` termina em ponto —, e a guarda o lia como
+   * envelope truncado. Ou seja: **este módulo produzia um valor que ele próprio
+   * recusava.**
+   *
+   * É a distinção central deste projeto na camada de string: *ausência de
+   * parte* (o envelope veio cortado) não é *parte vazia* (a parte existe e mede
+   * zero). Contar as partes separa as duas; testar a verdade de cada uma
+   * colapsa.
+   *
+   * ### 🔴 O CUSTO NÃO ERA A EXCEÇÃO — ERA A MENSAGEM
+   *
+   * `decryptSecretSafe` engolia e registrava *"a ENCRYPTION_KEY mudou?"*, que é
+   * a causa errada, e a mais assustadora que existe aqui: **não há rotação de
+   * chave**, então "a chave mudou" se lê como *todo segredo do banco está
+   * ilegível*. Alguém seguiria essa pista por horas.
+   *
+   * ⚠️ **`iv` e `tag` seguem sendo checados por verdade, e é correto:** os dois
+   * têm tamanho fixo (12 e 16 bytes) e nunca são vazios num envelope real.
+   * Só o ciphertext pode legitimamente medir zero.
+   *
+   * ⚠️ Até 14/08/2026 isto era inalcançável em produção por **proteção
+   * acidental**: os dois chamadores guardavam o vazio cada um do seu jeito (a
+   * chave é gerada; o token passa por um ternário). Nenhuma dessas guardas era
+   * propriedade deste módulo, e as duas sumiriam no dia de um terceiro
+   * chamador. Agora a propriedade mora aqui.
+   */
+  const partes = stored.slice(PREFIX.length).split(".");
+  const [ivB64, tagB64, ctB64] = partes;
+  if (partes.length !== 3 || !ivB64 || !tagB64) throw new Error("Segredo encriptado malformado.");
 
   const decipher = createDecipheriv("aes-256-gcm", encryptionKey(), Buffer.from(ivB64, "base64url"));
   decipher.setAuthTag(Buffer.from(tagB64, "base64url"));
