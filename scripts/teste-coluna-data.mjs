@@ -61,8 +61,7 @@ if (process.env.__COLUNA_FILHO) {
        rodando de imediato, e a suíte inteira do filho vai para o `stdout` por
        cima do JSON.
      A forma que serve é `await` na escrita e só então o `exit`. */
-  await new Promise((r) =>
-    process.stdout.write(
+  process.stdout.write(
         JSON.stringify({
         tz: process.env.TZ,
         offsetDoProcesso: -new Date().getTimezoneOffset() / 60,
@@ -77,230 +76,238 @@ if (process.env.__COLUNA_FILHO) {
           dateColumnKey(new Date("2026-12-31T23:59:59.999Z")),
         ].join("|"),
       }),
-      r,
-    ),
   );
-  process.exit(0);
-}
+  /* ⛔ SEM `process.exit()`. No Windows, sair com stdout em PIPE e escrita
+     pendente aborta o processo com `3221226505` (STACK_BUFFER_OVERRUN): o pai
+     recebe o JSON **e** uma excecao junto. E o defeito e INTERMITENTE — passou
+     isolado e derrubou o `npm test` completo.
 
-let n = 0;
-const ok = (nome, cond, extra) => {
-  assert.ok(cond, nome + (extra ? " — " + extra : ""));
-  console.log("  ✓ " + nome + (extra ? " — " + extra : ""));
-  n++;
-};
+     O `else` resolve por estrutura: o filho escreve e o modulo acaba sozinho,
+     drenando o stdout. Protecao por ESTRUTURA, nao por timing.
+     ⚠️ `write` com callback tambem nao serve — ele nao interrompe nada, e o
+     resto do arquivo roda por cima do JSON. */
+} else {
 
-const EU = fileURLToPath(import.meta.url);
-const comTz = (tz) =>
-  JSON.parse(
-    execFileSync(process.execPath, [...process.execArgv, EU], {
-      env: { ...process.env, TZ: tz, __COLUNA_FILHO: "1" },
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }),
-  );
+  let n = 0;
+  const ok = (nome, cond, extra) => {
+    assert.ok(cond, nome + (extra ? " — " + extra : ""));
+    console.log("  ✓ " + nome + (extra ? " — " + extra : ""));
+    n++;
+  };
 
-/* ═══════════════════════════════════════════════════════════════════════
- * 0 · LINHA DE BASE — a coluna é meia-noite UTC, que é como ela existe
- * ═════════════════════════════════════════════════════════════════════ */
-{
-  console.log("\n0 · a forma da coluna");
+  const EU = fileURLToPath(import.meta.url);
+  const comTz = (tz) =>
+    JSON.parse(
+      execFileSync(process.execPath, [...process.execArgv, EU], {
+        env: { ...process.env, TZ: tz, __COLUNA_FILHO: "1" },
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }),
+    );
 
-  const col = keyToDateColumn("2026-08-14");
-  ok("é meia-noite exata", col.getUTCHours() === 0 && col.getUTCMinutes() === 0 && col.getUTCSeconds() === 0);
-  ok("e em UTC", col.toISOString() === "2026-08-14T00:00:00.000Z", col.toISOString());
-  ok("a chave volta idêntica", dateColumnKey(col) === "2026-08-14");
-  ok("e a chave sai bem formada", /^\d{4}-\d{2}-\d{2}$/.test(dateColumnKey(col)));
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
- * 1 · O PAR INVERSO — sob fuzz, com linha de base dos dois lados
- * ═════════════════════════════════════════════════════════════════════ */
-{
-  console.log("\n1 · o par inverso");
-
-  let semente = 7;
-  const rnd = () => ((semente = (semente * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
-
-  let quebrouIda = null;
-  let quebrouVolta = null;
-  let naoEhMeiaNoite = null;
-  let anos = new Set();
-  let bissextos = 0;
-
-  for (let i = 0; i < 400; i++) {
-    const k = addDaysToKey("2024-01-01", Math.floor(rnd() * 1200));
-    const col = keyToDateColumn(k);
-
-    if (dateColumnKey(col) !== k) quebrouIda ??= `${k} -> ${col.toISOString()} -> ${dateColumnKey(col)}`;
-    if (col.getUTCHours() !== 0 || col.getUTCMilliseconds() !== 0) naoEhMeiaNoite ??= k;
-    /* E a volta pela outra ponta: um instante qualquer do dia UTC devolve a
-       mesma chave, porque `dateColumnKey` só lê os componentes de data. */
-    const meioDoDia = new Date(col.getTime() + Math.floor(rnd() * 864e5));
-    if (dateColumnKey(meioDoDia) !== k) quebrouVolta ??= `${k} + ${meioDoDia.toISOString()}`;
-
-    anos.add(k.slice(0, 4));
-    if (k.endsWith("-02-29")) bissextos++;
-  }
-
-  ok("linha de base: o fuzz cobriu " + anos.size + " anos", anos.size >= 3, [...anos].join(", "));
-
-  /* ⚠️ 29 de fevereiro NÃO é linha de base do fuzz, e a primeira versão deste
-     arquivo tentou fazê-lo ser: com 400 amostras em 1.200 dias, ele saiu 0
-     vezes com a semente 7. Um dia único em 1.200 não é caso para amostragem —
-     é caso NOMEADO, e a regra desta base já diz que aleatório não substitui o
-     caso nomeado. Ele está logo abaixo, como asserção própria. */
-  ok(
-    "29 de fevereiro tem coluna própria, e ela volta",
-    dateColumnKey(keyToDateColumn("2024-02-29")) === "2024-02-29",
-    "bissextos vistos no fuzz: " + bissextos + " — por isso ele é caso nomeado",
-  );
-  ok(
-    "…e o dia seguinte é 1º de março",
-    dateColumnKey(new Date(keyToDateColumn("2024-02-29").getTime() + 864e5)) === "2024-03-01",
-  );
-
-  ok("fuzz 400 (semente 7): chave → coluna → chave devolve a mesma", quebrouIda === null, quebrouIda ?? "");
-  ok("toda coluna é meia-noite UTC", naoEhMeiaNoite === null, naoEhMeiaNoite ?? "");
-  ok(
-    "qualquer instante DO MESMO DIA UTC devolve a mesma chave",
-    quebrouVolta === null,
-    quebrouVolta ?? "a coluna é um dia, não um instante",
-  );
-
-  /* Os extremos do dia UTC, nomeados. */
-  ok("00:00:00.000Z é o dia", dateColumnKey(new Date("2026-12-31T00:00:00.000Z")) === "2026-12-31");
-  ok("23:59:59.999Z ainda é o MESMO dia", dateColumnKey(new Date("2026-12-31T23:59:59.999Z")) === "2026-12-31");
-  ok("e 00:00:00.000Z do seguinte já é outro", dateColumnKey(new Date("2027-01-01T00:00:00.000Z")) === "2027-01-01");
-
-  /* Coerência com a aritmética de chave: um dia de coluna a mais é um dia de
-     calendário a mais. Sem isso, `dayKeyRange` e o `where` discordariam. */
-  const a = keyToDateColumn("2026-02-28");
-  const b = keyToDateColumn(addDaysToKey("2026-02-28", 1));
-  ok(
-    "um dia de calendário = 864e5 ms na coluna",
-    b.getTime() - a.getTime() === 864e5,
-    "e 2026 não é bissexto, então o seguinte é 01/03",
-  );
-  ok("…inclusive atravessando fevereiro", dateColumnKey(b) === "2026-03-01");
-  ok(
-    "a distância em chave bate com a distância em coluna",
-    daysBetweenKeys("2026-01-01", "2027-01-01") ===
-      (keyToDateColumn("2027-01-01").getTime() - keyToDateColumn("2026-01-01").getTime()) / 864e5,
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
- * 2 · O `TZ` DO PROCESSO NÃO ENTRA — medido em processo filho
- *
- * ⛔ A linha de base prova que o `TZ` forçado CHEGA. Sem ela, um `TZ` ignorado
- * faria os dois filhos serem o mesmo processo e a comparação passaria por não
- * ter o que divergir.
- * ═════════════════════════════════════════════════════════════════════ */
-const emUtc = comTz("UTC");
-const emSp = comTz("America/Sao_Paulo");
-const emTokyo = comTz("Asia/Tokyo");
-{
-  console.log("\n2 · o TZ do processo não entra");
-
-  ok("linha de base: UTC tem offset 0", emUtc.offsetDoProcesso === 0);
-  ok("linha de base: São Paulo tem −3", emSp.offsetDoProcesso === -3);
-  ok("linha de base: Tóquio tem +9", emTokyo.offsetDoProcesso === 9);
-
-  ok(
-    "as derivações saem IDÊNTICAS nos três fusos",
-    emUtc.canonico === emSp.canonico && emSp.canonico === emTokyo.canonico,
-    emUtc.canonico,
-  );
-  ok(
-    "e a ida e volta também",
-    emUtc.voltaReal === "2026-08-14" && emSp.voltaReal === "2026-08-14" && emTokyo.voltaReal === "2026-08-14",
-  );
-
-  /* ── PLANTIO: `new Date(k).toDateString()` — o que o comentário do
-     `metrics.ts` nomeia como a versão que a janela tinha antes. */
-  ok(
-    "PLANTIO: `toDateString()` é MUDO em `TZ=UTC` — a Vercel não denuncia",
-    emUtc.plantioISO === emUtc.colunaISO,
-    emUtc.colunaISO,
-  );
-  ok(
-    "PLANTIO: e erra em `TZ=America/Sao_Paulo`",
-    emSp.plantioISO !== emSp.colunaISO,
-    "real " + emSp.colunaISO + " × plantio " + emSp.plantioISO,
-  );
-  ok(
-    "PLANTIO: erra também em Tóquio, para o outro lado",
-    emTokyo.plantioISO !== emTokyo.colunaISO,
-    "real " + emTokyo.colunaISO + " × plantio " + emTokyo.plantioISO,
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
- * 3 · 🔴 O DEFEITO NOMEADO — passar a coluna pelo FUSO DO USUÁRIO
- *
- * É o erro que os dois consumidores documentam, e o mais fácil de cometer:
- * `dayKeyInTz` é a função certa para VENDA (que tem instante) e a errada para
- * a coluna (que é um dia de calendário).
- *
- * ⚠️ **E ele é invisível para metade do mundo.** A oeste de Greenwich a chave
- * cai um dia para trás; a leste, ela acerta. Este é o par negativo, e ele é
- * geográfico em vez de temporal.
- * ═════════════════════════════════════════════════════════════════════ */
-{
-  console.log("\n3 · 🔴 o defeito: a coluna passada pelo fuso do usuário");
-
-  const CHAVE = "2026-08-14";
-  const col = keyToDateColumn(CHAVE);
-
-  ok("o certo devolve o dia da coluna", dateColumnKey(col) === CHAVE);
-
-  /* A oeste: erra. */
-  const OESTE = ["America/Sao_Paulo", "America/New_York", "America/Los_Angeles"];
-  const erram = OESTE.filter((tz) => dayKeyInTz(col, tz) !== CHAVE);
-  ok(
-    "🔴 a OESTE de Greenwich, `dayKeyInTz` devolve o dia ANTERIOR",
-    erram.length === OESTE.length,
-    OESTE.map((tz) => tz.split("/")[1] + ": " + dayKeyInTz(col, tz)).join(" · "),
-  );
-  ok(
-    "e o erro é de exatamente UM dia",
-    OESTE.every((tz) => daysBetweenKeys(dayKeyInTz(col, tz), CHAVE) === 1),
-    "todo gasto de anúncio cairia no bucket do dia anterior",
-  );
-
-  /* ── PAR NEGATIVO GEOGRÁFICO: a leste, a função errada ACERTA. */
-  const LESTE = ["Asia/Tokyo", "Europe/Berlin", "Australia/Sydney"];
-  const acertam = LESTE.filter((tz) => dayKeyInTz(col, tz) === CHAVE);
-  ok(
-    "PAR NEGATIVO: a LESTE, a função errada devolve o dia CERTO",
-    acertam.length === LESTE.length,
-    "quem programasse em Tóquio nunca veria o defeito",
-  );
-  ok(
-    "…e em UTC também acerta",
-    dayKeyInTz(col, "UTC") === CHAVE,
-    "que é o fuso do processo na Vercel — o defeito não aparece nem lá",
-  );
-
-  /* 🔴 A consequência medida: um dia inteiro de gasto sai do período. */
+  /* ═══════════════════════════════════════════════════════════════════════
+   * 0 · LINHA DE BASE — a coluna é meia-noite UTC, que é como ela existe
+   * ═════════════════════════════════════════════════════════════════════ */
   {
-    const dias = ["2026-08-12", "2026-08-13", "2026-08-14"];
-    const colunas = dias.map(keyToDateColumn);
-    const certo = colunas.map((c) => dateColumnKey(c));
-    const errado = colunas.map((c) => dayKeyInTz(c, "America/Sao_Paulo"));
+    console.log("\n0 · a forma da coluna");
+
+    const col = keyToDateColumn("2026-08-14");
+    ok("é meia-noite exata", col.getUTCHours() === 0 && col.getUTCMinutes() === 0 && col.getUTCSeconds() === 0);
+    ok("e em UTC", col.toISOString() === "2026-08-14T00:00:00.000Z", col.toISOString());
+    ok("a chave volta idêntica", dateColumnKey(col) === "2026-08-14");
+    ok("e a chave sai bem formada", /^\d{4}-\d{2}-\d{2}$/.test(dateColumnKey(col)));
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════
+   * 1 · O PAR INVERSO — sob fuzz, com linha de base dos dois lados
+   * ═════════════════════════════════════════════════════════════════════ */
+  {
+    console.log("\n1 · o par inverso");
+
+    let semente = 7;
+    const rnd = () => ((semente = (semente * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+
+    let quebrouIda = null;
+    let quebrouVolta = null;
+    let naoEhMeiaNoite = null;
+    let anos = new Set();
+    let bissextos = 0;
+
+    for (let i = 0; i < 400; i++) {
+      const k = addDaysToKey("2024-01-01", Math.floor(rnd() * 1200));
+      const col = keyToDateColumn(k);
+
+      if (dateColumnKey(col) !== k) quebrouIda ??= `${k} -> ${col.toISOString()} -> ${dateColumnKey(col)}`;
+      if (col.getUTCHours() !== 0 || col.getUTCMilliseconds() !== 0) naoEhMeiaNoite ??= k;
+      /* E a volta pela outra ponta: um instante qualquer do dia UTC devolve a
+         mesma chave, porque `dateColumnKey` só lê os componentes de data. */
+      const meioDoDia = new Date(col.getTime() + Math.floor(rnd() * 864e5));
+      if (dateColumnKey(meioDoDia) !== k) quebrouVolta ??= `${k} + ${meioDoDia.toISOString()}`;
+
+      anos.add(k.slice(0, 4));
+      if (k.endsWith("-02-29")) bissextos++;
+    }
+
+    ok("linha de base: o fuzz cobriu " + anos.size + " anos", anos.size >= 3, [...anos].join(", "));
+
+    /* ⚠️ 29 de fevereiro NÃO é linha de base do fuzz, e a primeira versão deste
+       arquivo tentou fazê-lo ser: com 400 amostras em 1.200 dias, ele saiu 0
+       vezes com a semente 7. Um dia único em 1.200 não é caso para amostragem —
+       é caso NOMEADO, e a regra desta base já diz que aleatório não substitui o
+       caso nomeado. Ele está logo abaixo, como asserção própria. */
     ok(
-      "linha de base: as 3 colunas existem e são distintas",
-      new Set(certo).size === 3,
-      certo.join(", "),
+      "29 de fevereiro tem coluna própria, e ela volta",
+      dateColumnKey(keyToDateColumn("2024-02-29")) === "2024-02-29",
+      "bissextos vistos no fuzz: " + bissextos + " — por isso ele é caso nomeado",
     );
     ok(
-      "🔴 com a função errada, a janela inteira desliza um dia",
-      errado.every((k, i) => daysBetweenKeys(k, certo[i]) === 1),
-      errado.join(", ") + "  ← o gasto do dia 14 seria somado no 13",
+      "…e o dia seguinte é 1º de março",
+      dateColumnKey(new Date(keyToDateColumn("2024-02-29").getTime() + 864e5)) === "2024-03-01",
+    );
+
+    ok("fuzz 400 (semente 7): chave → coluna → chave devolve a mesma", quebrouIda === null, quebrouIda ?? "");
+    ok("toda coluna é meia-noite UTC", naoEhMeiaNoite === null, naoEhMeiaNoite ?? "");
+    ok(
+      "qualquer instante DO MESMO DIA UTC devolve a mesma chave",
+      quebrouVolta === null,
+      quebrouVolta ?? "a coluna é um dia, não um instante",
+    );
+
+    /* Os extremos do dia UTC, nomeados. */
+    ok("00:00:00.000Z é o dia", dateColumnKey(new Date("2026-12-31T00:00:00.000Z")) === "2026-12-31");
+    ok("23:59:59.999Z ainda é o MESMO dia", dateColumnKey(new Date("2026-12-31T23:59:59.999Z")) === "2026-12-31");
+    ok("e 00:00:00.000Z do seguinte já é outro", dateColumnKey(new Date("2027-01-01T00:00:00.000Z")) === "2027-01-01");
+
+    /* Coerência com a aritmética de chave: um dia de coluna a mais é um dia de
+       calendário a mais. Sem isso, `dayKeyRange` e o `where` discordariam. */
+    const a = keyToDateColumn("2026-02-28");
+    const b = keyToDateColumn(addDaysToKey("2026-02-28", 1));
+    ok(
+      "um dia de calendário = 864e5 ms na coluna",
+      b.getTime() - a.getTime() === 864e5,
+      "e 2026 não é bissexto, então o seguinte é 01/03",
+    );
+    ok("…inclusive atravessando fevereiro", dateColumnKey(b) === "2026-03-01");
+    ok(
+      "a distância em chave bate com a distância em coluna",
+      daysBetweenKeys("2026-01-01", "2027-01-01") ===
+        (keyToDateColumn("2027-01-01").getTime() - keyToDateColumn("2026-01-01").getTime()) / 864e5,
     );
   }
-}
 
-console.log("\n\x1b[32m" + n + " asserções, 0 falha(s).\x1b[0m");
-console.log("   denominador: 3 fusos forçados em processo filho · 7 consumidores da coluna\n");
+  /* ═══════════════════════════════════════════════════════════════════════
+   * 2 · O `TZ` DO PROCESSO NÃO ENTRA — medido em processo filho
+   *
+   * ⛔ A linha de base prova que o `TZ` forçado CHEGA. Sem ela, um `TZ` ignorado
+   * faria os dois filhos serem o mesmo processo e a comparação passaria por não
+   * ter o que divergir.
+   * ═════════════════════════════════════════════════════════════════════ */
+  const emUtc = comTz("UTC");
+  const emSp = comTz("America/Sao_Paulo");
+  const emTokyo = comTz("Asia/Tokyo");
+  {
+    console.log("\n2 · o TZ do processo não entra");
+
+    ok("linha de base: UTC tem offset 0", emUtc.offsetDoProcesso === 0);
+    ok("linha de base: São Paulo tem −3", emSp.offsetDoProcesso === -3);
+    ok("linha de base: Tóquio tem +9", emTokyo.offsetDoProcesso === 9);
+
+    ok(
+      "as derivações saem IDÊNTICAS nos três fusos",
+      emUtc.canonico === emSp.canonico && emSp.canonico === emTokyo.canonico,
+      emUtc.canonico,
+    );
+    ok(
+      "e a ida e volta também",
+      emUtc.voltaReal === "2026-08-14" && emSp.voltaReal === "2026-08-14" && emTokyo.voltaReal === "2026-08-14",
+    );
+
+    /* ── PLANTIO: `new Date(k).toDateString()` — o que o comentário do
+       `metrics.ts` nomeia como a versão que a janela tinha antes. */
+    ok(
+      "PLANTIO: `toDateString()` é MUDO em `TZ=UTC` — a Vercel não denuncia",
+      emUtc.plantioISO === emUtc.colunaISO,
+      emUtc.colunaISO,
+    );
+    ok(
+      "PLANTIO: e erra em `TZ=America/Sao_Paulo`",
+      emSp.plantioISO !== emSp.colunaISO,
+      "real " + emSp.colunaISO + " × plantio " + emSp.plantioISO,
+    );
+    ok(
+      "PLANTIO: erra também em Tóquio, para o outro lado",
+      emTokyo.plantioISO !== emTokyo.colunaISO,
+      "real " + emTokyo.colunaISO + " × plantio " + emTokyo.plantioISO,
+    );
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════
+   * 3 · 🔴 O DEFEITO NOMEADO — passar a coluna pelo FUSO DO USUÁRIO
+   *
+   * É o erro que os dois consumidores documentam, e o mais fácil de cometer:
+   * `dayKeyInTz` é a função certa para VENDA (que tem instante) e a errada para
+   * a coluna (que é um dia de calendário).
+   *
+   * ⚠️ **E ele é invisível para metade do mundo.** A oeste de Greenwich a chave
+   * cai um dia para trás; a leste, ela acerta. Este é o par negativo, e ele é
+   * geográfico em vez de temporal.
+   * ═════════════════════════════════════════════════════════════════════ */
+  {
+    console.log("\n3 · 🔴 o defeito: a coluna passada pelo fuso do usuário");
+
+    const CHAVE = "2026-08-14";
+    const col = keyToDateColumn(CHAVE);
+
+    ok("o certo devolve o dia da coluna", dateColumnKey(col) === CHAVE);
+
+    /* A oeste: erra. */
+    const OESTE = ["America/Sao_Paulo", "America/New_York", "America/Los_Angeles"];
+    const erram = OESTE.filter((tz) => dayKeyInTz(col, tz) !== CHAVE);
+    ok(
+      "🔴 a OESTE de Greenwich, `dayKeyInTz` devolve o dia ANTERIOR",
+      erram.length === OESTE.length,
+      OESTE.map((tz) => tz.split("/")[1] + ": " + dayKeyInTz(col, tz)).join(" · "),
+    );
+    ok(
+      "e o erro é de exatamente UM dia",
+      OESTE.every((tz) => daysBetweenKeys(dayKeyInTz(col, tz), CHAVE) === 1),
+      "todo gasto de anúncio cairia no bucket do dia anterior",
+    );
+
+    /* ── PAR NEGATIVO GEOGRÁFICO: a leste, a função errada ACERTA. */
+    const LESTE = ["Asia/Tokyo", "Europe/Berlin", "Australia/Sydney"];
+    const acertam = LESTE.filter((tz) => dayKeyInTz(col, tz) === CHAVE);
+    ok(
+      "PAR NEGATIVO: a LESTE, a função errada devolve o dia CERTO",
+      acertam.length === LESTE.length,
+      "quem programasse em Tóquio nunca veria o defeito",
+    );
+    ok(
+      "…e em UTC também acerta",
+      dayKeyInTz(col, "UTC") === CHAVE,
+      "que é o fuso do processo na Vercel — o defeito não aparece nem lá",
+    );
+
+    /* 🔴 A consequência medida: um dia inteiro de gasto sai do período. */
+    {
+      const dias = ["2026-08-12", "2026-08-13", "2026-08-14"];
+      const colunas = dias.map(keyToDateColumn);
+      const certo = colunas.map((c) => dateColumnKey(c));
+      const errado = colunas.map((c) => dayKeyInTz(c, "America/Sao_Paulo"));
+      ok(
+        "linha de base: as 3 colunas existem e são distintas",
+        new Set(certo).size === 3,
+        certo.join(", "),
+      );
+      ok(
+        "🔴 com a função errada, a janela inteira desliza um dia",
+        errado.every((k, i) => daysBetweenKeys(k, certo[i]) === 1),
+        errado.join(", ") + "  ← o gasto do dia 14 seria somado no 13",
+      );
+    }
+  }
+
+  console.log("\n\x1b[32m" + n + " asserções, 0 falha(s).\x1b[0m");
+  console.log("   denominador: 3 fusos forçados em processo filho · 7 consumidores da coluna\n");
+
+}
