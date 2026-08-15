@@ -1,6 +1,6 @@
 /**
  * `despesaVale` × `whereDespesasDaArea` — DUAS IMPLEMENTAÇÕES DA MESMA
- * PERGUNTA, e elas DISCORDAM.
+ * PERGUNTA, e elas DISCORDAVAM.
  *
  * A pergunta que as duas respondem é uma só: *"esta despesa entra no cálculo
  * desta área?"*. Uma responde em memória, a outra vira `where` do Prisma. E o
@@ -8,43 +8,48 @@
  *
  *   > `where` do Prisma **equivalente** ao `despesaVale`, para filtrar na consulta.
  *
- * ⛔ **Elas não são equivalentes.** Medido em 14/08/2026:
+ * ⛔ **Elas não eram equivalentes.** Medido em 14/08/2026:
  *
- *   despesaVale({ workspaceId: null }, "area-A")  ->  false   (a nula NÃO entra)
+ *   despesaVale({ workspaceId: null }, "area-A")  ->  false   (a nula NÃO entrava)
  *   whereDespesasDaArea("area-A")                 ->  OR [ null, "area-A" ]
  *                                                     (a nula ENTRA)
  *
- * ### 🔎 A PROCEDÊNCIA — as duas estão certas para o dia em que nasceram
+ * ### 🔎 A PROCEDÊNCIA — as duas estavam certas no dia em que nasceram
  *
  * | | commit | data | semântica |
  * |---|---|---|---|
  * | `despesaVale` | `8b9b162` | **30/07/2026** | NULO não vale — "cada área com as suas próprias taxas" |
  * | `whereDespesasDaArea` | `3be5d39` | **04/08/2026** | NULO vale para todas — e o commit se chama *"DESPESA QUE NAO ERA DESCONTADA"* |
  *
- * Ou seja: a de 04/08 foi escrita **para consertar** o comportamento estrito, que
- * estava descartando TODA despesa cadastrada do cálculo de lucro (o `CLAUDE.md`
+ * A de 04/08 foi escrita **para consertar** o comportamento estrito, que estava
+ * descartando TODA despesa cadastrada do cálculo de lucro (o `CLAUDE.md`
  * registra: cinco descontos cadastrados, painel mostrando `− R$ 0,00`). A de
- * 30/07 ficou para trás com a semântica antiga — e o comentário da nova passou a
- * chamá-la de equivalente.
+ * 30/07 ficou para trás com a semântica revogada — e o comentário da nova
+ * passou a chamá-la de equivalente.
  *
- * ### ⛔ POR QUE ISTO NÃO É CONSERTADO AQUI
+ * ### ✅ CORRIGIDO EM 14/08/2026 — a FUNÇÃO, não o comentário
  *
- * Os dois commits são anteriores a `4e6aa9e`: **código congelado**. A regra do
- * `CLAUDE.md` é MEDE · REGISTRA · AVISA — e a linha do `Expense.workspaceId` é
- * uma das duas vermelhas da tabela de NULOS: ali nulo **amplia escopo**, então
- * mexer no lado errado muda número de lucro em produção sem ninguém decidir.
+ * O dono pediu "corrija o comentário ou a função". A função é a correção mais
+ * forte: consertar só a prosa deixaria de pé um helper que devolve a resposta
+ * revogada para qualquer chamador futuro. Hoje `despesaVale` inclui o nulo, e o
+ * `whereDespesasDaArea` volta a ser honestamente equivalente a ela.
  *
- * ### 🔑 O QUE SEGURA O DEFEITO HOJE É O `despesaVale` NÃO TER CONSUMIDOR
+ * ⚠️ **Nenhum comportamento mudou**, e é verificável: `despesaVale` tinha ZERO
+ * chamadores de produção no momento do alinhamento. A §3 continua medindo e
+ * IMPRIMINDO essa contagem.
  *
- * A divergência é inofensiva **enquanto ninguém chamar a versão estrita**.
- * Medido: zero consumidores de produção. Por isso a contagem é ASSERÇÃO e não
- * nota de rodapé — no dia em que alguém ligar o `despesaVale` numa tela, a
- * divergência deixa de ser histórica e vira dois números de lucro diferentes na
- * mesma conta. O teste força a decisão nesse dia, em vez de descobri-la depois.
+ * ### ⛔ O QUE ESTE ARQUIVO CONGELA AGORA É O ACORDO, e ele é mais forte
  *
- * ⚠️ E a contagem de consumidores **apaga os comentários antes de medir**: o
- * vizinho cita `despesaVale` pelo nome, na prosa, justamente para explicá-lo. É
- * a família *guarda por texto medindo PROSA*, que esta base já pagou seis vezes.
+ * A versão anterior congelava a divergência, para que ninguém a unificasse sem
+ * decidir o lado. O lado foi decidido, e o que fica é a exigência de que as
+ * duas concordem em TODAS as entradas — com linha de base dos dois desfechos,
+ * senão duas funções que devolvessem sempre `true` concordariam com nota
+ * máxima.
+ *
+ * ⚠️ E a contagem de consumidores **apaga os comentários antes de medir**: os
+ * dois arquivos citam `despesaVale` pelo nome, na prosa, justamente para
+ * explicá-lo. É a família *guarda por texto medindo PROSA*, que esta base já
+ * pagou nove vezes.
  */
 
 import assert from "node:assert/strict";
@@ -87,16 +92,20 @@ const whereAceita = (areaId, despesa) =>
   whereDespesasDaArea(areaId).OR.some((r) => r.workspaceId === despesa.workspaceId);
 
 /* ═══════════════════════════════════════════════════════════════════════
- * 1 · A DIVERGÊNCIA — e ela está confinada a EXATAMENTE UMA entrada
+ * 1 · O ACORDO — as duas concordam em TODAS as entradas
  *
- * Esta é a relação congelada, e não o valor de nenhuma das duas: para toda
- * despesa com dono, as duas CONCORDAM; para a despesa sem dono, elas discordam.
+ * ⛔ Esta seção congelava a DIVERGÊNCIA até 14/08/2026: ela afirmava que as
+ * duas discordavam em exatamente uma entrada (`workspaceId: null`), e existia
+ * para que ninguém as unificasse sem decidir para que lado.
  *
- * ⛔ É o confinamento que importa. Se um dia elas passarem a discordar noutra
- * entrada, o defeito deixou de ser o histórico conhecido e virou outro.
+ * ✅ O lado foi decidido — o `despesaVale` passou a incluir o nulo, que é a
+ * semântica que o `where` já usava e que de fato roda. Agora se congela o
+ * ACORDO, e ele é mais forte que a divergência era: qualquer mudança em
+ * qualquer um dos dois lados que os separe reprova aqui, em vez de produzir
+ * dois números de lucro na mesma conta.
  * ═════════════════════════════════════════════════════════════════════ */
 {
-  console.log("\n1 · a divergência, confinada a uma entrada só");
+  console.log("\n1 · o acordo entre a função e o `where`");
 
   const universo = [
     { workspaceId: AREA },
@@ -107,64 +116,79 @@ const whereAceita = (areaId, despesa) =>
   ];
 
   const discordam = universo.filter((d) => despesaVale(d, AREA) !== whereAceita(AREA, d));
-
   ok(
-    "discordam em EXATAMENTE 1 das " + universo.length + " entradas",
-    discordam.length === 1,
-    JSON.stringify(discordam),
+    "concordam nas " + universo.length + " entradas",
+    discordam.length === 0,
+    discordam.length ? "DISCORDAM em: " + JSON.stringify(discordam) : "",
   );
-  ok("e a entrada da discordância é `workspaceId: null`", discordam[0].workspaceId === null);
 
-  /* As duas metades nomeadas, para o relatório dizer QUAL lado faz o quê. */
-  ok("estrito: a despesa SEM DONO não vale para a área", despesaVale({ workspaceId: null }, AREA) === false);
-  ok("catch-all: a despesa SEM DONO entra na consulta", whereAceita(AREA, { workspaceId: null }) === true);
-
-  /* E o par negativo do confinamento: com dono, os dois concordam sempre —
-     inclusive quando a resposta é NÃO. É por isso que a divergência nunca
-     apareceu: o caso comum é uma despesa com dono. */
-  const comDono = universo.filter((d) => d.workspaceId !== null);
+  /* ⛔ LINHA DE BASE DO ACORDO, e sem ela a §1 não mede nada: duas funções que
+     devolvessem `true` para tudo — ou `false` para tudo — concordariam com nota
+     máxima. O universo precisa produzir os DOIS desfechos. */
+  const aceitas = universo.filter((d) => despesaVale(d, AREA));
   ok(
-    "com dono, os dois concordam nas " + comDono.length + " entradas",
-    comDono.every((d) => despesaVale(d, AREA) === whereAceita(AREA, d)),
+    "linha de base: o universo produz aceitas E recusadas",
+    aceitas.length > 0 && aceitas.length < universo.length,
+    aceitas.length + " de " + universo.length + " aceitas",
   );
-  ok("e concordam também quando a resposta é NÃO", despesaVale({ workspaceId: OUTRA }, AREA) === false && whereAceita(AREA, { workspaceId: OUTRA }) === false);
+
+  /* As duas metades nomeadas, para o relatório dizer o que cada uma faz. */
+  ok("a despesa DA ÁREA entra", despesaVale({ workspaceId: AREA }, AREA) === true);
+  ok("a despesa de OUTRA área não entra", despesaVale({ workspaceId: OUTRA }, AREA) === false);
+  ok(
+    "🔴 a despesa SEM DONO entra — nulo é GLOBAL, não 'sem área'",
+    despesaVale({ workspaceId: null }, AREA) === true,
+    "é uma das duas linhas vermelhas da tabela de nulos do CLAUDE.md",
+  );
+  ok("e ela entra para QUALQUER área", despesaVale({ workspaceId: null }, OUTRA) === true);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
- * 2 · PLANTIO — os dois "consertos" que alguém faria ao ler o comentário
+ * 2 · PLANTIO — os dois "consertos" que separam as duas de novo
  *
- * O comentário diz que são equivalentes. Quem o ler vai querer torná-las
- * equivalentes — e há dois jeitos, com custos opostos. As asserções da §1
- * derrubam os dois, cada uma por um motivo diferente.
+ * Eles são simétricos, e os custos são opostos. Antes de 14/08 um deles era o
+ * estado real do repositório.
  * ═════════════════════════════════════════════════════════════════════ */
 {
-  console.log("\n2 · plantio — os dois lados do 'conserto'");
+  console.log("\n2 · plantio — os dois jeitos de separá-las");
 
-  /* ── A: alinhar o `despesaVale` ao `where` (nulo passa a valer).
-     É o lado BARATO de errar — mas é mudança de comportamento em código
-     congelado, e é a semântica que o dono REVERTEU em 30/07. */
+  /* ── A: o `despesaVale` volta a ser estrito.
+     Era o estado até 14/08, e é o "conserto" de quem lê a decisão de 30/07
+     ("cada área com as suas próprias taxas") sem ver a correção de 04/08. */
   {
-    const frouxo = (d, areaId) => d.workspaceId === areaId || d.workspaceId === null;
-    const aindaDiscordam = [{ workspaceId: AREA }, { workspaceId: OUTRA }, { workspaceId: null }].filter(
-      (d) => frouxo(d, AREA) !== whereAceita(AREA, d),
+    const estrito = (d, areaId) => d.workspaceId === areaId;
+    const discordam = [{ workspaceId: AREA }, { workspaceId: OUTRA }, { workspaceId: null }].filter(
+      (d) => estrito(d, AREA) !== whereAceita(AREA, d),
     );
-    ok("PLANTIO A (nulo vale): a asserção da divergência DERRUBA", aindaDiscordam.length === 0);
+    ok(
+      "PLANTIO A (função estrita): a asserção do acordo DERRUBA",
+      discordam.length > 0,
+      JSON.stringify(discordam),
+    );
+    /* ⚠️ PAR NEGATIVO: com dono, o estrito e o catch-all concordam. A separação
+       mora só no nulo — e é por isso que ela sobreviveu duas semanas. */
+    const comDono = [{ workspaceId: AREA }, { workspaceId: OUTRA }, { workspaceId: "area-C" }];
+    ok(
+      "PAR NEGATIVO: com dono, o estrito concorda com o `where` nas " + comDono.length,
+      comDono.every((d) => estrito(d, AREA) === whereAceita(AREA, d)),
+      "o caso comum é uma despesa com dono — por isso ninguém viu",
+    );
   }
 
-  /* ── B: alinhar o `where` ao `despesaVale` (nulo deixa de entrar).
+  /* ── B: o `where` vira estrito.
      É o lado CARO, e é literalmente o defeito de 04/08: taxa de gateway e
      imposto nascem GLOBAIS, então o filtro estrito descarta todo desconto e o
      lucro sai maior que a realidade, com número plausível. */
   {
-    const whereEstrito = () => ({ workspaceId: AREA });
-    const aceitaEstrito = (d) => whereEstrito().workspaceId === d.workspaceId;
+    const aceitaEstrito = (d) => d.workspaceId === AREA;
     ok(
       "PLANTIO B (where estrito): a despesa GLOBAL some do cálculo",
       aceitaEstrito({ workspaceId: null }) === false,
+      "foi assim que o painel mostrou `Taxas de gateway − R$ 0,00`",
     );
     ok(
-      "PLANTIO B: e a asserção do catch-all DERRUBA",
-      aceitaEstrito({ workspaceId: null }) !== whereAceita(AREA, { workspaceId: null }),
+      "PLANTIO B: e a asserção do acordo DERRUBA",
+      aceitaEstrito({ workspaceId: null }) !== despesaVale({ workspaceId: null }, AREA),
     );
   }
 }
@@ -207,17 +231,36 @@ const whereAceita = (areaId, despesa) =>
     cruas + " linhas cruas citam o nome, e só 1 é código",
   );
 
+  /* ⚠️ ESTA ASSERÇÃO MUDOU DE PAPEL EM 14/08/2026.
+     Ela era `forasteiros.length === 0`, e existia porque a AUSÊNCIA de
+     consumidor era o que tornava a divergência inofensiva. Com as duas
+     alinhadas, um consumidor deixou de ser perigo — e mantê-la assim faria a
+     suíte reprovar no dia em que alguém usasse a função corretamente.
+
+     ⛔ O que protege agora é a §1 (o acordo). Aqui fica a MEDIÇÃO, impressa:
+     ela responde "nenhum comportamento mudou no alinhamento?" para quem for
+     auditar este commit depois. */
+  console.log(
+    "   consumidores de produção: " +
+      forasteiros.length +
+      (forasteiros.length
+        ? "\n     " + forasteiros.join("\n     ")
+        : "  (era 0 quando as duas foram alinhadas)"),
+  );
   ok(
-    "`despesaVale` tem ZERO consumidores de produção",
-    forasteiros.length === 0,
-    forasteiros.length ? "\n      " + forasteiros.join("\n      ") : "e é isso que torna a divergência histórica em vez de ativa",
+    "a contagem de consumidores é MENSURÁVEL",
+    Number.isInteger(forasteiros.length),
+    forasteiros.length + " hoje — o que protege é o acordo da §1, não este número",
   );
 }
 
 console.log(
-  "\n\x1b[33m  ⚠️  ACHADO REGISTRADO, NÃO CORRIGIDO: `despesaVale` (30/07) e" +
-    "\n      `whereDespesasDaArea` (04/08) discordam em `workspaceId: null`," +
-    "\n      e o comentário entre as duas as declara equivalentes." +
-    "\n      Os dois commits são anteriores a `4e6aa9e` — congelados.\x1b[0m",
+  "\n\x1b[32m  ✅ CORRIGIDO EM 14/08/2026: `despesaVale` (30/07) devolvia `false`" +
+    "\n      para `workspaceId: null` enquanto o `whereDespesasDaArea` (04/08) o" +
+    "\n      INCLUI — com o comentário entre as duas as declarando equivalentes." +
+    "\n      A função foi alinhada ao `where`, que é o que de fato roda." +
+    "\n" +
+    "\n      O que segurava era ela não ter consumidor — um acidente. Agora o que" +
+    "\n      segura é o ACORDO, sob asserção.\x1b[0m",
 );
 console.log("\n\x1b[32m" + n + " asserções, 0 falha(s).\x1b[0m\n");

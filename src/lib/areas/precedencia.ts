@@ -286,23 +286,69 @@ export function construirMapa(d: DadosDoMapa): MapaDeAreas {
 }
 
 /**
- * Despesas de uma área — **isoladas**, como o resto da configuração.
+ * Esta despesa entra no cálculo desta área?
  *
- * ⚠️ **Isto reverteu a semântica anterior** (`NULL` = vale para todas as áreas),
- * por decisão do usuário em 30/07/2026: ele quer cada área com as suas próprias
- * taxas. A migration `20260730120000` levou as despesas nulas para a Principal.
+ * ### 🔴 ELA E O `whereDespesasDaArea` DISCORDAVAM, E O COMENTÁRIO OS CHAMAVA DE EQUIVALENTES
  *
- * 🔴 **O risco que a decisão anterior evitava continua real:** uma área sem taxa
- * de gateway ou sem imposto cadastrado calcula lucro **sem eles** — número maior
- * que a realidade, e plausível. A mitigação é a TELA avisar (`faltamTaxas`, em
- * `escopoConfig.ts`), transformando erro silencioso em erro visível. **Se o aviso
- * sair, o risco volta inteiro.**
+ * Medido em 14/08/2026, e corrigido no mesmo dia:
+ *
+ * ```
+ * despesaVale({ workspaceId: null }, "A")  ->  false   <- a nula NÃO entrava
+ * whereDespesasDaArea("A")                 ->  OR [ null, "A" ]   <- a nula ENTRA
+ * ```
+ *
+ * As duas respondem **a mesma pergunta**, uma em memória e a outra como `where`
+ * do Prisma, e o comentário da segunda dizia — literalmente — que era o
+ * *"`where` equivalente ao `despesaVale`"*.
+ *
+ * ### 🔎 A PROCEDÊNCIA — as duas estavam certas no dia em que nasceram
+ *
+ * | | commit | data | semântica |
+ * |---|---|---|---|
+ * | esta função | `8b9b162` | **30/07** | nulo não vale — *"cada área com as suas próprias taxas"* |
+ * | o `where` | `3be5d39` | **04/08** | nulo vale para todas — e o commit se chama *"DESPESA QUE NAO ERA DESCONTADA"* |
+ *
+ * A de 04/08 foi escrita **para consertar** o comportamento estrito: taxa de
+ * gateway e imposto nascem GLOBAIS (o formulário não os prende a área nenhuma),
+ * então o filtro estrito descartava TODA despesa cadastrada do cálculo de
+ * lucro. Reproduzido na época: cinco descontos cadastrados, painel mostrando
+ * `Taxas de gateway − R$ 0,00`.
+ *
+ * ⛔ **Esta função ficou para trás com a semântica revogada, e o que a tornava
+ * inofensiva era não ter consumidor — ou seja, um acidente.** Hoje ela devolve
+ * a mesma resposta que a consulta, e o `whereDespesasDaArea` volta a ser
+ * honestamente equivalente a ela.
+ *
+ * ⚠️ **Nenhum comportamento mudou nesta correção**, e isso é verificável:
+ * `despesaVale` tinha zero chamadores de produção quando foi alinhada
+ * (`test:despesa-vale` mede a contagem a cada execução).
+ *
+ * ### 🔴 E O RISCO QUE A SEMÂNTICA ESTRITA EVITAVA CONTINUA REAL
+ *
+ * Uma área sem taxa de gateway ou sem imposto cadastrado calcula lucro **sem
+ * eles** — número maior que a realidade, e plausível. A mitigação é a tela
+ * avisar (`faltamTaxas`), transformando erro silencioso em erro visível.
+ *
+ * ⚠️ **E o aviso já saiu uma vez:** ele perdeu o último consumidor em `9608704`
+ * (12/08), quando a reescrita de Taxas deletou a `FeesView`, e ficou dois dias
+ * e meio sem ninguém. Foi religado em 14/08 no construtor de alertas do
+ * Dashboard, com o par dispara/não-dispara em `test:alertas` §6b/§6c.
  */
 export function despesaVale(despesa: { workspaceId: string | null }, areaId: string): boolean {
-  return despesa.workspaceId === areaId;
+  /* 🔴 NULO = vale para TODAS as áreas. É uma das DUAS linhas vermelhas da
+     tabela de nulos do `CLAUDE.md` (a outra é `AutomationRule.workspaceId`):
+     aqui nulo não significa "sem dono", significa GLOBAL. Trocar este `||` por
+     um `===` não restringe um filtro — apaga toda despesa global do cálculo. */
+  return despesa.workspaceId === areaId || despesa.workspaceId === null;
 }
 
-/** `where` do Prisma equivalente ao `despesaVale`, para filtrar na consulta. */
+/**
+ * `where` do Prisma equivalente ao `despesaVale`, para filtrar na consulta.
+ *
+ * ⚠️ A palavra **equivalente** aqui já foi falsa (ver o cabeçalho do
+ * `despesaVale`). `test:despesa-vale` a mantém verdadeira: ele avalia as duas
+ * sobre o mesmo universo e exige que concordem em TODAS as entradas.
+ */
 export function whereDespesasDaArea(areaId: string) {
   /**
    * 🔴 `workspaceId` NULO = vale para TODAS as áreas — e por isso ENTRA aqui.
