@@ -263,7 +263,19 @@ const orfaos = libs.filter((f) => temImportador(f) === null);
     /`faltamTaxas`/.test(prec),
     "e diz: 'Se o aviso sair, o risco volta inteiro'",
   );
-  ok("linha de base: e declara o risco em vermelho", /risco que a decisão anterior evitava continua real/.test(prec));
+  /* ⚠️ A âncora era `risco que a decisão anterior evitava continua real`, e
+     QUEBROU quando o `precedencia.ts` foi reescrito na mesma sessão (o
+     alinhamento do `despesaVale`). Ela citava uma redação, não um fato — e
+     redação de outro arquivo muda por motivos que este teste não controla.
+
+     ⛔ E o modo de falha vale registrar: rodei o teste de cada item e não os
+     CRUZADOS. Só o `npm test` completo pegou. Guarda que lê arquivo alheio
+     precisa da suíte inteira depois de tocar aquele arquivo. */
+  ok(
+    "linha de base: e declara o risco em vermelho",
+    /continua real/i.test(prec) && /maior que a realidade/i.test(prec),
+    "o `precedencia.ts` descreve o lucro inflado por falta de taxa",
+  );
   ok("linha de base: a função existe e é exportada", /export function faltamTaxas/.test(taxas));
 
   /* A função funciona — o problema não é ela. */

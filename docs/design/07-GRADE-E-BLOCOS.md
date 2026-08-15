@@ -1771,3 +1771,119 @@ janela é qual.
 desmaximizar a janela que a contém, a próxima sessão mede as bandas, as duas
 origens da §7.2 e o `h` do vazio. ⛔ Se a aba fechar, o grupo é auto-removido e
 o passo 1 recomeça.
+
+---
+
+# 🔧 As correções de 14/08/2026 (2ª rodada) — cinco vermelhos fechados
+
+> **Ordem do dono, depois da rodada de cobertura.** Os quatro itens de
+> `## Estado` (bandas, origem A, origem B, `h` do vazio) **seguem NÃO
+> MEDIDOS** — nada aqui os toca, e a janela continuou indisponível.
+
+| # | o que era | como foi fechado |
+|---|---|---|
+| 1 | `faltamTaxas` sem consumidor desde 12/08 | religado no `montarAlertas`, com o portão na RECEITA |
+| 2 | o `where` do cron excluindo `tokenExpiresAt` nulo, e o limiar 30 × 14 | nulo incluído; o cron **importa** `DIAS_ATENCAO` |
+| 3 | `encryptSecret("")` produzindo envelope que o próprio módulo recusava | a guarda conta PARTES em vez de perguntar se cada uma é vazia |
+| 4 | `despesaVale` × `whereDespesasDaArea` divergindo no nulo | a **função** foi alinhada ao `where`, que é o que roda |
+| 5 | `escalaArredondada` reimplementada em linha no `LineChart` | unificada; a §7 congela a AUSÊNCIA da segunda fonte |
+
+## 🔑 O PADRÃO QUE ATRAVESSA OS CINCO
+
+> ## Em quatro dos cinco, a correção certa não foi trocar um valor — foi APAGAR A SEGUNDA FONTE.
+
+| | o conserto fraco | o que foi feito |
+|---|---|---|
+| **2** | pôr `30` também no cron | o cron **importa** a constante |
+| **4** | corrigir o comentário | alinhar a **função** ao `where` |
+| **5** | conferir que os dois tetos batem | tirar a aritmética do `LineChart` |
+| **3** | guardar o vazio no chamador | guardar **no módulo** |
+
+⚠️ E no 5 isso é decisivo: *"os dois dão o mesmo teto"* passaria com as duas
+contas duplicadas — que era o estado anterior. **Congelar concordância não
+impede duplicação; só a ausência da segunda fonte impede.**
+
+## ⛔ AS SEÇÕES DE TESTE QUE CONGELAVAM O ESTADO RUIM MUDARAM DE VEREDITO — e a saída estava escrita nelas
+
+Três guardas da rodada anterior reprovaram **sozinhas**, cada uma com a
+instrução do que fazer:
+
+| guarda | o que ela disse ao reprovar |
+|---|---|
+| `test:modulos-orfaos` | *"se ganhar consumidor, o aviso voltou: apague esta entrada"* |
+| `test:token-estado` §7a | *"se reprovar porque os dois foram unificados, apague a §7a"* |
+| `test:eixo-y` §7 | *"se reprovar porque ele passou a importar, apague esta seção"* |
+
+> ## Um registro que congela estado ruim SEM a saída escrita vira o formato "decidido, não reabrir" que este projeto proíbe. Com ela, a guarda instrui a própria remoção.
+
+⚠️ E o `test:despesa-vale` **não tinha essa nota** — é a única das quatro que
+reprovou sem dizer o que fazer. Lacuna minha, registrada.
+
+## 🎁 QUATRO ACHADOS QUE VIERAM DE BRINDE
+
+| | |
+|---|---|
+| a guarda antiga do envelope **aceitava partes a mais** (`aa.bb.cc.dd`): ela desestruturava as três primeiras e ignorava o resto | agora recusa, com asserção |
+| o cron formatava a data com `toLocaleDateString("pt-BR")` **no fuso do PROCESSO** — na Vercel, UTC. Um token vencendo às 02h UTC era anunciado com a data do dia seguinte | morreu junto: o texto agora sai de `rotuloDoToken`, que é relativo |
+| `perfisEmRisco` reportava o **pré-filtro**, não quem passou na guarda | passou a contar quem passou, com `perfisConsultados` ao lado |
+| `faltam-taxas` e `gasto-sem-conversao` são **mutuamente exclusivos** por construção (um exige receita > 0, o outro `=== 0`) | congelado: a troca entre os dois é exata |
+
+## ⚖️ AS DUAS DECISÕES QUE EU TOMEI, e a regra que decidiu cada uma
+
+**O limiar do token foi para 30, não para 14.** A regra de desempate do dono —
+*o que não corta informação do usuário vence* — decide sozinha: baixar a tela
+para 14 apagaria o aviso entre o 15º e o 30º dia; subir o cron para 30 não
+apaga nada.
+
+⚠️ **O custo é VOLUME e fica registrado:** a janela vai de ≤14 para ≤30
+notificações por perfil (uma por dia, e para na reconexão).
+
+**O aviso de taxas voltou no DASHBOARD, não na tela de Taxas.** Ele vale onde o
+número inflado é LIDO — quem abre Taxas já está indo cadastrar; quem abre o
+Dashboard está lendo um Lucro maior que o dinheiro que entrou.
+
+## ⚠️ SEIS ERROS MEUS NESTA PARTE, e a família é sempre a mesma
+
+| erro | o que o denunciou |
+|---|---|
+| a guarda de "o cabeçalho parou de afirmar" casou com a **citação** que o cabeçalho novo faz da frase antiga | a asserção reprovou — e não existe âncora que separe *afirmar* de *citar para desmentir* |
+| a linha de base do `LineChart` supunha que a prosa **transcrevia** a fórmula | idem; ela cita os nomes sem a aritmética |
+| o `try` faltava na §1 do `test:segredos`: com a guarda antiga plantada, a suíte morria com `Error:` e **não dizia qual segredo** | plantei e li a saída |
+| um `catch (err)` sem uso quebrou o piso de **zero warnings** | o lint, no primeiro comando |
+| a §3 do `test:despesa-vale` manteria `zero consumidores` como asserção — o que faria a suíte reprovar no dia em que alguém usasse a função **corretamente** | pensar no que a guarda passaria a significar depois da correção |
+| bash comeu as crases do comentário que eu escrevia por `python -c` dentro de aspas duplas | reler o arquivo depois de editar |
+
+> ⛔ **Nenhum foi pego por atenção.** Cinco dos seis foram pegos por uma
+> asserção que IMPRIME o alvo, por plantar o conserto legítimo e ler a
+> mensagem, ou pelo lint. O sexto, por reler o resultado da edição — que é a
+> regra *edição por casamento de string se verifica*.
+
+## 🔴 O SÉTIMO ERRO SÓ A SUÍTE INTEIRA PEGOU — e é o mais instrutivo
+
+Ao alinhar o `despesaVale` (item 4) eu reescrevi o cabeçalho do
+`precedencia.ts`. Uma linha de base do `test:modulos-orfaos` (item 1) citava
+aquele cabeçalho **por redação** — `/risco que a decisão anterior evitava
+continua real/` — e quebrou.
+
+⛔ **Eu rodei o teste de cada item e não os CRUZADOS.** Cada um dos cinco
+commits passou nas suas próprias asserções; só o `npm test` completo reprovou.
+
+> ## Guarda que lê arquivo ALHEIO é uma dependência invisível: ela não aparece no diff do arquivo que você mudou.
+
+⚠️ E a âncora era frágil por natureza — ela citava **uma redação**, não um
+fato. Hoje ela exige duas propriedades do texto (`continua real` **e** `maior
+que a realidade`), que sobrevivem a reescrita de estilo.
+
+**A disciplina:** depois de tocar qualquer arquivo que uma guarda LÊ, roda-se a
+suíte inteira, não o teste do item.
+
+## ✅ O ESTADO AO FECHAR
+
+`tsc` 0 · `lint` 0 erros **e 0 warnings** · `npm test` exit **0**, **2.093
+asserções em 68 scripts** (eram 2.058 antes desta parte).
+
+⚠️ **Medido de novo depois de um susto:** a primeira leitura do `npm test` desta
+parte reportou `exit 0` — e era o exit do **wrapper**, não do npm. A suíte tinha
+falhado. O que denunciou foi o total de asserções ter caído de 2.058 para 1.297.
+É *a medição não acertou o alvo* mais uma vez, e o que a pegou foi comparar com
+o baseline conhecido.
