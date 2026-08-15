@@ -4,7 +4,7 @@ import * as React from "react";
 
 import { useTamanho } from "@/components/dashboard/ui/useTamanho";
 import { caminhoSuave, fecharArea } from "@/lib/grafico/curva";
-import { intervalosDoEixoY } from "@/lib/grafico/eixo";
+import { escalaArredondada, intervalosDoEixoY } from "@/lib/grafico/eixo";
 
 /**
  * LineChart — duas séries com pontos e a LINHA DE BREAK-EVEN.
@@ -104,9 +104,29 @@ export function LineChart({
   const alt = A - PAD.t - PAD.b;
 
   const maxBruto = Math.max(...pontos.flatMap((p) => [p.a, p.b]), breakEven ?? 0, 1);
-  // Teto "redondo" para a régua não sair com 37.412 no topo.
-  const passo = Math.pow(10, Math.floor(Math.log10(maxBruto))) / 2;
-  const max = Math.ceil(maxBruto / passo) * passo;
+  /**
+   * Teto "redondo" para a régua não sair com 37.412 no topo.
+   *
+   * 🔴 **ISTO ERA UMA SEGUNDA FONTE, e o comentário do vizinho jurava que não.**
+   * O C3 (`36bccdc`, 13/08/2026) extraiu `intervalosDoEixoY` para
+   * `lib/grafico/eixo.ts` e deixou o arredondamento reimplementado aqui — três
+   * linhas com `maxBruto`, `passo` e `Math.ceil`. No mesmo commit, o
+   * `SerieTemporal` ganhou o comentário: *"`escalaArredondada` é a MESMA função
+   * do `LineChart` — os dois gráficos arredondam igual **por construção**, não
+   * 'parecido'"*. Era falso: este arquivo nem importava a função.
+   *
+   * ⚠️ **E era a pior forma dessa família, não a melhor:** as duas contas
+   * concordavam. Medido em 14/08 com fuzz de 400 tetos — zero divergências. Uma
+   * divergência apareceria na tela; a concordância não aparece em lugar nenhum,
+   * e é ela que faz a segunda fonte sobreviver até o commit que mexe num lado
+   * só.
+   *
+   * ✅ Unificado em 14/08/2026. `min = 0` porque este gráfico desenha VOLUME:
+   * a escala é ancorada no zero (`(max * i) / nY`, sem `min`), e por isso ele
+   * também não passa `obrigatorio` ao `intervalosDoEixoY` — não existe barra
+   * abaixo do zero para medir.
+   */
+  const max = escalaArredondada(0, maxBruto).max;
 
   const x = (i: number) => PAD.l + (pontos.length === 1 ? larg / 2 : (i / (pontos.length - 1)) * larg);
   const y = (v: number) => PAD.t + alt - (v / max) * alt;

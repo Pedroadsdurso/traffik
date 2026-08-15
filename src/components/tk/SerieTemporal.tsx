@@ -65,7 +65,14 @@ export function SerieTemporal({
      valor cru: a barra mais alta encostava no teto e a régua sairia com
      `R$ 3.847` na ponta. `escalaArredondada` é a MESMA função do `LineChart`
      (`lib/grafico/eixo.ts`) — os dois gráficos arredondam igual por construção,
-     não "parecido". */
+     não "parecido".
+
+     ⚠️ **Esta frase foi FALSA por um dia**, de 13 a 14/08/2026: o C3 a escreveu
+     aqui e deixou o arredondamento reimplementado em linha no `LineChart`. As
+     duas contas concordavam, então nada na tela denunciava — e concordância não
+     aparece em lugar nenhum. Hoje o que a mantém verdadeira não é a boa
+     intenção de quem editar: é `test:eixo-y` §7a, que congela a AUSÊNCIA da
+     segunda fonte. */
   const escala = escalaArredondada(
     permitirNegativo ? Math.min(...valores, 0) : 0,
     Math.max(...valores, 0),

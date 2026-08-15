@@ -405,88 +405,147 @@ const {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
- * 7 · 🔴 O C3 UNIFICOU **METADE** DO EIXO — e o comentário afirma que unificou tudo
+ * 7 · ✅ O EIXO INTEIRO VIROU FONTE ÚNICA — o C3 tinha unificado METADE
  *
- * `SerieTemporal:66-68` diz, literal (commit `36bccdc`, o próprio C3):
+ * `SerieTemporal:66-68` dizia, literal (commit `36bccdc`, o próprio C3):
  *
  *   > `escalaArredondada` é a MESMA função do `LineChart` (`lib/grafico/eixo.ts`)
  *   > — os dois gráficos arredondam igual **por construção**, não "parecido".
  *
- * ⛔ **É falso.** O `LineChart` importa só `intervalosDoEixoY`, e reimplementa o
- * arredondamento em linha (linhas 106–109): `maxBruto`, `passo` e `Math.ceil`
- * escritos ali dentro. São **duas fontes** da mesma conta.
+ * ⛔ **Era falso.** O `LineChart` importava só `intervalosDoEixoY` e
+ * reimplementava o arredondamento em linha: `maxBruto`, `passo` e `Math.ceil`
+ * escritos ali dentro. Duas fontes da mesma conta, com a documentação jurando
+ * o contrário.
  *
- * ⚠️ E é a pior forma dessa família, não a melhor: as duas concordam hoje. Uma
- * divergência apareceria na tela; **a concordância não aparece em lugar
- * nenhum**, e é ela que faz a segunda fonte sobreviver até o commit que mexer
- * num lado só.
+ * ⚠️ **E era a PIOR forma dessa família, não a melhor:** as duas concordavam.
+ * Medido com fuzz de 400 tetos, zero divergências. Uma divergência apareceria
+ * na tela; **a concordância não aparece em lugar nenhum**, e é ela que faz a
+ * segunda fonte sobreviver até o commit que mexer num lado só.
  *
- * ⛔ **NÃO CORRIGIDO.** Fazer o `LineChart` importar a função é mudança nos
- * dois gráficos do Dashboard, e a tela não é mensurável nesta máquina — o
- * instrumento de janela está registrado como INDISPONÍVEL em 14/08/2026. A
- * asserção abaixo mantém as duas contas amarradas enquanto isso.
+ * ✅ Unificado em 14/08/2026: o `LineChart` importa `escalaArredondada` e a
+ * chama com `min = 0`. O comentário do `SerieTemporal` passou a ser verdade.
+ *
+ * ### ⛔ E O QUE SE CONGELA NÃO É "OS DOIS DÃO O MESMO TETO"
+ *
+ * Essa asserção passaria com as duas contas duplicadas de novo — foi
+ * exatamente o estado anterior. O que se congela é a AUSÊNCIA da segunda
+ * fonte: o `LineChart` não pode conter a aritmética.
  * ═════════════════════════════════════════════════════════════════════ */
 {
-  console.log("\n7 · 🔴 o C3 unificou metade do eixo");
+  console.log("\n7 · ✅ o eixo inteiro é fonte única");
 
-  const line = readFileSync("src/components/tk/LineChart.tsx", "utf8").replace(/\r\n/g, "\n");
-  const serie = readFileSync("src/components/tk/SerieTemporal.tsx", "utf8").replace(/\r\n/g, "\n");
+  const semCom = (s) =>
+    s.replace(/\r\n/g, "\n").replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " ")).replace(/\/\/[^\n]*/g, "");
 
+  const lineBruto = readFileSync("src/components/tk/LineChart.tsx", "utf8").replace(/\r\n/g, "\n");
+  const serieBruto = readFileSync("src/components/tk/SerieTemporal.tsx", "utf8").replace(/\r\n/g, "\n");
+  const line = semCom(lineBruto);
+  const serie = semCom(serieBruto);
+
+  /* ⚠️ Apagar comentário é obrigatório aqui: o `LineChart` agora DOCUMENTA, em
+     prosa, a aritmética que ele deixou de ter (`maxBruto`, `passo`,
+     `Math.ceil`). Uma guarda sobre o texto cru acusaria a explicação como se
+     fosse o código — é a família *guarda por texto medindo PROSA*, e ela já
+     mordeu duas vezes nesta sessão. */
   ok(
-    "linha de base: o comentário AFIRMA que os dois usam a mesma função",
-    /`escalaArredondada` é a MESMA função do `LineChart`/.test(serie),
+    "linha de base: sobrou CÓDIGO no `LineChart` depois de apagar comentário",
+    /const maxBruto = Math\.max/.test(line),
+    "senão as negações abaixo passariam sobre um arquivo em branco",
+  );
+  /* ⚠️ Esta linha de base supunha que a prosa repetia a aritmética exata
+     (`Math.pow(10, Math.floor…`) e REPROVOU: o comentário do `LineChart` cita
+     os nomes (`maxBruto`, `passo`, `Math.ceil`) sem transcrever a fórmula.
+     Medir o que se supõe do texto alheio é a mesma família de sempre — a
+     substituta mede o que ela alega: o apagador removeu volume. */
+  ok(
+    "linha de base: o apagador removeu comentário de verdade",
+    lineBruto.length - line.replace(/ /g, "").length > 3000,
+    lineBruto.length + " bytes crus × " + line.replace(/ /g, "").length + " de código",
+  );
+
+  /* ── 7a: a segunda fonte não existe mais. */
+  ok(
+    "7a · ⛔ o `LineChart` NÃO reimplementa o arredondamento",
+    !/Math\.pow\(10, Math\.floor\(Math\.log10/.test(line) && !/Math\.ceil\(maxBruto \/ passo\)/.test(line),
+    "estas três linhas eram a segunda fonte",
   );
   ok(
-    "🔴 e o `LineChart` NÃO importa `escalaArredondada`",
-    !/escalaArredondada/.test(line.replace(/\/\*[\s\S]*?\*\//g, "")),
-    "SE ESTA REPROVAR porque ele passou a importar, apague esta seção: o comentário virou verdade",
+    "7a · …ele IMPORTA `escalaArredondada`",
+    /import \{[^}]*escalaArredondada[^}]*\} from "@\/lib\/grafico\/eixo"/.test(line),
   );
   ok(
-    "ele reimplementa o arredondamento em linha",
-    /Math\.pow\(10, Math\.floor\(Math\.log10\(maxBruto\)\)\) \/ 2/.test(line) &&
-      /Math\.ceil\(maxBruto \/ passo\) \* passo/.test(line),
-    "linhas 106–109 — a segunda fonte",
+    "7a · …e a CHAMA — import não chamado dá aparência de cobertura",
+    /escalaArredondada\(0, maxBruto\)\.max/.test(line),
+    "`min = 0` porque este gráfico desenha volume, ancorado no zero",
+  );
+  ok(
+    "7a · o `SerieTemporal` também a importa",
+    /import \{[^}]*escalaArredondada[^}]*\} from "@\/lib\/grafico\/eixo"/.test(serie),
+  );
+  ok(
+    "7a · ✅ e o comentário dele virou VERDADE",
+    /`escalaArredondada` é a MESMA função do `LineChart`/.test(serieBruto) &&
+      /escalaArredondada\(/.test(line),
+    "ele afirmava isso desde 13/08 sobre um arquivo que não a importava",
   );
 
-  /* ── E A AMARRA: enquanto forem duas, elas têm de dar o MESMO teto.
-     Esta é a asserção que uma divergência futura derruba — sem ela, mexer num
-     lado só passa em tudo, que é como a família cobra. */
-  const inline = (valores, breakEven) => {
-    const maxBruto = Math.max(...valores, breakEven ?? 0, 1);
-    const passo = Math.pow(10, Math.floor(Math.log10(maxBruto))) / 2;
-    return Math.ceil(maxBruto / passo) * passo;
-  };
+  /* ── 7b: a assimetria do `obrigatorio` continua DELIBERADA.
+     Unificar o arredondamento não unifica isto, e não deve: o `LineChart`
+     ancora a escala no zero e não tem barra abaixo dele para medir. */
+  ok(
+    "7b · `SerieTemporal` PASSA `obrigatorio`",
+    /intervalosDoEixoY\([^)]*,[^)]*,[^)]*\)/.test(serie),
+  );
+  ok(
+    "7b · `LineChart` NÃO passa — a escala dele é ancorada em zero",
+    !/intervalosDoEixoY\([^)]*,[^)]*,[^)]*\)/.test(line) && /\(max \* i\) \/ nY/.test(line),
+    "sem `min`, não existe barra abaixo do zero para medir",
+  );
 
-  let semente = 7;
-  const rnd = () => ((semente = (semente * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
-  let divergiu = null;
-  let comparados = 0;
+  /* ── 7c: e o comportamento não mudou. A unificação é provável, não presumida:
+     a fórmula que o `LineChart` tinha, aplicada aos mesmos valores, dá o mesmo
+     teto que `escalaArredondada(0, bruto)`. Isto é o que autoriza chamar a
+     mudança de MOVE. */
+  {
+    const antiga = (valores, breakEven) => {
+      const maxBruto = Math.max(...valores, breakEven ?? 0, 1);
+      const passo = Math.pow(10, Math.floor(Math.log10(maxBruto))) / 2;
+      return Math.ceil(maxBruto / passo) * passo;
+    };
 
-  for (let i = 0; i < 400; i++) {
-    const valores = Array.from({ length: 1 + Math.floor(rnd() * 8) }, () => rnd() * 50000);
-    const be = rnd() < 0.5 ? rnd() * 50000 : null;
-    const bruto = Math.max(...valores, be ?? 0, 1);
+    let semente = 7;
+    const rnd = () => ((semente = (semente * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    let divergiu = null;
+    let comparados = 0;
 
-    const doModulo = escalaArredondada(0, bruto).max;
-    const doLineChart = inline(valores, be);
-    comparados++;
-    if (doModulo !== doLineChart) divergiu ??= `bruto ${bruto.toFixed(2)}: módulo ${doModulo} × inline ${doLineChart}`;
+    for (let i = 0; i < 400; i++) {
+      const valores = Array.from({ length: 1 + Math.floor(rnd() * 8) }, () => rnd() * 50000);
+      const be = rnd() < 0.5 ? rnd() * 50000 : null;
+      const bruto = Math.max(...valores, be ?? 0, 1);
+      comparados++;
+      if (escalaArredondada(0, bruto).max !== antiga(valores, be)) {
+        divergiu ??= `bruto ${bruto.toFixed(2)}: módulo ${escalaArredondada(0, bruto).max} × antiga ${antiga(valores, be)}`;
+      }
+    }
+
+    ok("linha de base: " + comparados + " tetos comparados", comparados === 400);
+    ok(
+      "7c · a unificação é um MOVE: mesmo teto da fórmula que saiu (fuzz 400, semente 7)",
+      divergiu === null,
+      divergiu ?? "nenhum valor do gráfico muda com a troca",
+    );
   }
-
-  ok("linha de base: " + comparados + " tetos comparados", comparados === 400);
-  ok(
-    "as DUAS fontes dão o mesmo teto hoje (fuzz 400, semente 7)",
-    divergiu === null,
-    divergiu ?? "concordam — e é a concordância que esconde a segunda fonte",
-  );
 }
 
 console.log(
-  "\n\x1b[33m  ⚠️  ACHADO REGISTRADO, NÃO CORRIGIDO: o C3 (`36bccdc`, 13/08)" +
-    "\n      extraiu `intervalosDoEixoY` para fonte única e deixou" +
-    "\n      `escalaArredondada` reimplementada em linha no `LineChart` — mas o" +
-    "\n      comentário do `SerieTemporal` afirma que os dois a usam." +
-    "\n      As duas contas concordam hoje, e é a concordância que faz a segunda" +
-    "\n      fonte sobreviver. A §7 as mantém amarradas até alguém unificar.\x1b[0m",
+  "\n\x1b[32m  ✅ O EIXO VIROU FONTE ÚNICA em 14/08/2026. O C3 (`36bccdc`, 13/08)" +
+    "\n      extraiu `intervalosDoEixoY` e deixou `escalaArredondada` reimplementada" +
+    "\n      no `LineChart` — com o comentário do `SerieTemporal` afirmando o" +
+    "\n      contrário desde então." +
+    "\n" +
+    "\x1b[33m      ⚠️  A §7 congela a AUSÊNCIA da segunda fonte, não a igualdade dos" +
+    "\n      tetos: os dois já concordavam quando eram duas contas, e foi essa" +
+    "\n      concordância que deixou a duplicação sobreviver.\x1b[0m",
 );
+
 console.log("\n\x1b[32m" + n + " asserções, 0 falha(s).\x1b[0m\n");
