@@ -4312,6 +4312,7 @@ instrumento funcionou e respondeu a outra pergunta.**
 ⚠️ E o motivo de `{ donos: _ }` não resolver é medível em um comando: este lint
 não tem `varsIgnorePattern`, então `_` é um binding como qualquer outro. O jeito
 sem binding é não desestruturar — `({ ...dtoParaForm(px), donos: {} })`.
+
 ---
 
 # 🕸️ GUARDA QUE LÊ ARQUIVO ALHEIO É DEPENDÊNCIA INVISÍVEL
