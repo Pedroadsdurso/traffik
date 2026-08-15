@@ -115,11 +115,33 @@ const whereAceita = (areaId, despesa) =>
     { workspaceId: null },
   ];
 
+  /* ⛔ A NOTA DE SAÍDA — ela FALTAVA, e a falta custou.
+     A versão anterior desta seção congelava a DIVERGÊNCIA sem dizer o que fazer
+     quando reprovasse. Ela foi a única das quatro guardas de estado-ruim desta
+     sessão sem essa nota, e foi a única que reprovou deixando quem lia adivinhar
+     se o certo era desfazer a correção ou reescrever a guarda.
+
+     Esta asserção reprova de DOIS jeitos, e eles pedem correções OPOSTAS:
+
+       · se reprovar dizendo que discordam em `workspaceId: null`, alguém
+         devolveu o `despesaVale` à semântica estrita de 30/07 — a que descartava
+         toda despesa GLOBAL do lucro. A correção é reverter aquela mudança, não
+         relaxar esta asserção;
+
+       · se reprovar dizendo que discordam noutra entrada, o defeito é NOVO e
+         não é o histórico. Meça antes de escolher um lado: um deles alimenta o
+         cálculo de lucro em produção.
+
+     ⛔ Em nenhum dos dois a saída é apagar a asserção. */
   const discordam = universo.filter((d) => despesaVale(d, AREA) !== whereAceita(AREA, d));
   ok(
     "concordam nas " + universo.length + " entradas",
     discordam.length === 0,
-    discordam.length ? "DISCORDAM em: " + JSON.stringify(discordam) : "",
+    discordam.length
+      ? "DISCORDAM em: " +
+        JSON.stringify(discordam) +
+        " · SE FOR `null`, alguém devolveu o `despesaVale` ao estrito de 30/07 — reverta lá, não aqui"
+      : "",
   );
 
   /* ⛔ LINHA DE BASE DO ACORDO, e sem ela a §1 não mede nada: duas funções que

@@ -4218,6 +4218,160 @@ seguinte. O ida-e-volta entre as duas já dá o tempo de repintura.
 
 ---
 
+## 🚦 O SEXTO CASO: `exit 0` DE WRAPPER NÃO É EVIDÊNCIA DE SUÍTE VERDE
+
+> **14/08/2026.** Mesmo eixo do caso 1 ao 4 — o instrumento funcionou, e estava
+> apontado para **outro processo**.
+
+Rodei `npm test > arquivo 2>&1; echo "exit: $?"` em segundo plano. A notificação
+do harness disse **"completed (exit code 0)"**, e eu li isso como suíte verde.
+
+⛔ **O `0` era do `echo`.** O `npm test` tinha saído com **1**, e a linha
+`exit: 1` estava dentro do próprio arquivo de saída, que eu não abri.
+
+> ## Um comando composto reporta o exit do ÚLTIMO elo. Se o último elo é um `echo`, o exit é sempre `0` — e ele descreve o `echo`, não a suíte.
+
+### 🔎 O QUE DENUNCIOU, e é a guarda que fica
+
+Não foi o exit, nem a leitura do arquivo: foi **o total de asserções ter caído**.
+
+```
+execução anterior ...... 2.058 asserções em 68 scripts
+esta execução .......... 1.297 asserções em 49 scripts   ← 19 scripts a menos
+```
+
+A suíte é um `&&` encadeado: o primeiro script que reprova **interrompe o
+resto**. Então uma queda no total não é ruído — é a assinatura de interrupção.
+
+> ### ⛔ A GUARDA
+> **Compare o total de asserções com o da execução anterior, e trate QUEDA como
+> falha — mesmo com `exit 0`.**
+>
+> ```bash
+> npm test 2>&1 | tee /tmp/suite.txt
+> grep -oE "[0-9]+ asserções" /tmp/suite.txt | grep -oE "[0-9]+" \
+>   | awk '{s+=$1;n++} END {print s" em "n" scripts"}'
+> ```
+>
+> A pergunta binária: **o número subiu ou ficou igual?** Se caiu, a suíte parou
+> no meio, e o `exit` que você leu é de outra coisa.
+
+⚠️ **E não meça o exit por `echo` na mesma linha.** Ou se lê o `$?` como último
+elo, ou se lê o arquivo — as duas coisas medem a suíte; um `echo` no fim mede o
+`echo`.
+
+⚠️ É primo do *denominador na saída*: `"0 falhas"` sem o número de asserções
+examinadas é indistinguível de *"a suíte não chegou lá"*. O total **é** o
+denominador da suíte inteira.
+
+---
+
+# 🕸️ GUARDA QUE LÊ ARQUIVO ALHEIO É DEPENDÊNCIA INVISÍVEL
+
+> **14/08/2026.** Ela não aparece no `git diff` do arquivo que você mudou, e é
+> por isso que rodar "o teste do item" dá verde e a suíte reprova.
+
+Ao alinhar o `despesaVale` eu reescrevi o cabeçalho do `precedencia.ts`. Uma
+linha de base do `test:modulos-orfaos` — **de outro item, de outro commit** —
+citava aquele cabeçalho por REDAÇÃO:
+
+```js
+/risco que a decisão anterior evitava continua real/.test(prec)
+```
+
+Os dois testes passaram **isoladamente**. Só o `npm test` completo reprovou.
+
+> ## O teste que quebra não é o do arquivo que você editou. Ele é de outro item, e o `grep` que o acharia é pelo NOME DO ARQUIVO dentro de `scripts/`, não pelo diff.
+
+### 🔎 AS DUAS METADES DA DISCIPLINA
+
+| | |
+|---|---|
+| **antes** | ao mexer em prosa que alguma guarda lê, `grep -l "<arquivo>" scripts/teste-*.mjs` |
+| **depois** | **`npm test` completo**, nunca o teste do item |
+
+```bash
+# quem lê este arquivo?
+grep -l "src/lib/areas/precedencia.ts" scripts/teste-*.mjs
+```
+
+⚠️ **E a âncora frágil é a outra metade do defeito:** ela citava *uma redação*,
+não um fato. Redação de arquivo alheio muda por motivos que o teste não
+controla. Hoje ela exige duas propriedades do texto (`continua real` **e**
+`maior que a realidade`), que sobrevivem a reescrita de estilo.
+
+⛔ **Isto vale em dobro para comentário**, que é onde a tentação de reescrever
+é maior: ninguém espera que melhorar a redação de um cabeçalho reprove a suíte.
+
+---
+
+# 🔂 DUAS FONTES DA MESMA CONTA: O CONSERTO É APAGAR UMA, NUNCA ALINHAR AS DUAS
+
+> **Formulação do dono, 14/08/2026, depois de a mesma decisão aparecer em
+> QUATRO dos cinco consertos de uma sessão.** É a extensão operacional de
+> *duas implementações da mesma conta divergem sempre*: aquela diz que
+> divergem; esta diz o que fazer.
+
+> ## Concordar hoje é exatamente o que faz a duplicata sobreviver até o commit que mexe num lado só.
+
+Uma divergência aparece: alguém vê dois números diferentes na tela e investiga.
+**A concordância não aparece em lugar nenhum.** Ela é silenciosa, dura anos, e
+morre no dia em que alguém corrige um dos lados achando que corrigiu o
+comportamento.
+
+### 🔴 OS TRÊS CASOS DE 14/08, e o conserto FRACO que cada um convidava
+
+| duplicata | o conserto fraco | o que foi feito |
+|---|---|---|
+| `AVISO_TOKEN_DIAS` (14) × `DIAS_ATENCAO` (30) | pôr `30` também no cron | o cron **importa** a constante |
+| `despesaVale` × `whereDespesasDaArea` | corrigir o comentário que os chamava de equivalentes | a **função** foi alinhada ao `where` que roda |
+| `escalaArredondada` × a aritmética em linha no `LineChart` | conferir que os dois tetos batem | o `LineChart` **importa** a função |
+
+⚠️ **No terceiro isso é decisivo, e a asserção mostra por quê:** *"os dois dão o
+mesmo teto"* **passaria com as duas contas duplicadas de novo** — era
+literalmente o estado anterior, medido com fuzz de 400 e zero divergências. Uma
+guarda de concordância não impede duplicação. Só a **ausência da segunda fonte**
+impede.
+
+> ### ⛔ O QUE SE CONGELA, ENTÃO, NÃO É A IGUALDADE — É A AUSÊNCIA
+>
+> ```js
+> // ⛔ não: passa com as duas fontes de volta
+> assert.equal(doModulo, doComponente);
+>
+> // ✅ sim: a aritmética não pode existir no componente
+> assert.ok(!/Math\.pow\(10, Math\.floor\(Math\.log10/.test(componente));
+> assert.ok(/import \{[^}]*escalaArredondada[^}]*\} from "@\/lib\/grafico\/eixo"/.test(componente));
+> ```
+
+### 🔎 O SINAL BARATO, e ele é anterior ao defeito
+
+**Um comentário afirmando que dois lugares usam a mesma coisa.** Se a frase
+precisou ser escrita, é porque o `import` não a torna óbvia — e se o `import`
+não existe, a frase é falsa. As duas de 14/08 eram:
+
+> *"`escalaArredondada` é a MESMA função do `LineChart` — os dois arredondam
+> igual **por construção**"* — e o `LineChart` não a importava.
+>
+> *"30 é o mesmo limiar do `/api/cron/manutencao`, **de propósito**"* — e lá
+> eram 14.
+
+```bash
+grep -rn "a MESMA\|o mesmo limiar\|por construção\|de propósito" src/ --include=*.ts --include=*.tsx
+```
+
+⛔ **A pergunta por acerto:** *o arquivo que a frase cita IMPORTA aquilo?* Se
+não importa, ou a frase é falsa hoje, ou ela é uma segunda fonte esperando
+divergir.
+
+⚠️ **E o quarto caso da sessão é o mesmo padrão numa camada acima:** a guarda
+do `encryptSecret("")` morava nos dois CHAMADORES, cada um do seu jeito, e não
+no módulo. Duas guardas para a mesma condição são duas fontes — e as duas
+sumiriam no dia de um terceiro chamador. A correção foi a mesma: **uma só, no
+lugar certo.**
+
+---
+
 # ⚖️ SÉRIE DE FONTE INDEPENDENTE DA VIZINHA: a razão não é conversão, é DISCORDÂNCIA ENTRE INSTRUMENTOS
 
 > **13/08/2026. É o CASO SIMÉTRICO da regra que já existe**, e faltava metade.
