@@ -1887,3 +1887,120 @@ parte reportou `exit 0` — e era o exit do **wrapper**, não do npm. A suíte t
 falhado. O que denunciou foi o total de asserções ter caído de 2.058 para 1.297.
 É *a medição não acertou o alvo* mais uma vez, e o que a pegou foi comparar com
 o baseline conhecido.
+
+---
+
+# ## Estado em 15/08/2026 — o que a suíte garante, e o que ninguém olhou
+
+> **Escrito ao encerrar a rodada de cobertura.** Substitui, para efeito de
+> estado, as seções de 14/08 acima — o que elas registram como PADRÃO continua
+> valendo; o que registram como NÚMERO foi remedido aqui.
+
+## ✅ VERDE, e em qual commit
+
+| | |
+|---|---|
+| commit | **`31df764`** |
+| `origin/main` | conferido por `git ls-remote`, não pelo que o `push` disse |
+| `tsc` | **0 erros** |
+| `lint` | **0 erros e 0 warnings** — contados na SAÍDA, nunca pelo exit |
+| `npm test` | exit **0**, **2.485 asserções em 80 scripts** |
+| agregado | **97 arquivos de teste, 0 órfãos** |
+
+⚠️ **O total é o denominador da suíte.** Ela é um `&&` encadeado: o primeiro
+script que reprova interrompe o resto, então **queda no total é assinatura de
+interrupção**, mesmo com exit 0. A progressão desta rodada foi
+2.058 → 2.093 → 2.161 → 2.277 → 2.370 → 2.379 → 2.412 → 2.479 → **2.485**.
+
+## 🔴 REGISTRADO E NÃO CORRIGIDO — as três
+
+### 1 · `buildPoints` tem dois denominadores, e nenhum é guardado por ela
+
+```ts
+arr.map((v, i) => `${(i * w) / (n - 1)},${h - pad - (v / max) * (h - pad * 2)}`)
+```
+
+| denominador | quando é zero | sai |
+|---|---|---|
+| `n - 1` | série com **um** ponto | `NaN` no x — é `0/0`, não `1/0` |
+| `max` | série toda **zerada** | `NaN` no y |
+
+⛔ **O segundo é o estado NORMAL de conta nova**, não caso de borda. E o
+sintoma já está medido neste projeto: *"todo `y` vira `NaN`, e o `<path>` da
+área degenera num retângulo cheio: na tela, uma barra azul sólida"*.
+
+**O que segura é o CHAMADOR:** `useTraffikState:734` escreve
+`cr.length > 1 ? cr : [...cr, ...cr]`. É proteção acidental — a propriedade não
+é do módulo e some no dia de um segundo chamador. `test:format-mensagem`
+congela a guarda do chamador **e a contagem de chamadores** por isso.
+
+⛔ Não corrigido: `format.ts` é anterior a `4e6aa9e`, e guardar os
+denominadores muda a geometria de um gráfico que não dá para ver nesta máquina.
+
+### 2 · 12 exports órfãos em `actions/diagnostics.ts`
+
+A tela de **Testes foi DELETADA** — a rota `integracoes/testes` não existe mais,
+e há asserção disso. Ela levou os consumidores de 12 server actions. **O módulo
+sobreviveu** porque outros 4 exports seguem em uso (`BannerPendencias`,
+`VisaoGeralScreen`, `WebhooksScreen`, `espelho.ts`), e por isso a varredura de
+órfãos **por arquivo** nunca os veria.
+
+⚠️ A `TestesView` era a dívida que o `CLAUDE.md` registrava com prazo (*"ela
+MORRE no passo de Integrações"*). Ela morreu; **as server actions dela não**.
+
+⛔ Não deletadas: a regra desta base é perguntar o que o órfão FAZIA antes de
+apagá-lo, e 12 actions de diagnóstico são decisão de produto — parte do que elas
+respondem (espelho, checklist de instalação, testador de payload) pode ter de
+voltar em outra tela.
+
+### 3 · `v2loja` passa no discriminador de hash
+
+O endurecimento de 14/08 (`palavra + número` não é hash) fechou 5 de 6 falsos
+positivos e o caso multi-tenant. **`v2loja` fica**: o dígito está no meio, e
+separá-lo de um hash gerado exigiria palpite sobre o hospedeiro — que é
+exatamente o que `pixel/ambiente.ts` recusa por princípio.
+
+✅ Tem asserção própria em `test:ambiente-padroes`, para não parecer
+esquecimento. ⚠️ E a assimetria do teste de prefixo **é irredutível**: ele fala
+de um CONJUNTO, e a ingestão vê um host por vez.
+
+## ⛔ O QUE SEGUE SEM MEDIÇÃO — e nada nesta rodada mudou isso
+
+### Os quatro itens de TELA
+
+| # | | |
+|---|---|---|
+| 1 | bandas de **8, 4 e 1 coluna** (`960–1279`, `640–959`, `<640`) | só **2260** foi medida — 1 de 5 larguras |
+| 2 | **origem A** da §7.2 — vão entre conteúdos | não medida |
+| 3 | **origem B** da §7.2 — vão até a borda | não medida |
+| 4 | **`h` derivado de medição de estado VAZIO** | não medido |
+
+⛔ **Não os marque como feitos por asserção verde.** O que existe são funções
+puras testadas (`test:vazio-origens`, `test:grade`, `test:catalogo-f0b`); o que
+falta é o que só a tela responde. O instrumento de janela segue **indisponível
+nesta máquina** — sete caminhos medidos e registrados, `document.hidden` em
+todas as sondagens.
+
+### A metade dos alertas que o `AlertList` deve
+
+O construtor é puro e está coberto: **`test:alertas`, 58 asserções, 7 alertas,
+cada um com o par dispara / não-dispara.**
+
+⛔ **Nenhum foi visto DESENHADO.** `AlertList.tsx` é apenas LIDO por
+`teste-grade.mjs` (análise estática da grade); ele nunca é renderizado por
+teste nenhum.
+
+| metade | estado |
+|---|---|
+| o alerta é CONSTRUÍDO quando deve | ✅ 7 de 7, com o par |
+| o alerta é DESENHADO na tela | ⛔ **0 de 7** |
+
+⚠️ **Isto não é a mesma dívida dos quatro itens acima.** Aqueles precisam de
+janela; este precisa de um render — e `AlertList` **não porta para o `<body>`**,
+então `renderToStaticMarkup` o alcança. É a dívida mais barata da lista, e a
+única desta seção que não depende do instrumento indisponível.
+
+⚠️ E o `faltam-taxas` é o mais novo dos sete: ele voltou em 14/08 depois de
+**dois dias e meio sem consumidor**, e o que garante que ele não some de novo é
+`test:alertas` §6c — a asserção de que a TELA passa o campo e filtra `active`.
+Ela cobre a plumbagem, não o desenho.
