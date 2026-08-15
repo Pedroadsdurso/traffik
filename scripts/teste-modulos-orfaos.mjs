@@ -323,6 +323,90 @@ const orfaos = libs.filter((f) => temImportador(f) === null);
   );
 }
 
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 4 · 🔴 ESTA VARREDURA É POR MÓDULO, E ELA NÃO VÊ O EXPORT ÓRFÃO DENTRO DE
+ *     UM MÓDULO VIVO
+ *
+ * Achado em 14/08/2026: `calcularFita`, em `lib/funil/fita.ts`, não tem
+ * consumidor nenhum — nem em `src/`, nem em `scripts/`. Mas o MÓDULO tem
+ * (`calcularFluxo` e `segmentosDaFita` são importados pelo `FitaFunil`), então
+ * a §1 nunca o alcança.
+ *
+ * > ## Módulo vivo com export morto é o mesmo defeito do módulo morto — só que invisível para uma varredura que conta arquivos.
+ *
+ * ### ⛔ E A VARREDURA POR EXPORT **NÃO** VIRA GUARDA — medido antes de tentar
+ *
+ * Rodada em 14/08: **74 exports** de `src/lib/` sem consumidor fora do próprio
+ * arquivo. E a lista mistura três coisas que só a leitura separa:
+ *
+ * | | exemplo |
+ * |---|---|
+ * | morto de verdade | `calcularFita`, `calcularFunil` |
+ * | **exportado SÓ para o teste** | `evaluateRule`, `metricValue`, `conditionsMet`, `planejarAcao` |
+ * | exportado e usado só internamente | `fatorDeRateio`, `paisEhMelhor` |
+ *
+ * ⛔ A segunda categoria é **deliberada nesta base**: o `07` registra que o
+ * motor de regras recebeu *"três `export`, e nada mais"* justamente para ficar
+ * alcançável por teste. Uma guarda que acusasse os 74 reprovaria o que foi
+ * decidido de propósito — e lista inflada é lista desacreditada, que é a regra
+ * do CRITÉRIO LARGO DEMAIS.
+ *
+ * ✅ Por isso o `calcularFita` entra como asserção NOMEADA, e não como
+ * varredura. O custo de uma lista à mão aqui é conhecido; o de uma lista com
+ * 74 falsos positivos é maior.
+ * ═════════════════════════════════════════════════════════════════════ */
+{
+  console.log("\n4 · 🔴 o export órfão dentro de um módulo vivo");
+
+  const semCom = (s) =>
+    s.replace(/\r\n/g, "\n").replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " ")).replace(/\/\/[^\n]*/g, "");
+
+  /* ⚠️ Os `teste-*.mjs` ficam FORA do conjunto de consumidores — é a regra que
+     esta base já escreve: não é "alguém importa?", é "alguém ALÉM DO TESTE
+     importa?". Um símbolo cujo único chamador é a fixture está morto com
+     atestado de saúde. */
+  const { globSync } = await import("node:fs");
+  const consumidores = [...globSync("src/**/*.{ts,tsx}"), ...globSync("scripts/**/*.mjs")]
+    .map((f) => f.replace(/\\/g, "/"))
+    .filter((f) => !f.includes("generated") && !/^scripts\/teste-/.test(f) && f !== "src/lib/funil/fita.ts");
+
+  const citam = consumidores.filter((f) => /\bcalcularFita\b/.test(semCom(readFileSync(f, "utf8"))));
+
+  ok(
+    "linha de base: o MÓDULO `funil/fita.ts` está vivo",
+    temImportador("src/lib/funil/fita.ts") !== null,
+    "importado por " + temImportador("src/lib/funil/fita.ts") + " — por isso a §1 não o vê",
+  );
+  ok(
+    "linha de base: e ele exporta `calcularFita`",
+    /export function calcularFita/.test(readFileSync("src/lib/funil/fita.ts", "utf8")),
+  );
+  ok(
+    "🔴 `calcularFita` não tem consumidor de produção",
+    citam.length === 0,
+    citam.join(" · ") || "0 de " + consumidores.length + " arquivos examinados",
+  );
+
+  /* E os irmãos dele TÊM — é o que prova que o módulo não está inteiro morto,
+     e que o alvo da medição é o export, não o arquivo. */
+  for (const vivo of ["calcularFluxo", "segmentosDaFita"]) {
+    const quem = consumidores.filter((f) => new RegExp("\\b" + vivo + "\\b").test(semCom(readFileSync(f, "utf8"))));
+    ok(
+      "…enquanto `" + vivo + "` tem " + quem.length,
+      quem.length > 0,
+      quem[0] ?? "",
+    );
+  }
+
+  console.log(
+    "\n   \x1b[33m⚠️  REGISTRADO, NÃO DELETADO. `calcularFita` é a geometria da\n" +
+      "      fita, e a regra desta base é perguntar o que o órfão FAZIA antes de\n" +
+      "      apagá-lo — só a leitura responde, e apagar 40 linhas de geometria no\n" +
+      "      meio de um commit de cobertura mistura dois motivos de revisão.\x1b[0m",
+  );
+}
+
 console.log(
   "\n\x1b[32m  ✅ `faltamTaxas` FOI RELIGADO em 14/08/2026 — no construtor de alertas" +
     "\n      do Dashboard, não na tela de Taxas: o aviso vale onde o número inflado" +
