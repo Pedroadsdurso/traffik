@@ -4264,6 +4264,54 @@ elo, ou se lê o arquivo — as duas coisas medem a suíte; um `echo` no fim med
 examinadas é indistinguível de *"a suíte não chegou lá"*. O total **é** o
 denominador da suíte inteira.
 
+### 🔻 A MESMA FAMÍLIA UMA CAMADA ABAIXO: `eslint` sai **0 com warnings**
+
+O caso da suíte é sobre um comando composto. Este é sobre um comando SÓ, e é
+pior porque não há nenhum `echo` para culpar:
+
+```
+npx eslint .            →  exit 0,  "✖ 1 problem (0 errors, 1 warning)"
+```
+
+⛔ **O exit do `eslint` reporta ERROS. Warnings não entram nele.** Então
+`npx eslint . ; echo $?` devolve `0` para um repositório que acabou de perder o
+piso de zero warnings — e o piso é justamente o que faz *o próximo warning ser
+sinal*.
+
+> ### 🔎 A VERIFICAÇÃO É CONTAR A SAÍDA, NUNCA LER O STATUS
+> ```bash
+> SAIDA=$(npx eslint . 2>&1)
+> echo "warnings: $(echo "$SAIDA" | grep -c warning)"
+> ```
+> A pergunta binária: **quantos warnings a saída tem?** `0` é a única resposta
+> que vale. O exit não distingue `0 warnings` de `12 warnings`.
+
+⚠️ É a mesma forma dos dois primos: `"0 falhas"` sem o denominador, `exit 0` de
+um `echo`, e agora `exit 0` de um linter que só conta erros. **Nos três, o
+instrumento funcionou e respondeu a outra pergunta.**
+
+> ## 🔴 O AGRAVANTE, e ele é o registro que importa
+>
+> Eu quebrei o piso de zero warnings e **declarei o conserto feito sem estar** —
+> troquei `{ donos, ...resto }` por `{ donos: _, ...resto }`, que só RENOMEIA o
+> binding sem uso. E fiz isso **dois commits depois de escrever a guarda do
+> `exit 0` de wrapper neste arquivo.**
+>
+> ## Guarda escrita não protege quem a escreveu.
+>
+> Ela não é um hábito adquirido no ato de redigi-la: é um procedimento que
+> precisa ser EXECUTADO, e eu pulei a execução exatamente na versão mais fácil
+> do mesmo erro. O que me pegou não foi lembrar da regra — foi o lint acusar de
+> novo no comando seguinte.
+>
+> ⛔ **Daí a forma da regra:** ela não pode ser *"lembre-se de conferir"*. Tem
+> de ser um comando que produz um NÚMERO, e o número tem de aparecer antes de a
+> frase "está corrigido" ser escrita. Se a conferência não deixou um número na
+> tela, ela não aconteceu.
+
+⚠️ E o motivo de `{ donos: _ }` não resolver é medível em um comando: este lint
+não tem `varsIgnorePattern`, então `_` é um binding como qualquer outro. O jeito
+sem binding é não desestruturar — `({ ...dtoParaForm(px), donos: {} })`.
 ---
 
 # 🕸️ GUARDA QUE LÊ ARQUIVO ALHEIO É DEPENDÊNCIA INVISÍVEL
