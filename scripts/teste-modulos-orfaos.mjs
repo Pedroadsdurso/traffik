@@ -407,6 +407,116 @@ const orfaos = libs.filter((f) => temImportador(f) === null);
   );
 }
 
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 5 · A VARREDURA POR SÍMBOLO — ela RODA barato, e NÃO vira allowlist
+ *
+ * A §4 registrava que a varredura por export não era viável. Tentada de novo
+ * em 15/08/2026, com um corte a mais: separar "morto" de "exportado SÓ para o
+ * teste", que era o ruído que a inviabilizava.
+ *
+ * **Medido: 74 exports sem consumidor de produção → 41 citados por algum
+ * `teste-*.mjs`, 33 não.** O corte funciona como REDUÇÃO.
+ *
+ * ### ⛔ MAS O DISCRIMINADOR CONFLACIONA DUAS COISAS, e a prova é este arquivo
+ *
+ * "Citado por um teste" significa duas coisas diferentes:
+ *
+ * | | exemplo |
+ * |---|---|
+ * | exportado **para** o teste alcançar | `evaluateRule` — o `07` registra "três `export`, e nada mais" |
+ * | **morto**, e um teste documenta a morte | `calcularFita` — citado 8× pela §4, aqui em cima |
+ *
+ * ⛔ `calcularFita` é morto, e o corte o joga no balde dos vivos — **porque a
+ * asserção que prova que ele é morto conta como citação**. Escrever o registro
+ * muda o resultado da medição.
+ *
+ * > ## Uma guarda cujo critério é alterado pelo ato de registrar o achado não pode ser allowlist: a lista se auto-invalida no commit seguinte.
+ *
+ * ### ✅ O QUE ELA VIRA, ENTÃO: INVENTÁRIO PUBLICADO COM TETO
+ *
+ * Ela imprime os dois baldes a cada execução — o denominador fica na tela — e
+ * reprova se o total CRESCER. Um símbolo que perde o último consumidor sobe a
+ * contagem e aparece na lista impressa, que é o que se queria; e nenhuma lista
+ * à mão precisa ser mantida, que é o que a inviabilizava.
+ *
+ * ⚠️ **O limite está escrito:** um empate (apagar um morto e criar outro) passa
+ * pelo teto. A lista impressa é o que resolve isso, e ela depende de alguém
+ * ler — como a evidência de agrupamento do `test:catalogo-f0b`.
+ * ═════════════════════════════════════════════════════════════════════ */
+{
+  console.log("\n5 · o inventário de exports sem consumidor");
+
+  const testes = globSync("scripts/teste-*.mjs").map((f) => f.replace(/\\/g, "/"));
+  const txtTestes = testes.map((f) => readFileSync(f, "utf8")).join("\n");
+
+  const mortos = [];
+  const paraTeste = [];
+  for (const f of libs) {
+    for (const m of fontes.get(f).matchAll(/export (?:async )?function (\w+)/g)) {
+      const nome = m[1];
+      let usado = false;
+      for (const [g, s] of fontes) {
+        if (g === f) continue;
+        if (new RegExp("\\b" + nome + "\\b").test(s)) { usado = true; break; }
+      }
+      if (usado) continue;
+      (new RegExp("\\b" + nome + "\\b").test(txtTestes) ? paraTeste : mortos).push(
+        f.replace("src/lib/", "") + " :: " + nome,
+      );
+    }
+  }
+
+  /** Medido em 15/08/2026. Teto, não alvo: ele existe para acusar CRESCIMENTO. */
+  const TETO = 74;
+
+  console.log("   denominador: " + (mortos.length + paraTeste.length) + " exports sem consumidor de produção");
+  console.log("     · " + paraTeste.length + " citados por algum teste (inclui os exportados PARA o teste)");
+  console.log("     · " + mortos.length + " sem citação nenhuma:");
+  for (const x of mortos) console.log("       - " + x);
+
+  ok(
+    "linha de base: a varredura achou exports dos DOIS tipos",
+    mortos.length > 0 && paraTeste.length > 0,
+    "senão o detector estaria devolvendo tudo num balde só",
+  );
+  ok(
+    "linha de base: e ela reconhece consumo — a maioria dos exports NÃO entra",
+    mortos.length + paraTeste.length < 200,
+    "um detector quebrado listaria todos os exports de `src/lib/`",
+  );
+
+  ok(
+    "o total de exports sem consumidor não CRESCEU",
+    mortos.length + paraTeste.length <= TETO,
+    (mortos.length + paraTeste.length) + " de teto " + TETO +
+      " — se subiu, alguém deletou o último consumidor de algo. A lista impressa acima nomeia.",
+  );
+
+  /* 🔴 O maior aglomerado, e ele tem causa conhecida: a tela de Testes foi
+     DELETADA e levou os consumidores das server actions de diagnóstico — mas o
+     módulo sobreviveu porque outros quatro exports seguem em uso. É o caso que
+     a varredura por ARQUIVO (§1) não tem como ver. */
+  {
+    const doDiagnostico = mortos.filter((x) => x.startsWith("actions/diagnostics.ts"));
+    ok(
+      "🔴 o maior aglomerado é `actions/diagnostics.ts`",
+      doDiagnostico.length >= 8,
+      doDiagnostico.length + " exports — a tela de Testes foi deletada e levou os consumidores",
+    );
+    ok(
+      "…e o MÓDULO continua vivo, por isso a §1 não o vê",
+      temImportador("src/lib/actions/diagnostics.ts") !== null,
+      "importado por " + temImportador("src/lib/actions/diagnostics.ts"),
+    );
+    ok(
+      "linha de base: a rota de Testes de fato não existe mais",
+      globSync("src/app/dashboard/(app)/integracoes/testes/**").length === 0,
+      "sem isto, o aglomerado poderia ser defeito do detector",
+    );
+  }
+}
+
 console.log(
   "\n\x1b[32m  ✅ `faltamTaxas` FOI RELIGADO em 14/08/2026 — no construtor de alertas" +
     "\n      do Dashboard, não na tela de Taxas: o aviso vale onde o número inflado" +
