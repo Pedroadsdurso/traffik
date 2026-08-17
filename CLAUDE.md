@@ -474,7 +474,7 @@ As **v1 (13 fases)** estão completas e reais. O **roteiro v2 (13 blocos)** tamb
 > | `docs/design/04-CONFERENCIA-COM-AS-REFERENCIAS.md.txt` | 🥇 **o inventário do que precisa existir, tela por tela, conferido contra as 11 imagens.** Tem **precedência sobre todos** os outros documentos de design | **antes de qualquer tela do redesign** |
 > | `docs/design/03-ARQUITETURA-DE-TELAS.md` | estrutura das telas, catálogo de blocos, as três zonas do Dashboard. **Perde para o `04`** em divergência | desenhar uma tela ou o modo de edição |
 > | `docs/design/03-FASE-1-DECISOES.md` | arquitetura de **tokens** (`--tk-*`, `@theme inline`), não de telas. O nome engana | mexer em token ou no `globals.css` |
-> | `docs/design/05-MAPA-DAS-RAZOES.md` | 🚧 **levantamento INCOMPLETO** das razões com denominador zero. **Só o item 4 (regras de automação) está pronto** — e é o urgente | **antes de mexer em qualquer métrica derivada** |
+> | `docs/design/05-MAPA-DAS-RAZOES.md` | ✅ **FECHADO em 06/08/2026 — 0 de 24 pontos com contrato errado.** A regra do denominador zero (`div()` de `lib/ads/metrics.ts` é fonte única) e os 3 que devolvem `0` de propósito por serem GEOMETRIA | mexer em métrica derivada, para não reintroduzir o colapso |
 > | `docs/design/05-MOCKUPS-VS-TOKENS.md` | os 4 conflitos mockup × sistema e **como cada um foi decidido** (canal só dentro do gráfico, roxo como categoria, selo tingido, gradiente não preenche botão) | mexer em cor, selo ou botão |
 > | `docs/design/06-LINGUAGEM-VISUAL.md` | 🎨 **as medidas do acabamento em NÚMEROS** — raio, padding, sombra, curva, hachura, pílula de variação, e a ORDEM DE APLICAÇÃO por resultado/custo. ⚠️ cita 4 imagens que **não estão no repo** | antes de qualquer trabalho visual |
 | `docs/design/06-CRIADOR-DE-REGRAS.md` | ⛔ **especificação de algo que NÃO existe** — fora do escopo do redesign, por decisão | só se for decidir construir o motor |
@@ -2306,7 +2306,26 @@ ativos ou não. **6 de 10 âncoras com a cor errada antes; 0 de 10 depois.** A
 mecânica completa está na seção própria, acima — procure por *"CSS SEM CAMADA
 VENCE UTILITÁRIO DO TAILWIND"*.
 
-## 🚧 EM ANDAMENTO — o mapa das razões com denominador zero
+## ✅ CONCLUÍDO NO MESMO DIA — o mapa das razões com denominador zero
+
+> ### ⛔ ESTA SEÇÃO DIZIA "EM ANDAMENTO", E FICOU ASSIM POR ONZE DIAS
+>
+> Ela foi escrita no MEIO da sessão de 06/08, com quatro itens "⛔ não começou".
+> O mapa **fechou naquele mesmo dia** — `0 de 24`, e o `05` abre com
+> *"✅ FECHADO EM 06/08/2026"*. A tabela abaixo ficou congelada no estado
+> intermediário.
+>
+> 🔴 **E ela não era inofensiva:** em 17/08/2026 eu propus "terminar o mapa"
+> como próximo passo, lendo daqui. O dono corrigiu. É a família da **afirmação
+> replicada** — três cópias diziam pendente, uma dizia fechado, e a que tinha
+> MEDIÇÃO era a última.
+>
+> ⚠️ A tabela fica, **riscada**, porque ela é o registro de como o trabalho
+> andou naquele dia. O que não pode é ser lida como estado.
+
+| ~~item~~ | ~~estado no meio da sessão~~ |
+|---|---|
+| *(o quadro abaixo é histórico — o desfecho é `0 de 24`, fechado)* | |
 
 **Documento: `docs/design/05-MAPA-DAS-RAZOES.md`.** Levantamento, **não**
 correção — o dono foi explícito: *"NÃO CORRIJA NADA. Quero decidir com o mapa na
@@ -2351,7 +2370,9 @@ em arquivo local, de propósito. Quem responde é
 
 ## ➡️ PRÓXIMO PASSO, e por quê
 
-**Terminar o mapa — itens 1, 2, 3 e 5** de `05-MAPA-DAS-RAZOES.md`.
+~~**Terminar o mapa — itens 1, 2, 3 e 5**~~ → ✅ **O MAPA FECHOU EM 06/08/2026**,
+no mesmo dia em que esta linha foi escrita. `0 de 24` pontos com contrato
+errado. ⛔ Não leia o que segue como fila: é o raciocínio daquele momento.
 
 O item 2 é o de maior valor: *"hero mostra `0,00x`, faixa mostra `—` para o mesmo
 período — são dois caminhos de código ou o mesmo valor formatado de dois jeitos?"*
@@ -3284,6 +3305,78 @@ NÃO consertado**.
 > dia alguém "unificar" os dois para eliminar a divergência, o lado que perde é
 > o Insights — e o defeito volta no lugar onde ele custa dinheiro, porque lá o
 > produto RECOMENDA em vez de listar.
+
+# ⚖️ LGPD E PRIVACIDADE — parecer técnico de 17/08/2026
+
+> ## ⛔ NÃO É PARECER JURÍDICO. Escrito por mim, a pedido do dono, como mapa TÉCNICO para ele decidir.
+>
+> Base legal declarada, texto de banner e política de privacidade precisam de
+> revisão de quem responde legalmente pelo produto. **Nada daqui foi
+> implementado** — o dono pediu o parecer ANTES do código, e é assim que está.
+
+⚠️ **A divisão abaixo é o que mais importa neste registro.** O pedido original
+tratava tudo como desenho futuro; a medição mostrou que **parte já é situação
+corrente**. Misturar as duas faria uma decisão de produto parecer uma escolha
+de arquitetura ainda em aberto.
+
+## 🔴 SITUAÇÃO DE HOJE — não é recomendação, é o que já acontece
+
+| | |
+|---|---|
+| 🔴 **A CAPI já roda e já compartilha com a Meta** | toda venda dispara `Purchase`; `AddToCart`, `Lead` e `InitiateCheckout` também. Isso é **compartilhamento de dado pessoal com terceiro**, acontecendo agora, em produção |
+| 🔴 **O que vai junto** | e-mail e telefone do comprador (hasheados), `fbc`/`fbp`, e o **IP em claro** — `podeIrParaCapi` existe justamente porque a Meta recusa IP hasheado |
+| ⚠️ **O IP completo é armazenado** | `Click.ip`. Há purga progressiva e `ehIpAnonimizado`, mas a coluna guarda o valor cheio até ela rodar |
+| ⚠️ **Não existe banner de consentimento** | nem nosso, nem exigido do cliente. O script instala e captura |
+
+> ### ⛔ O QUE ISSO SIGNIFICA, E É DECISÃO DO DONO, NÃO MINHA
+>
+> Se o compartilhamento com a Meta exigir consentimento — e a leitura técnica
+> comum é que exige, por ser terceiro e finalidade de publicidade —, então
+> **isso não é um item de roadmap: é uma exposição corrente**, com dado de
+> comprador real já enviado.
+>
+> ⛔ **Registrado como fato, sem recomendação de ação embutida.** Qualquer
+> mudança aqui altera comportamento de quem já usa, e a decisão é do dono.
+
+## 🔎 O QUE EXIGE CONSENTIMENTO E O QUE NÃO EXIGE — leitura técnica
+
+**Não exige** (legítimo interesse, art. 7º IX — operação do serviço contratado
+pelo anunciante): pageview, referrer, scroll, tempo ativo, dispositivo,
+navegador, resolução, idioma, país por IP **anonimizado**, e os eventos de funil
+vinculados ao clique do próprio anúncio.
+
+**Exige**: persistir identificador no navegador além da sessão · o
+`fbclid` e o envio à CAPI (terceiro + publicidade) · rage click e exit intent
+**se guardarem coordenadas**.
+
+## ⛔ O QUE NÃO CAPTURAR DE JEITO NENHUM
+
+Conteúdo digitado em campo (nome, e-mail, cartão, CPF) · valor de
+`input`/`textarea` em qualquer forma · screenshot ou DOM de página de checkout ·
+URL com query string **sem sanear** — é por onde token de sessão e e-mail vazam
+sem ninguém ter pedido.
+
+⚠️ Vale para o que **já existe**: `Click.url` e `PixelEvent.url` guardam a URL
+como veio. Se um cliente puser e-mail em query string, ele está no nosso banco.
+**Não medi se acontece.**
+
+## ✅ RECOMENDAÇÃO — configuração "privacy-safe" padrão
+
+⛔ **Nada disto está implementado. É proposta, e o dono decide item a item.**
+
+| | proposta |
+|---|---|
+| IP | anonimizar **na ingestão** — derivar país/região e descartar os octetos finais. Metade já existe (Fase A da fila) |
+| cookie próprio | nenhum de longa duração; `sessionStorage`, como o `pixel.js` já faz |
+| comportamento | **marcos agregados** (25/50/75/100%), nunca trilha contínua |
+| **CAPI desligada por padrão** | 🔴 **NÃO FAÇA SEM DECISÃO DO DONO** — muda comportamento de quem já usa, e é a recomendação de maior impacto deste parecer |
+| banner | fornecido pela ferramenta como snippet **opcional**, com o script respeitando `navigator.globalPrivacyControl` e um `window.__tkConsent` |
+
+⚠️ E o **mapa de calor / gravação de cursor** ficou explicitamente **FORA** por
+decisão do dono: pesado, de baixo retorno, e é a captura que mais se aproxima
+de conteúdo de tela.
+
+---
 
 # 😴 MECANISMO DORMENTE — a afirmação é VERDADEIRA, e a condição mora em outro arquivo
 
