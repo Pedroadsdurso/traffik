@@ -217,6 +217,51 @@ export const EFEITOS = [
 ];
 
 /**
+ * 🔴 OS PROBLEMAS DE UMA VENDA — a leitura que faltava, em 17/08/2026.
+ *
+ * ## O par escritor-sem-leitor que esta função desfaz
+ *
+ * `marcarEfeito.ts` grava `capiStatus`, `checkoutStatus` e `notifStatus` em
+ * toda venda desde a Família 1. O único leitor era `resumoEfeitos`, uma server
+ * action da tela de `Integrações › Testes` — e quando a tela foi deletada, a
+ * action ficou órfã e foi podada junto. As três colunas ficaram **só com
+ * escritor**: gravadas em toda venda, lidas por ninguém.
+ *
+ * É a imagem espelhada do `Sale.apiCredentialId` (6 leitores, 0 escritores), e
+ * a mesma família: dado que existe, custa escrita, e não chega a lugar nenhum.
+ *
+ * ## ⛔ POR QUE A LEITURA VOLTA NA LINHA DA VENDA, e não num resumo
+ *
+ * O que estas colunas guardam é **por que ESTA venda não produziu o efeito** —
+ * um fato da linha, não uma estatística. Um resumo ("3 falharam") obriga quem
+ * lê a ir procurar QUAIS, e era exatamente essa fricção que fazia ninguém
+ * abrir a tela. Na linha, o problema chega junto do dinheiro.
+ *
+ * ⚠️ **Só o que pede AÇÃO entra.** `tom: "ok"` e `tom: "neutro"` ficam de fora:
+ * uma linha que anuncia "enviado à Meta ✓" em toda venda é ruído que se aprende
+ * a ignorar — e aí a que diz "não enviado" chega no meio de dez verdes. É a
+ * mesma regra do `AlertList`.
+ *
+ * ⚠️ **NULO não entra**, e é a distinção central deste projeto: venda anterior
+ * às colunas tem os três nulos, e nulo é ausência de informação, nunca alarme.
+ * Quem garante isso é o `ler()` acima, que devolve `null` — não esta função.
+ */
+export function problemasDaVenda(v: {
+  capiStatus?: string | null;
+  checkoutStatus?: string | null;
+  notifStatus?: string | null;
+}): { chave: "capi" | "checkout" | "notif"; rotulo: string; acao: string | null }[] {
+  const porChave = { capi: v.capiStatus, checkout: v.checkoutStatus, notif: v.notifStatus };
+  return EFEITOS.flatMap((e) => {
+    const s = e.ler(porChave[e.chave]);
+    /* ⛔ O filtro é por `tom`, derivado das TABELAS — nunca uma lista de status
+       escrita aqui. Duas listas para a mesma pergunta divergem no primeiro
+       status novo, e é o motivo de o `STATUS_PROBLEMA` acima ser derivado. */
+    return s && s.tom === "problema" ? [{ chave: e.chave, rotulo: s.rotulo, acao: s.acao }] : [];
+  });
+}
+
+/**
  * Recorta a mensagem crua antes de gravar.
  *
  * A Meta devolve corpo de erro longo e às vezes com a URL da documentação

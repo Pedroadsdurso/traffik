@@ -18,6 +18,7 @@ import {
 import { chaveDoPedido, contarPedidos, umPorPedido } from "@/lib/pedidos";
 import { ehFonteMeta, nomeDaFonte } from "@/lib/fontes";
 import { ehTemplateNaoSubstituido, splitPipe } from "@/lib/utm/parse";
+import { problemasDaVenda } from "@/lib/webhook/efeitos";
 import { CAMPOS_UTM, utmsDaVenda } from "@/lib/vendas/utmsDaVenda";
 import { getImpostoAnunciosPct } from "@/lib/impostoAnuncios";
 import { calcularFinanceiro, type Composicao } from "@/lib/financeiro";
@@ -241,6 +242,15 @@ export interface DashboardData {
     campaign: string;
     value: number | null;
     ts: number;
+    /**
+     * 🔴 O que deu errado DEPOIS que esta venda entrou — só o que pede AÇÃO.
+     *
+     * Vazio é o caso normal e o esperado. ⚠️ Ele NÃO distingue "correu tudo
+     * bem" de "esta linha não é uma venda" nem de "venda anterior às colunas" —
+     * e não precisa: nos três a tela não afirma nada, que é a resposta certa.
+     * O alarme é a presença, nunca a ausência.
+     */
+    problemas?: { rotulo: string; acao: string | null }[];
   }[];
   filterOptions: { accounts: { id: string; name: string }[]; products: string[]; sources: string[] };
 }
@@ -377,6 +387,17 @@ async function windowAggregate(
         // O resolvedor de área precisa destes três para aplicar a precedência.
         webhookId: true,
         apiCredentialId: true,
+        /* 🔴 OS TRÊS EFEITOS PÓS-VENDA — no `select` desde 17/08/2026.
+           `marcarEfeito.ts` os grava em toda venda desde a Família 1, e o único
+           leitor era uma server action da tela de Testes: quando a tela morreu,
+           as colunas ficaram SÓ COM ESCRITOR. A leitura voltou na LINHA da
+           venda (`buildActivity`), que é onde a informação é acionável.
+           ⚠️ Fora do `select` eles chegam `undefined`, `problemasDaVenda`
+           devolve `[]`, e a linha fica muda com ar de saudável — a armadilha do
+           `pedidoId`, de novo. */
+        capiStatus: true,
+        checkoutStatus: true,
+        notifStatus: true,
         // ⚠️ Os UTMs vêm das DUAS pontas de propósito: a cadeia `Sale -> Click`
         // é a fonte, e a cópia na venda é o seguro para quando o clique some
         // (`clickId` é `SetNull`). Ver `lib/vendas/utmsDaVenda`.
@@ -1507,6 +1528,12 @@ function buildActivity(w: Window) {
       campaign: feedUtms.utmCampaign ?? s.product,
       value: num(s.value),
       ts: s.timestamp.getTime(),
+      /* ⛔ A conta é da função PURA, nunca uma lista de status escrita aqui:
+         duas listas para a mesma pergunta divergem no primeiro status novo, e
+         a divergência seria invisível do pior jeito — a linha pintaria um
+         problema que o vocabulário não reconhece, ou calaria um que ele
+         reconhece. */
+      problemas: problemasDaVenda(s).map((p) => ({ rotulo: p.rotulo, acao: p.acao })),
     });
   }
   for (const c of w.clicks.slice(0, 40)) {

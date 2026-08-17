@@ -843,6 +843,11 @@ export function useTraffikState(
          ⛔ Isso quebra no dia em que alguem passar `initialDashData` do
          layout. Se for fazer isso, troque por `<Desde>` (tk/Desde.tsx). */
       timeLabel: elapsed(f.ts),
+      /* 🔴 A LEITURA QUE FALTAVA. `capiStatus`/`checkoutStatus`/`notifStatus`
+         eram gravados em toda venda e lidos por ninguém desde que a tela de
+         Testes morreu — par escritor-sem-leitor. A conta é do servidor (função
+         pura `problemasDaVenda`); aqui é só repasse. */
+      problemas: f.problemas,
     };
   });
 

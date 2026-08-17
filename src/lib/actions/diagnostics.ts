@@ -75,22 +75,28 @@ export async function listWebhookLogs(limit = 20, webhookId?: string): Promise<W
    | `listTestablePixels` · `testarPayloadDeGateway` · `listarGatewaysDoTestador` · `carregarExemploDeGateway` | o testador de payload | ⚪ idem — e `lib/gateways/testador.ts` continua de pé |
    | `getPendenciasDasAreas` | o PLURAL do `getPendenciasDaArea` | ⚪ o singular tem consumidor |
 
-   ## 🔴 A LINHA VERMELHA — três colunas ficaram SÓ COM ESCRITOR
+   ## ✅ A LINHA VERMELHA FOI FECHADA NO MESMO DIA — a leitura voltou
 
-   `marcarEfeito.ts` grava `capiStatus`, `checkoutStatus` e `notifStatus` em
-   toda venda. Com o `resumoEfeitos` fora, **ninguém as lê**. É a imagem
-   espelhada do `Sale.apiCredentialId` (6 leitores, 0 escritores) — e a mesma
-   família: dado que existe, é gravado, e não chega a lugar nenhum.
+   Por algumas horas as três colunas ficaram **só com escritor**: `marcarEfeito`
+   as grava em toda venda e, com o `resumoEfeitos` fora, ninguém as lia. Era a
+   imagem espelhada do `Sale.apiCredentialId` (6 leitores, 0 escritores).
 
-   ⚠️ **As colunas NÃO foram removidas de propósito.** Elas guardam por que um
-   efeito pós-venda falhou, e essa era a informação que se perdia em
-   `console.error` antes de a Família 1 existir. Apagá-las junto seria desfazer
-   a correção; deixá-las sem leitor é dívida REGISTRADA, com o `grep` que a acha:
+   ⛔ **Havia duas saídas, e a de parar de escrever foi RECUSADA**: as colunas
+   guardam *por que* um efeito falhou, que é exatamente a informação perdida em
+   `console.error` antes da Família 1. Fechar o par apagando a escrita seria
+   reverter o conserto para arrumar a contabilidade de leitores.
 
-       grep -rn "capiStatus\|checkoutStatus\|notifStatus" src/ --include=*.ts
+   ✅ **A leitura voltou na LINHA da venda**, não num resumo: `problemasDaVenda`
+   (puro, em `webhook/efeitos.ts`) → `buildActivity` → `FeedVendas`. O que a
+   coluna guarda é um fato DAQUELA venda; um resumo obrigaria quem lê a ir
+   procurar quais, e era essa fricção que fazia ninguém abrir a tela.
 
-   🔜 Quem for religar: a pergunta *"algum efeito pós-venda falhou?"* é ALERTA
-   (pede decisão), não tela — a mesma porta que o `padrao-teste-` usa.
+   ⚠️ **O que este bloco continua a registrar** é a poda, não a dívida: as
+   outras sete saídas seguem valendo, e `resumoEfeitos` saiu de verdade — o que
+   voltou foi a PERGUNTA dele, em outro lugar e em outra forma.
+
+   ✅ Congelado em `npm run test:efeitos-na-linha` (32 asserções), que mede o
+   par nas DUAS pontas: quem escreve continua escrevendo, e existe quem leia.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 // ─────────────────────── Checklist de instalação ───────────────────────

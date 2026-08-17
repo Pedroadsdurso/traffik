@@ -1956,6 +1956,29 @@ interrupção**, mesmo com exit 0. A progressão desta rodada foi
 >
 > ⛔ Bastou tirar UMA perna do tripé: o removedor voltou, no alerta.
 >
+> ### ✅ E A PODA ABRIU UM SEGUNDO PAR, FECHADO NO MESMO DIA
+>
+> `resumoEfeitos` era o **único leitor** de `Sale.capiStatus`, `checkoutStatus`
+> e `notifStatus`. Podá-la deixou as três **só com escritor** — imagem
+> espelhada do `Sale.apiCredentialId` (6 leitores, 0 escritores).
+>
+> ⛔ **Duas saídas fechavam o par, e a de PARAR DE ESCREVER foi recusada:** as
+> colunas guardam *por que* um efeito pós-venda falhou, que é exatamente a
+> informação perdida em `console.error` antes da Família 1. Apagar a escrita
+> seria reverter o conserto para arrumar a contabilidade de leitores.
+>
+> ✅ A leitura voltou **na LINHA da venda**, não num resumo: `problemasDaVenda`
+> (puro) → `buildActivity` → `FeedVendas`. O que a coluna guarda é um fato
+> DAQUELA venda; um resumo obrigaria quem lê a ir procurar quais, e era essa
+> fricção que fazia ninguém abrir a tela.
+>
+> ⚠️ Na linha, o problema **desaloja a campanha** em vez de disputar largura com
+> ela — e o texto é o sinal, com o ⚠ só acompanhando. Informação que só existe
+> no `title` não existe: no toque não há hover, e esta base já pagou por isso
+> com o resumo do gargalo do funil.
+>
+> ✅ `test:efeitos-na-linha`, **32 asserções**, medindo o par nas duas pontas.
+>
 > ⚠️ **A metade dos alertas também fechou** — ver o fim desta seção.
 
 ### 1 · ~~`buildPoints` tem dois denominadores, e nenhum é guardado por ela~~ → ✅ GUARDADO

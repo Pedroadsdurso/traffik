@@ -198,21 +198,39 @@ secao("4 · ⚠️ O registro das podadas vive no arquivo, e nomeia o que se per
     "sem isto, a poda vira `git log` — e ninguém lê `git log` de um arquivo que nunca abriu",
   );
 
-  /* 🔴 A LINHA VERMELHA: três colunas ficaram só com ESCRITOR. É a imagem
-     espelhada do `Sale.apiCredentialId` (6 leitores, 0 escritores). */
-  const LEITORES = globSync("src/**/*.{ts,tsx}")
+  /* ✅ A LINHA VERMELHA FOI FECHADA — e esta asserção MUDOU DE VEREDITO.
+
+     Ela afirmava que as 3 colunas estavam só com escritor, e o rodapé chamava
+     isso de "dívida REGISTRADA". Passava, verde — ou seja, a suíte exigia que
+     o par continuasse aberto. Um teste que congela o estado ruim não fica
+     obsoleto de forma visível: ele fica VERDE, e o que o denuncia é reprovar
+     no dia do conserto. Foi o que aconteceu, algumas horas depois.
+
+     ⛔ Havia duas saídas para o par, e a de PARAR DE ESCREVER foi recusada:
+     as colunas guardam por que um efeito falhou, que é a informação perdida em
+     `console.error` antes da Família 1. Fechar o par apagando a escrita seria
+     reverter o conserto para arrumar a contagem de leitores.
+
+     A asserção agora exige o inverso, e o detalhe está em
+     `test:efeitos-na-linha`, que mede o par nas duas pontas. */
+  const TOCAM = globSync("src/**/*.{ts,tsx}")
     .map((f) => f.replace(/\\/g, "/"))
     .filter((f) => !f.includes("generated/"))
     .filter((f) => /capiStatus|checkoutStatus|notifStatus/.test(semCom(ler(f))));
   ok(
-    "4 · 🔴 MEDIDO: as 3 colunas de efeito ficaram SÓ com escritor",
-    LEITORES.length === 1 && LEITORES[0].endsWith("webhook/marcarEfeito.ts"),
-    LEITORES.join(" · ") + " — só escreve. Dívida REGISTRADA, não escondida",
+    "4 · linha de base: as colunas de efeito aparecem em `src/`",
+    TOCAM.length >= 2,
+    TOCAM.map((f) => f.split("/").pop()).join(" · "),
   );
   ok(
-    "4 · …e o arquivo diz isso, com o `grep` que a acha",
-    /SÓ COM ESCRITOR|SO COM ESCRITOR/.test(FONTE) && /grep -rn "capiStatus/.test(FONTE),
-    "registro sem o comando que o reencontra é narrativa",
+    "4 · ✅ o par escritor-sem-leitor foi FECHADO — alguém lê as 3 colunas",
+    TOCAM.some((f) => f.endsWith("dashboard/metrics.ts")),
+    "a leitura voltou na LINHA da venda, não num resumo — `test:efeitos-na-linha`",
+  );
+  ok(
+    "4 · …e o arquivo registra a DECISÃO, não só a poda",
+    /RECUSADA/.test(FONTE) && /problemasDaVenda/.test(FONTE),
+    "registro que não diz o que foi decidido, e por quê, é narrativa",
   );
 
   /* ⚠️ E o par que prova que a poda não foi cega: o `resumoEspelhos` saiu

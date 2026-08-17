@@ -27,6 +27,14 @@ export interface ItemFeed {
   timeLabel: string;
   source?: string | null;
   campaign?: string | null;
+  /**
+   * 🔴 O que deu errado DEPOIS que esta venda entrou — só o que pede AÇÃO.
+   *
+   * Vazio é o caso normal. ⚠️ Ele não distingue "correu bem" de "esta linha não
+   * é uma venda" nem de "venda anterior às colunas", e não precisa: nos três a
+   * tela não afirma nada. **O alarme é a presença, nunca a ausência.**
+   */
+  problemas?: { rotulo: string; acao: string | null }[];
 }
 
 /** A linha do `+N`: uma `text-caption` com a margem de cima. Medida uma vez. */
@@ -101,12 +109,57 @@ export function FeedVendas({ itens, limite = 12 }: { itens: ItemFeed[]; limite?:
               A cor acelera; o texto é quem informa. */}
           <span aria-hidden="true" style={{ width: 7, height: 7, borderRadius: 99, background: f.cor, flex: "none" }} />
           <span className="text-caption text-text" style={{ flex: "none" }}>{f.typeLabel}</span>
-          <span
-            className="text-caption text-text-muted tk-feed-origem"
-            style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-          >
-            {f.campaign || f.source || ""}
-          </span>
+          {/* 🔴 QUANDO A VENDA TEM PROBLEMA, ELE OCUPA A CÉLULA LARGA — no lugar
+              da campanha, não ao lado dela.
+
+              ⛔ A alternativa era um ícone com o texto no `title`, e esta base
+              já pagou por isso: o resumo do gargalo do funil ficou invisível no
+              DOM por uma sessão, e a palavra "não medido" teve de sair do
+              `title` para a tela. Informação que só existe no `title` não
+              existe — no toque não há hover.
+
+              A troca não custa largura e inverte a prioridade certa: "a venda
+              não chegou ao Facebook" vale mais que o nome da campanha, e a
+              campanha continua alcançável no `title`.
+
+              ⚠️ O glifo NÃO é o sinal: ele acompanha o texto. Cor e ícone
+              sozinhos não comunicam gravidade (WCAG 1.4.1) — é a mesma regra
+              do `AlertList`. */}
+          {f.problemas && f.problemas.length > 0 ? (
+            <span
+              className="text-caption tk-feed-origem"
+              /* O `title` é COMPLEMENTO, nunca a única via: a linha já mostra o
+                 problema. Aqui vai a AÇÃO (que não caberia) e a campanha (que
+                 o problema desalojou). */
+              title={[
+                f.problemas.map((p) => (p.acao ? `${p.rotulo} — ${p.acao}` : p.rotulo)).join(" · "),
+                f.campaign || f.source || null,
+              ]
+                .filter(Boolean)
+                .join(`\n`)}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                color: "var(--tk-warning)",
+              }}
+            >
+              <span aria-hidden="true">⚠ </span>
+              {f.problemas[0].rotulo}
+              {/* Um segundo problema não cabe na linha, e sumir com ele seria a
+                  tela afirmando que só há um. O `+N` diz que há mais. */}
+              {f.problemas.length > 1 ? ` +${f.problemas.length - 1}` : ""}
+            </span>
+          ) : (
+            <span
+              className="text-caption text-text-muted tk-feed-origem"
+              style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+            >
+              {f.campaign || f.source || ""}
+            </span>
+          )}
           <span className="text-caption text-text" style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
             {f.valueLabel}
           </span>
