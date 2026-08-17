@@ -1907,6 +1907,21 @@ o baseline conhecido.
 | `npm test` | exit **0**, **2.485 asserções em 80 scripts** |
 | agregado | **97 arquivos de teste, 0 órfãos** |
 
+> ### ✅ 17/08/2026 — remedido
+>
+> | | |
+> |---|---|
+> | `tsc` | **0 erros** |
+> | `lint` | **0 warnings, 0 errors** — contados na saída |
+> | `npm test` | exit **0**, **2.608 asserções em 82 scripts** |
+>
+> A progressão continua: 2.379 → 2.412 → 2.479 → 2.485 → **2.608**.
+>
+> ⚠️ **E o total pegou a interrupção antes do exit, de novo.** A primeira
+> execução desta rodada saiu com **1.297 em 49 scripts** — queda de mais da
+> metade, assinatura de `&&` interrompido. O exit também era 1 ali, mas o que
+> apontou ONDE foi o total; ver o achado do `test:modulos-orfaos` no item 2.
+
 ⚠️ **O total é o denominador da suíte.** Ela é um `&&` encadeado: o primeiro
 script que reprova interrompe o resto, então **queda no total é assinatura de
 interrupção**, mesmo com exit 0. A progressão desta rodada foi
@@ -1914,7 +1929,64 @@ interrupção**, mesmo com exit 0. A progressão desta rodada foi
 
 ## 🔴 REGISTRADO E NÃO CORRIGIDO — as três
 
-### 1 · `buildPoints` tem dois denominadores, e nenhum é guardado por ela
+> ## ✅ ATUALIZADO EM 17/08/2026 — as duas primeiras FECHARAM
+>
+> | | 15/08 | 17/08 |
+> |---|---|---|
+> | 1 · `buildPoints` sem guarda | 🔴 registrado | ✅ **guardado**, com invariante |
+> | 2 · 12 exports órfãos | 🔴 registrado | ✅ **triados por consequência** — nenhum deletado, e um deles NÃO PODE ser |
+> | 3 · `v2loja` no discriminador | ⏸️ fica | ⏸️ fica, sem mudança |
+>
+> ⚠️ **A metade dos alertas também fechou** — ver o fim desta seção.
+
+### 1 · ~~`buildPoints` tem dois denominadores, e nenhum é guardado por ela~~ → ✅ GUARDADO
+
+> ### ✅ 17/08/2026 — e o que autorizou mexer em código anterior a `4e6aa9e`
+>
+> Os dois denominadores são guardados **na função**: `n > 1` para o x,
+> `Number.isFinite(max) && max > 0` para o y. A série zerada deita no piso
+> (`h - pad`), que é exatamente onde `v = 0` já plotava com qualquer `max > 0` —
+> **limite contínuo da conta, não valor de conveniência**, e há asserção de
+> continuidade para o dia em que alguém trocar o piso por `h / 2` ou por
+> "esconder o ponto".
+>
+> 🔑 **O instrumento de janela continua indisponível, então a conferência visual
+> foi substituída por algo mais forte que "parece igual":**
+>
+> > **Toda entrada cuja saída ANTES era finita produz saída IDÊNTICA, caractere
+> > por caractere.** Medido por fuzz de 400 entradas com semente fixa: **265
+> > finitas, 0 divergências; 135 degeneradas, todas agora finitas.**
+>
+> Por isso as expressões dentro do ramo guardado são as MESMAS —
+> `(i * w) / (n - 1)` não virou `i * (w / (n - 1))`, que é igual no papel e
+> diferente no último bit. ✅ Provado pelo lado negativo: um deslocamento de
+> **1e-9** aplicado só a séries de 4+ pontos (que o §1 não vê) derruba a
+> invariante **nomeando a entrada exata**.
+>
+> ⚠️ **O limite está escrito na guarda:** ela cobre o DENOMINADOR, nunca os
+> VALORES. `NaN` dentro de `arr` continua saindo `NaN` — sanear ali esconderia
+> defeito de quem produziu a série, que é a família do `?? 0`.
+>
+> ### ⛔ E A LINHA DO CHAMADOR NÃO É MAIS GUARDA — É DECISÃO DE DESENHO
+>
+> A leitura natural agora é *"guarda duplicada, some com ela"*, e esta base
+> resolve duas fontes da mesma conta APAGANDO uma. **Aqui não são a mesma
+> conta**, e as duas saídas são visíveis:
+>
+> | quem trata o ponto único | o que o `<polyline>` desenha |
+> |---|---|
+> | a FUNÇÃO (`n > 1`) | `0,y` — polilinha de um ponto **não desenha nada** |
+> | o CHAMADOR (duplica) | `0,y w,y` — uma **linha reta** de ponta a ponta |
+>
+> Apagar a duplicação é **mudança de tela**, não faxina. Há asserção com o par.
+>
+> ⚠️ O `Math.max(1, …)` do `combinedMax`, esse sim, ficou redundante — os dois
+> põem a série zerada no piso. Fica por ser também o máximo do EIXO; se alguém
+> o remover, o desenho não muda. A distinção está registrada para a decisão ser
+> tomada com o número na mão.
+
+<details>
+<summary>O registro de 15/08, preservado — o defeito como ele era</summary>
 
 ```ts
 arr.map((v, i) => `${(i * w) / (n - 1)},${h - pad - (v / max) * (h - pad * 2)}`)
@@ -1937,7 +2009,61 @@ congela a guarda do chamador **e a contagem de chamadores** por isso.
 ⛔ Não corrigido: `format.ts` é anterior a `4e6aa9e`, e guardar os
 denominadores muda a geometria de um gráfico que não dá para ver nesta máquina.
 
-### 2 · 12 exports órfãos em `actions/diagnostics.ts`
+</details>
+
+### 2 · ~~12 exports órfãos em `actions/diagnostics.ts`~~ → ✅ TRIADOS
+
+> ### 🔴 A TRIAGEM PRODUZIU UM ACHADO QUE VALE MAIS QUE A LIMPEZA
+>
+> `npm run test:diagnosticos-orfaos` — **24 asserções**. Nenhuma action foi
+> deletada, e a classe A **não pode** ser:
+>
+> | classe | quantas | se for deletada |
+> |---|---|---|
+> | 🔴 **A · remédio** | 2 | viola propriedade declarada em OUTRO módulo |
+> | ⚠️ **B · vigilância** | 4 | nada quebra hoje — e é esse o problema: a falha que elas veem é MUDA |
+> | ⚪ **C · apoio** | 6 | custa só o trabalho de reescrever |
+>
+> **`lib/pixel/ambiente.ts` declarava**, sobre o bloqueio de host de teste:
+> *"a lista é REMOVÍVEL na tela … irreversível é exatamente o que ela não pode
+> ser."*
+>
+> Medido: `removerPadraoDeTeste` é o **único escritor de
+> `User.testHostPatterns` em toda a base**, e está órfã. A tela que a chamava
+> foi deletada.
+>
+> ## ⛔ Ou seja: a propriedade declarada JÁ ESTÁ VIOLADA, e apagar a action a tornaria permanente — com o módulo vizinho continuando a afirmar o contrário.
+>
+> É o `segredoInicial` outra vez: **comportamento desalojado**, não código
+> inerte. O sinal barato se repetiu — o nome é um VERBO. E o comentário do
+> `ambiente.ts` foi reescrito (afirmação que mudou é APAGADA, não mantida ao
+> lado do que vale hoje), com asserção de que ele não afirma mais uma tela
+> inexistente.
+>
+> ### 🎯 DOIS ERROS MEUS DE INSTRUMENTO, e os dois são a mesma família
+>
+> | # | o que mediu errado | o que denunciou |
+> |---|---|---|
+> | 1 | a varredura contou **o próprio arquivo de triagem** como consumidor e reportou *"12 religadas"* | o número ser exatamente 12 |
+> | 2 | citar os 12 nomes moveu-os de `mortos` para `paraTeste` no `test:modulos-orfaos` — **o aglomerado caiu de 12 para 0**, e o TETO passou | só a asserção do aglomerado; o teto sozinho deixaria passar |
+>
+> ⛔ **O segundo é o mais instrutivo**, e é a *guarda que lê arquivo alheio*:
+> o teste que quebrou era de outro item, e rodar "o teste do item" dava verde.
+> Um arquivo cuja função é NOMEAR órfãos cita todos eles — e citar faz a triagem
+> parecer cobertura. `teste-modulos-orfaos.mjs` agora o exclui, com o motivo
+> escrito. ⚠️ E os dois baldes afirmam coisas diferentes: `paraTeste` quer dizer
+> *"há asserção exercitando isto"*, e **para os 12 não há nenhuma** — medido e
+> afirmado no próprio `test:diagnosticos-orfaos`.
+>
+> ⚠️ **Correção de registro:** o `07` listava `espelho.ts` entre os 4
+> consumidores. Ele não é — `diagnostics.ts` **importa** `ordemDoEspelho` DELE.
+> A direção estava invertida: são **3** arquivos consumidores, **2** exports.
+>
+> 🔜 **Fica aberto, e é decisão do dono:** as classes B e C. E a saída da classe
+> A não é deletar nem manter — é **uma tela que chame `removerPadraoDeTeste`**.
+
+<details>
+<summary>O registro de 15/08, preservado</summary>
 
 A tela de **Testes foi DELETADA** — a rota `integracoes/testes` não existe mais,
 e há asserção disso. Ela levou os consumidores de 12 server actions. **O módulo
@@ -1952,6 +2078,8 @@ MORRE no passo de Integrações"*). Ela morreu; **as server actions dela não**.
 apagá-lo, e 12 actions de diagnóstico são decisão de produto — parte do que elas
 respondem (espelho, checklist de instalação, testador de payload) pode ter de
 voltar em outra tela.
+
+</details>
 
 ### 3 · `v2loja` passa no discriminador de hash
 
@@ -1981,19 +2109,67 @@ falta é o que só a tela responde. O instrumento de janela segue **indisponíve
 nesta máquina** — sete caminhos medidos e registrados, `document.hidden` em
 todas as sondagens.
 
-### A metade dos alertas que o `AlertList` deve
+### ✅ A metade dos alertas que o `AlertList` devia — PAGA em 17/08/2026
 
 O construtor é puro e está coberto: **`test:alertas`, 58 asserções, 7 alertas,
-cada um com o par dispara / não-dispara.**
+cada um com o par dispara / não-dispara.** Faltava o desenho, e ele era a dívida
+mais barata da lista — a única que não depende do instrumento de janela.
 
-⛔ **Nenhum foi visto DESENHADO.** `AlertList.tsx` é apenas LIDO por
-`teste-grade.mjs` (análise estática da grade); ele nunca é renderizado por
-teste nenhum.
+| metade | 15/08 | 17/08 |
+|---|---|---|
+| o alerta é CONSTRUÍDO quando deve | ✅ 7 de 7, com o par | ✅ |
+| o alerta é DESENHADO | ⛔ **0 de 7** | ✅ **7 de 7** — `test:alertas-desenho`, **89 asserções** |
 
-| metade | estado |
-|---|---|
-| o alerta é CONSTRUÍDO quando deve | ✅ 7 de 7, com o par |
-| o alerta é DESENHADO na tela | ⛔ **0 de 7** |
+**Cada alerta é renderizado SOZINHO**, com o mesmo par do construtor: a entrada
+que dispara desenha o título, o detalhe, o tinte da severidade e o link; a
+entrada que não dispara desenha o **estado vazio** e o título some.
+
+> ### ⛔ A NEGAÇÃO AQUI É SEGURA POR ESTRUTURA, e é o que o arquivo prova primeiro
+>
+> *Negação sobre string vazia sempre passa* — um componente que porta devolve
+> `""`, e `!html.includes("X")` vira atestado de que algo não está lá quando
+> NADA está. Aqui escapa porque com zero alertas o `AlertList` renderiza o
+> estado vazio, que é markup de verdade: **toda negação carrega junto a
+> afirmação de que o vazio foi desenhado.**
+>
+> ✅ **Provado pelo lado negativo, duas vezes.** Apagar o rótulo de severidade
+> → 7 falhas nomeadas (WCAG 1.4.1). Fazer o componente PORTAR → o §0 reprova
+> primeiro, e o arquivo inteiro cai em vez de ficar verde medindo `""`.
+
+### 🔎 O QUE A MEDIÇÃO ACHOU DE QUEBRA — o `limite` não manda antes de haver medição
+
+⛔ **Renderizar os sete juntos e procurar os sete títulos mediria o
+TRUNCAMENTO, não o desenho** — e daria **1 de 7** com o componente
+perfeitamente correto. Foi a sonda que evitou isso, e o achado virou asserção:
+
+```
+6 alertas, limite padrão (3) ....  desenhados [1]            rodapé "+ 5 alertas"
+6 alertas, limite 6 ............  desenhados [1,2,3,4,5,6]   rodapé —
+```
+
+A causa é uma guarda que existe numa conta e não na vizinha:
+
+```ts
+const cabem     = ch > 0 && hLinha > 0 ? Math.max(1, …) : limite;   // ✅ guarda o não-medido
+const comRodape = ordenados.length > cabem ? Math.max(1, Math.floor((ch + 8 - 26) / (hLinha + 8))) : cabem;  // ⛔ não guarda
+```
+
+Com `ch = 0` e `hLinha = 0` — **todo render de servidor, e o primeiro do
+cliente antes de o `ResizeObserver` disparar** — dá `Math.floor(-18 / 8) = -3`,
+e o `Math.max(1, …)` segura em **1**. É *endurecer uma porta com a outra
+aberta*, na camada de layout.
+
+⛔ **MEDIDO, REGISTRADO, NÃO CORRIGIDO.** Corrigir muda quantos alertas o
+Dashboard pinta antes da primeira medição — geometria de tela, na máquina em
+que o instrumento de janela está indisponível. *Nenhum limiar sem medição do
+próprio bloco*; *asserção verde não fecha o que a tela não confirmou*. A
+asserção congela o valor MEDIDO para a correção aparecer como falha, e não como
+mudança silenciosa.
+
+⚠️ **Também não é a mesma dívida dos quatro itens de tela**: aqueles precisam
+de janela; este precisava de um render — e `AlertList` **não porta para o
+`<body>`**, então `renderToStaticMarkup` o alcança. Há asserção disso, para o
+dia em que alguém o fizer portar.
 
 ⚠️ **Isto não é a mesma dívida dos quatro itens acima.** Aqueles precisam de
 janela; este precisa de um render — e `AlertList` **não porta para o `<body>`**,

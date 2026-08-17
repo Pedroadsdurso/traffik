@@ -290,11 +290,27 @@ export function familiasDePreview(hosts: string[]): FamiliaDePreview[] {
  * irreversível (o evento não vai para a CAPI e não volta), então a aprovação
  * amplia o alcance da regra, nunca afrouxa o teste que a torna confiável.
  *
- * ## ⚠️ Por isso a lista é REMOVÍVEL na tela
+ * ## 🔴 POR ISSO A LISTA PRECISA SER REMOVÍVEL — e HOJE ELA NÃO É
  *
- * Integrações › Testes lista os padrões aprovados com botão de remover. Uma
- * regra de bloqueio que só saísse por SQL seria irreversível na prática — e
- * irreversível é exatamente o que ela não pode ser.
+ * Uma regra de bloqueio que só saísse por SQL seria irreversível na prática, e
+ * irreversível é exatamente o que ela não pode ser. **Esse requisito está
+ * violado agora**, e o registro fica aqui em vez de numa tela porque foi a tela
+ * que sumiu:
+ *
+ * | | medido em 17/08/2026 |
+ * |---|---|
+ * | quem remove | `removerPadraoDeTeste`, em `actions/diagnostics.ts` |
+ * | quem a chama | ⛔ **ninguém** — `Integrações › Testes` foi deletada |
+ * | outros escritores de `User.testHostPatterns` | **nenhum** |
+ *
+ * ⚠️ Ou seja: a action existe, funciona e é inalcançável pelo produto. Quem
+ * aprovar uma família por `eventos:marcar --aplicar` só desfaz por script.
+ *
+ * ⛔ **NÃO "resolva" isto deletando a action órfã.** Ela não é código inerte —
+ * é o remédio desta regra, desalojado. Apagá-la converte "irreversível na
+ * prática" em irreversível, ponto, com este comentário ainda por perto dizendo
+ * que não podia. A saída é uma tela que a chame; até lá, a triagem que segura
+ * a decisão é `npm run test:diagnosticos-orfaos`.
  */
 export interface PadraoAprovado {
   padrao: string;

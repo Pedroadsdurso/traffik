@@ -87,9 +87,74 @@ export function elapsed(ts: number): string {
   return anos <= 1 ? "1 ano atrás" : anos + " anos atrás";
 }
 
+/**
+ * Os pontos de um `<polyline>`/`<polygon>`, em coordenadas de tela.
+ *
+ * ## 🔴 OS DOIS DENOMINADORES — guardados aqui em 17/08/2026
+ *
+ * A versão anterior era uma linha:
+ *
+ * ```ts
+ * arr.map((v, i) => `${(i * w) / (n - 1)},${h - pad - (v / max) * (h - pad * 2)}`)
+ * ```
+ *
+ * | denominador | quando é zero | o que saía |
+ * |---|---|---|
+ * | `n - 1` | série com **um** ponto | `NaN` no x — é `0/0`, não `1/0` |
+ * | `max`   | série toda **zerada**  | `NaN` no y |
+ *
+ * ⛔ **O segundo é o estado NORMAL de conta nova**, não caso de borda: é o dia 1
+ * de todo usuário. E o sintoma já está medido neste projeto — *"todo `y` vira
+ * `NaN`, e o `<path>` da área degenera num retângulo cheio: na tela, uma barra
+ * azul sólida"*. O dano não fica no ponto: a string inteira vai para o `points`,
+ * e o chamador ainda tira `lastX`/`lastY` do último par, que viram `"NaN"` como
+ * atributo no DOM.
+ *
+ * ## ⚠️ O QUE SEGURAVA ERA O CHAMADOR — e isso não é contrato
+ *
+ * `useTraffikState:734` escreve `cr.length > 1 ? cr : [...cr, ...cr]` e
+ * `Math.max(1, …)` no `max`. Os dois seguram, e nenhum dos dois é propriedade
+ * DESTA função: some no dia de um segundo chamador, que não herda guarda
+ * nenhuma. É a *proteção acidental* — "não quebra" nunca foi "não pode
+ * quebrar".
+ *
+ * ## ⛔ A GUARDA PRESERVA A ARITMÉTICA, e é isso que autoriza mexer aqui
+ *
+ * `format.ts` é anterior a `4e6aa9e`, e o instrumento de janela está
+ * indisponível nesta máquina — ou seja, não dá para conferir na tela. Por isso
+ * as expressões abaixo são **as mesmas**, caractere por caractere, dentro do
+ * ramo guardado: `(i * w) / (n - 1)` não virou `i * (w / (n - 1))`, que seria
+ * algebricamente igual e diferente no último bit.
+ *
+ * > **Invariante congelada em `test:format-mensagem`: toda entrada cuja saída
+ * > hoje é FINITA produz saída idêntica.** Só o que era `NaN` mudou.
+ *
+ * O piso (`h - pad`) não é número inventado: é exatamente onde `v = 0` já
+ * plota com qualquer `max > 0` — `h - pad - 0 * (h - pad * 2)`. A guarda é o
+ * limite contínuo da conta, não um valor de conveniência.
+ *
+ * ⚠️ **O limite dela, escrito para não virar promessa:** ela guarda o
+ * DENOMINADOR, nunca os VALORES. Um `NaN` dentro de `arr` continua saindo
+ * `NaN` — de propósito: sanear valor aqui esconderia defeito de quem produziu a
+ * série, que é a família do `?? 0`. E `max` não-finito ou `<= 0` com algum `v`
+ * positivo significa que o chamador calculou o máximo errado; o desenho vai
+ * para o piso em vez de para fora da tela, mas o defeito é dele.
+ */
 export function buildPoints(arr: number[], max: number, w: number, h: number, pad: number): string {
   const n = arr.length;
-  return arr.map((v, i) => `${(i * w) / (n - 1)},${h - pad - (v / max) * (h - pad * 2)}`).join(" ");
+  /* Um ponto só não tem vão para distribuir: ele é a primeira amostra, e a
+     primeira amostra mora na origem. Repartir `w` por zero é que não é. */
+  const temVao = n > 1;
+  /* `max <= 0` inclui a série toda zerada; `!isFinite` cobre o `max` quebrado
+     rio acima. Nos dois, a fração é 0 e a série deita no piso. */
+  const temEscala = Number.isFinite(max) && max > 0;
+  return arr
+    .map((v, i) => {
+      const x = temVao ? (i * w) / (n - 1) : 0;
+      const y = temEscala ? h - pad - (v / max) * (h - pad * 2) : h - pad;
+      return `${x},${y}`;
+    })
+    .join(" ");
 }
 
 /**

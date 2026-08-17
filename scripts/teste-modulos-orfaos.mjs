@@ -447,7 +447,24 @@ const orfaos = libs.filter((f) => temImportador(f) === null);
 {
   console.log("\n5 · o inventário de exports sem consumidor");
 
-  const testes = globSync("scripts/teste-*.mjs").map((f) => f.replace(/\\/g, "/"));
+  /**
+   * ⛔ `teste-diagnosticos-orfaos.mjs` FICA DE FORA, e a razão é a mesma que já
+   * tirou os testes do conjunto de CONSUMIDORES, um nível acima.
+   *
+   * > ## Um arquivo cuja função é NOMEAR órfãos cita todos eles — e citar aqui move o símbolo de `mortos` para `paraTeste`, ou seja, faz a triagem parecer cobertura.
+   *
+   * Aconteceu de verdade em 17/08/2026: aquele arquivo nasceu, os 12 exports de
+   * `actions/diagnostics.ts` migraram de balde, o total continuou 74 — o teto
+   * passou — e o aglomerado caiu de **12 para 0**. Só a asserção do aglomerado
+   * denunciou; sozinho, o teto teria deixado passar.
+   *
+   * ⚠️ E os dois baldes afirmam coisas diferentes: `paraTeste` quer dizer *"há
+   * asserção exercitando isto"*, e para os 12 não há nenhuma — o próprio
+   * `test:diagnosticos-orfaos` mede e afirma que não há.
+   */
+  const testes = globSync("scripts/teste-*.mjs")
+    .map((f) => f.replace(/\\/g, "/"))
+    .filter((f) => !f.endsWith("teste-diagnosticos-orfaos.mjs"));
   const txtTestes = testes.map((f) => readFileSync(f, "utf8")).join("\n");
 
   const mortos = [];

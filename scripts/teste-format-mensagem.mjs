@@ -84,55 +84,235 @@ const finitos = (s) => coords(s).every(([x, y]) => Number.isFinite(x) && Number.
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
- * 2 · 🔴 OS DOIS DENOMINADORES — medidos, NÃO corrigidos
+ * 2 · ✅ OS DOIS DENOMINADORES — GUARDADOS em 17/08/2026
+ *
+ * ## ⛔ ESTA SEÇÃO MUDOU DE VEREDITO, e a saída estava escrita nela
+ *
+ * Ela CONGELAVA o estado ruim: três asserções afirmavam que `NaN` sai, e uma
+ * delas literalmente checava `.includes("NaN")`. Elas passavam, e o rodapé
+ * dizia "REGISTRADO, NÃO CORRIGIDO" — ou seja, a suíte defendia o defeito.
+ *
+ * ⚠️ **Um teste que congela o valor errado não fica obsoleto de forma visível:
+ * ele fica VERDE.** O que o denuncia é a asserção reprovar no dia do conserto,
+ * e é por isso que a virada de veredito vale registro em vez de edição
+ * silenciosa: quem ler o `git log` desta seção vê que o `NaN` foi decisão de
+ * alguém, não descuido.
  * ═════════════════════════════════════════════════════════════════════ */
 {
-  console.log("\n2 · 🔴 os dois denominadores");
+  console.log("\n2 · ✅ os dois denominadores, guardados");
 
-  /* ── n - 1 = 0 */
+  /* ── n - 1 = 0 ─────────────────────────────────────────────────────────
+     ⚠️ Uma versão minha escreveu "produz `Infinity`" e MEDIU depois: era
+     `NaN`. Com um ponto só, o índice do único elemento é 0, então a conta é
+     `0 / 0` — indeterminação, não divisão de não-zero por zero. Supor a forma
+     do defeito é supor; a linha fica porque a asserção certa nasceu disso. */
   const umPonto = buildPoints([5], 10, W, H, PAD);
-  /* ⚠️ Eu escrevi "produz `Infinity`" e MEDI depois: é `NaN`. Com um ponto só,
-     o índice do único elemento é 0, então a conta é `0 / 0` — indeterminação,
-     não divisão de não-zero por zero. A asserção passava pelo `!finitos`, e a
-     DESCRIÇÃO é que estava errada. Supor a forma do defeito é supor. */
   ok(
-    "🔴 série de UM ponto produz `NaN` no x — `(0 * w) / 0`",
-    !finitos(umPonto) && Number.isNaN(coords(umPonto)[0][0]),
-    JSON.stringify(umPonto) + " — o `<polyline>` não desenha, e nada acusa",
+    "✅ série de UM ponto sai FINITA — o `0 / 0` do x foi guardado",
+    finitos(umPonto),
+    JSON.stringify(umPonto) + " — antes: `NaN,y`, e o `<polyline>` não desenhava",
   );
-  ok("…e é o x, não o y", !Number.isFinite(coords(umPonto)[0][0]) && Number.isFinite(coords(umPonto)[0][1]));
+  ok(
+    "…e o ponto único mora na ORIGEM — não há vão para repartir",
+    coords(umPonto)[0][0] === 0,
+    "x = " + coords(umPonto)[0][0],
+  );
+  ok(
+    "…e o y dele continua sendo o de sempre",
+    coords(umPonto)[0][1] === H - PAD - (5 / 10) * (H - PAD * 2),
+    "o guarda do x não podia mexer no y",
+  );
 
-  /* ── max = 0 */
+  /* ── max = 0 — o estado NORMAL de conta nova ─────────────────────────── */
   const tudoZero = buildPoints([0, 0, 0], 0, W, H, PAD);
   ok(
-    "🔴 série toda ZERADA produz `NaN` no y",
-    coords(tudoZero).some(([, y]) => Number.isNaN(y)),
-    JSON.stringify(tudoZero) + " — é o `retângulo cheio` que o CLAUDE.md mede",
+    "✅ série toda ZERADA sai FINITA — o `0 / 0` do y foi guardado",
+    finitos(tudoZero),
+    JSON.stringify(tudoZero) + " — antes: o `retângulo cheio` que o CLAUDE.md mede",
+  );
+  ok(
+    "…e ela deita no PISO, que é exatamente onde `v = 0` já plotava",
+    coords(tudoZero).every(([, y]) => y === H - PAD),
+    "piso = " + (H - PAD) + " — limite contínuo da conta, não número de conveniência",
   );
   ok(
     "…e uma série zerada é o estado NORMAL de conta nova",
-    buildPoints([0, 0], 0, W, H, PAD).includes("NaN"),
+    finitos(buildPoints([0, 0], 0, W, H, PAD)),
     "não é caso de borda: é o dia 1 de todo usuário",
   );
 
-  /* ⚠️ E o par que mostra que não é o zero em si: com `max > 0`, série zerada
-     desenha no piso, que é o desenho certo. */
+  /* ⛔ A CONTINUIDADE é o que prova que o piso não é invenção: a MESMA série,
+     com `max` 0 e com `max` 10, desenha no MESMO y. Se um dia alguém trocar o
+     piso por `h / 2`, por `0` ou por "esconder o ponto", este par cai. */
   ok(
-    "⚠️ com `max > 0`, a série zerada desenha no PISO — sem NaN",
-    finitos(buildPoints([0, 0], 10, W, H, PAD)),
-    "o defeito é o DENOMINADOR zero, não o valor zero",
+    "⛔ CONTINUIDADE: `max = 0` e `max > 0` põem a série zerada no MESMO y",
+    buildPoints([0, 0], 0, W, H, PAD) === buildPoints([0, 0], 10, W, H, PAD),
+    JSON.stringify(buildPoints([0, 0], 0, W, H, PAD)),
+  );
+
+  /* `max` não-finito é o chamador com o máximo quebrado rio acima. O desenho
+     vai para o piso em vez de para fora da tela — e o limite está escrito na
+     guarda, para não virar promessa de que a série foi saneada. */
+  ok(
+    "…e `max` NÃO-FINITO também não vaza para o DOM",
+    finitos(buildPoints([1, 2], NaN, W, H, PAD)) && finitos(buildPoints([1, 2], Infinity, W, H, PAD)),
+    "o defeito é de quem calculou o máximo; o que a guarda impede é o `NaN` no atributo",
+  );
+
+  /* ⛔ O LIMITE, e ele é asserção para não virar promessa: a guarda cobre o
+     DENOMINADOR, nunca os VALORES. Sanear `arr` aqui esconderia defeito de
+     quem produziu a série — é a família do `?? 0`. */
+  ok(
+    "⛔ LIMITE ESCRITO: `NaN` DENTRO da série continua saindo `NaN`",
+    !finitos(buildPoints([1, NaN, 3], 10, W, H, PAD)),
+    "a guarda é do denominador; sanear valor seria o `?? 0` de novo",
   );
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
- * 3 · A GUARDA MORA NO CHAMADOR — e é proteção acidental
+ * 2b · 🔑 A INVARIANTE QUE AUTORIZOU MEXER EM CÓDIGO CONGELADO
  *
- * ⛔ Sem esta seção, o §2 seria um achado sem consequência declarada: alguém
- * leria "produz Infinity" e não saberia se está em produção. Está protegido —
- * por uma linha do `useTraffikState`, não pela função.
+ * `format.ts` é anterior a `4e6aa9e`, e o instrumento de janela está
+ * indisponível nesta máquina — ou seja, **não dá para conferir o gráfico na
+ * tela**. O que substitui a conferência visual não é confiança: é uma
+ * invariante mais forte que "parece igual".
+ *
+ * > ## Toda entrada cuja saída ANTES era finita produz saída IDÊNTICA, caractere por caractere.
+ *
+ * Ou seja: nada que o usuário conseguia ver mudou de lugar. Só o que era `NaN`
+ * — e `NaN` não desenha — passou a existir.
+ *
+ * ⛔ Por isso a implementação antiga vive AQUI, como referência. Sem ela a
+ * afirmação seria uma opinião sobre álgebra: `(i * w) / (n - 1)` e
+ * `i * (w / (n - 1))` são iguais no papel e diferentes no último bit, e é
+ * exatamente esse tipo de troca "inofensiva" que move um pixel sem ninguém ver.
+ *
+ * ⚠️ **Semente FIXA.** Aleatório de verdade dá teste que falha uma vez por
+ * semana e ninguém reproduz.
  * ═════════════════════════════════════════════════════════════════════ */
 {
-  console.log("\n3 · a guarda do chamador");
+  console.log("\n2b · 🔑 a invariante: finito antes ⇒ idêntico depois");
+
+  /** A implementação ANTERIOR ao guarda, palavra por palavra. */
+  const antigo = (arr, max, w, h, pad) => {
+    const n = arr.length;
+    return arr.map((v, i) => `${(i * w) / (n - 1)},${h - pad - (v / max) * (h - pad * 2)}`).join(" ");
+  };
+
+  /* ⚠️ Gerador com semente fixa — o mesmo conjunto em toda execução, e grande
+     demais para alguém tê-lo escolhido a dedo. */
+  let semente = 7;
+  const rnd = () => ((semente = (semente * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+  const escolha = (a) => a[Math.floor(rnd() * a.length)];
+
+  let finitasAntes = 0;
+  let divergentes = [];
+  let naoFinitasAntes = 0;
+  for (let t = 0; t < 400; t++) {
+    const n = 1 + Math.floor(rnd() * 8);
+    const arr = Array.from({ length: n }, () => escolha([0, 0, rnd() * 1000, rnd() * 5, Math.floor(rnd() * 90)]));
+    const max = escolha([0, 1, Math.max(...arr), Math.max(...arr) * 1.15, rnd() * 2000]);
+    const w = escolha([100, 600, 37]);
+    const h = escolha([40, 180, 91]);
+    const pad = escolha([0, 4, 12]);
+
+    const a = antigo(arr, max, w, h, pad);
+    const b = buildPoints(arr, max, w, h, pad);
+    if (finitos(a)) {
+      finitasAntes++;
+      if (a !== b) divergentes.push({ arr, max, w, h, pad, a, b });
+    } else {
+      naoFinitasAntes++;
+    }
+  }
+
+  /* ⛔ LINHA DE BASE: sem ela, `divergentes.length === 0` passaria com ZERO
+     entradas finitas examinadas — que é o `=== 0` sobre coleção vazia de
+     novo. O denominador vai na saída, sempre. */
+  ok(
+    "linha de base: houve entrada finita para comparar",
+    finitasAntes > 100,
+    finitasAntes + " de 400 finitas antes · " + naoFinitasAntes + " degeneradas",
+  );
+  ok(
+    "🔑 INVARIANTE: onde a saída era finita, ela é IDÊNTICA",
+    divergentes.length === 0,
+    divergentes.length
+      ? JSON.stringify(divergentes[0]).slice(0, 200)
+      : finitasAntes + " entradas conferidas caractere por caractere",
+  );
+  /* E a outra metade: as degeneradas, que ANTES saíam `NaN`, agora saem
+     finitas. Sem esta, a invariante acima passaria com um `buildPoints` que
+     não mudou nada. */
+  ok(
+    "…e as DEGENERADAS, que saíam `NaN`, agora saem finitas",
+    naoFinitasAntes > 20,
+    naoFinitasAntes + " entradas — é o que o guarda passou a cobrir",
+  );
+  {
+    semente = 7;
+    let corrigidas = 0;
+    for (let t = 0; t < 400; t++) {
+      const n = 1 + Math.floor(rnd() * 8);
+      const arr = Array.from({ length: n }, () => escolha([0, 0, rnd() * 1000, rnd() * 5, Math.floor(rnd() * 90)]));
+      const max = escolha([0, 1, Math.max(...arr), Math.max(...arr) * 1.15, rnd() * 2000]);
+      const w = escolha([100, 600, 37]);
+      const h = escolha([40, 180, 91]);
+      const pad = escolha([0, 4, 12]);
+      if (!finitos(antigo(arr, max, w, h, pad)) && finitos(buildPoints(arr, max, w, h, pad))) corrigidas++;
+    }
+    ok(
+      "…e TODAS elas — nenhuma degenerada sobrou",
+      corrigidas === naoFinitasAntes,
+      corrigidas + " de " + naoFinitasAntes,
+    );
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * 3 · A LINHA DO CHAMADOR NÃO É MAIS GUARDA — ELA É DECISÃO DE DESENHO
+ *
+ * ## ⛔ E ESTA DISTINÇÃO É O QUE IMPEDE A PRÓXIMA FAXINA DE APAGÁ-LA
+ *
+ * Com o denominador guardado na função, a leitura natural de
+ * `cr.length > 1 ? cr : [...cr, ...cr]` passa a ser *"guarda duplicada, some
+ * com ela"* — e esta base tem a regra de que duas fontes da mesma conta se
+ * resolvem APAGANDO uma. **Aqui não são a mesma conta**, e as duas saídas são
+ * visíveis:
+ *
+ * | quem trata o ponto único | o que o `<polyline>` desenha |
+ * |---|---|
+ * | a FUNÇÃO (`n > 1`) | um par `0,y` — polilinha de um ponto **não desenha nada** |
+ * | o CHAMADOR (duplica) | `0,y w,y` — uma **linha reta** de ponta a ponta |
+ *
+ * A função impede o `NaN`; a duplicação decide que um dia de dado ainda vira
+ * uma linha visível em vez de um gráfico vazio. **Apagá-la é mudança de tela**,
+ * não limpeza — e a pergunta certa antes de remover um órfão nunca foi "alguém
+ * usa?", foi *"o que isto FAZIA?"*.
+ *
+ * ⚠️ O `Math.max(1, …)` do `combinedMax`, esse sim, virou redundante com o
+ * `temEscala`: os dois põem a série zerada no piso. Fica porque também é o
+ * máximo do EIXO, não só o denominador — mas se um dia alguém o remover, o
+ * desenho não muda. A distinção está aqui para a decisão ser tomada com o
+ * número na mão.
+ * ═════════════════════════════════════════════════════════════════════ */
+{
+  console.log("\n3 · a linha do chamador — decisão de desenho, não guarda");
+
+  /* ⛔ O PAR QUE PROVA A DISTINÇÃO ACIMA. Sem ele, a tabela do cabeçalho seria
+     prosa, e prosa não impede ninguém de apagar a duplicação. */
+  const semDuplicar = buildPoints([5], 10, W, H, PAD);
+  const duplicando = buildPoints([5, 5], 10, W, H, PAD);
+  ok(
+    "🔑 a duplicação do chamador NÃO é a mesma coisa que a guarda da função",
+    semDuplicar !== duplicando && coords(semDuplicar).length === 1 && coords(duplicando).length === 2,
+    JSON.stringify(semDuplicar) + "  ×  " + JSON.stringify(duplicando),
+  );
+  ok(
+    "…e é ela que faz UM dia de dado virar uma LINHA de ponta a ponta",
+    coords(duplicando)[0][0] === 0 && coords(duplicando)[1][0] === W,
+    "apagá-la deixaria o gráfico vazio — é mudança de tela, não faxina",
+  );
 
   const semCom = (s) =>
     s.replace(/\r\n/g, "\n").replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " ")).replace(/\/\/[^\n]*/g, "");
@@ -140,9 +320,9 @@ const finitos = (s) => coords(s).every(([x, y]) => Number.isFinite(x) && Number.
 
   ok("linha de base: o hook chama `buildPoints` no CÓDIGO", /buildPoints\(/.test(hook));
   ok(
-    "🔑 GUARDA: ele duplica o ponto único antes de chamar",
+    "🔑 ele duplica o ponto único antes de chamar",
     /length > 1 \? c[rs] : \[\.\.\.c[rs], \.\.\.c[rs]\]/.test(hook),
-    "é o que impede o `n - 1 === 0` — e é do chamador, não da função",
+    "hoje isso não impede mais o `NaN` — decide que um dia de dado vira LINHA",
   );
 
   /* E os chamadores continuam sendo os que se conhece. Um terceiro é
@@ -153,17 +333,22 @@ const finitos = (s) => coords(s).every(([x, y]) => Number.isFinite(x) && Number.
       .map((f) => f.replace(/\\/g, "/"))
       .filter((f) => !f.includes("generated") && !f.endsWith("lib/format.ts"))
       .filter((f) => /buildPoints\(/.test(semCom(readFileSync(f, "utf8"))));
+    /* ⚠️ A contagem de chamadores continua importando, e por outro motivo: um
+       segundo chamador agora HERDA a guarda do denominador (ela é da função),
+       e NÃO herda a decisão de desenho do §3 — ele desenharia vazio com um
+       ponto só, sem nada acusar. */
     ok(
-      "há UM arquivo chamador, e é o que guarda",
+      "há UM arquivo chamador",
       chamadores.length === 1 && chamadores[0].endsWith("useTraffikState.ts"),
-      chamadores.join(" · ") + " — um segundo chamador não herda a guarda",
+      chamadores.join(" · ") + " — um segundo herda a guarda, não a duplicação",
     );
   }
 
   console.log(
-    "\n   \x1b[33m⚠️  REGISTRADO, NÃO CORRIGIDO. `format.ts` é anterior a `4e6aa9e`,\n" +
-      "      e guardar os denominadores mudaria a geometria de um gráfico que não\n" +
-      "      dá para ver nesta máquina. MEDE · REGISTRA · AVISA.\x1b[0m",
+    "\n   \x1b[32m✅ CORRIGIDO em 17/08/2026. Os dois denominadores são guardados na\n" +
+      "      FUNÇÃO, e o §2b congela a invariante que autorizou mexer em código\n" +
+      "      anterior a `4e6aa9e` sem poder ver a tela: onde a saída era finita,\n" +
+      "      ela é IDÊNTICA caractere por caractere.\x1b[0m",
   );
 }
 
