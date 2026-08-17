@@ -1,15 +1,19 @@
 /**
- * OS SETE ALERTAS, DESENHADOS — a outra metade de `test:alertas`.
+ * OS OITO ALERTAS, DESENHADOS — a outra metade de `test:alertas`.
  *
  * ## 🔴 A DÍVIDA QUE ESTE ARQUIVO FECHA
  *
- * `test:alertas` cobre o CONSTRUTOR: 58 asserções, 7 alertas, cada um com o par
- * dispara / não-dispara. E o `07` registrava, ao encerrar 15/08/2026:
+ * `test:alertas` cobre o CONSTRUTOR, com o par dispara / não-dispara para cada
+ * alerta. E o `07` registrava, ao encerrar 15/08/2026:
  *
- * | metade | estado |
- * |---|---|
- * | o alerta é CONSTRUÍDO quando deve | ✅ 7 de 7, com o par |
- * | o alerta é DESENHADO na tela | ⛔ **0 de 7** |
+ * | metade | 15/08 | hoje |
+ * |---|---|---|
+ * | o alerta é CONSTRUÍDO quando deve | ✅ 7 de 7 | ✅ 8 de 8 |
+ * | o alerta é DESENHADO na tela | ⛔ **0 de 7** | ✅ **8 de 8** |
+ *
+ * ⚠️ O oitavo (`padrao-teste-`, §7b) nasceu em 17/08 e é o único com AÇÃO: ele
+ * anuncia um bloqueio irreversível e carrega o botão que o desfaz, porque a
+ * tela que fazia isso foi deletada e o remédio tinha ficado inalcançável.
  *
  * `AlertList.tsx` era apenas LIDO por `teste-grade.mjs` (análise estática da
  * grade) — nenhum teste o renderizava. É a família *"passa no build com a coisa
@@ -41,11 +45,17 @@
  *   6 alertas, limite 6 ......... desenhados [1,2,3,4,5,6]    rodapé —
  *   0 alertas ................... estado vazio, 585 chars
  *
- * ⛔ **Por isso cada alerta é renderizado SOZINHO.** Renderizar os sete juntos e
- * procurar os sete títulos mediria o truncamento, não o desenho — e daria 1 de
- * 7 com o componente perfeitamente correto. É *a medição não acertou o alvo*
- * esperando para acontecer, e a §9 abaixo a converte em asserção explícita em
- * vez de deixá-la como armadilha.
+ * ⛔ **Por isso cada alerta é renderizado SOZINHO.** Renderizar os oito juntos e
+ * procurar os oito títulos mediria o TRUNCAMENTO, não o desenho — e daria 1 de
+ * 8 com o componente perfeitamente correto. É *a medição não acertou o alvo*
+ * esperando para acontecer, e a §9 a converteu em asserção explícita em vez de
+ * deixá-la como armadilha.
+ *
+ * ✅ **E a linha do meio virou defeito CONSERTADO em 17/08/2026.** Ela media o
+ * `comRodape`, que calculava sem guarda de estado não medido e prendia o
+ * visível em **1**. Hoje a mesma sonda devolve `desenhados [1,2,3]` com rodapé
+ * `+ 3 alertas` — o `limite` declarado. As três linhas acima ficam como estavam
+ * porque são o retrato do que a sonda achou; quem diz o que vale hoje é a §9.
  *
  *   npm run test:alertas-desenho
  */
@@ -187,7 +197,7 @@ function par(rotulo, entradaQueDispara, entradaQueNao, idEsperado) {
   ok(`${rotulo} · …e o título SOME do markup`, !tNao.includes(alerta.titulo), alerta.titulo);
 }
 
-console.log("\n\x1b[1mOs sete alertas, DESENHADOS\x1b[0m");
+console.log("\n\x1b[1mOs oito alertas, DESENHADOS\x1b[0m");
 
 /* ═══ 0 · A LINHA DE BASE DO ARQUIVO INTEIRO ════════════════════════════════
 
@@ -340,6 +350,48 @@ par("7", pixelCom([{ chave: "Purchase", bruto: "1", assumido: "traffik" }]), pix
   ok("7 · o título NOMEIA o pixel", t.includes("Pixel Loja"));
 }
 
+/* ═══ 7b · `padrao-teste-<host>` — o único alerta com AÇÃO, e é a porta ═══
+
+   🔴 Um padrão aprovado bloqueia envio à CAPI **na ingestão**, e o evento não
+   volta. A remoção existia e a tela que a chamava foi deletada — o produto
+   tinha o remédio e nenhuma porta. Este alerta é a porta, e o botão é a
+   maçaneta: se ele não desenhar, o remédio continua inalcançável.            */
+secao("7b · `padrao-teste-<host>` — o alerta que ANUNCIA o bloqueio e o DESFAZ");
+const PADRAO = [{ padrao: "moldes-*-projeto.vercel.app", criadoEm: "2026-08-14T12:00:00.000Z" }];
+par("7b", limpa({ padroesDeTeste: PADRAO }), limpa({ padroesDeTeste: [] }), "padrao-teste-moldes-*-projeto.vercel.app");
+{
+  const removidos = [];
+  const lista = montarAlertas(limpa({ padroesDeTeste: PADRAO, aoRemoverPadrao: (p) => removidos.push(p) }));
+  const html = desenhar(lista);
+  const t = texto(html);
+
+  ok("7b · linha de base: o alerta veio COM ação", lista[0].acao?.rotulo === "Remover", lista[0].acao?.rotulo);
+  ok("7b · 🔑 o botão de remover é DESENHADO", /<button[^>]*>Remover<\/button>/.test(html), "sem ele o remédio segue inalcançável");
+  ok("7b · o padrão bloqueado aparece no texto", t.includes("moldes-*-projeto.vercel.app"), t.slice(0, 90));
+
+  /* ⛔ COM AÇÃO, NUNCA ÂNCORA. `<button>` dentro de `<a>` é markup inválido, e
+     o clique fica ambíguo: o usuário mira "Remover" e navega. */
+  ok("7b · ⛔ a linha NÃO é âncora quando há ação", !/<a /.test(html), "botão dentro de <a> é inválido");
+
+  /* O PAR: sem `aoRemoverPadrao` o alerta ainda anuncia — e é aí que ele volta
+     a ser o estado que existe para denunciar. */
+  const semPorta = desenhar(montarAlertas(limpa({ padroesDeTeste: PADRAO })));
+  ok(
+    "7b · …e SEM a ação injetada, o alerta anuncia e NÃO oferece saída",
+    texto(semPorta).includes("moldes-*-projeto.vercel.app") && !/<button[^>]*>Remover/.test(semPorta),
+    "← o par prova que quem traz a porta é a TELA, não o construtor",
+  );
+
+  /* ⚠️ E o botão precisa ter ÁREA DE CLIQUE estável: `flex: none` impede que
+     ele encolha quando o título ocupa duas linhas. É a falha muda do rail
+     recolhido, onde a `Tooltip` derrubou o alvo de 43px para 17. */
+  ok(
+    "7b · o botão não encolhe com o título ao lado (`flex:none`)",
+    /<button[^>]*style="[^"]*flex:none/.test(html.replace(/\s*:\s*/g, ":")),
+    "área de clique que muda de tamanho com o texto vizinho é falha muda",
+  );
+}
+
 /* ═══ 8 · A COMPOSIÇÃO — o máximo simultâneo é SEIS, e os seis desenham ═══
 
    ⛔ Os SETE não podem coexistir, e não é limitação da fixture: `faltam-taxas`
@@ -418,7 +470,7 @@ secao("8 · A composição — o máximo simultâneo é SEIS, e os seis chegam a
    não fecha o que a tela não confirmou*. A asserção abaixo congela o valor
    MEDIDO, para a correção — quando houver janela — aparecer como falha e não
    como mudança silenciosa.                                                    */
-secao("9 · ⚠️ Antes da medição, o `limite` NÃO manda — quem manda é o `comRodape`");
+secao("9 · ✅ Antes da medição, quem manda é o `limite` DECLARADO");
 {
   const seis = [1, 2, 3, 4, 5, 6].map((i) => ({
     id: "a" + i,
@@ -431,14 +483,22 @@ secao("9 · ⚠️ Antes da medição, o `limite` NÃO manda — quem manda é o
   const tp = texto(padrao);
   const quantos = seis.filter((a) => tp.includes(a.titulo)).length;
   ok(
-    "9 · MEDIDO: com `limite` 3 e 6 alertas, o markup inicial desenha 1",
-    quantos === 1,
-    `${quantos} de 6 — \`cabem\` guarda o não-medido, \`comRodape\` não`,
+    "9 · ✅ com `limite` 3 e 6 alertas, o markup inicial desenha TRÊS",
+    quantos === 3,
+    `${quantos} de 6 — antes era 1: \`comRodape\` calculava \`floor(-18/8)\` e o \`max(1,…)\` o segurava`,
   );
   ok(
     "9 · …e o rodapé declara os que ficaram de fora",
-    /\+ 5 alertas/.test(tp),
+    /\+ 3 alertas/.test(tp),
     (tp.match(/\+ \d+ alertas?/) || ["(nenhum)"])[0],
+  );
+  /* ⛔ A FRONTEIRA da correção: o visível é `min(limite, comRodape)`, e antes o
+     `comRodape` valia 1 sem medição. A asserção acima congela o TRÊS; esta
+     congela que o `limite` é de fato quem manda — passe 5 e saem 5. */
+  ok(
+    "9 · 🔑 e é o `limite` que decide, não um piso escondido",
+    texto(renderToStaticMarkup(React.createElement(AlertList, { alertas: seis, limite: 5 }))).match(/Alerta numero/g)?.length === 5,
+    "com `limite` 5 saem 5 — se voltasse o piso de 1, este número não mexeria",
   );
   ok(
     "9 · ⛔ o rodapé é BOTÃO, não link — ele expande no lugar, não navega",
@@ -472,5 +532,5 @@ if (falhas.length) {
   process.exit(1);
 }
 console.log("\n\x1b[32m" + n + " asserções, 0 falha(s).\x1b[0m");
-console.log("   denominador: 7 alertas renderizados um a um, cada um com o par desenha/não-desenha");
+console.log("   denominador: 8 alertas renderizados um a um, cada um com o par desenha/não-desenha");
 console.log("   + composição de 6 (o máximo simultâneo) e o truncamento pré-medição\n");

@@ -35,6 +35,30 @@ export type Alerta = {
   titulo: string;
   detalhe?: string;
   href?: string;
+  /**
+   * A AÇÃO INLINE — para o alerta cuja resolução não tem tela para onde mandar.
+   *
+   * ⛔ **Ela não é a forma preferida, e a preferida é o `href`.** Um alerta que
+   * leva para a tela do assunto mostra o contexto inteiro antes de o usuário
+   * mexer; um botão aqui resolve às cegas, com o detalhe de uma linha como toda
+   * a informação. Por isso a regra:
+   *
+   * > ## `acao` só quando NÃO EXISTE tela que resolva aquilo. Se existe, é `href`.
+   *
+   * O caso que a trouxe: os padrões de host aprovados bloqueiam envio à Meta e
+   * são **irreversíveis** se ninguém puder removê-los. A remoção existe
+   * (`removerPadraoDeTeste`) e a tela que a chamava foi deletada — ou seja, o
+   * produto tinha o remédio e nenhuma porta. O alerta é a porta.
+   *
+   * ⚠️ `href` e `acao` são MUTUAMENTE EXCLUSIVOS no desenho: com `acao` a linha
+   * nunca vira `<a>`, porque `<button>` dentro de `<a>` é markup inválido e o
+   * clique fica ambíguo — o usuário mira "remover" e navega.
+   */
+  acao?: {
+    rotulo: string;
+    /** ⚠️ Quem chama é a TELA, não este componente: aqui não há server action. */
+    aoAcionar: () => void | Promise<void>;
+  };
 };
 
 /* ⚠️ NÃO ACRESCENTE UM CARIMBO DE TEMPO AQUI ("há 2h", `06` §14.3).
@@ -61,6 +85,9 @@ export function AlertList({
   limite?: number;
 }) {
   const [expandido, setExpandido] = React.useState(false);
+  /* Qual `acao` está em curso. Sem isto, dois cliques disparam duas remoções e
+     a segunda opera sobre a lista que a primeira ainda não devolveu. */
+  const [emCurso, setEmCurso] = React.useState<string | null>(null);
   /**
    * 🔴 F3 — QUANTOS ALERTAS CABEM É MEDIDO (§4 do `07`).
    *
@@ -87,9 +114,33 @@ export function AlertList({
     [alertas],
   );
   /* 8 é o `gap` da coluna; o rodapé do `+ N` mede ~26. Os dois entram na conta
-     porque ocupam a mesma altura que uma linha disputaria. */
-  const cabem = ch > 0 && hLinha > 0 ? Math.max(1, Math.floor((ch + 8) / (hLinha + 8))) : limite;
-  const comRodape = ordenados.length > cabem ? Math.max(1, Math.floor((ch + 8 - 26) / (hLinha + 8))) : cabem;
+     porque ocupam a mesma altura que uma linha disputaria.
+
+     ## ⛔ AS DUAS CONTAS PRECISAM DA MESMA GUARDA — e por duas semanas só uma tinha
+     `cabem` já caía para `limite` sem medição. `comRodape` não caía: com
+     `ch = 0` e `hLinha = 0` ele calculava `Math.floor(-18 / 8) = -3`, e o
+     `Math.max(1, …)` o segurava em **1**. Como o visível é
+     `min(limite, comRodape)`, o `1` vencia e **o HTML inicial desenhava UM
+     alerta** onde o `limite` declara três.
+
+     E o estado não medido não é caso de borda: é **todo render de servidor** e o
+     primeiro render do cliente, antes de o `ResizeObserver` disparar.
+
+     ⚠️ Foi *endurecer uma porta com a outra aberta*, na camada de layout — e
+     invisível porque o cliente se corrige sozinho um quadro depois. Quem paga é
+     quem lê o HTML: SSR, leitor de tela e qualquer teste de render.
+
+     ⛔ Antes de medir, quem manda é o `limite` DECLARADO. Não invente um piso
+     aqui: sem altura de linha não há "quantas cabem", e chutar 1 é afirmar uma
+     medição que não houve. */
+  const medido = ch > 0 && hLinha > 0;
+  const cabem = medido ? Math.max(1, Math.floor((ch + 8) / (hLinha + 8))) : limite;
+  const comRodape =
+    ordenados.length > cabem
+      ? medido
+        ? Math.max(1, Math.floor((ch + 8 - 26) / (hLinha + 8)))
+        : limite
+      : cabem;
   const visiveis = expandido ? ordenados : ordenados.slice(0, Math.min(limite, comRodape));
   const restantes = ordenados.length - visiveis.length;
 
@@ -145,6 +196,34 @@ export function AlertList({
                 </span>
               )}
             </span>
+            {a.acao && (
+              /* ⚠️ `flex: none` e `alignSelf: center`: o botão não pode encolher
+                 quando o título ocupa duas linhas — área de clique que muda de
+                 tamanho com o texto ao lado é a mesma falha muda do rail
+                 recolhido, onde a `Tooltip` derrubou o alvo de 43px para 17. */
+              <button
+                type="button"
+                disabled={emCurso === a.id}
+                onClick={() => {
+                  setEmCurso(a.id);
+                  void Promise.resolve(a.acao!.aoAcionar()).finally(() => setEmCurso(null));
+                }}
+                className="text-caption text-primary hover:bg-surface-hover"
+                style={{
+                  flex: "none",
+                  alignSelf: "center",
+                  background: "none",
+                  border: "1px solid var(--tk-borda)",
+                  borderRadius: "var(--tk-radius-controle)",
+                  padding: "4px 9px",
+                  cursor: emCurso === a.id ? "progress" : "pointer",
+                  opacity: emCurso === a.id ? 0.6 : 1,
+                  transition: "background-color var(--tk-dur-rapida) var(--tk-ease-padrao)",
+                }}
+              >
+                {emCurso === a.id ? "…" : a.acao.rotulo}
+              </button>
+            )}
           </>
         );
 
@@ -157,7 +236,9 @@ export function AlertList({
 
         /* A PRIMEIRA linha é a medida — com o clamp, todas têm a mesma altura. */
         const medir = i === 0 ? medirLinha : undefined;
-        return a.href ? (
+        /* ⛔ Com `acao`, NUNCA âncora: `<button>` dentro de `<a>` é inválido, e
+           o clique fica ambíguo — o usuário mira "remover" e navega. */
+        return a.href && !a.acao ? (
           <a key={a.id} ref={medir} href={a.href} title={a.titulo} style={estilo} className="transition-[background-color]">{Conteudo}</a>
         ) : (
           <div key={a.id} ref={medir} title={a.titulo} style={estilo}>{Conteudo}</div>

@@ -150,6 +150,46 @@ export function useDadosDosBlocos(v: TraffikView) {
   const semPais = v.byCountry.reduce((s, c) => s + (c.code ? 0 : c.sales), 0);
   const { visao: visaoPais, setVisao: setVisaoPais } = useVisaoPais(paises.length);
 
+  /* ── 🔴 OS PADRÕES DE TESTE — o único dado NOVO desta camada, e o motivo ───
+     Todo o resto aqui é derivado do `TraffikView`. Este não dá: os padrões
+     vivem em `User.testHostPatterns` e não passam pelo hook — o Dashboard nunca
+     precisou deles.
+
+     ⛔ E buscá-los aqui é o preço de o alerta ser a porta. A alternativa seria
+     levá-los ao `useTraffikState`, que é o monolito de 1.9k linhas que este
+     projeto conta linha a linha; um acessor a mais lá custa mais que um efeito
+     local aqui, e este morre no dia em que existir tela de Testes.
+
+     ⚠️ `padroes` começa `[]`, não `null`: com `null` o alerta some e volta, e
+     um alerta que pisca é pior que um que demora. Lista vazia é o estado normal
+     — quase ninguém aprova padrão. */
+  const [padroes, setPadroes] = React.useState<readonly { padrao: string; criadoEm: string | null }[]>([]);
+  React.useEffect(() => {
+    let vivo = true;
+    void import("@/lib/actions/diagnostics")
+      .then((m) => m.listarPadroesDeTeste())
+      .then((r) => {
+        if (vivo) setPadroes(r);
+      })
+      /* ⛔ Falha aqui NÃO derruba o Dashboard e NÃO inventa lista vazia com ar
+         de medição: o alerta simplesmente não aparece, que é o mesmo estado de
+         antes desta ligação. O que não pode é a tela inteira cair por causa de
+         um aviso. */
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  /* A remoção devolve a lista restante, então o estado vem do SERVIDOR — não de
+     um `filter` local. Filtrar aqui criaria a segunda fonte da mesma lista, e
+     ela divergiria no primeiro erro de escrita: a tela mostraria removido o que
+     o banco ainda bloqueia. */
+  const removerPadrao = React.useCallback(async (padrao: string) => {
+    const m = await import("@/lib/actions/diagnostics");
+    setPadroes(await m.removerPadraoDeTeste(padrao));
+  }, []);
+
   /* ── Alertas — DERIVADOS do que já existe, sem dado novo ─────────────────── */
   const alertas: Alerta[] = React.useMemo(
     /* ⛔ O CORPO SAIU DAQUI EM 14/08/2026 — `lib/dashboard/alertas.ts`.
@@ -187,9 +227,49 @@ export function useDadosDosBlocos(v: TraffikView) {
            `whereDespesas` que o lucro usa. Um segundo filtro seria a segunda
            implementação do mesmo recorte. */
         tiposDeDespesa: (v.despesasCruas ?? []).filter((d) => d.active).map((d) => d.type),
+        /* 🔴 RELIGADO EM 17/08/2026 — e o que estava órfão não era código
+           inerte, era o REMÉDIO de uma regra irreversível.
+
+           `removerPadraoDeTeste` é o único escritor de `User.testHostPatterns`
+           na base, e perdeu o consumidor quando `Integrações › Testes` foi
+           deletada. `lib/pixel/ambiente.ts` declara que a lista PRECISA ser
+           removível, *"porque irreversível é exatamente o que ela não pode
+           ser"* — e por dois dias ela era.
+
+           ⛔ A porta é o alerta, não uma tela nova: alerta aqui é o que pede
+           DECISÃO, e bloqueio permanente de host é isso. */
+        padroesDeTeste: padroes,
+        aoRemoverPadrao: removerPadrao,
       }),
-    [v.fbConnected, v.adProfiles, v.perfisCrus, v.metricCards.roi, v.chartSerie, v.pixels, v.despesasCruas, agora],
+    [v.fbConnected, v.adProfiles, v.perfisCrus, v.metricCards.roi, v.chartSerie, v.pixels, v.despesasCruas, agora, padroes, removerPadrao],
   );
+
+  /* ── 🔴 AS ROTINAS AGENDADAS — religadas em 17/08/2026, e aqui ────────────
+     `getRotinasAgendadas` ficou órfã com a tela de Testes. Ela entra no RODAPÉ
+     e não em tela nova porque o rodapé já faz esta pergunta — e a fazia com um
+     proxy: o bloco `Regras ativas` deduz "em execução" de `lastRunAt` recente,
+     com o comentário admitindo que *"não existe processo rodando para
+     perguntar"*.
+
+     Existe: `estadoDasRotinas()` responde pelas CINCO rotinas — sincronização,
+     motor de regras, relatórios, manutenção e histórico de primeira conexão.
+
+     ⛔ O proxy do `Regras ativas` FICA: ele responde outra coisa (quantas
+     regras rodaram), e trocá-lo pelo agendador faria o bloco parar de falar de
+     regras. São duas perguntas vizinhas, não duas fontes da mesma. */
+  const [rotinas, setRotinas] = React.useState<readonly { rotulo: string; atrasada: boolean; falhou: boolean }[]>([]);
+  React.useEffect(() => {
+    let vivo = true;
+    void import("@/lib/actions/diagnostics")
+      .then((m) => m.getRotinasAgendadas())
+      .then((r) => {
+        if (vivo) setRotinas(r);
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
+  }, []);
 
   /* ── Rodapé de estado ────────────────────────────────────────────────────── */
   const rodape: BlocoEstado[] = React.useMemo(() => {
@@ -246,6 +326,24 @@ export function useDadosDosBlocos(v: TraffikView) {
         icone: <Icone nome="taxas" tamanho={17} />,
         href: "/dashboard/taxas",
       },
+      /* 🔴 A REDE DE SEGURANÇA — e a falha dela é MUDA: o painel responde, os
+         dados estão lá, e o que morre é o que acontece sem ninguém olhar.
+
+         ⚠️ Lista vazia é *ainda não respondeu*, não *nenhuma rotina*: por isso
+         o valor é `—` e não `0 em dia`. Zero rotinas seria uma afirmação, e
+         não houve medição — é a distinção central deste projeto. */
+      {
+        chave: "rotinas",
+        rotulo: "Rotinas agendadas",
+        valor: rotinas.length === 0 ? "—" : `${rotinas.filter((r) => !r.atrasada && !r.falhou).length} de ${rotinas.length} em dia`,
+        alerta:
+          rotinas.some((r) => r.falhou)
+            ? { texto: `${rotinas.filter((r) => r.falhou).length} falhando`, tom: "danger" }
+            : rotinas.some((r) => r.atrasada)
+              ? { texto: `${rotinas.filter((r) => r.atrasada).length} atrasada(s)`, tom: "warning" }
+              : null,
+        icone: <Icone nome="atualizar" tamanho={17} />,
+      },
       {
         chave: "sync",
         rotulo: "Última atualização",
@@ -254,7 +352,7 @@ export function useDadosDosBlocos(v: TraffikView) {
         icone: <Icone nome="atualizar" tamanho={17} />,
       },
     ];
-  }, [v.adProfiles, v.rules, v.despesaRows, v.taxExpenses, v.gatewayExpenses, v.activeAccountCount, v.syncLabel, v.syncManualBusy, v.dashLoading, agora]);
+  }, [v.adProfiles, v.rules, v.despesaRows, v.taxExpenses, v.gatewayExpenses, v.activeAccountCount, v.syncLabel, v.syncManualBusy, v.dashLoading, agora, rotinas]);
 
   return {
     tema: (theme === "light" ? "light" : "dark") as "light" | "dark",

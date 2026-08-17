@@ -3002,6 +3002,99 @@ NÃO consertado**.
 > o Insights — e o defeito volta no lugar onde ele custa dinheiro, porque lá o
 > produto RECOMENDA em vez de listar.
 
+# 🧨 A COMPOSIÇÃO É O DEFEITO — três peças corretas que juntas dão bloqueio PERMANENTE de host legítimo
+
+> **Medida e desfeita em 17/08/2026.** Família nova, e ela não se parece com
+> nenhuma das que este arquivo já tem: **nenhuma das três peças está errada
+> sozinha**, e nenhuma varredura desta base olha para o produto delas.
+
+> ## Cada peça foi revisada, aprovada e documentada por si. O defeito nasceu de ninguém ter olhado as três JUNTAS.
+
+## 🔎 AS TRÊS PEÇAS, e o que cada uma é isolada
+
+| # | peça | isolada, ela é… |
+|---|---|---|
+| 1 | o bloqueio é **IRREVERSÍVEL** — o evento não vai à CAPI e não volta | ✅ decisão certa: *"errar para o lado seguro"*, escrita no `ambiente.ts` |
+| 2 | a guarda que decide é **`pareceHashUnico`** — formato só, sem prefixo comum | ⚠️ assimetria conhecida, registrada, e **irredutível**: o teste de prefixo fala de um CONJUNTO e a ingestão vê um host por vez |
+| 3 | o **removedor ficou órfão** quando a tela de Testes foi deletada | ⚠️ parecia dívida de faxina — "12 exports sem consumidor" |
+
+## 🔴 E O PRODUTO DAS TRÊS
+
+```
+guarda FRACA          →  um host legítimo pode casar o padrão
+bloqueio IRREVERSÍVEL →  os eventos dele param de ir à Meta
+removedor ÓRFÃO       →  e não há como desfazer pelo produto
+─────────────────────────────────────────────────────────────
+                      =  BLOQUEIO PERMANENTE DE HOST LEGÍTIMO
+```
+
+**E o sintoma é mudo dos dois lados.** Do nosso: nada dá erro — o evento é
+*classificado como teste*, que é um caminho de sucesso. Do lado do cliente: a
+venda existe, aparece no gateway, e simplesmente **não otimiza campanha
+nenhuma**. Quem denunciaria é o Gerenciador de Eventos da Meta, que é de outra
+empresa, semanas depois.
+
+> ### ⛔ POR QUE NENHUMA FERRAMENTA DESTA BASE PEGAVA
+>
+> | ferramenta | o que ela olha | por que passou |
+> |---|---|---|
+> | `test:ambiente-padroes` | a guarda | ela está **certa** para o que ela promete |
+> | `test:modulos-orfaos` | módulos sem importador | o módulo tem consumidor — o órfão é o EXPORT |
+> | varredura de exports | quem chama o quê | responde *"alguém usa?"*, nunca *"o que isto FAZIA?"* |
+> | `tsc` · `lint` · `build` | tipos e sintaxe | as três peças compilam |
+>
+> **Cada uma olha uma peça.** O defeito é a aresta entre elas, e aresta não tem
+> arquivo.
+
+## 🔑 A PERGUNTA QUE ACHA A PRÓXIMA, e ela é composta de propósito
+
+> ## Para todo caminho IRREVERSÍVEL: **(a)** quão forte é a guarda que decide entrar nele, e **(b)** quem, no PRODUTO, consegue sair?
+>
+> Se (a) é heurística e (b) é "ninguém", existe um estado permanente que o
+> usuário não escolheu.
+
+⛔ **As duas metades juntas, sempre.** Guarda fraca com saída fácil é
+inconveniência; guarda forte sem saída é aceitável quando a guarda é um fato
+(formato reservado, por exemplo). **É a combinação que é o defeito** — e por
+isso perguntar só uma das duas passa.
+
+### 🔎 O `grep` que enumera os candidatos
+
+```bash
+# 1. os caminhos irreversíveis: o que se escreve e não se desfaz
+grep -rn "irrevers\|não volta\|nao volta\|não desfaz" src/ --include=*.ts --include=*.tsx
+# 2. e, para cada um, QUEM desfaz — a resposta tem de ser um caminho de TELA
+grep -rn "remover\|revogar\|desfazer\|restaurar" src/lib/actions/ --include=*.ts
+```
+
+A pergunta binária por candidato: **o desfazedor tem chamador em `src/` fora de
+`lib/`?** Se não tem, o caminho é irreversível *na prática* — e o comentário que
+diz o contrário está mentindo desde o commit que deletou a tela.
+
+⚠️ **Candidatos NÃO investigados**, medidos como forma, não como defeito:
+exclusão de área (tem confirmação, mas a prévia enxerga a área vazia — ver *duas
+relações paralelas*), `ENCRYPTION_KEY` sem rotação (dívida nº 6: chave trocada
+torna ilegível o que já foi gravado, e não há desfazedor nenhum), e a migração
+de altura do layout (`max`, do qual não se recupera o operando).
+
+> ### 🩹 O QUE FOI FEITO — e a saída escolhida diz algo sobre a família
+>
+> A peça 3 foi desfeita: `removerPadraoDeTeste` **religada no ALERTA que anuncia
+> o bloqueio**, não numa tela nova. Alerta nesta base é *o que pede decisão*, e
+> bloqueio permanente é isso; uma tela custaria uma sessão e deixaria o buraco
+> aberto até lá.
+>
+> ⛔ **As peças 1 e 2 ficam como estão, e é decisão medida.** A 1 é a escolha
+> certa; a 2 é irredutível pelo motivo já registrado. **Bastou tirar uma perna
+> do tripé** — que é a propriedade útil desta família: o produto de três não
+> precisa de três consertos.
+>
+> ✅ Congelado em `test:diagnosticos-orfaos` (a porta, ponta a ponta: a tela
+> busca, liga a remoção, e a lista vem do servidor) e em `test:alertas` §6d
+> (o par: sem a injeção, o alerta anuncia e **não** oferece saída).
+
+---
+
 # 🧾 FERRAMENTA QUE GERA RELATÓRIO SE VALIDA CONTRA UM BASELINE CONHECIDO
 
 > **Ela reporta errado com a mesma confiança com que reporta certo.** Método,

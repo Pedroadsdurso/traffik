@@ -1915,7 +1915,8 @@ o baseline conhecido.
 > | `lint` | **0 warnings, 0 errors** — contados na saída |
 > | `npm test` | exit **0**, **2.608 asserções em 82 scripts** |
 >
-> A progressão continua: 2.379 → 2.412 → 2.479 → 2.485 → **2.608**.
+> A progressão continua: 2.379 → 2.412 → 2.479 → 2.485 → 2.608 → **2.640**
+> (execução de 17/08, tarde — com o 8º alerta, a poda e as viradas de veredito).
 >
 > ⚠️ **E o total pegou a interrupção antes do exit, de novo.** A primeira
 > execução desta rodada saiu com **1.297 em 49 scripts** — queda de mais da
@@ -1934,8 +1935,26 @@ interrupção**, mesmo com exit 0. A progressão desta rodada foi
 > | | 15/08 | 17/08 |
 > |---|---|---|
 > | 1 · `buildPoints` sem guarda | 🔴 registrado | ✅ **guardado**, com invariante |
-> | 2 · 12 exports órfãos | 🔴 registrado | ✅ **triados por consequência** — nenhum deletado, e um deles NÃO PODE ser |
+> | 2 · 12 exports órfãos | 🔴 registrado | ✅ **triados**, e em 17/08 **EXECUTADOS**: 2 religadas · 1 despromovida · 8 podadas com registro |
 > | 3 · `v2loja` no discriminador | ⏸️ fica | ⏸️ fica, sem mudança |
+>
+> ## 🧨 E A TRIAGEM ACHOU O QUE VALE MAIS QUE OS TRÊS CONSERTOS
+>
+> As peças 2 e 3 **compunham** com uma terceira que ninguém tinha ligado a elas:
+>
+> ```
+> guarda FRACA (`pareceHashUnico`)  +  bloqueio IRREVERSÍVEL  +  removedor ÓRFÃO
+> ─────────────────────────────────────────────────────────────────────────────
+>                        =  BLOQUEIO PERMANENTE DE HOST LEGÍTIMO
+> ```
+>
+> Nenhuma das três está errada sozinha, e **nenhuma varredura desta base olha
+> para o produto delas** — o defeito é a aresta, e aresta não tem arquivo. A
+> família está registrada no `CLAUDE.md` (*A COMPOSIÇÃO É O DEFEITO*), com a
+> pergunta que acha a próxima: **para todo caminho irreversível, quão forte é a
+> guarda de entrada e quem, no PRODUTO, consegue sair?**
+>
+> ⛔ Bastou tirar UMA perna do tripé: o removedor voltou, no alerta.
 >
 > ⚠️ **A metade dos alertas também fechou** — ver o fim desta seção.
 
@@ -2159,12 +2178,20 @@ cliente antes de o `ResizeObserver` disparar** — dá `Math.floor(-18 / 8) = -3
 e o `Math.max(1, …)` segura em **1**. É *endurecer uma porta com a outra
 aberta*, na camada de layout.
 
-⛔ **MEDIDO, REGISTRADO, NÃO CORRIGIDO.** Corrigir muda quantos alertas o
-Dashboard pinta antes da primeira medição — geometria de tela, na máquina em
-que o instrumento de janela está indisponível. *Nenhum limiar sem medição do
-próprio bloco*; *asserção verde não fecha o que a tela não confirmou*. A
-asserção congela o valor MEDIDO para a correção aparecer como falha, e não como
-mudança silenciosa.
+> ### ✅ CORRIGIDO EM 17/08/2026 — e o limiar veio do que estava DECLARADO
+>
+> As duas contas passaram a compartilhar a mesma guarda (`medido`), e antes de
+> haver medição quem manda é o `limite` declarado — **3**.
+>
+> ⛔ **Nenhum número novo foi inventado**, e isso é o ponto: a regra desta base é
+> *nenhum limiar sem medição do próprio bloco*, e sem altura de linha não existe
+> "quantas cabem". Chutar um piso aqui seria afirmar uma medição que não houve.
+> O `limite` não é um limiar novo — é o valor que o chamador já declarava e que
+> a conta vizinha ignorava.
+>
+> ✅ Medido depois: `desenhados [1,2,3]`, rodapé `+ 3 alertas`. E há o par que
+> prova que quem decide é o `limite`: com `limite` 5 saem **5** — se o piso de 1
+> voltasse, esse número não mexeria.
 
 ⚠️ **Também não é a mesma dívida dos quatro itens de tela**: aqueles precisam
 de janela; este precisava de um render — e `AlertList` **não porta para o

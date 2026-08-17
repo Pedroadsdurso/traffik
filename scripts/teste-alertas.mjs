@@ -283,11 +283,108 @@ ok("linha de base: entrada saudável não produz alerta nenhum", ids(limpa()).le
     /\.filter\(\(d\) => d\.active\)/.test(TELA),
     "uma taxa DESLIGADA calaria o aviso sem ser descontada",
   );
+  /* ⚠️ A ÂNCORA MEDIA ADJACÊNCIA, e por isso quebrou por MOTIVO ERRADO em
+     17/08: ela era `/v\.despesasCruas, agora\]/`, e acrescentar duas deps ao
+     mesmo array a fez reprovar sem que nada tivesse se perdido.
+
+     > ## Âncora que mede POSIÇÃO reprova quando o vizinho muda. A propriedade é PERTENCER ao array, não vir antes do `]`.
+
+     Hoje ela recorta o array de deps e pergunta pertinência. */
+  {
+    const dep = TELA.slice(TELA.indexOf("montarAlertas({"));
+    const arr = dep.slice(dep.indexOf("}),") + 3);
+    const deps = arr.slice(0, arr.indexOf("]") + 1);
+    ok("6c · linha de base: o array de deps foi recortado", /^\s*\[/.test(deps) && deps.length < 400, deps.trim().slice(0, 60) + "…");
+    ok(
+      "6c · e `despesasCruas` está nas deps do `useMemo`",
+      /\bv\.despesasCruas\b/.test(deps),
+      "sem ela o alerta congelaria no primeiro valor",
+    );
+    /* 🔴 E as deps do OITAVO alerta, pelo mesmo motivo: sem elas o alerta de
+       bloqueio congela na lista vazia do primeiro render — ou seja, some. */
+    ok(
+      "6c · …e `padroes` também, senão o alerta de bloqueio nunca aparece",
+      /\bpadroes\b/.test(deps),
+      deps.trim(),
+    );
+  }
+}
+
+/* ═══ 6d · `padrao-teste-<host>` — o OITAVO, e ele carrega a PORTA ══════
+
+   🔴 Um padrão aprovado faz o evento ser tratado como TESTE **na ingestão**:
+   ele não vai para a CAPI, e não volta. `lib/pixel/ambiente.ts` declara que
+   por isso a lista precisa ser removível — *"irreversível é exatamente o que
+   ela não pode ser"*.
+
+   ⛔ E não era: `removerPadraoDeTeste` é o único escritor de
+   `User.testHostPatterns` e ficou órfã quando a tela de Testes morreu. Este
+   alerta é a porta, e a `acao` é a maçaneta. */
+{
+  const comPadroes = (ps, extra = {}) => limpa({ padroesDeTeste: ps, ...extra });
+  const UM = [{ padrao: "moldes-*-projeto.vercel.app", criadoEm: "2026-08-14T12:00:00.000Z" }];
+
   ok(
-    "6c · e `despesasCruas` está nas deps do `useMemo`",
-    /v\.despesasCruas, agora\]/.test(TELA),
-    "sem ela o alerta congelaria no primeiro valor",
+    "6d · `padrao-teste-<host>` dispara com padrão aprovado",
+    ids(comPadroes(UM)).includes("padrao-teste-moldes-*-projeto.vercel.app"),
+    ids(comPadroes(UM)).join(" · "),
   );
+  ok("6d · …e SOME sem padrão nenhum", !ids(comPadroes([])).some((i) => i.startsWith("padrao-teste-")));
+  ok("6d · sem o campo, nada dispara", !ids(limpa()).some((i) => i.startsWith("padrao-teste-")));
+
+  /* ⛔ UM POR PADRÃO — contra o costume de consolidar do `donos-` e do
+     `faltam-taxas`. Lá o alerta pede UMA revisão; aqui cada padrão tem a
+     própria remoção, e um botão só removeria o quê? É a forma do `token-<id>`. */
+  const dois = ids(comPadroes([...UM, { padrao: "preview-*.netlify.app", criadoEm: null }]));
+  ok(
+    "6d · ⛔ um alerta POR PADRÃO, com id distinto — cada um tem a própria remoção",
+    dois.filter((i) => i.startsWith("padrao-teste-")).length === 2,
+    dois.join(" · "),
+  );
+
+  const a = montarAlertas(comPadroes(UM))[0];
+  ok("6d · o título NOMEIA o padrão", a.titulo.includes("moldes-*-projeto.vercel.app"), a.titulo);
+  ok("6d · e o detalhe diz a CONSEQUÊNCIA: não vai à Meta e não volta", /não voltam|nao voltam/.test(a.detalhe), a.detalhe);
+  ok(
+    "6d · ⚠️ é `warning`, não `danger` — o usuário aprovou isto de propósito",
+    a.severidade === "warning",
+    "pintar de vermelho a escolha dele é o alarme que grita sem motivo",
+  );
+  ok(
+    "6d · ⛔ e NÃO tem `href` — não existe tela que resolva isto",
+    a.href === undefined,
+    "apontar para uma que não resolve seria affordance mentindo",
+  );
+
+  /* 🔑 O PAR QUE PROVA A PORTA. Sem `aoRemoverPadrao` o alerta ainda ANUNCIA o
+     bloqueio — e é aí que ele volta a ser o estado que existe para denunciar:
+     o usuário sabe do bloqueio e não tem como desfazê-lo. */
+  ok(
+    "6d · 🔑 com `aoRemoverPadrao`, o alerta carrega a AÇÃO de remover",
+    montarAlertas(comPadroes(UM, { aoRemoverPadrao: () => {} }))[0].acao?.rotulo === "Remover",
+  );
+  ok(
+    "6d · …e SEM ela o alerta anuncia o bloqueio e não oferece saída",
+    montarAlertas(comPadroes(UM))[0].acao === undefined,
+    "← o par: é a tela que injeta a porta, e o construtor é puro",
+  );
+  {
+    /* ⛔ E a ação tem de levar O PADRÃO CERTO. Um `aoAcionar` que ignorasse o
+       argumento removeria sempre o primeiro — e com um padrão só na fixture
+       isso passaria despercebido. Por isso são DOIS. */
+    const recebidos = [];
+    const lista = montarAlertas(
+      comPadroes([...UM, { padrao: "preview-*.netlify.app", criadoEm: null }], {
+        aoRemoverPadrao: (p) => recebidos.push(p),
+      }),
+    );
+    lista.forEach((x) => x.acao?.aoAcionar());
+    ok(
+      "6d · ⛔ cada ação remove O SEU padrão — não o primeiro da lista",
+      recebidos.join("|") === "moldes-*-projeto.vercel.app|preview-*.netlify.app",
+      recebidos.join(" · "),
+    );
+  }
 }
 
 /* ═══ 7 · A COMPOSIÇÃO — os seis convivem, e a ordem é de chegada ═══════ */
@@ -369,4 +466,4 @@ ok("linha de base: entrada saudável não produz alerta nenhum", ids(limpa()).le
 }
 
 console.log("\n\x1b[32m" + n + " asserções, 0 falha(s).\x1b[0m");
-console.log("   denominador: 7 alertas, cada um com o par dispara/não-dispara\n");
+console.log("   denominador: 8 alertas, cada um com o par dispara/não-dispara\n");

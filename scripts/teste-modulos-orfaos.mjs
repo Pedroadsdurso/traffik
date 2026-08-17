@@ -61,6 +61,18 @@ const ACEITOS = {
     "SUPERADO pela reescrita do funil (`lib/funil/fita.ts`, com 4 suítes). Sem lápide, e a regra de percentual " +
     "dele ('vs. maior etapa', com teto em 100) NÃO é a do funil vivo — revivê-lo troca a conta em silêncio. " +
     "Se for deletado, apague esta entrada.",
+  /* 🔴 ÓRFÃO POR CONSEQUÊNCIA, em 17/08/2026 — e esta guarda foi quem avisou.
+     Ao podar as 8 server actions de apoio de `actions/diagnostics.ts`, o último
+     consumidor de PRODUÇÃO deste módulo saiu junto. A varredura reprovou
+     nomeando, e a mensagem dela ("leia o que o módulo FAZIA") é literalmente o
+     passo que evitou apagá-lo atrás. */
+  "src/lib/gateways/testador.ts":
+    "VIVO E SEM PORTA: 299 linhas que analisam um payload de gateway e dizem o que foi extraído, o que ficou " +
+    "vazio e POR QUÊ — é como se valida uma integração antes de ter conta no gateway. Perdeu o consumidor de " +
+    "produção em 17/08/2026, junto do testador de payload da tela de Testes, mas continua EXERCIDO por " +
+    "`test:onyxpag` e `test:cakto`. ⛔ Não é código morto: é lógica de produto sem tela. Se for construída " +
+    "uma tela de diagnóstico, ela começa aqui. Se for deletado, apague esta entrada — e saiba que as duas " +
+    "suítes vão junto.",
 };
 
 const semCom = (s) =>
@@ -485,7 +497,12 @@ const orfaos = libs.filter((f) => temImportador(f) === null);
   }
 
   /** Medido em 15/08/2026. Teto, não alvo: ele existe para acusar CRESCIMENTO. */
-  const TETO = 74;
+  /* ⚠️ BAIXADO de 74 para 67 em 17/08/2026, e baixar é obrigatório: um teto que
+     só sobe acumula folga em silêncio, e aí ele para de medir. As 8 server
+     actions podadas de `actions/diagnostics.ts` (mais os tipos exclusivos
+     delas) saíram do inventário — se o teto ficasse em 74, os 7 lugares vagos
+     absorveriam a próxima regressão sem ninguém ver. */
+  const TETO = 67;
 
   console.log("   denominador: " + (mortos.length + paraTeste.length) + " exports sem consumidor de produção");
   console.log("     · " + paraTeste.length + " citados por algum teste (inclui os exportados PARA o teste)");
@@ -510,19 +527,48 @@ const orfaos = libs.filter((f) => temImportador(f) === null);
       " — se subiu, alguém deletou o último consumidor de algo. A lista impressa acima nomeia.",
   );
 
-  /* 🔴 O maior aglomerado, e ele tem causa conhecida: a tela de Testes foi
-     DELETADA e levou os consumidores das server actions de diagnóstico — mas o
-     módulo sobreviveu porque outros quatro exports seguem em uso. É o caso que
-     a varredura por ARQUIVO (§1) não tem como ver. */
+  /* ✅ O MAIOR AGLOMERADO FOI DESFEITO — 17/08/2026, e esta seção MUDOU DE
+     VEREDITO.
+
+     ## ⛔ Ela congelava o estado ruim, e é isso que vale registrar
+
+     Até aqui ela afirmava `doDiagnostico.length >= 8` — ou seja, **a suíte
+     exigia que os 12 órfãos continuassem órfãos**. Passava, verde, e o rodapé
+     dizia "registrado". Um teste que congela o valor errado não fica obsoleto
+     de forma visível: ele fica VERDE, e o que o denuncia é reprovar no dia do
+     conserto. Foi o que aconteceu.
+
+     A triagem por consequência (`test:diagnosticos-orfaos`) desfez o aglomerado
+     em três movimentos, e nenhum foi "apagar porque ninguém usa":
+
+     | | |
+     |---|---|
+     | 2 RELIGADAS | `removerPadraoDeTeste` no alerta de bloqueio · `getRotinasAgendadas` no rodapé |
+     | 1 DESPROMOVIDA | `getInstallChecklist` nunca esteve órfã — tinha consumidor INTERNO; órfão era o `export` |
+     | 8 PODADAS | as de apoio e as duas de vigilância sem superfície, com o custo de cada uma escrito no arquivo |
+
+     ⛔ A asserção agora exige o ZERO — e o inverso dela é o que importa: se
+     alguém deletar uma tela e deixar as actions dela para trás, o aglomerado
+     volta e esta linha reprova de novo. */
   {
     const doDiagnostico = mortos.filter((x) => x.startsWith("actions/diagnostics.ts"));
     ok(
-      "🔴 o maior aglomerado é `actions/diagnostics.ts`",
-      doDiagnostico.length >= 8,
-      doDiagnostico.length + " exports — a tela de Testes foi deletada e levou os consumidores",
+      "✅ o aglomerado de `actions/diagnostics.ts` foi DESFEITO",
+      doDiagnostico.length === 0,
+      doDiagnostico.length === 0
+        ? "0 órfãos — 2 religadas, 1 despromovida, 8 podadas com registro"
+        : "voltaram: " + doDiagnostico.join(", "),
+    );
+    /* ⛔ LINHA DE BASE do `=== 0` acima: sem ela, o zero passaria com a
+       varredura devolvendo coleção vazia — o defeito que este arquivo inteiro
+       existe para não cometer. */
+    ok(
+      "linha de base: a varredura ainda ENCONTRA órfãos noutros módulos",
+      mortos.length > 0,
+      mortos.length + " exports sem citação nenhuma — senão o zero acima não mediria nada",
     );
     ok(
-      "…e o MÓDULO continua vivo, por isso a §1 não o vê",
+      "…e o MÓDULO continua vivo, com os consumidores que sobraram",
       temImportador("src/lib/actions/diagnostics.ts") !== null,
       "importado por " + temImportador("src/lib/actions/diagnostics.ts"),
     );

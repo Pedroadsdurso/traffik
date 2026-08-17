@@ -73,6 +73,37 @@ export interface EntradaDeAlertas {
    * base já pagou com o lucro descontando `R$ 0,00`.
    */
   tiposDeDespesa?: readonly string[];
+  /**
+   * 🔴 OS PADRÕES DE HOST APROVADOS — o bloqueio que não tinha como sair.
+   *
+   * Um padrão aprovado (`eventos:marcar --aplicar`) faz o evento ser tratado
+   * como TESTE **na ingestão**: ele não vai para a CAPI, e não volta.
+   * `lib/pixel/ambiente.ts` declara, no próprio módulo, que por isso a lista
+   * precisa ser removível — *"irreversível é exatamente o que ela não pode
+   * ser"*.
+   *
+   * ⛔ **E não era.** `removerPadraoDeTeste` é o único escritor de
+   * `User.testHostPatterns` na base, e ficou órfã quando a tela de
+   * `Integrações › Testes` foi deletada. O remédio existia e não tinha porta.
+   *
+   * ⚠️ **Por que ALERTA e não uma tela nova:** alerta aqui é *o que pede
+   * decisão*, e uma regra de bloqueio permanente é exatamente isso. Uma tela
+   * nova custaria uma sessão e deixaria o buraco aberto até lá.
+   *
+   * ⚠️ **Por que UM POR PADRÃO**, contra o costume de consolidar do `donos-` e
+   * do `faltam-taxas`: lá o alerta pede UMA revisão; aqui cada padrão tem a
+   * própria remoção. Consolidar daria um alerta com N botões — e um botão só
+   * removeria o quê? É a mesma forma do `token-<id>` e do `conta-<id>`, que já
+   * são um por entidade.
+   */
+  padroesDeTeste?: readonly { padrao: string; criadoEm: string | null }[];
+  /**
+   * ⚠️ Injetada pela TELA, como o `brl` acima — este módulo é puro e não conhece
+   * server action. Sem ela o alerta ainda ANUNCIA o bloqueio; o que ele perde é
+   * a única porta de saída, e aí volta a ser o estado que ele existe para
+   * denunciar. Há asserção do par.
+   */
+  aoRemoverPadrao?: (padrao: string) => void | Promise<void>;
 }
 
 /**
@@ -209,6 +240,33 @@ export function montarAlertas(e: EntradaDeAlertas): Alerta[] {
       titulo: `${px.name}: configuração de eventos ilegível`,
       detalhe: `A ferramenta assumiu: ${partes.join(" · ")}. Reveja quem envia cada evento — se dois lados enviarem o mesmo, a Meta conta em dobro.`,
       href: "/dashboard/integracoes/pixel",
+    });
+  }
+
+  /* ── 🔴 PADRÃO DE HOST APROVADO — bloqueio irreversível, e a porta de saída ─
+     O padrão faz o evento ser tratado como TESTE na ingestão: ele não vai para
+     a CAPI e não volta. Enquanto não houver tela de Testes, ESTE alerta é o
+     único lugar do produto onde o padrão pode ser visto e removido.
+
+     ⛔ NÃO é `danger`: o usuário aprovou isto de propósito, e pintar de
+     vermelho a própria escolha dele é o alarme que grita sem motivo. O que o
+     alerta acrescenta é a CONSEQUÊNCIA e a saída — não um juízo.
+
+     ⚠️ E ele não some sozinho: some quando o padrão for removido, ou no dia em
+     que uma tela listar os padrões e este bloco puder sair daqui. */
+  for (const p of e.padroesDeTeste ?? []) {
+    lista.push({
+      id: `padrao-teste-${p.padrao}`,
+      severidade: "warning",
+      titulo: `Bloqueio de teste ativo: ${p.padrao}`,
+      detalhe:
+        "Eventos de hosts com este desenho não são enviados à Meta, e não voltam. Se algum for um site de verdade, a venda dele não conta.",
+      /* ⛔ Sem `href` DE PROPÓSITO: não existe tela que resolva isto. Apontar
+         para uma que não resolve seria affordance mentindo — a regra que matou
+         a interação do globo. */
+      acao: e.aoRemoverPadrao
+        ? { rotulo: "Remover", aoAcionar: () => e.aoRemoverPadrao!(p.padrao) }
+        : undefined,
     });
   }
 
