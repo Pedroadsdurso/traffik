@@ -206,7 +206,7 @@ que é o que se quer.
 | 🔴 **outro clone aqui mesmo** | idem |
 | 🔴 **a interface do GitHub** | merge de PR pelo botão não passa por `git push` |
 | 🔴 **quem apagar a config** | uma linha, sem rastro no repositório |
-| ⚠️ **`git push origin main:main`** | refspec completo na linha de comando; não testado |
+| 🔴 **`git push origin main:main`** | refspec completo na linha de comando. **MEDIDO em 17/08/2026: PASSA.** Era a linha "não testado" desta tabela — o `--dry-run` devolveu `64326a1..6e1c519 main -> main`, e o push seguinte foi confirmado por `git ls-remote`. É por esta porta que a `main` andou nas sessões de 14 e 15/08 |
 
 > ### 🔴 A TRAVA QUE VALE É `branch protection` NO GITHUB, exigindo PR na `main`
 >
@@ -218,6 +218,19 @@ que é o que se quer.
 > *proteção acidental*: o que segurava a `main` até 12/08 não era a trava — era
 > ninguém ter digitado a outra forma. Eu digitei, sem saber que havia trava, e
 > passei.
+>
+> ## 🔴 E EM 17/08/2026 A ÚLTIMA LINHA "não testado" DA TABELA FOI MEDIDA: ELA PASSA.
+>
+> As duas configs param `git push` e `git push origin main`. **`git push origin
+> main:main` atravessa as duas** — medido por `--dry-run` e confirmado por
+> `git ls-remote`. Ou seja: das quatro formas de chegar à `main`, a trava local
+> cobre **duas**, e a forma que efetivamente vem sendo usada é a que ela não
+> cobre.
+>
+> ⚠️ Isto não é motivo para fechar a brecha na config: seria trocar uma trava
+> parcial por outra, no mesmo clone, contra quem já sabe a sintaxe. A trava que
+> vale continua sendo `branch protection` no GitHub — e isso segue sendo decisão
+> do dono, no painel.
 
 ⚠️ E o motivo de a trava existir está registrado logo acima: em 12/08 16:35 a
 `main` foi avançada e **publicou o redesign inteiro sem decisão de ninguém**. A
