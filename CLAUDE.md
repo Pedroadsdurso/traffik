@@ -1848,6 +1848,103 @@ chamadas simultâneas é exatamente a que não está em uso.
 
 ---
 
+### 🧨 A CADEIA DO CRON — as três peças isoladas não mostram o risco
+
+> **Registrada como UM caso em 17/08/2026**, porque separadas cada uma parece
+> aceitável e nenhuma varredura olha para o produto delas.
+> ⛔ **MEDIDO · REGISTRADO · NÃO CORRIGIDO.**
+
+```
+escadas dormentes  →  todo ciclo é COMPLETO
+                   →  usuário pesado não cabe em 45s
+                   →  morre por maxDuration
+                   →  ninguém depois dele roda
+                   →  sem resposta, sem log, sem batimento
+```
+
+Cada elo é defensável sozinho. As escadas estão certas e testadas; o orçamento
+de 45s existe justamente para o laço conseguir responder; o corte antes de
+começar outro usuário é desenho deliberado. **É a cadeia que produz o estado
+que nenhum elo produz.**
+
+> ## 🔴 O QUE A TORNA PIOR QUE UM BUG COMUM: o sintoma no cliente é "a sincronização parou" — e o painel não distingue isso de agendador desligado.
+>
+> Quem for diagnosticar **olha o cron primeiro**, e vai encontrá-lo em ordem: o
+> GitHub Actions dispara, a chamada sai, o log do workflow fica verde. O
+> problema está do outro lado, numa função que morre antes de conseguir dizer
+> que morreu.
+
+### ⛔ O TESTE BARATO QUE REVELARIA — e ele NÃO É EXECUTÁVEL HOJE
+
+A ideia é uma consulta: **`ExecucaoCron` tem lacunas nos carimbos?** Execuções
+que deveriam existir a cada 15 min e não existem seriam morte silenciosa, não
+agendador parado.
+
+🔴 **Ela não roda, e a razão está no schema:**
+
+```prisma
+model ExecucaoCron {
+  rota      String   @id   // ⬅ UMA linha por rota. Upsert, não insert.
+  ultimaEm  DateTime
+  ...
+}
+```
+
+**Não há histórico — logo não há lacuna para procurar.** Nos dois casos
+(morte silenciosa e agendador parado) o sintoma é idêntico: `ultimaEm`
+simplesmente **não avança**.
+
+> ## O instrumento que existe responde "quando foi a última vez?". A pergunta que separa os dois casos é "quantas deveriam ter havido desde então?" — e essa exige uma linha POR EXECUÇÃO, não por rota.
+
+🔜 **O que falta para o batimento ser diagnosticável** (registrado, **não
+construído** — decisão do dono, 17/08/2026): uma tabela de execuções, com
+retenção curta. Com ela, "esperava 4 na última hora, achei 1" separa os dois
+casos numa consulta. Sem ela, não há como distinguir, e o diagnóstico começa no
+lugar errado.
+
+⚠️ E note a família: o `ExecucaoCron` **não está errado** — ele foi feito para
+responder *"a rotina está viva?"* e responde. O que ele não faz é o que ninguém
+pediu a ele. Registrar isto como limite do instrumento, e não como defeito, é o
+que impede a próxima pessoa de "consertar" um upsert que está correto.
+
+### 📏 A MEDIÇÃO DE 17/08/2026 — e exatamente o que ela cobre
+
+**Lido de `ExecucaoCron` em produção**, pelo dono:
+
+| rota | `ultimaEm` | `duracaoMs` | `ok` |
+|---|---|---|---|
+| `sync-facebook` | 22:08:04 | **631 ms** | ✅ |
+| `run-rules` | 22:05:02 | 36 ms | ✅ |
+| `reports` | 22:00:11 | 27 ms | ✅ |
+| `manutencao` | 07:00:11 | 538 ms | ✅ |
+
+✅ **631 ms contra 45.000 ms de orçamento.** Nenhuma rota parada, nenhum erro
+gravado, nenhum usuário bloqueando a fila **no perfil de hoje**.
+
+> ### ⛔ O QUE ESTA MEDIÇÃO **NÃO** RESPONDE — e é mais do que parece
+>
+> | | |
+> |---|---|
+> | 🔴 **o cenário do usuário pesado** | o risco é por **CONTA**, e isto é uma amostra de **um usuário** com o número de contas de hoje. Nada aqui escala para 20 contas |
+> | 🔴 **em que MODO a execução rodou** | `duracaoMs` não guarda o modo. **631 ms tem a forma de um `pulado`** — 4 idas ao banco (~99 ms cada) — e não a de um ciclo completo, que são **21 idas à Graph em série**. Se foi `pulado`, o número é verdadeiro e mede *"não havia o que fazer"*, não *"o ciclo cabe com folga"* |
+> | ⚠️ **a hipótese que explicaria** | os **dois agendadores** (seção abaixo): se o cron-job.org bate com mais frequência, o disparo do GitHub Actions encontra tudo fresco |
+>
+> 🔎 **A chamada que desfaz a ambiguidade** — a rota já publica o modo:
+>
+> ```bash
+> curl -s -H "Authorization: Bearer $CRON_SECRET" "$APP_URL/api/cron/sync-facebook" \
+>   | jq '{ms, msPorUsuario, results: [.results[] | {modo, motivo, ms, accounts, contasElegiveis}]}'
+> ```
+>
+> `modo: "pulado"` confirma a ressalva; `modo: "completo"` com `accounts` > 0
+> torna os 631 ms uma medição de capacidade de verdade.
+>
+> ⚠️ **Registrado como ressalva, não como correção**: a conclusão operacional
+> (*"nada a consertar antes de convidar testadores"*) **continua válida** por
+> outro caminho — testador não chega com 20 contas, e o risco é por conta.
+
+---
+
 ### 🔴 DOIS AGENDADORES rodando ao mesmo tempo
 
 O **cron-job.org** (configurado pelo usuário) e o
