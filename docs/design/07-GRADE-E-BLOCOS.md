@@ -2230,3 +2230,94 @@ então `renderToStaticMarkup` o alcança. É a dívida mais barata da lista, e a
 **dois dias e meio sem consumidor**, e o que garante que ele não some de novo é
 `test:alertas` §6c — a asserção de que a TELA passa o campo e filtra `active`.
 Ela cobre a plumbagem, não o desenho.
+
+---
+
+# ## Estado em 17/08/2026 — o que ficou verde, e o que a tela nunca confirmou
+
+> **Escrito ao encerrar a sessão.** Substitui, para efeito de ESTADO, a seção de
+> 15/08 acima — o que ela registra como PADRÃO continua valendo; o que registra
+> como NÚMERO foi remedido aqui.
+
+## ✅ VERDE, e em qual commit
+
+| | |
+|---|---|
+| commit | **`d8da390`** — a suíte foi medida nele; esta seção é o commit de documentação em cima |
+| `origin/main` | conferido por `git ls-remote`, **nunca** pelo que o `push` disse |
+| `tsc` | **0 erros** |
+| `lint` | **0 erros e 0 warnings** — contados na SAÍDA, nunca pelo exit |
+| `npm test` | exit **0**, **2.673 asserções em 83 scripts** |
+| agregado | **100 arquivos de teste, 0 órfãos** |
+
+⚠️ **O total é o denominador da suíte**, e a queda é assinatura de interrupção
+mesmo com exit 0. A progressão: 2.485 → 2.608 → 2.640 → **2.673**.
+
+⛔ E o exit não vale sozinho: nesta sessão o `npm test` saiu **1.297 em 49
+scripts** numa execução, e foi o TOTAL que localizou onde a cadeia `&&` parou.
+
+## ✅ O QUE ESTA SESSÃO FECHOU
+
+| | |
+|---|---|
+| **`AlertList`: 8 de 8 DESENHADOS** | era 0 de 7. Cada alerta renderizado sozinho, com o par desenha/não-desenha. `test:alertas-desenho`, 105 asserções |
+| **`buildPoints`: os dois denominadores guardados** | com a invariante que autorizou mexer em código anterior a `4e6aa9e` sem ver a tela — *finito antes ⇒ idêntico depois*, fuzz de 400, 265 finitas e 0 divergências |
+| **`comRodape`** | antes de medir, quem manda é o `limite` declarado. Desenhava 1 onde o `limite` diz 3, em todo render de servidor |
+| **12 órfãos de `diagnostics.ts`** | 2 religadas · 1 despromovida · 8 podadas com registro. **0 órfãs** |
+| **O 8º alerta, com AÇÃO** | `padrao-teste-<host>` anuncia o bloqueio e carrega o botão que o desfaz |
+| **O par escritor-sem-leitor dos 3 efeitos** | fechado no mesmo dia em que a poda o abriu — leitura na LINHA da venda |
+| **Duas famílias novas no `CLAUDE.md`** | *A COMPOSIÇÃO É O DEFEITO* e *ASSERÇÃO QUE CONGELA DEFEITO PRECISA DIZER ISSO* |
+
+## ⛔ O QUE SEGUE SEM TELA — seis itens, e a lista CRESCEU
+
+⚠️ **A lista era de quatro e passou a seis.** Os dois novos não são dívida
+herdada: **nasceram nesta sessão**, e nascer sem verificação de tela é o
+resultado normal de entregar com o instrumento de janela indisponível.
+
+### Os quatro de GRADE — herdados, nenhum mexeu
+
+| # | | |
+|---|---|---|
+| 1 | bandas de **8, 4 e 1 coluna** (`960–1279`, `640–959`, `<640`) | só **2260** foi medida — 1 de 5 larguras |
+| 2 | **origem A** da §7.2 — vão entre conteúdos | não medida |
+| 3 | **origem B** da §7.2 — vão até a borda | não medida |
+| 4 | **`h` derivado de medição de estado VAZIO** | não medido |
+
+### Os dois NOVOS — construídos, asseridos, nunca vistos
+
+| # | | o que existe · o que falta |
+|---|---|---|
+| 5 | **a linha de venda COM problema** | ✅ markup asserido (`test:efeitos-na-linha`, 32) · ⛔ **nunca vista**: o dev não tem venda com `capiStatus` de falha, e semear uma é escrita em tabela de dado de negócio — a regra nº 1 do incidente de 29/07 |
+| 6 | **o 8º alerta e o botão `Remover`** | ✅ markup asserido, e a porta medida ponta a ponta · ⛔ **nunca visto**: exigiria aprovar um padrão de host no dev |
+
+> ### ⛔ NÃO MARQUE NENHUM DOS SEIS COMO FEITO POR ASSERÇÃO VERDE
+>
+> O que existe são funções puras testadas e markup asserido. O que falta é o que
+> **só a tela responde** — e esta base tem a lista do que passou por `tsc`,
+> `lint`, `build` e teste e mesmo assim estava errado na tela: 3 dos 4
+> primitivos da Fase 2, o único bug do Gerenciador, os três do Login, os dois de
+> Taxas, a cor gravada fora da paleta em Áreas.
+>
+> ⚠️ E os itens 5 e 6 têm um agravante que os 1–4 não têm: eles dependem de um
+> **estado de dado que o dev não produz**, não só de uma janela. Levantar a
+> janela não basta — alguém precisa produzir a falha.
+
+## 🚫 O instrumento de janela segue INDISPONÍVEL NESTA MÁQUINA
+
+Sete caminhos medidos e registrados, `document.hidden` em todas as sondagens, e
+`requestAnimationFrame` que **nunca disparou** (`quadrosAcumulados: 0`,
+`transicoes: 0` em horas). ⛔ Não regaste nenhum dos sete sem ler a seção
+própria no `CLAUDE.md`.
+
+⚠️ **Nesta sessão nem a aba existia**: a extensão do Chrome não conectou e o
+devtools abriu um navegador novo com só `about:blank`. Não é "oculta" — é
+ausente, e é outro estado.
+
+## 🔜 O QUE SEGUE ABERTO, e não é de tela
+
+| | |
+|---|---|
+| **classes B e C das actions** | as 8 podadas estão registradas com o custo de cada uma; reconstruí-las é decisão de produto, não faxina |
+| **`gateways/testador.ts`** | 299 linhas de lógica de produto **sem tela**, órfão por consequência da poda. Em `ACEITOS` com o motivo |
+| **`v2loja`** | o falso positivo que sobrou no discriminador de hash. Agora ETIQUETADO como `🧊 CONGELA DEFEITO`, com a saída escrita |
+| **os candidatos a caminho irreversível** | exclusão de área, `ENCRYPTION_KEY` sem rotação, migração de altura. Medidos como FORMA, não investigados |

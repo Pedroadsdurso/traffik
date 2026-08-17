@@ -3002,6 +3002,85 @@ NÃO consertado**.
 > o Insights — e o defeito volta no lugar onde ele custa dinheiro, porque lá o
 > produto RECOMENDA em vez de listar.
 
+# 🧊 ASSERÇÃO QUE CONGELA DEFEITO PRECISA DIZER ISSO NA PRÓPRIA MENSAGEM
+
+> **Três viradas de veredito numa sessão só, 17/08/2026.** Três não é
+> coincidência: é a forma de um teste que esta base escreve o tempo todo, e que
+> reprova **exatamente no dia em que alguém faz a coisa certa**.
+
+Esta base congela estado ruim de propósito, e está certa em fazê-lo: é assim que
+*"registrado, não corrigido"* deixa de ser promessa e vira sinal. O problema não
+é congelar — é **congelar em silêncio**.
+
+> ## Uma asserção que exige que o defeito continue lá reprova quando ele é consertado. Sem a mensagem dizendo isso, o conserto certo lê como REGRESSÃO — e a reação natural é desfazê-lo.
+
+## 🔎 AS TRÊS DE 17/08/2026, e as três passavam verdes
+
+| # | a asserção | o que ela EXIGIA | reprovou quando |
+|---|---|---|---|
+| 1 | `test:format-mensagem` §2 | `buildPoints([0,0], 0, …).includes("NaN")` | os denominadores foram guardados |
+| 2 | `test:modulos-orfaos` | `doDiagnostico.length >= 8` — que os 12 órfãos **continuassem** órfãos | o aglomerado foi desfeito |
+| 3 | `test:diagnosticos-orfaos` §4 | que as 3 colunas de efeito seguissem **só com escritor** | o par foi fechado, horas depois |
+
+⚠️ **A nº 3 é a mais instrutiva**: ela foi escrita **na mesma sessão** que a
+desfez. Ou seja, o intervalo entre congelar e reprovar pode ser de horas — não é
+dívida antiga, é a forma do teste.
+
+> ### 🔴 POR QUE ISSO ENGANA MAIS QUE UM TESTE QUEBRADO
+>
+> | | o que quem lê conclui |
+> |---|---|
+> | teste quebrado comum | *"eu quebrei algo"* — e vai olhar o que mudou |
+> | asserção que congelava defeito | 🔴 *"eu quebrei algo"* — **e a conclusão é falsa**: ele consertou |
+>
+> A mensagem de falha é idêntica nos dois casos. E o reflexo — reverter até
+> ficar verde — desfaz o conserto e **repõe o defeito**, agora com a suíte
+> confirmando que está tudo certo.
+
+## ⛔ O FORMATO, e ele tem DUAS partes obrigatórias
+
+**A mensagem diz que congela um defeito, e diz o que fazer quando ela reprovar.**
+
+```js
+ok(
+  "🧊 CONGELA DEFEITO — as 3 colunas de efeito estão SÓ COM ESCRITOR. " +
+  "Se esta linha reprovar, alguém FECHOU o par: troque o veredito, não o conserto.",
+  leitores.length === 0,
+  …
+);
+```
+
+⛔ **A segunda metade não é redundante.** *"Isto congela um defeito"* diz o que
+a linha é; **"troque o veredito, não o conserto"** diz o que fazer com as mãos
+no teclado, que é o momento em que a decisão errada é tomada.
+
+⚠️ E vale para o outro sabor, que é o mais comum aqui: **"ainda não medido"**.
+`04` tem linhas em branco com esse significado, e uma asserção que exija
+*"continua sem medição"* reprova no dia em que alguém finalmente medir.
+
+### 🔬 A PERGUNTA QUE ACHA AS OUTRAS — binária, por asserção
+
+> ## **O que faria esta linha reprovar?** Se a resposta for *"alguém consertar o defeito"*, ela congela estado ruim — e a mensagem tem de dizer.
+
+Não é *"esta asserção está certa?"* — as três estavam. É *o que a faz cair*.
+
+```bash
+# candidatos: asserção cujo texto AFIRMA um estado ruim em vez de uma propriedade
+grep -rnE "SÓ COM|so com|>= [0-9]+ .*(órfão|orfao)|includes\(\"NaN\"\)|continua sem|ainda não|nunca foi" scripts/teste-*.mjs
+# e, ao lado, as que já se declaram:
+grep -rn "CONGELA DEFEITO" scripts/teste-*.mjs
+```
+
+A segunda linha é o inventário do que já está etiquetado. **A diferença entre as
+duas contagens é a dívida** — e ela é medível, o que é mais do que se podia
+dizer antes desta regra.
+
+⚠️ **Prima de *COMENTÁRIO QUE PROÍBE É O MAIS PERIGOSO DE TODOS***, e pela mesma
+mecânica: lá o ⛔ envelhecido autoriza desfazer o conserto; aqui é a suíte que
+autoriza, com a autoridade extra de estar vermelha.
+
+---
+
 # 🧨 A COMPOSIÇÃO É O DEFEITO — três peças corretas que juntas dão bloqueio PERMANENTE de host legítimo
 
 > **Medida e desfeita em 17/08/2026.** Família nova, e ela não se parece com

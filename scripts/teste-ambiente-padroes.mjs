@@ -92,12 +92,21 @@ const { lerPadroes, pareceHashUnico, casaPadrao, familiasDePreview } =
     "`loja2024` e `a1b2c3` cabem os dois no formato; o que separa é onde os dígitos estão",
   );
 
-  /* ⚠️ O QUE AINDA PASSA, e por quê. Dígito no MEIO é indistinguível de hash
-     sem palpite sobre o hospedeiro — que é o que este módulo recusa. */
+  /* 🧊 ESTA ASSERÇÃO CONGELA UM DEFEITO, e a etiqueta é obrigatória.
+     Dígito no MEIO é indistinguível de hash sem palpite sobre o hospedeiro —
+     que é o que este módulo recusa. `v2loja` é o falso positivo que sobreviveu
+     ao endurecimento de 14/08, e ele bloqueia envio à CAPI de forma
+     irreversível.
+
+     ⚠️ Ela exige que o defeito CONTINUE lá. Sem a etiqueta, quem endurecesse a
+     guarda veria um vermelho indistinguível de regressão — e o reflexo de
+     reverter até ficar verde reporia o falso positivo, agora com a suíte
+     confirmando que está tudo certo. */
   ok(
-    "⚠️ `v2loja` AINDA passa — o dígito está no meio",
+    "🧊 CONGELA DEFEITO — `v2loja` AINDA passa como hash (dígito no meio). " +
+      "Se esta linha reprovar, alguém FECHOU o falso positivo: troque o veredito, não o conserto",
     pareceHashUnico("v2loja") === true,
-    "registrado, não fechado: separá-lo de um hash exigiria heurística",
+    "registrado, não fechado: separá-lo de um hash exigiria heurística sobre o hospedeiro",
   );
 
   /* ⛔ E a linha de base do outro lado: os hashes de verdade continuam
