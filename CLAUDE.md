@@ -1662,6 +1662,131 @@ campanha, e **o motor de regras** — PAUSAR (por acidente) e `AJUSTAR_ORCAMENTO
 com o clamp travando no teto, os dois em produção em 31/07.
 → inventário completo em `docs/temas/gerenciador-e-graph-api.md`
 
+### 🪜 AS ESCADAS DE INTERVALO DO SYNC SÃO DECORAÇÃO A `*/15` — e nasceram assim
+
+> **Medido em 17/08/2026**, ao responder "quantos usuários cabem no cron".
+> ⛔ **MEDIDO · REGISTRADO · NÃO CORRIGIDO** — anterior a `4e6aa9e`.
+
+`autoSync.ts` tem dois ritmos: `METRICAS_MS = 20_000` e `COMPLETO_MS = 180_000`.
+Eles existem para **aliviar carga**: chamado com frequência, o sync decide
+sozinho se toca só as métricas, o ciclo inteiro, ou nada. E o cabeçalho da rota
+afirma o que isso compra:
+
+> *"É o que torna esta rota **segura de chamar a cada 1 minuto**: a frequência
+> da chamada deixa de determinar a carga na Graph API — os intervalos internos
+> determinam."*
+
+**A afirmação é VERDADEIRA. E o agendador roda `*/15`.** A 15 minutos de
+espaçamento todo usuário está sempre vencido nas duas escadas, então o ciclo
+completo roda em toda execução: **o mecanismo de alívio nunca alivia nada.**
+
+> ### 🔴 O AGRAVANTE É A DATA, e ele muda a família
+>
+> | | commit | data |
+> |---|---|---|
+> | o `*/15` entrou | `89cb87f` | **24/07/2026** |
+> | as escadas entraram | `c721058` | 28/07 |
+> | a frase "segura a 1 min" entrou | `5af6ad3` | 28/07 |
+>
+> `git log -p -- .github/workflows/cron.yml`: **a cadência nunca mudou.** Ou
+> seja, as escadas foram escritas **quatro dias depois** do `*/15`, contra uma
+> frequência que nunca existiu neste repositório.
+>
+> ## Ele não é um comentário que envelheceu até ficar falso. É um mecanismo que NASCEU DORMENTE — e a frase descreve corretamente uma capacidade que ninguém jamais exerceu.
+>
+> ⚠️ É por isso que ele escapa da varredura de *comentário que afirma efeito
+> inexistente*: o efeito **existe**, o código está certo, e a frase não mente. O
+> que não existe é a **condição** que a torna relevante — e nenhuma leitura do
+> arquivo revela isso, porque a condição mora em outro repositório de arquivos
+> (`.github/workflows/`), a quatro diretórios de distância.
+
+### ⛔ AS DUAS CONDIÇÕES, escritas juntas porque separadas enganam
+
+| cadência | o que as escadas fazem |
+|---|---|
+| **`*/15` (hoje)** | 🔴 **nada.** Decoração: todos vencidos, todos no ciclo completo, toda vez |
+| **1 min** | ✅ valem inteiras — a maioria sai em `pulado`, e a carga na Graph passa a ser ditada pelos intervalos |
+
+⛔ **Não "conserte" apagando as escadas**, e não conclua que elas estão erradas:
+elas são o que permitiria descer a cadência sem multiplicar a carga. E **não
+desça a cadência** achando que é de graça — a 1 min o `pulado` ainda custa 3
+idas ao banco por usuário (a reserva + as duas contagens da rota).
+
+> ### 🔎 O SINAL BARATO, e ele generaliza
+>
+> ## Todo comentário que afirma uma propriedade CONDICIONAL ("é seguro chamar a cada X") precisa dizer quanto vale o X HOJE — senão ninguém descobre que a condição não é atendida.
+>
+> ```bash
+> # a afirmação e a cadência real, lado a lado
+> grep -rn "a cada [0-9]" src/app/api/cron/ --include=*.ts
+> grep -n "cron:" .github/workflows/cron.yml
+> ```
+>
+> A pergunta binária por ocorrência: **o X do comentário bate com o X do
+> agendador?** Se não bate, o mecanismo que ele descreve está dormente — e isso
+> não aparece em teste nenhum, porque o código está correto.
+
+---
+
+### 🔴🔴 OS DOIS RISCOS DO CRON QUE ESCALAM PIOR QUE O TEMPO
+
+> **Medidos em 17/08/2026, e valem mais que o `msPorUsuario`.** Os dois são
+> anteriores a `4e6aa9e` (o laço por usuário é de `d6c3c8d`, 23/07).
+> ⛔ **MEDIDO · REGISTRADO · NÃO CORRIGIDO.**
+
+#### 1 · A fila é por USUÁRIO, o custo é por CONTA
+
+`route.ts` itera `for (const u of users)` com orçamento de **45s**
+(`ORCAMENTO_MS`), e corta antes de começar mais um. Dentro de cada usuário,
+`sync.ts` itera as contas **em série**, com 4 chamadas à Graph por conta no
+ciclo completo.
+
+```
+5 contas  →  descobrirContas + 4×5  =  21 idas à Graph, em série
+20 contas →  descobrirContas + 4×20 =  81 idas à Graph, em série
+```
+
+> ## Uma pessoa com 20 contas pesa como quatro com 5 — e pode sozinha consumir o orçamento e disparar o corte para todos os outros.
+
+🔴 **E isso não aparece no `msPorUsuario`**, que é a média que a própria rota
+publica: um usuário de 40s e três de 1s dão média de ~11s, e a média sugere que
+cabem 4. Cabe **um**, e os outros três caem no `interrompido`.
+
+✅ **O que segura hoje**, e é desenho deliberado: a ordem é rotativa
+(`lastSyncedAt` ascendente, nulos primeiro), então quem ficou de fora é o
+primeiro da próxima. **Estourar não quebra — estica o intervalo.**
+
+⚠️ Mas a rotação não protege contra um usuário que sozinho **não cabe em 45s**:
+ele nunca termina, nunca avança `lastSyncedAt`, e por isso é sempre o primeiro
+da fila — consumindo o orçamento inteiro, toda vez, para sempre. **A rotação
+resolve injustiça, não insuficiência.**
+
+🔎 O sinal na saída da rota é `interrompido: true` com `entraram` baixo e um
+`results[].ms` grande. **Leia o `ms` POR USUÁRIO, nunca só a média.**
+
+#### 2 · Rate limit da Meta por token, com N usuários no mesmo minuto
+
+Não há código para medir: é limite do outro lado, **por token de acesso**, e ele
+não avisa antes — devolve erro.
+
+⚠️ **O que torna este pior que o tempo:** o estouro de orçamento é diagnosticado
+(`interrompido`, `naoAlcancados`); o rate limit chega como **erro por conta**,
+cai no `catch` do laço, vira `registrarErro(acc.id)` e **incrementa o backoff
+daquela conta**. Ou seja: um pico de rate limit **coloca contas saudáveis em
+espera**, e a tela passa a mostrar erro de sincronização onde não há defeito
+nenhum de configuração.
+
+⛔ E o alívio que existiria — as escadas da seção acima — **está dormente**,
+porque a cadência é `*/15`. Os dois achados se compõem: a coisa que reduziria
+chamadas simultâneas é exatamente a que não está em uso.
+
+🔜 **Quem for paralelizar as contas** (o ganho óbvio: 21 idas em série viram ~4
+em profundidade) **paralelize contra este limite, não contra o relógio.** Trocar
+série por `Promise.all` sem teto de concorrência troca um problema medido por um
+não medido — e este não avisa.
+
+---
+
 ### 🔴 DOIS AGENDADORES rodando ao mesmo tempo
 
 O **cron-job.org** (configurado pelo usuário) e o
