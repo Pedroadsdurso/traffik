@@ -1699,6 +1699,11 @@ completo roda em toda execução: **o mecanismo de alívio nunca alivia nada.**
 > que não existe é a **condição** que a torna relevante — e nenhuma leitura do
 > arquivo revela isso, porque a condição mora em outro repositório de arquivos
 > (`.github/workflows/`), a quatro diretórios de distância.
+>
+> 🔎 **Este caso nomeou uma família própria** — procure por *MECANISMO DORMENTE*
+> neste arquivo. Lá está o `grep` que acha os outros candidatos pela FORMA da
+> frase (afirmação condicional cuja condição não está no arquivo), e o motivo de
+> o conserto **não** ser apagar.
 
 ### ⛔ AS DUAS CONDIÇÕES, escritas juntas porque separadas enganam
 
@@ -1752,17 +1757,56 @@ ciclo completo.
 publica: um usuário de 40s e três de 1s dão média de ~11s, e a média sugere que
 cabem 4. Cabe **um**, e os outros três caem no `interrompido`.
 
-✅ **O que segura hoje**, e é desenho deliberado: a ordem é rotativa
-(`lastSyncedAt` ascendente, nulos primeiro), então quem ficou de fora é o
-primeiro da próxima. **Estourar não quebra — estica o intervalo.**
-
-⚠️ Mas a rotação não protege contra um usuário que sozinho **não cabe em 45s**:
-ele nunca termina, nunca avança `lastSyncedAt`, e por isso é sempre o primeiro
-da fila — consumindo o orçamento inteiro, toda vez, para sempre. **A rotação
-resolve injustiça, não insuficiência.**
+> ### 🔴🔴 O MODO DE FALHA EM ESCALA NÃO É DEGRADAÇÃO — É BLOQUEIO
+>
+> **Corrigido em 17/08/2026, e a leitura anterior estava errada.** Aqui se dizia
+> que a ordem rotativa (`lastSyncedAt` ascendente, nulos primeiro) tornava o
+> estouro suave: *"estourar não quebra — estica o intervalo"*. **Não estica.**
+>
+> ## A rotação resolve INJUSTIÇA, não INSUFICIÊNCIA. E a diferença entre as duas é a diferença entre sincronizar a cada 30 min e não sincronizar nunca.
+>
+> Um usuário que sozinho **não cabe** no orçamento não gera atraso: gera fome.
+> A mecânica, com os três pontos medidos no código:
+>
+> | | |
+> |---|---|
+> | `lastSyncedAt` só avança **no sucesso** | `autoSync.ts:152` — quem não termina, não carimba |
+> | ordem é `lastSyncedAt` asc, **nulos primeiro** | quem não carimbou é **sempre o primeiro** |
+> | `LOCK_EXPIRA_MS` = **10 min** < cadência de **15 min** | o lock sempre expira entre as execuções, então ele **sempre volta elegível** |
+>
+> O laço:
+>
+> ```
+> execução 1  →  usuário pesado é o primeiro  →  não cabe  →  função morre
+> execução 2  →  lastSyncedAt continua nulo   →  é o primeiro de novo  →  morre
+> execução N  →  idem, para sempre
+> ```
+>
+> 🔴 **E ninguém mais roda.** O corte de orçamento só impede COMEÇAR outro
+> usuário — ele não interrompe quem já está correndo. Se a função morre DENTRO
+> do primeiro, o laço nunca chega aos demais: eles não atrasam, eles **nunca
+> sincronizam**, e o `lastSyncedAt` deles também congela.
+>
+> ⛔ **E não há sinal.** Morte por `maxDuration` não devolve resposta, então não
+> há `interrompido`, não há `naoAlcancados`, e o `registrarExecucao` — que roda
+> *depois* de `executar` — nem chega a gravar. O batimento vira **silêncio**,
+> que é indistinguível de "o agendador parou".
+>
+> ### 🕸️ E OS DOIS ACHADOS SE COMPÕEM — é isto que fecha a armadilha
+>
+> As escadas de intervalo (seção acima) estão **dormentes a `*/15`**, então o
+> usuário pesado pega **sempre o ciclo completo**, que é justamente o caminho
+> que não cabe. O mecanismo que poderia dar a ele um ciclo barato existe, está
+> correto, e não é exercido.
+>
+> ⚠️ **Isto muda a urgência, não só o registro:** não é um teto que se descobre
+> quando incomoda. É um usuário que, ao entrar, pode **parar a sincronização de
+> todos os outros** sem produzir um único erro visível.
 
 🔎 O sinal na saída da rota é `interrompido: true` com `entraram` baixo e um
-`results[].ms` grande. **Leia o `ms` POR USUÁRIO, nunca só a média.**
+`results[].ms` grande. **Leia o `ms` POR USUÁRIO, nunca só a média.** E se a
+rota parar de responder de vez, leia `ExecucaoCron`: silêncio ali é o caso
+grave, não o leve.
 
 #### 2 · Rate limit da Meta por token, com N usuários no mesmo minuto
 
@@ -1780,10 +1824,27 @@ nenhum de configuração.
 porque a cadência é `*/15`. Os dois achados se compõem: a coisa que reduziria
 chamadas simultâneas é exatamente a que não está em uso.
 
-🔜 **Quem for paralelizar as contas** (o ganho óbvio: 21 idas em série viram ~4
-em profundidade) **paralelize contra este limite, não contra o relógio.** Trocar
-série por `Promise.all` sem teto de concorrência troca um problema medido por um
-não medido — e este não avisa.
+> ### ⛔⛔ PARALELIZE CONTRA O RATE LIMIT, NUNCA CONTRA O RELÓGIO
+>
+> O ganho é real e óbvio — 21 idas em série viram ~4 em profundidade. E é
+> exatamente por ser óbvio que ele será feito com pressa, no dia em que o
+> `msPorUsuario` incomodar.
+>
+> ## `Promise.all` sem teto de concorrência troca um problema DIAGNOSTICADO por um que chega como erro de configuração em conta saudável.
+>
+> | | como se manifesta |
+> |---|---|
+> | estouro de orçamento (hoje) | `interrompido: true` + `naoAlcancados` — **a rota diz quem ficou** |
+> | rate limit (depois) | erro **por conta** → `catch` → `registrarErro` → **backoff** |
+>
+> 🔴 O segundo não se parece com um problema de escala: ele se parece com **a
+> conta do cliente estar mal configurada**. A tela mostra erro de sincronização,
+> o contador de falhas sobe, a conta entra em espera — e nada aponta para o
+> `Promise.all` que foi introduzido para resolver outra coisa.
+>
+> ⛔ **O teto de concorrência não é otimização — é a parte que torna a mudança
+> reversível.** Sem ele, a única forma de descobrir o limite é atingi-lo em
+> produção, com a conta de um cliente pagando a conta.
 
 ---
 
@@ -3126,6 +3187,84 @@ NÃO consertado**.
 > dia alguém "unificar" os dois para eliminar a divergência, o lado que perde é
 > o Insights — e o defeito volta no lugar onde ele custa dinheiro, porque lá o
 > produto RECOMENDA em vez de listar.
+
+# 😴 MECANISMO DORMENTE — a afirmação é VERDADEIRA, e a condição mora em outro arquivo
+
+> **Família nova, nomeada em 17/08/2026.** Ela é vizinha de *comentário que
+> afirma efeito inexistente* e **não é a mesma** — a diferença decide se a
+> varredura daquela acha esta. Não acha.
+
+| | o que está errado | como se acha |
+|---|---|---|
+| **comentário que afirma efeito inexistente** | a afirmação é **falsa** | lendo o código que ela descreve |
+| **mecanismo dormente** | 🔴 **nada.** A afirmação é verdadeira e o código está certo | ⛔ só comparando com um arquivo que ela não cita |
+
+> ## O que falta não é a implementação — é a CONDIÇÃO. E a condição vive fora do arquivo que a afirma.
+
+## 🔎 O CASO QUE NOMEOU A FAMÍLIA
+
+`api/cron/sync-facebook/route.ts` afirma, sobre as escadas de intervalo do
+`autoSync`:
+
+> *"É o que torna esta rota **segura de chamar a cada 1 minuto**: a frequência
+> da chamada deixa de determinar a carga na Graph API."*
+
+**Tudo nessa frase é verdade.** As escadas existem, funcionam, têm teste, e a
+rota é de fato segura a 1 minuto. O agendador roda **`*/15`** — e a 15 minutos
+todo usuário está sempre vencido, então o mecanismo nunca alivia nada.
+
+⚠️ E o agravante mediu-se no `git log`: o `*/15` entrou em **24/07** (`89cb87f`)
+e nunca mudou; as escadas e a frase entraram em **28/07**. Ou seja, o mecanismo
+**nasceu dormente** — não envelheceu até ficar inerte. A cadência que ele
+pressupõe nunca existiu neste repositório.
+
+> ### 🔴 POR QUE NENHUMA FERRAMENTA DESTA BASE PEGA
+>
+> `tsc`, `lint`, `build` e teste passam — o código está **certo**. A varredura
+> de comentário mentiroso passa — a frase é **verdadeira**. E a varredura de
+> código inerte passa — o mecanismo **é** chamado, em toda execução; ele só
+> devolve sempre o mesmo ramo.
+>
+> ⛔ A condição está a quatro diretórios de distância, em
+> `.github/workflows/cron.yml`, e **a frase não cita esse arquivo**. Não há
+> caminho de leitura que ligue os dois.
+
+## ⛔ O SINAL BARATO — afirmação CONDICIONAL cuja condição não está no arquivo
+
+> ## Todo comentário que afirma uma capacidade sob condição ("é seguro a cada X", "desde que Y esteja ligado", "quando Z for maior que N") precisa dizer **quanto vale a condição HOJE** — e onde ela mora.
+
+O `grep` acha os candidatos pela FORMA da frase, não pelo assunto:
+
+```bash
+# afirmações condicionais em código
+grep -rnE "seguro (de )?(chamar|usar|rodar)|desde que|contanto que|a cada [0-9]|enquanto .* estiver" \
+  src/ --include=*.ts --include=*.tsx
+# e as condições que costumam morar fora
+grep -rn "cron:" .github/workflows/*.yml
+grep -rnE "maxDuration|revalidate|CRON_SECRET|NEXT_PUBLIC_" src/ --include=*.ts | head
+```
+
+**A pergunta binária por ocorrência:** *o valor que a frase pressupõe está
+escrito em algum lugar deste arquivo?* Se não está, ela é candidata — e a
+resposta pode ser que a condição nunca foi atendida **nem uma vez**.
+
+⚠️ **Candidatos NÃO investigados**, medidos como forma: as afirmações sobre
+`revalidate` e cache de rota, as que pressupõem uma env var setada
+(`ENCRYPTION_KEY`, `CRON_SECRET`), e as que dizem "o painel chama isto a cada
+N segundos" — todas descrevem condição que vive fora do arquivo.
+
+### ✅ O CONSERTO NÃO É APAGAR — e isso separa esta família da vizinha
+
+Em *comentário que afirma efeito inexistente*, a frase é falsa e **sai**. Aqui a
+frase é verdadeira e o mecanismo é útil: apagá-lo removeria a única coisa que
+permitiria mudar a condição depois.
+
+⛔ **Escreva as DUAS condições juntas** — quanto vale hoje, e o que muda quando
+a condição for atendida. Foi o que se fez no caso do cron: *"a `*/15` são
+decoração; a 1 min valem inteiras"*. Uma frase só, e ela impede tanto o "apague
+isso que não faz nada" quanto o "desça a cadência que é de graça".
+
+---
 
 # 🧊 ASSERÇÃO QUE CONGELA DEFEITO PRECISA DIZER ISSO NA PRÓPRIA MENSAGEM
 
