@@ -3018,6 +3018,37 @@ NÃO consertado**.
 | 2 | a guarda que decide é **`pareceHashUnico`** — formato só, sem prefixo comum | ⚠️ assimetria conhecida, registrada, e **irredutível**: o teste de prefixo fala de um CONJUNTO e a ingestão vê um host por vez |
 | 3 | o **removedor ficou órfão** quando a tela de Testes foi deletada | ⚠️ parecia dívida de faxina — "12 exports sem consumidor" |
 
+### 🔬 A PEÇA 2 PRECISA DE UM HOST CONCRETO — senão ela é abstração
+
+**Medido em 17/08/2026**, e o resultado corrige uma suposição natural sobre a
+forma do falso positivo:
+
+```
+pareceHashUnico("loja2024")   →  false      ⬅ palavra + número NÃO é hash
+pareceHashUnico("deploy2024") →  false
+pareceHashUnico("shop2025")   →  false
+pareceHashUnico("teste123")   →  false
+pareceHashUnico("v2loja")     →  true       ⬅ 🔴 É ESTE. O dígito está no MEIO
+```
+
+⛔ **`loja2024` não é o exemplo** — o endurecimento de 14/08 fechou exatamente
+essa forma. Quem passa é **`v2loja`**: separá-lo de um hash gerado exigiria
+palpite sobre o hospedeiro, que é o que `pixel/ambiente.ts` recusa por
+princípio. Ele tem asserção própria em `test:ambiente-padroes`, para não parecer
+esquecimento.
+
+> ## E é isso que torna a peça 2 irredutível em vez de mal-feita: o falso positivo que resta **não tem conserto sem inventar conhecimento sobre o host**.
+
+```bash
+# remede quando desconfiar — a guarda muda, a família não
+node --experimental-strip-types --import ./scripts/alias-loader.mjs \
+  -e 'const{pareceHashUnico}=await import("@/lib/pixel/ambiente");console.log(pareceHashUnico("v2loja"))'
+```
+
+⚠️ **A composição não depende de QUAL host passa.** Ela depende de existir
+algum — e existe, medido. Trocar o exemplo por um que não passa enfraqueceria o
+registro sem mudar o defeito, que é o inverso do que este arquivo precisa.
+
 ## 🔴 E O PRODUTO DAS TRÊS
 
 ```
