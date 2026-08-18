@@ -186,6 +186,60 @@ secao("5 · Reserva negada é informação, não falha");
   );
 }
 
+/* ═══ 6 · 🔴 O CAMPO DO CONTRATO TEM LEITOR — a metade que faltava ══════
+
+   ## Contrato novo com consumidor que não leu o campo é a forma mais barata de nascer inerte.
+
+   A §5 prova que o SERVIDOR devolve `jaSincronizando`. Isso não prova que
+   alguém usa — e por um dia não usou: os dois consumidores em
+   `useTraffikState` ignoravam o campo, e o segundo dizia
+   **"Sincronizado: 0 campanhas, 0 anúncios, 0 dias de métricas"** para um
+   ciclo que não rodou. O produto afirmando resultado sobre medição que não
+   houve, que é a distinção central deste projeto.
+
+   ✅ **E dá para cobrir por asserção**, o que não era óbvio: o par
+   *rota que devolve* × *quem faz `fetch` daquela rota* é estático. A guarda
+   acha os consumidores pelo CAMINHO e exige que citem o campo.
+
+   ⚠️ **O limite vai escrito:** ela prova que o campo é LIDO, não que a
+   mensagem mostrada faz sentido. "Como ficou" segue sendo pergunta de tela —
+   e é a mesma fronteira de todo o resto deste arquivo.
+   ═════════════════════════════════════════════════════════════════════ */
+secao("6 · O campo `jaSincronizando` tem LEITOR — não basta o servidor devolver");
+{
+  const ROTA = "/api/sync/facebook";
+  const consumidores = globSync("src/**/*.{ts,tsx}")
+    .map((f) => f.replaceAll(String.fromCharCode(92), "/"))  /* barra invertida sem literal: o escape se perdeu duas vezes ao gerar este arquivo */
+    .filter((f) => !f.includes("generated/") && !f.startsWith("src/app/api/"))
+    .filter((f) => semCom(ler(f)).includes(`"${ROTA}"`));
+
+  ok(
+    "6 · linha de base: há quem faça `fetch` da rota",
+    consumidores.length >= 1,
+    consumidores.map((f) => f.split("/").pop()).join(" · ") || "⛔ ninguém chama — a asserção abaixo não mediria nada",
+  );
+
+  const semLeitura = consumidores.filter((f) => !/jaSincronizando/.test(semCom(ler(f))));
+  ok(
+    "6 · 🔑 TODO consumidor da rota LÊ `jaSincronizando`",
+    semLeitura.length === 0,
+    semLeitura.map((f) => f.split("/").pop()).join(" · ") || `${consumidores.length} de ${consumidores.length}`,
+  );
+
+  /* ⛔ E o ramo tem de vir ANTES do caminho de sucesso, senão ele é código
+     morto: o resumo zerado casaria primeiro e a frase nunca apareceria. */
+  for (const f of consumidores) {
+    const txt = semCom(ler(f));
+    const iCampo = txt.indexOf("jaSincronizando");
+    const iSucesso = txt.indexOf("Sincronizado:");
+    ok(
+      `6 · …e em \`${f.split("/").pop()}\` o ramo vem ANTES do sucesso`,
+      iCampo > 0 && (iSucesso === -1 || iCampo < iSucesso),
+      iSucesso === -1 ? "não há ramo de sucesso neste arquivo" : `campo em ${iCampo}, sucesso em ${iSucesso}`,
+    );
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════ */
 if (falhas.length) {
   console.log("\n\x1b[31m" + falhas.length + " falha(s):\x1b[0m\n  - " + falhas.join("\n  - "));

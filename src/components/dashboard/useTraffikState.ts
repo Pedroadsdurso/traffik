@@ -1073,10 +1073,18 @@ export function useTraffikState(
            * É o mesmo defeito do `affected: 1` das regras: o produto sabia o
            * que houve e escolhia não dizer.
            */
+          /* 🔴 `jaSincronizando` ANTES de tudo — inclusive antes dos erros.
+             A rota devolve 200 com um resumo ZERADO quando a reserva é negada,
+             e sem este ramo a mensagem viraria "0 camp. · 0 anúncios · 0 dias":
+             o produto afirmando que sincronizou e não achou nada, quando na
+             verdade não sincronizou. É "não medido" virando "medi zero", a
+             distinção central deste projeto. */
           const msg = res.ok
-            ? json.errors?.length
-              ? `✗ ${json.errors.join(" · ")}`
-              : `${json.campaigns || 0} camp. · ${json.ads || 0} anúncios · ${json.metrics || 0} dias`
+            ? json.jaSincronizando
+              ? "Já está sincronizando…"
+              : json.errors?.length
+                ? `✗ ${json.errors.join(" · ")}`
+                : `${json.campaigns || 0} camp. · ${json.ads || 0} anúncios · ${json.metrics || 0} dias`
             : json.error || "Falha na sincronização.";
           setS((st) => ({ ...st, accountSync: { ...st.accountSync, [ac.id]: { busy: false, msg } }, adsRefreshKey: st.adsRefreshKey + 1 }));
         } catch {
@@ -1766,7 +1774,16 @@ export function useTraffikState(
       try {
         const res = await fetch("/api/sync/facebook", { method: "POST" });
         const json = await res.json();
-        if (res.ok) {
+        if (res.ok && json.jaSincronizando) {
+          /* ⛔ NÃO é sucesso e NÃO é erro — é o estado real, e ele precisa ter
+             frase própria. Sem este ramo a linha abaixo diria "Sincronizado: 0
+             campanhas, 0 anúncios, 0 dias de métricas", que é o produto
+             afirmando um resultado sobre um ciclo que não rodou.
+
+             ⚠️ E `refreshKey` NÃO avança: não há dado novo para buscar, e
+             recarregar aqui ensinaria o usuário a achar que o clique fez algo. */
+          set({ syncBusy: false, syncResult: "Já está sincronizando — os dados chegam em instantes." });
+        } else if (res.ok) {
           setS((st) => ({
             ...st,
             syncBusy: false,

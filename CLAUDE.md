@@ -2270,9 +2270,35 @@ isso só ele reservava) e o `autoSync` passou a **delegar** — inclusive o
 `LOCK_EXPIRA_MS`, que decide o mesmo `where`. Extrair e deixar a cópia lá
 recriaria a duplicata no commit que a desfaz.
 
-✅ `test:reserva-sync`, **21 asserções**, no `npm test` no mesmo commit. Provado
-pelo lado negativo duas vezes: um `= "exigir"` na assinatura e um `"ignorar"` no
-`?full=1` reprovam nomeando.
+✅ `test:reserva-sync`, **24 asserções**, no `npm test` no mesmo commit. Provado
+pelo lado negativo três vezes: um `= "exigir"` na assinatura, um `"ignorar"` no
+`?full=1`, e o consumidor voltando a ignorar o campo — os três reprovam nomeando.
+
+> ### 🔴 CONTRATO NOVO COM CONSUMIDOR QUE NÃO LEU O CAMPO — a forma mais barata de nascer inerte
+>
+> Por um dia, `jaSincronizando` existiu no servidor e **ninguém leu**. A §5
+> provava que a rota devolve; nada provava que alguém usa.
+>
+> ⛔ **E o sintoma era pior que silêncio:** o consumidor do botão global montava
+> a frase com o resumo zerado e dizia **"Sincronizado: 0 campanhas, 0 anúncios,
+> 0 dias de métricas"** — o produto afirmando um resultado sobre um ciclo que
+> não rodou. É *"não medido"* virando *"medi zero"*, a distinção central deste
+> projeto, na camada de microcópia.
+>
+> ✅ **E DÁ para cobrir por asserção**, o que não era óbvio: o par *rota que
+> devolve* × *quem faz `fetch` daquela rota* é estático. A guarda acha os
+> consumidores **pelo caminho da rota** e exige que citem o campo — e exige
+> ainda que o ramo venha **antes** do caminho de sucesso, senão ele é código
+> morto (o resumo zerado casaria primeiro).
+>
+> ⚠️ **O limite vai escrito:** ela prova que o campo é LIDO, não que a mensagem
+> mostrada faz sentido. *"Como ficou"* segue sendo pergunta de tela.
+>
+> 🔎 O `grep` que generaliza, para qualquer campo novo de contrato:
+> ```bash
+> grep -rln '"/api/<rota>"' src/ --include=*.ts --include=*.tsx | grep -v src/app/api/
+> # e, em cada um: o campo novo aparece?
+> ```
 
 ---
 
@@ -3875,6 +3901,55 @@ permitiria mudar a condição depois.
 a condição for atendida. Foi o que se fez no caso do cron: *"a `*/15` são
 decoração; a 1 min valem inteiras"*. Uma frase só, e ela impede tanto o "apague
 isso que não faz nada" quanto o "desça a cadência que é de graça".
+
+---
+
+# 📐 EM QUE UNIDADE A PROTEÇÃO SERIALIZA, E EM QUE UNIDADE O PROBLEMA ACONTECE?
+
+> **Formulação do dono, 17/08/2026**, ao fechar a investigação do cron. É a
+> pergunta a fazer em **qualquer proteção nova** — não é nota do sync.
+
+> ## Uma proteção tem uma GRANULARIDADE, e o problema tem outra. Quando não batem, ela funciona perfeitamente e não protege — e ninguém percebe, porque ela está lá.
+
+### 🔎 OS DOIS CASOS QUE PRODUZIRAM A PERGUNTA, medidos no mesmo dia
+
+| proteção | serializa por | o problema acontece por | batem? |
+|---|---|---|---|
+| a **fila** do cron (`for` com orçamento) | **USUÁRIO** | **CONTA** — o custo é 4 idas à Graph por conta | 🔴 não |
+| a **reserva** (`AdProfile.syncLockedAt`) | **PERFIL** | **TOKEN** — o rate limit da Meta é por token | 🔴 não |
+
+**Consequências, e cada uma foi medida:**
+
+- A fila trata um usuário de 20 contas como um de 5. Ele pesa 4× e **consome o
+  orçamento de todos** — e isso não aparece no `msPorUsuario`, que é média.
+- A reserva impede dois syncs do mesmo perfil, e **não impede** dois perfis do
+  mesmo token baterem na Graph juntos. Quem ler "tem lock" conclui que o rate
+  limit está tratado. Não está.
+
+### ⛔ O QUE TORNA ESTA FAMÍLIA DIFÍCIL
+
+A proteção **funciona**. Ela faz exatamente o que promete, e o teste dela passa.
+O que falha é a inferência de quem lê: *"existe um lock, logo a concorrência
+está resolvida"* — sem perguntar **concorrência de quê**.
+
+⚠️ É prima de *mecanismo dormente* (lá a condição não é atendida; aqui ela é, e
+para a coisa errada) e de *controle que não controla nada* (lá não há mecanismo;
+aqui há, e ele mira ao lado).
+
+> ### 🔬 A PERGUNTA, em duas linhas, antes de escrever qualquer guarda
+>
+> 1. **Em que unidade ela serializa?** — a chave do lock, o `where` da reserva,
+>    o que o laço itera. É uma leitura de código, e é objetiva.
+> 2. **Em que unidade o problema acontece?** — quem impõe o limite, e sobre o
+>    quê. Costuma estar do lado de fora: a Meta, o Postgres, a Vercel.
+>
+> ⛔ **Se as duas respostas forem palavras diferentes, escreva isso NA
+> PROTEÇÃO** — senão a próxima pessoa vai concluir que ela cobre o que não
+> cobre. Foi o que se fez em `lib/facebook/reserva.ts`, no cabeçalho.
+
+⚠️ **E não conclua que a proteção está errada.** As duas acima são úteis: a fila
+impede a função de morrer, e a reserva impede desperdício de quota. O defeito
+não é existirem — é **serem lidas como cobertura de outro problema**.
 
 ---
 
