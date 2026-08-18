@@ -1389,6 +1389,7 @@ qualquer resize, leia `innerWidth` e compare.
 | SHELL | 18 | — | 2 |
 | DASHBOARD | 29 | — | 9 |
 | INTEGRAÇÕES | 24 | — | 17 |
+| ANÚNCIOS | 0 | 22 | — |
 | REGRAS | 0 | 21 | — |
 | CAMPANHAS / GERENCIADOR | 18 | 1 | 4 |
 | UTM & SNIPPETS | 22 | — | 10 |
@@ -8966,6 +8967,19 @@ uma sessão que já entregou cinco frentes — é a regra das duas tentativas.
 | o **PROMPT F** | resolve-se **dentro dela** — consertar a grade antes seria trabalho que não sobrevive à deleção |
 | a inconsistência REAL | 🔑 **`auto-fit` × `auto-fill`**, não o `minmax`: `CriativosScreen` usa `auto-fill` nos cards e as outras usam `auto-fit`, então com poucos itens os cards esticam numa tela e não na outra |
 | grades medidas | `AnunciosView` `minmax(200px,1fr)` · `WebhooksScreen` `auto-fit minmax(150px,1fr)` + mestre/detalhe · `PixelScreen` mestre/detalhe (sem grade de card) · `CriativosScreen` `auto-fit` nos KPIs e **`auto-fill`** nos cards |
+| ✅ **a especificação** | escrita em 18/08/2026 — `04`, seção **ANÚNCIOS**, **22 itens**, todos ❌. Era o bloqueio: o `04` tem precedência sobre todos e não tinha inventário desta tela |
+
+> ### 🔑 `v.adProfiles` NÃO FICA ÓRFÃO ao deletar a `AnunciosView`
+>
+> Medido em 17/08/2026: além dela, leem o acessor a **`VisaoGeralScreen`** e o
+> **`AppShell`**.
+>
+> ⛔ Registrado para não virar **órfão aparente** na próxima varredura: quem
+> deletar a view e rodar o lint verá o acessor ainda em uso, e está certo. O
+> inverso também vale — não o remova junto "por limpeza"; duas telas param.
+>
+> ⚠️ É a forma boa da regra *antes de deletar um órfão, pergunte o que ele
+> FAZIA*: aqui a resposta é que ele nunca foi só daquela tela.
 
 ### 🔬 A DUPLA RESTRIÇÃO — MEDIDA em 17/08/2026, e a forma NÃO é a do Pixel
 

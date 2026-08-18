@@ -455,6 +455,107 @@ e entram **pelo webhook cadastrado**, não por um catálogo fixo.
 
 ---
 
+## ANÚNCIOS
+
+> ### ⛔ SEM IMAGEM DE REFERÊNCIA — a terceira tela do redesign nessa situação
+>
+> Como WEBHOOKS e PIXEL & EVENTOS, esta seção foi **escrita a partir do que a
+> `AnunciosView` (322 linhas) já faz**, mais o histórico de entregas — não
+> conferida contra print. As imagens 3, 5 e 6 são todas a *Visão geral*.
+>
+> Seção **nova**, e não um apêndice de INTEGRAÇÕES: misturar a contagem
+> esconderia o que falta nesta tela. O `docs:estado` passa a contar **14 telas**.
+>
+> ⛔ **Todos os itens nascem ❌, não em branco.** A convenção da linha em
+> branco é *"construída e NÃO VISTA"* — ela tira o item da contagem. Aqui a
+> tela **não existe**, e usar branco mostraria `0 | — | —` na tabela de
+> estado: nada feito e **nada faltando**, que é o oposto da verdade.
+
+> ### 🔑 O PAINEL DE INTEGRAÇÕES › VISÃO GERAL É POR INTEGRAÇÃO. ANÚNCIOS É POR PERFIL
+>
+> O objeto que **conecta, expira e reconecta** é o **perfil**, não a conta. É a
+> terceira da família por-usuário, junto de Pixel e Webhooks.
+>
+> **O motivo que decide é a ação, não a hierarquia:** reconectar é a coisa mais
+> importante que se faz aqui, e ela pertence ao perfil. Numa lista achatada de
+> contas não há onde pendurá-la — apareceria repetida em cada linha, ou fora de
+> lugar num cabeçalho.
+>
+> ⚠️ Decisão do dono, 18/08/2026. Ela existia para Pixel e Webhooks e **faltava
+> para esta tela** — e a ausência foi o que bloqueou a construção: o `04` tem
+> precedência sobre todos, e uma tela sem inventário aqui seria especificação
+> escrita por quem constrói.
+
+> ### 🔴 O RECORTE POR ÁREA AQUI É INDIRETO — e isso vira CONTEÚDO, não problema
+>
+> `AdProfile` **não tem `workspaceId`**. O escopo entra nas CONTAS
+> (`adAccounts: { where }`), e o perfil some por consequência de ficar sem
+> nenhuma (`perfisNoEscopo`, medido em `test:perfis-area`).
+>
+> **Duas consequências, e as duas são informação que a tela deve DIZER:**
+>
+> | o que acontece | o que a tela diz |
+> |---|---|
+> | o perfil aparece com um SUBCONJUNTO das contas dele | **`3 de 8 contas nesta área`** — o resto declarado, não escondido |
+> | um perfil sem NENHUMA conta nesta área **não aparece** | precisa estar dito em algum lugar, senão o usuário procura um perfil que sabe ter conectado |
+>
+> ⛔ Numa lista achatada de contas, as de outra área **simplesmente somem** e
+> ninguém sabe que existem. A vitrine de perfis é o que torna a ausência
+> declarável — e é o segundo motivo de ela ser a forma certa.
+
+### Vitrine — a lista de perfis conectados
+
+| Elemento | Status |
+|---|---|
+| Card por perfil, com avatar, nome e e-mail | ❌ |
+| **`N de M contas nesta área`** — o recorte declarado no próprio card | ❌ |
+| Aviso quando um perfil conectado **não aparece** por não ter conta nesta área | ❌ |
+| Contagem de contas com rastreamento ligado (`trackedCount` / `accountCount`) | ❌ |
+| Selo de estado do TOKEN (válido · expira em N dias · vencido · desconhecido) | ❌ |
+| `Reconectar` — a ação principal da tela, no PERFIL | ❌ |
+| `Desconectar`, com confirmação que nomeia o que se perde e o que NÃO se perde | ❌ |
+| `Sincronizar` do perfil, e o estado `jaSincronizando` quando a reserva é negada | ❌ |
+| `Adicionar perfil` / `Conectar Facebook Ads` no estado vazio | ❌ |
+| Estado vazio dizendo o que se perde sem perfil (sem gasto, sem ROAS, sem ROI) | ❌ |
+
+### Contas de um perfil
+
+| Elemento | Status |
+|---|---|
+| Expandir o card revela as contas DA ÁREA ATIVA | ❌ |
+| Nome, `fbAccountId` e moeda de cada conta | ❌ |
+| Interruptor de rastreamento por conta (`toggleTracking`), pelo primitivo `tk/Controles` | ❌ |
+| `Ativar todas` / `Rastrear` em massa, no nível do perfil | ❌ |
+| Selo de status da conta, com **`Status não informado`** distinto de `Desabilitada` | ❌ |
+| `Sincronizar` de UMA conta, com a mensagem de resultado ao lado | ❌ |
+| Indicador de **busca de histórico** na primeira sincronização (`buscandoHistorico`) | ❌ |
+
+### Erros e espera — o que a tela antiga já fazia bem
+
+| Elemento | Status |
+|---|---|
+| Erro de sincronização POR CONTA, com o tom do `erroMeta.ts` respeitado | ❌ |
+| ⛔ Erro do PERFIL não repetido em cada conta (`mesmoErroDoPerfil`) | ❌ |
+| Contador de falhas seguidas e rótulo de espera do backoff (`esperaLabel`) | ❌ |
+| Erro CRU disponível, sem poluir o card (`erroCru`) | ❌ |
+| `erroDescoberta` do perfil — explica `accountStatus` nulo em massa | ❌ |
+
+> ### ⚠️ O QUE **NÃO** ENTRA, e o motivo de cada um
+>
+> | | |
+> |---|---|
+> | catálogo multi-plataforma (Google, TikTok, Stripe…) | 🔧 a ferramenta é **mono-plataforma** hoje — mesma causa dos 🔧 de INTEGRAÇÕES |
+> | criar/editar conta de anúncio | não somos o Gerenciador da Meta; a conta nasce lá |
+> | mover conta entre áreas | é a tela de **Áreas de Trabalho**, e o vínculo é `AdAccount.workspaceId` |
+
+> ### 🔗 O QUE ELA HERDA, já medido
+>
+> - **`perfisNoEscopo`** (`lib/facebook/perfis.ts`) já extraído e asserido —
+>   `test:perfis-area`, 15 asserções, com as **quatro** formas de fixture.
+> - **`jaSincronizando`** já tem contrato e leitor; a tela nova precisa mantê-lo.
+> - ⚠️ **`v.adProfiles` NÃO fica órfão** ao deletar a `AnunciosView`: a
+>   `VisaoGeralScreen` e o `AppShell` também o leem. Ver o registro no CLAUDE.md.
+
 ## REGRAS
 
 Referência: imagem 2. Tela inteiramente nova.
