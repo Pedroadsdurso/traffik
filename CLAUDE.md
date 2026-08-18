@@ -3402,6 +3402,40 @@ família da cicatriz que virou anatomia.
 | **Cálculo** | denominador zero (o mapa das razões) | `null` → `"—"` | `0` → `0,00x` |
 | **Gráfico** | heatmap dia × hora | célula hachurada, nunca observada | célula pintada no piso, observada e sem venda |
 | **Persistência** | `paineis` no layout salvo | campo **não é array** → corrompido, cai no padrão | `[]` → o usuário removeu todos, e a escolha é respeitada |
+| 🆕 **Microcópia** | a frase de resultado do sync | o ciclo **não rodou** → *"já está sincronizando"* | rodou e não achou nada → *"0 campanhas"* |
+
+> ### 🔴 A QUARTA CAMADA — o TEXTO que descreve o que aconteceu, 17/08/2026
+>
+> As três acima são sobre o VALOR: um número, um pixel, um campo salvo. Esta é
+> sobre a **frase** — e ela escapou de todas as guardas anteriores porque
+> nenhuma olha para microcópia.
+>
+> O caso: `POST /api/sync/facebook` passou a devolver `reservaNegada` quando a
+> reserva é negada, com um resumo **zerado** (`accounts: 0, campaigns: 0, …`).
+> O consumidor não leu o campo e montou a frase de sempre:
+>
+> ```
+> "Sincronizado: 0 campanhas, 0 anúncios, 0 dias de métricas."
+> ```
+>
+> ## Cada número ali é verdadeiro. A frase inteira é falsa — porque a palavra "Sincronizado" afirma que houve um ciclo, e não houve.
+>
+> ⚠️ **Não é erro de cálculo nem de dado**: o servidor mandou a informação
+> certa, e ela estava no envelope. O que colapsou as duas foi o **verbo**.
+>
+> 🔎 **O `grep` que acha os candidatos** é por frase de resultado montada a
+> partir de contagem, sem ramo para "não houve medição":
+> ```bash
+> grep -rnE '`[A-ZÀ-Ú][^`]*\$\{[a-z]+\.(count|total|campaigns|metrics|ads|accounts)' src/ --include=*.ts --include=*.tsx
+> ```
+> A pergunta binária por ocorrência: **existe um estado em que esta frase é
+> montada e a operação não aconteceu?** Se existe, ela precisa de ramo próprio
+> — não de um número diferente.
+>
+> ⛔ **E o corolário fecha o caso:** na reserva negada o `refreshKey` **não
+> avança**. Recarregar ali seria a tela confirmando com movimento o que a frase
+> acabou de negar — e movimento é mais convincente que texto. Um estado que não
+> mudou não pode produzir sinal de que mudou.
 
 **A pergunta é sempre a mesma: houve medição?** Se não houve, o produto não pode
 afirmar nada sobre o valor — nem zero, nem padrão, nem "tudo bem".
@@ -8715,3 +8749,63 @@ qual deles é uma medição — não uma leitura de código.
 Se nada mudou, ele não era a causa. Foi assim que este erro caiu, e é a mesma
 disciplina de *provar pelo lado negativo* que a base já usa em teste — aplicada a
 diagnóstico de layout.
+
+---
+
+# 📌 ESTADO DA SESSÃO — 17/08/2026
+
+> **A mais nova. Se contradisser qualquer coisa acima, ela vence.**
+
+## ✅ VERDE, e o remoto conferido por `ls-remote`
+
+| | |
+|---|---|
+| `origin/main` | `64326a1` → **`fe770ab`**, 16 commits, **0 à frente / 0 atrás** |
+| outras branches | `fix/pixel-checkout-taxa-fixa`, `redesign/dashboard`, `ux-f-g` — **hashes idênticos** aos do início. Nenhuma tocada |
+| `tsc` | **0 erros** |
+| `lint` | **0 warnings, 0 errors** — contados na SAÍDA |
+| `npm test` | exit **0**, **2.717 asserções em 85 scripts** (era 2.485 em 80) |
+
+## 🔧 O QUE MUDOU EM CÓDIGO
+
+| | |
+|---|---|
+| **`AlertList`** | 8 de 8 alertas DESENHADOS (era 0 de 7) · o `comRodape` deixou de prender o visível em 1 antes da medição · 8º alerta com AÇÃO, que devolve a porta de um bloqueio irreversível |
+| **`buildPoints`** | os dois denominadores guardados, com a invariante *finito antes ⇒ idêntico depois* (fuzz de 400) |
+| **`diagnostics.ts`** | 12 órfãos → **0**: 2 religadas, 1 despromovida, 8 podadas com registro |
+| **efeitos pós-venda** | a leitura voltou na LINHA da venda — as 3 colunas deixaram de ser só-escritor |
+| **feed › ORIGEM** | a coluna tinha dois significados; passou a ter um |
+| **prefixo do IP** | `PREFIXO_IP_ANONIMO` exportado, a purga importa |
+| **reserva de sync** | parâmetro **obrigatório** nos 6 chamadores · CAS extraído para `reserva.ts` · `jaSincronizando` com leitor |
+
+## 📚 FAMÍLIAS NOVAS NO ARQUIVO
+
+`A COMPOSIÇÃO É O DEFEITO` · `ASSERÇÃO QUE CONGELA DEFEITO PRECISA DIZER ISSO` ·
+`MECANISMO DORMENTE` · `EM QUE UNIDADE A PROTEÇÃO SERIALIZA` · e a **quarta
+camada** da distinção central (microcópia).
+
+## ⚠️ O QUE EU ERREI, e as três estão registradas
+
+| | |
+|---|---|
+| **escadas "dormentes"** | li a cadência no `cron.yml` e o chamador real era outro serviço. **Falso positivo preservado** de propósito — é o caso mais instrutivo da família |
+| **"terminar o mapa das razões"** | li de três cópias que diziam pendente; a que MEDIU dizia fechado desde 06/08 |
+| **guarda medindo prosa** | 7ª ocorrência, num arquivo cujo comentário eu tinha acabado de escrever |
+
+## ➡️ PRÓXIMA SESSÃO: Integrações › Anúncios
+
+⛔ **Não começou de propósito.** Sétima reescrita de tela não se emenda no fim de
+uma sessão que já entregou cinco frentes — é a regra das duas tentativas.
+
+**O que já está medido, para não remedir:**
+
+| | |
+|---|---|
+| `AnunciosView` | **322 linhas**, e é a **ÚLTIMA legada servindo rota** |
+| o **PROMPT F** | resolve-se **dentro dela** — consertar a grade antes seria trabalho que não sobrevive à deleção |
+| a inconsistência REAL | 🔑 **`auto-fit` × `auto-fill`**, não o `minmax`: `CriativosScreen` usa `auto-fill` nos cards e as outras usam `auto-fit`, então com poucos itens os cards esticam numa tela e não na outra |
+| grades medidas | `AnunciosView` `minmax(200px,1fr)` · `WebhooksScreen` `auto-fit minmax(150px,1fr)` + mestre/detalhe · `PixelScreen` mestre/detalhe (sem grade de card) · `CriativosScreen` `auto-fit` nos KPIs e **`auto-fill`** nos cards |
+
+⚠️ E ela herda a **dupla restrição do artefato**: o painel de Anúncios entrega
+conta e perfil, então vale a pergunta de sempre — *trocar de área muda o
+CONTEÚDO ou a LISTA?*

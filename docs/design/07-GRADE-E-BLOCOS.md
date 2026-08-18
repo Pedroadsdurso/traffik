@@ -2243,15 +2243,16 @@ Ela cobre a plumbagem, não o desenho.
 
 | | |
 |---|---|
-| commit | **`d8da390`** — a suíte foi medida nele; esta seção é o commit de documentação em cima |
+| commit | **`fe770ab`** — remedido ao encerrar a sessão |
 | `origin/main` | conferido por `git ls-remote`, **nunca** pelo que o `push` disse |
 | `tsc` | **0 erros** |
 | `lint` | **0 erros e 0 warnings** — contados na SAÍDA, nunca pelo exit |
-| `npm test` | exit **0**, **2.673 asserções em 83 scripts** |
+| `npm test` | exit **0**, **2.717 asserções em 85 scripts** |
 | agregado | **100 arquivos de teste, 0 órfãos** |
 
 ⚠️ **O total é o denominador da suíte**, e a queda é assinatura de interrupção
-mesmo com exit 0. A progressão: 2.485 → 2.608 → 2.640 → **2.673**.
+mesmo com exit 0. A progressão: 2.485 → 2.608 → 2.640 → 2.673 → 2.687 → 2.693
+→ 2.714 → **2.717**.
 
 ⛔ E o exit não vale sozinho: nesta sessão o `npm test` saiu **1.297 em 49
 scripts** numa execução, e foi o TOTAL que localizou onde a cadeia `&&` parou.
