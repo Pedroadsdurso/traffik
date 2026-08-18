@@ -8880,5 +8880,39 @@ ou não está" — é o mesmo item mudando de conteúdo conforme a área.
 ⚠️ **Com um perfil só, ou com três formas, a asserção passa por acidente** — é a
 mesma armadilha registrada no Pixel, agravada pelo grau a mais de indireção.
 
-⚠️ E a segunda metade — *trocar de PERFIL muda o conteúdo* — **não foi medida**:
-ela depende do que o painel novo desenhar, e o painel ainda não existe.
+### ✅ MEDIDO E ASSERIDO EM 17/08/2026 — `test:perfis-area`, 15 asserções
+
+A consulta saiu de dentro da server action (`lib/facebook/perfis.ts`,
+`perfisNoEscopo`) porque `requireUserId()` exige sessão e nenhum script tem uma
+— o mesmo MOVE que o `escopoWhere.ts` fez pelo Pixel. Está no `test:banco`: o
+recorte é do Prisma, não de função pura.
+
+> ### 🔴 O QUE A OBSERVAÇÃO ACHOU, e ela contraria a dedução
+>
+> ```
+> PRINCIPAL (catch-all)   P-órfão  -> [cO]      forma 4: NÃO ENTRA
+> Área A (estrito)        P-só-A   -> [cA]
+>                         P-A-e-B  -> [c4a]     forma 4: ENTRA com [c4a]
+> Área B (estrito)        P-só-B   -> [cB]
+>                         P-A-e-B  -> [c4b]     forma 4: ENTRA com [c4b]
+> ```
+>
+> ## ⛔ "Catch-all" NÃO é "vê tudo" — é "vê o que é MEU ou de NINGUÉM".
+>
+> O `OR [ workspaceId = principal , NULL ]` não alcança contas de áreas
+> secundárias. Um perfil cujas contas estão **todas** em áreas secundárias é
+> **invisível na Principal** — e `P-só-A` e `P-só-B` também não aparecem lá.
+>
+> ⚠️ A Principal é o **catch-all do que não tem dono**, não a visão global. Quem
+> ler "Principal" como "todas as áreas" erra — e a leitura é natural o bastante
+> para eu ter medido em vez de deduzir, por ordem do dono.
+
+⛔ **A asserção compara CONJUNTO DE IDS**, nunca `length` nem presença do perfil.
+✅ E a regra de aceitação foi exercida: trocando o `where` de B por um fixo em A,
+a suíte sai com **4 falhas nomeadas**. Um teste de presença não teria caído.
+
+### 🔜 PENDENTE — a segunda metade NÃO foi tocada
+
+*Trocar de PERFIL muda o conteúdo do painel* segue **sem medição**: ela depende
+do que o painel novo desenhar, e ele ainda não existe. ⛔ Não a marque como
+coberta pelas 15 asserções acima — elas medem o recorte por ÁREA.

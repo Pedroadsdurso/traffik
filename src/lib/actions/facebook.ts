@@ -3,6 +3,7 @@
 import { auth } from "@/auth";
 import { getLastWorkspaceId } from "@/lib/actions/workspaces";
 import { escopoDeConfig } from "@/lib/areas/escopoConfig";
+import { perfisNoEscopo } from "@/lib/facebook/perfis";
 import { prisma } from "@/lib/prisma";
 
 export interface AdAccountDTO {
@@ -78,51 +79,15 @@ async function requireUserId(): Promise<string> {
 export async function listAdProfiles(workspaceId?: string | null): Promise<AdProfileDTO[]> {
   const userId = await requireUserId();
   const escopo = await escopoDeConfig(userId, workspaceId ?? (await getLastWorkspaceId()));
-  const profiles = await prisma.adProfile.findMany({
-    where: { userId },
-    orderBy: { connectedAt: "asc" },
-    include: {
-      adAccounts: {
-        where: escopo.where,
-        orderBy: { name: "asc" },
-        // Contagens para a tela de Integracoes. `_count` e uma subquery do
-        // Prisma — nao carrega as linhas.
-        include: { _count: { select: { campaigns: true, pixelConfigs: true } } },
-      },
-    },
-  });
-  return profiles
-    .filter((p) => p.adAccounts.length > 0)
-    .map((p) => ({
-    id: p.id,
-    name: p.name,
-    email: p.email,
-    pictureUrl: p.pictureUrl,
-    lastDiscoveryError: p.lastDiscoveryError,
-    // ⚠️ Distingue "ainda nao sincronizamos" de "a Meta nao informou". Sem
-    // isso, `accountStatus` nulo dizia "Status nao informado" nos dois casos —
-    // e so um deles pede acao.
-    nuncaSincronizou: p.lastSyncedAt == null,
-    tokenExpiresAt: p.tokenExpiresAt,
-    connectedAt: p.connectedAt,
-    lastSyncedAt: p.lastSyncedAt,
-    accounts: p.adAccounts.map((a) => ({
-      id: a.id,
-      fbAccountId: a.fbAccountId,
-      name: a.name,
-      currency: a.currency,
-      status: a.status,
-      accountStatus: a.accountStatus,
-      lastSyncError: a.lastSyncError,
-      lastSyncErrorAt: a.lastSyncErrorAt,
-      backfillFeitoEm: a.backfillFeitoEm,
-      syncErrorCount: a.syncErrorCount,
-      trackingEnabled: a.trackingEnabled,
-      timezone: a.timezone,
-      campanhas: a._count.campaigns,
-      pixels: a._count.pixelConfigs,
-    })),
-  }));
+  /* ⛔ O CORPO SAIU DAQUI EM 17/08/2026 — `lib/facebook/perfis.ts`.
+     Enquanto ele morava dentro desta action, o recorte por área era
+     inalcançável por teste: `requireUserId()` exige sessão, e nenhum script a
+     tem. É a mesma razão que tirou o `where` de dentro do `escopoDeConfig` para
+     o `escopoWhere.ts`, e a mesma que tirou o construtor de alertas do
+     `useMemo`.
+
+     ⚠️ MOVE: nem uma vírgula do que se calcula mudou. */
+  return perfisNoEscopo(userId, escopo.where);
 }
 
 export async function toggleAccountTracking(accountId: string): Promise<AdAccountDTO> {
