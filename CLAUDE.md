@@ -1994,7 +1994,39 @@ gravado, nenhum usuário bloqueando a fila **no perfil de hoje**.
 
 ---
 
-### 🔒 O LOCK COBRE UM DOS QUATRO CHAMADORES DE `syncUser` — medido em 17/08/2026
+### 🧷 O GITHUB ACTIONS FICA — e a RAZÃO é o que está registrado, não a decisão
+
+> **Decisão do dono, 17/08/2026.** Escrita como razão de propósito: uma decisão
+> registrada sozinha é revogada por quem só vê o custo.
+
+Ele é **subconjunto estrito** do cron-job.org — mesmas quatro rotas, e sem o
+`?full=1`. Custa ~**6,7%** de carga a mais (4 ciclos de métricas por hora contra
+os 60 do chamador de minuto). Ou seja: pela planilha, ele é redundante.
+
+> ## ⛔ E é exatamente por isso que ele fica: ele é a única parte da cadência que existe DENTRO do repositório.
+>
+> Sem ele, a programação inteira passa a viver num painel de terceiro, atrás de
+> um login, **sem nada em arquivo que a mencione**.
+
+🔴 **Isto não é hipótese — é o erro que acabou de acontecer.** Em 17/08 eu
+registrei as escadas de intervalo como "decoração" porque li `*/15` no
+`cron.yml`. O chamador real era de 1 minuto, e as escadas estavam valendo. **A
+parte versionada me deu a resposta errada, e ela era a única que eu tinha.**
+Com o Actions desligado, nem essa existiria.
+
+⛔ **Ao considerar desligá-lo por economia** — e alguém vai, porque 6,7% é
+mensurável e visibilidade não é — a pergunta não é *"ele faz algo que o outro
+não faça?"* (não faz). É: **"desligando, o que no repositório ainda diz com que
+frequência este produto sincroniza?"** Hoje a resposta é `cron.yml`. Depois,
+nada.
+
+⚠️ E o custo real dele não é a carga: é que ele **atrasa minutos**, então os
+carimbos do `ExecucaoCron` misturam duas assinaturas de pontualidade. Isso é
+ruído de diagnóstico, e está documentado logo abaixo em vez de resolvido.
+
+---
+
+### 🔒 O LOCK COBRE 2 DE 6 CHAMADAS DE SYNC — medido em 17/08/2026
 
 > ⛔ **MEDIDO · REGISTRADO · NÃO CORRIGIDO.** Anterior a `4e6aa9e`.
 
@@ -2022,26 +2054,60 @@ if (full) { const s = await syncUser(u.userId, 30); }   // ⬅ direto
 else      { const r = await autoSyncSeNecessario(u.userId); }  // ⬅ com reserva
 ```
 
-`syncUser` **não toca em `syncLockedAt`** — zero ocorrências no arquivo. E ele
-tem **quatro chamadores**, dos quais só um passa pela reserva:
+`syncUser` **não toca em `syncLockedAt`** — zero ocorrências no arquivo. O
+inventário completo, medido:
 
-| chamador | passa pelo lock? |
-|---|---|
-| `autoSync.ts:148` | ✅ sim — é quem reserva |
-| **`cron/sync-facebook?full=1`** | 🔴 **não** |
-| `api/sync/facebook` (botão do painel) | 🔴 não |
-| `auth/facebook/callback` (ao conectar) | 🔴 não |
+| # | chamador | função | janela | reserva? |
+|---|---|---|---|---|
+| 1 | `autoSync.ts:148` | `syncUser` | 2 d | ✅ |
+| 2 | `autoSync.ts:157` | `syncUserMetrics` | 2 d | ✅ |
+| 3 | `cron/sync-facebook?full=1` | `syncUser` | 30 d | 🔴 não |
+| 4 | `api/sync/facebook` (botão) | `syncUser` | **30 d (default)** | 🔴 não |
+| 5 | `api/sync/facebook` (uma conta) | `syncSingleAccount` | 30 d | 🔴 não |
+| 6 | `auth/facebook/callback` | `syncUser` | 30 d | 🔴 não |
 
-> ## O lock não foi desenhado para um chamador — ele protege UM CAMINHO, e três outros passam por fora.
+> ## 2 de 6 reservam — e as duas são o MESMO arquivo. O lock não protege `syncUser`: ele protege o `autoSync`.
+
+🔴 **E o botão do painel usa o DEFAULT de 30 dias.** `syncUser(userId)` sem o
+segundo argumento é a mesma janela do sync profundo diário — o cabeçalho do
+`?full=1` diz *"use no máximo 1×/dia"*, e o botão faz igual **a cada clique**,
+sem limite nenhum. `api/sync/facebook` tem só `auth()`: nenhuma reserva, nenhum
+teto, nenhum debounce.
 
 ⛔ **Às 04:00 isso é concreto:** o `?full=1` (janela de **30 dias**, a chamada
 mais cara que existe) roda **sem lock**, enquanto o chamador de minuto segue
 fazendo `autoSyncSeNecessario` **com** lock. Os dois podem tocar as mesmas
 contas ao mesmo tempo — e no mesmo minuto roda a `manutencao`.
 
-⚠️ **O dano provável é desperdício, não corrupção**: os dois escrevem os mesmos
-valores, vindos da mesma fonte, e o último vence. O que dobra é **quota da Graph
-e pressão de rate limit**, exatamente no minuto mais carregado do dia.
+#### 🔬 O QUE ACONTECE DE FATO AO COLIDIR — conferido nos DOIS tipos de escrita
+
+⚠️ Eu havia dito *"escrevem os mesmos valores da mesma fonte"* comparando dois
+caminhos. Conferido para os seis, a resposta se divide:
+
+| o que é escrito | como | concorrência |
+|---|---|---|
+| **`DailyAdMetric`** (as métricas) | `INSERT … ON CONFLICT DO UPDATE` **cru**, em lote | ✅ **seguro por construção** — o último vence, sem erro e sem linha perdida |
+| **`Campaign` · `AdSet` · `Ad`** (a estrutura) | `prisma.*.upsert` — **3 ocorrências** | ⚠️ **NÃO MEDIDO** |
+
+✅ **As métricas são o caso comum e são seguras**: o SQL está à vista, e dois
+sincronizadores buscando o mesmo dia na mesma conta recebem o mesmo valor da
+Meta — a janela diferente (2 d × 30 d) muda **quais** dias, nunca o valor de um
+dia.
+
+⛔ **A estrutura eu não medi.** `prisma.upsert` é *find-then-write* na semântica
+do cliente; se ele não compilar para um `ON CONFLICT` atômico, duas criações
+simultâneas do mesmo `Ad` colidem no índice único e uma lança. **Isso é a
+família *"nunca `create` + `catch`"* deste arquivo, e eu não sei de que lado ela
+cai aqui** — depende do Prisma 7 com `@prisma/adapter-pg`, e responder exige
+exercitar, não ler.
+
+⚠️ **Se lançar, não corrompe**: o `catch` do laço por conta registra o erro e
+incrementa o backoff — ou seja, **uma colisão vira "conta com erro de
+sincronização" na tela**, sem defeito de configuração nenhum. É o mesmo modo de
+falha do rate limit, e igualmente disfarçado.
+
+**O que dobra, em todo caso:** quota da Graph e pressão de rate limit, no minuto
+mais carregado do dia.
 
 #### ⚠️ 3 · O orçamento vale para `full=1`, com o limite de sempre
 
@@ -2068,8 +2134,62 @@ tudo que ele faz, e mais. O que se perde é outra coisa:
 > É literalmente o que me fez errar o registro das escadas. Quem herdar o
 > projeto lê `cron.yml`, conclui `*/15`, e está errado.
 
-⛔ **Não desliguei nada** — é decisão do dono, e ela troca 6,7% de carga por
-visibilidade da configuração.
+✅ **DECIDIDO: o Actions fica** — ver a seção da razão, acima.
+
+---
+
+### 🎯 O DESENHO DO CONSERTO — proposto em 17/08/2026, **não implementado**
+
+> O dono nomeou a tensão exata: *"reservar dentro cobre todo mundo, mas pode
+> quebrar o botão do painel que hoje sempre roda."* Ela é real, e é ela que
+> escolhe o desenho.
+
+#### ⛔ AS DUAS SAÍDAS ÓBVIAS, e por que nenhuma serve
+
+| saída | o que quebra |
+|---|---|
+| **`syncUser` reserva por dentro** | o botão do painel passa a **não fazer nada** às vezes, em silêncio. O usuário clica, a tela não muda, e não há como distinguir de falha. É **controle inerte** com outro nome — a família que este arquivo mais registra |
+| **cada chamador reserva antes** | 🔴 **é exatamente o que existe hoje**, e 4 de 6 esqueceram. Regra que depende de lembrar já foi testada aqui, e o resultado é esta seção |
+
+#### ✅ A PROPOSTA: um parâmetro OBRIGATÓRIO, para o compilador cobrar
+
+É a regra registrada deste projeto — *quando uma regra depende de alguém
+lembrar, procure a forma de o COMPILADOR cobrar* (o caso do
+`Record<IdBloco, RenderBloco>`).
+
+```ts
+type Reserva = "exigir" | "ignorar";
+export async function syncUser(userId: string, days: number, reserva: Reserva)
+```
+
+**Obrigatório, sem valor padrão.** Um chamador novo não compila sem decidir — e
+foi a ausência dessa decisão que produziu os 4 de 6.
+
+| valor | quem usa | por quê |
+|---|---|---|
+| `"exigir"` | cron `?full=1` · botão do painel · uma conta só | não conseguiu reservar ⇒ **não roda**, e devolve motivo distinguível |
+| `"ignorar"` | `auth/facebook/callback` | primeira conexão: o perfil **acabou de nascer**, não há nada concorrente para disputar. O motivo vai escrito na chamada |
+
+#### 🔑 E A TENSÃO DO BOTÃO SE DISSOLVE — não se resolve com espera
+
+Não é preciso inventar fila nem *retry*. Quando o painel recebe "não consegui
+reservar", **isso é informação verdadeira e útil**:
+
+> *"Já está sincronizando — os dados chegam em instantes."*
+
+⛔ Isso **não é falha**, e é a diferença que decide: o botão continua sempre
+respondendo alguma coisa, e o que ele responde é o estado real. Hoje, dois
+cliques em sequência disparam dois syncs de 30 dias e o usuário não sabe.
+
+⚠️ **O que este desenho NÃO resolve, e vai escrito para não parecer que
+resolve:** ele serializa por PERFIL, que é o que o lock já faz. Dois usuários
+diferentes continuam concorrendo na Graph, e o rate limit **não é** o problema
+que ele endereça.
+
+🔜 **Não implementado**, por ordem do dono. Quando for: `syncSingleAccount` entra
+na mesma assinatura, e a asserção que vale é a que conta os chamadores — *toda
+chamada de sync passa `reserva` explicitamente*, medida no código, não na
+lembrança.
 
 ---
 
