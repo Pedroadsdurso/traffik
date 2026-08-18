@@ -287,5 +287,78 @@ const IPS = ["200.160.2.3", "8.8.8.8", "2001:db8::1", "::1", "192.168.0.1"];
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════════════
+ * 4 · 🔴 O PREFIXO É UMA FONTE SÓ — e a purga IMPORTA, não repete
+ *
+ * Até 17/08/2026 o `where` da purga trazia `startsWith: "iph.v1."` com o
+ * literal na mão, porque um `where` do Prisma não chama função. As duas fontes
+ * CONCORDAVAM — e é a concordância que faz a duplicata sobreviver até o commit
+ * que mexe num lado só.
+ *
+ * ## ⛔ O modo de falha ao subir para `v2` é ACUMULATIVO e MUDO
+ *
+ * O `where` continuaria excluindo só `v1`; as linhas já anonimizadas em `v2`
+ * entrariam na seleção; `anonimizarIp` as devolveria intactas; e o teto de
+ * 5.000 por execução seria consumido por no-ops. **A purga roda, responde, e
+ * grava `ok: true` no batimento — sem anonimizar nada.** A fila de IPs em claro
+ * nunca anda, e nada na saída distingue isso de "não havia o que fazer".
+ *
+ * ⚠️ A guarda apaga COMENTÁRIO antes de medir: os dois arquivos citam o literal
+ * justamente para explicar por que ele não pode estar no código. É a família
+ * que já mordeu SETE vezes nesta base, e ela morderia aqui.
+ * ═════════════════════════════════════════════════════════════════════ */
+{
+  const { readFileSync } = await import("node:fs");
+  const lerArq = (f) => readFileSync(f, "utf8").replace(/\r\n/g, "\n");
+  /* Apaga comentário PRESERVANDO as quebras — o número reportado continua
+     sendo o do arquivo. */
+  const semComentario = (t) =>
+    t.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " ")).replace(/\/\/[^\n]*/g, "");
+
+  const PURGA = semComentario(lerArq("src/app/api/cron/manutencao/route.ts"));
+  const ORIGEM = semComentario(lerArq("src/lib/geo/anonimizarIp.ts"));
+
+  ok(
+    "4 · linha de base: os dois arquivos foram lidos",
+    PURGA.length > 1000 && ORIGEM.length > 800,
+    PURGA.length + " · " + ORIGEM.length + " chars",
+  );
+  ok(
+    "4 · linha de base: a purga de IP existe e é a que usa o prefixo",
+    /aAnonimizar/.test(PURGA) && /startsWith:/.test(PURGA),
+    "sem isto a asserção abaixo passaria num arquivo que não purga nada",
+  );
+
+  ok(
+    "4 · 🔑 a origem EXPORTA o prefixo",
+    /export const PREFIXO_IP_ANONIMO/.test(ORIGEM),
+    "sem export, o `where` não tem como importar e volta ao literal",
+  );
+  ok(
+    "4 · 🔑 e a purga IMPORTA a constante",
+    /import \{[^}]*PREFIXO_IP_ANONIMO[^}]*\}/.test(PURGA),
+    "duas fontes concordando hoje é o que faz a duplicata sobreviver",
+  );
+  ok(
+    "4 · ⛔ …e o `where` usa a CONSTANTE, não um literal",
+    /startsWith:\s*PREFIXO_IP_ANONIMO/.test(PURGA),
+    "é esta linha que decide o que a purga PULA",
+  );
+
+  /* ⛔ A ASSERÇÃO QUE IMPEDE A VOLTA: o literal não pode existir no CÓDIGO de
+     nenhum dos dois, fora da única declaração. Em comentário pode — e é por
+     isso que se mede com o comentário apagado. */
+  const semDeclaracao = (t) => t.replace(/export const PREFIXO_IP_ANONIMO[^;]*;/, "");
+  const comLiteral = [
+    ["manutencao/route.ts", PURGA],
+    ["anonimizarIp.ts", ORIGEM],
+  ].filter(([, t]) => /"iph\.v1\."/.test(semDeclaracao(t)));
+  ok(
+    "4 · ⛔ o literal não aparece no CÓDIGO fora da declaração",
+    comLiteral.length === 0,
+    comLiteral.map(([f]) => f).join(" · ") || "1 declaração, 0 cópias",
+  );
+}
+
 console.log("\n\x1b[32m" + n + " asserções, 0 falha(s).\x1b[0m");
-console.log("   denominador: " + IPS.length + " IPs · as 3 porteiras, agora no `npm test` e não só no `test:banco`\n");
+console.log("   denominador: " + IPS.length + " IPs · as 3 porteiras + o prefixo com fonte única\n");

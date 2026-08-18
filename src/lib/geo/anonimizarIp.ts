@@ -47,8 +47,31 @@ export const RETENCAO_DIAS = 7;
  * ⚠️ **É o que torna a purga IDEMPOTENTE.** Sem ele, cada execução re-hashearia
  * o hash anterior, e o valor mudaria a cada dia — quebrando o `matchClick` de
  * um jeito que só apareceria depois.
+ *
+ * ## 🔴 EXPORTADO EM 17/08/2026 — ele estava DUPLICADO, e a cópia era o `where`
+ *
+ * `cron/manutencao/route.ts` escrevia `NOT: { ip: { startsWith: "iph.v1." } }`
+ * com o literal na mão, porque um `where` do Prisma não chama função. As duas
+ * fontes **concordavam**, e é a concordância que faz a duplicata sobreviver até
+ * o commit que mexe num lado só.
+ *
+ * ⛔ **O modo de falha ao subir para `iph.v2.`** — e ele é acumulativo e mudo:
+ *
+ * | passo | o que acontece |
+ * |---|---|
+ * | 1 | o `where` continua excluindo só `iph.v1.` |
+ * | 2 | as linhas já anonimizadas em `v2` **entram** na seleção |
+ * | 3 | `anonimizarIp` as devolve intactas (a guarda do prefixo pega) |
+ * | 4 | 🔴 o teto de 5.000 é consumido por no-ops, e **a fila de IPs em claro nunca anda** |
+ *
+ * A purga roda, responde, grava `ok: true` no batimento — e não anonimiza nada.
+ * Nada na saída distingue isso de "não havia o que fazer".
+ *
+ * ⚠️ Por isso a constante é `export`: o `where` importa o valor. `test:geo-guardas`
+ * reprova se o literal voltar.
  */
-const PREFIXO = "iph.v1.";
+export const PREFIXO_IP_ANONIMO = "iph.v1.";
+const PREFIXO = PREFIXO_IP_ANONIMO;
 
 /**
  * IP → hash determinístico, com sal da chave da aplicação.

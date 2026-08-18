@@ -1945,6 +1945,43 @@ gravado, nenhum usuário bloqueando a fila **no perfil de hoje**.
 
 ---
 
+### 🕵️ A EVIDÊNCIA DOS DOIS AGENDADORES ESTÁ NO PRÓPRIO BATIMENTO — 17/08/2026
+
+> **Medido a partir do `ExecucaoCron` de produção**, ao investigar por que a
+> `manutencao` carimba 07:00 se o agendamento declarado é 04:00.
+
+⛔ **Fuso NÃO fecha a conta**, e é a primeira hipótese a descartar:
+
+| leitura do carimbo | conta |
+|---|---|
+| `07:00` em UTC | agendado `0 4 * * *` (UTC) → **3 h de gap** |
+| `07:00` em Brasília | armazenado 10:00 UTC → **6 h de gap** |
+
+Nenhuma dá zero. O que explica está na FORMA dos carimbos:
+
+| rota | agendado (GH Actions, UTC) | carimbo | atraso |
+|---|---|---|---|
+| `reports` | `0 * * * *` | 22:**00:11** | **11 s** |
+| `manutencao` | `0 4 * * *` | 07:**00:11** | mesma assinatura, **hora diferente** |
+| `sync-facebook` | `*/15` | 22:08:04 | ~8 min |
+| `run-rules` | `*/15` | 22:05:02 | ~5 min |
+
+> ## Duas assinaturas de pontualidade na mesma tabela são dois CHAMADORES, não um agendador irregular.
+
+O GitHub Actions atrasa minutos — é característica conhecida dele, e bate com
+as duas rotas de `*/15`. O padrão `:00:11` é de quem dispara no segundo.
+
+⚠️ **E o `ExecucaoCron` é `upsert` por ROTA**: se os dois agendadores chamam a
+mesma rota, **só o último sobrevive na linha**. Uma execução às 04:00 seguida de
+outra às 07:00 aparece como 07:00 apenas — a de 04:00 não deixa rastro.
+
+🔎 **O que fecharia**, e não alcanço daqui: o log de execuções do GitHub Actions
+(mostra a hora exata de cada job) e o painel do cron-job.org. ⛔ Até lá isto é
+inferência de assinatura, não medição do agendador.
+
+⚠️ É a mesma limitação já registrada acima — uma linha por rota responde *"a
+rotina está viva?"* e não responde *"quantas houve, e quem chamou"*.
+
 ### 🔴 DOIS AGENDADORES rodando ao mesmo tempo
 
 O **cron-job.org** (configurado pelo usuário) e o
@@ -3357,8 +3394,37 @@ URL com query string **sem sanear** — é por onde token de sessão e e-mail va
 sem ninguém ter pedido.
 
 ⚠️ Vale para o que **já existe**: `Click.url` e `PixelEvent.url` guardam a URL
-como veio. Se um cliente puser e-mail em query string, ele está no nosso banco.
-**Não medi se acontece.**
+como veio.
+
+> ### ✅ MEDIDO EM PRODUÇÃO, 17/08/2026 — não há e-mail em query string hoje
+>
+> | tabela | com URL | com query string | com `@` **e** `?` |
+> |---|---|---|---|
+> | `Click` | 2.528 | 1.679 | **0** |
+> | `PixelEvent` | 2.889 | 1.744 | **0** |
+>
+> **O denominador é 3.423 URLs com parâmetro**, e é ele que faz o zero valer.
+> ⚠️ A mesma consulta no DEV deu `0` também — e ali não significava nada: o dev
+> tem **0 URLs com query string**, ou seja era `0` sobre denominador `0`. É a
+> distinção que este arquivo persegue, e ela apareceu no mesmo dia nas duas
+> pontas.
+>
+> ### ⛔ O QUE A MEDIÇÃO **NÃO** COBRE — e não é a mesma consulta com outro caractere
+>
+> Procurei **arroba**. Passam sem serem vistos:
+>
+> | dado | por que escapa |
+> |---|---|
+> | telefone | dígitos e separadores — não há caractere marcador |
+> | CPF | idem, e o formato varia (`000.000.000-00`, cru) |
+> | nome | é texto comum; qualquer heurística pega falso positivo |
+>
+> ⛔ **Cobrir isso é outro padrão**, não `ilike '%@%'` trocado. Exigiria varrer
+> os NOMES dos parâmetros (`?cpf=`, `?telefone=`, `?nome=`) e ainda assim
+> perderia quem usa nome de campo próprio.
+>
+> ✅ **O risco continua existindo** — a URL é guardada como veio, e nada a
+> saneia. O que mudou é que **não há exposição atual por e-mail**, medida.
 
 ## ✅ RECOMENDAÇÃO — configuração "privacy-safe" padrão
 

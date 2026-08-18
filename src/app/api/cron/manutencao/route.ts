@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { cronAutorizado, naoAutorizado } from "@/lib/cronAuth";
 import { registrarExecucao } from "@/lib/cronBatimento";
 import { prisma } from "@/lib/prisma";
-import { RETENCAO_DIAS, anonimizarIp } from "@/lib/geo/anonimizarIp";
+import { PREFIXO_IP_ANONIMO, RETENCAO_DIAS, anonimizarIp } from "@/lib/geo/anonimizarIp";
 // ⛔ Os prazos NÃO moram mais aqui: a tela de Webhooks explica ao usuário por
 // que uma entrega antiga sumiu da lista, e precisa do MESMO número. Duas cópias
 // divergiriam em silêncio — a purga apagando em 30 dias e a tela prometendo 90.
@@ -74,7 +74,14 @@ async function executar(req: NextRequest) {
   // `lib/geo/anonimizarIp.ts` para por que isto é progressivo e não de uma vez.
   const corteIp = new Date(agora.getTime() - RETENCAO_DIAS * 864e5);
   const aAnonimizar = await prisma.click.findMany({
-    where: { ip: { not: null }, timestamp: { lt: corteIp }, NOT: { ip: { startsWith: "iph.v1." } } },
+    /* ⛔ O PREFIXO VEM DA CONSTANTE, nunca de um literal aqui.
+       Ele era `"iph.v1."` escrito na mão, e a cópia concordava com a origem —
+       o que faz duplicata sobreviver. Subindo para `v2`, este `where` pararia
+       de excluir as linhas já anonimizadas: elas entrariam na seleção, o
+       `anonimizarIp` as devolveria intactas, e o teto de 5.000 seria consumido
+       por no-ops. A purga rodaria saudável, com `ok: true` no batimento, e a
+       fila de IPs em claro **nunca andaria**. */
+    where: { ip: { not: null }, timestamp: { lt: corteIp }, NOT: { ip: { startsWith: PREFIXO_IP_ANONIMO } } },
     select: { id: true, ip: true },
     // Teto por execução: o cron é diário e a primeira passada pode ter um
     // histórico grande. Melhor 5 mil por dia do que uma transação gigante que
