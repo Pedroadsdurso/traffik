@@ -3977,15 +3977,30 @@ lápide existia, **370 linhas abaixo**, onde quem lê o cabeçalho não chega.
 a prosa não estava só desatualizada — ela descrevia uma semântica **maior** que
 a atual, que é exatamente a leitura errada.
 
-### ⚠️ E SÃO DOIS MECANISMOS COM O MESMO NOME
+### 🔴 DOIS MECANISMOS COM O MESMO NOME — e quem ler um assume o outro
 
-| | como decide | alcance |
-|---|---|---|
-| `escopoDeConfig` / `whereDaArea` (**configuração**) | `OR [ id , NULL ]` | meu ou órfão |
-| `precedencia.ts` (**atribuição de linha**) | 7º passo, depois de 6 critérios | o que sobrou sem dono |
+> ## "Catch-all" cobre os dois, e eles não são a mesma coisa.
 
-⚠️ Os dois chegam a lugares parecidos por caminhos diferentes, e **só o segundo
-tem algo de "tudo"** — e ainda assim é *tudo o que não foi reivindicado*.
+| | como decide | sobre o quê | alcance | quando erra |
+|---|---|---|---|---|
+| **`escopoDeConfig`/`whereDaArea`** | `OR [ id , NULL ]` — um `where` do Prisma | **configuração**: pixel, webhook, conta de anúncio | **meu ou órfão** — não vê secundárias | some da TELA o que existe |
+| **`precedencia.ts`** | **7º passo**, depois de 6 critérios em ordem | **linha de dado**: venda, clique, evento | o que sobrou sem dono após a disputa | atribui a venda à ÁREA ERRADA |
+
+⛔ **Os dois chegam a lugares parecidos por caminhos diferentes**, e é isso que
+faz a confusão passar: numa conta com uma área só, os dois dão o mesmo
+resultado. A divergência só aparece com **duas ou mais** áreas — e aí ela
+aparece em lugares distintos (uma na tela, outra no número).
+
+⚠️ **Só o segundo tem algo de "tudo"**, e ainda assim é *tudo o que não foi
+reivindicado por nenhum dos 6 critérios anteriores*.
+
+🔑 **A pergunta que separa os dois**, quando alguém disser "a Principal pega":
+**pega uma CONFIGURAÇÃO ou uma LINHA?** São mecanismos diferentes, com regras
+diferentes, e o mesmo apelido.
+
+⚠️ E há uma terceira exceção já registrada, que não é nem uma nem outra:
+`Expense.workspaceId` NULO **não** significa "sem dono" — significa *"vale para
+todas as áreas"*. O mesmo `OR` ali quer dizer outra coisa.
 
 > ### ⛔ A REGRA, e ela é sobre NOMES
 >
@@ -4003,9 +4018,40 @@ tem algo de "tudo"** — e ainda assim é *tudo o que não foi reivindicado*.
 > esperaria que isto alcançasse, e não alcança?** Se existe, essa coisa vai
 > escrita ao lado do termo.
 
-⚠️ **A lápide não basta se estiver longe.** Este caso tinha uma, correta e
-completa — e três referências no presente acima dela. Quem lê um cabeçalho não
-rola 370 linhas para conferir se ele ainda vale.
+> ### 🪦 LÁPIDE NÃO BASTA SE ESTIVER LONGE — a regra nova desta família
+>
+> Todas as regras anteriores desta base são sobre a lápide **existir**: *"ao
+> remover uma tela, procure as constantes dela"*, *"proibição que muda é
+> apagada"*, *"órfão saudável entra em ACEITOS com o motivo"*. Esta é sobre
+> **distância**.
+>
+> ## 370 linhas abaixo é o mesmo que não ter. Ninguém rola um arquivo para conferir se o cabeçalho que acabou de ler ainda vale.
+>
+> Este caso tinha lápide **correta e completa** — e três referências no presente
+> acima dela, uma delas no comentário de abertura da função. As três
+> sobreviveram dezenove dias, e foram elas que produziram a leitura errada.
+>
+> > ### ⛔ A CONSEQUÊNCIA OPERACIONAL
+> >
+> > **Ao remover um mecanismo, a lápide vai onde a MENÇÃO está — não onde o
+> > código estava.**
+> >
+> > O instinto é sepultar no lugar do corpo: apaga-se a função e escreve-se o
+> > ⛔ ali. Mas quem vai ser enganado é quem lê a MENÇÃO, e ela pode estar em
+> > outro arquivo, em outro parágrafo, ou 300 linhas acima.
+>
+> ```bash
+> # antes de apagar `<simbolo>`: onde ele é MENCIONADO, inclusive em prosa?
+> grep -rn "<simbolo>" src/ scripts/ docs/ CLAUDE.md
+> ```
+>
+> A pergunta binária por ocorrência: **quem ler ISTO e parar aqui fica com a
+> ideia certa?** Se não fica, a lápide (ou uma linha dela) pertence a este
+> ponto, não só ao ponto de remoção.
+>
+> ⚠️ E o caso mostra a forma mais cara: a menção descrevia um alcance **maior**
+> que o do mecanismo que a substituiu. Uma lápide distante não só falha em
+> corrigir — ela deixa em pé uma promessa que o código novo não cumpre.
 
 ---
 
