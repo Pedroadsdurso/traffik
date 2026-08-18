@@ -481,7 +481,19 @@ async function windowAggregate(
         ambiente: null,
         timestamp: { gte: start, lte: end },
       },
-      select: { id: true, event: true, url: true, fbclid: true, timestamp: true, pixelConfigId: true, clickId: true },
+      select: {
+        id: true, event: true, url: true, fbclid: true, timestamp: true, pixelConfigId: true, clickId: true,
+        /* 🔴 A FONTE DE TRÁFEGO DO EVENTO — no `select` desde 17/08/2026.
+           A coluna ORIGEM do feed mostrava "Pixel"/"Gateway" aqui, que é o
+           INSTRUMENTO, enquanto nas linhas de venda e clique mostrava a fonte
+           (`nomeDaFonte(utmSource)`). Dois significados na mesma coluna.
+           ⚠️ Vem pela relação e não do `w.clicks` já carregado: o clique pode
+           estar FORA da janela (evento de hoje, clique de três dias atrás), e
+           resolver pelo array em memória devolveria "Direto" para tráfego
+           atribuído — errado justamente no caso que a coluna existe para
+           mostrar. */
+        click: { select: { utmSource: true } },
+      },
       orderBy: { timestamp: "desc" },
       take: 200,
     }),
@@ -1566,9 +1578,16 @@ function buildActivity(w: Window) {
     items.push({
       id: "co-" + c.id,
       type: "checkout",
-      // A fonte diz QUEM detectou — é o que permite ver, no próprio feed, se o
-      // detector do script está vivo ou se só o gateway está reportando.
-      source: c.checkoutSource === "gateway" ? "Gateway" : "Pixel",
+      /* ⛔ AQUI HAVIA O INSTRUMENTO, NÃO A FONTE — corrigido em 17/08/2026.
+         A linha era `c.checkoutSource === "gateway" ? "Gateway" : "Pixel"`, com
+         o motivo escrito: *"a fonte diz QUEM detectou"*. O motivo é bom e a
+         coluna é a errada — nas linhas de venda e de clique, ORIGEM traz a
+         FONTE DE TRÁFEGO. Duas semânticas na mesma coluna fazem o leitor
+         comparar "Facebook" com "Pixel", que não são a mesma pergunta.
+         ✅ E nada se perde: QUEM DETECTOU continua dito, por extenso, no campo
+         ao lado — "Checkout no gateway" × "Clique no botão de compra". A
+         cobertura do snippet segue legível no próprio feed. */
+      source: c.utmSource ? nomeDaFonte(c.utmSource) : "Direto",
       campaign: c.checkoutSource === "gateway" ? "Checkout no gateway" : "Clique no botão de compra",
       value: null,
       ts: c.checkoutAt!.getTime(),
@@ -1586,7 +1605,11 @@ function buildActivity(w: Window) {
         : e.event === "AddToCart" ? "add_to_cart"
         : e.event === "PageView" ? "pageview"
         : "checkout",
-      source: e.url === SENTINELA_CHECKOUT_GATEWAY ? "Gateway" : "Pixel",
+      /* ⛔ MESMA correção: ORIGEM é a fonte de TRÁFEGO, não o instrumento.
+         ⚠️ `Direto` aqui significa evento SEM clique atribuído — que é
+         informação de verdade (visitante avulso), não ausência de medição. O
+         instrumento continua legível no campo `campaign`, logo abaixo. */
+      source: e.click?.utmSource ? nomeDaFonte(e.click.utmSource) : "Direto",
       // ⚠️ `gateway:webhook` é SENTINELA, não URL: marca o InitiateCheckout que
       // nasceu do webhook do gateway (checkout hospedado por ele, onde o nosso
       // script não roda). Vazava cru para a coluna e se lia como nome de
