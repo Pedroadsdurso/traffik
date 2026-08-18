@@ -3938,6 +3938,50 @@ isso que não faz nada" quanto o "desça a cadência que é de graça".
 
 ---
 
+# 📉 ERRO MEU FICA COM O MESMO PESO DO ACERTO — senão o arquivo vira propaganda
+
+> **Formulação do dono, 17/08/2026**, ao aprovar que o falso positivo das
+> escadas ficasse registrado em vez de trocado por um exemplo que funcionasse.
+
+> ## Arquivo que só guarda vitória vira propaganda — e ninguém consulta propaganda para tomar decisão.
+
+Este arquivo existe para ser lido **no meio de um trabalho**, por quem precisa
+decidir. Um registro que só mostra o que deu certo responde à pergunta errada:
+ele diz o que é possível, e quem está decidindo precisa saber **o que engana**.
+
+### 🔎 OS DOIS CASOS DO MESMO DIA, e o formato de cada um
+
+| | o que se fez | por quê |
+|---|---|---|
+| **escadas "dormentes"** | o falso positivo **ficou**, como exemplo que batizou a família | ele mostra que a ferramenta da família só alcança o que está VERSIONADO — trocá-lo por um caso limpo esconderia justamente o limite |
+| **tabela "em andamento" do mapa** | foi **riscada**, não apagada | ela registra como o trabalho andou naquele dia; o que não pode é ser lida como estado |
+
+**Os dois têm a mesma razão e formatos diferentes**, e a diferença importa: o
+primeiro continua sendo o melhor exemplo que a família tem; o segundo já não
+descreve nada, e o valor dele é só histórico.
+
+> ### ⛔ A REGRA
+>
+> **Ao corrigir um registro errado, pergunte o que a versão errada ENSINA.**
+>
+> | a versão errada ensina… | então |
+> |---|---|
+> | como alguém chega à conclusão errada com dado correto | ✅ **fica**, nomeada como falso positivo, e vira o exemplo |
+> | nada além de ter sido o estado de um dia | ✅ **riscada**, com o desfecho ao lado |
+> | nada, e induz ação errada hoje | ⛔ **apagada** — é o caso do ⛔ da sombra do `Card` |
+
+⚠️ **O que NUNCA se faz é trocar o exemplo errado por um que funcione e seguir
+sem dizer.** O registro fica correto e perde a única coisa que valia: a
+demonstração de que aquele erro era fácil de cometer.
+
+⚠️ E vale para os números: esta sessão registrou **três erros meus** — as
+escadas, o "terminar o mapa" lido de três cópias envelhecidas, e a sétima
+ocorrência da guarda que mede prosa (num arquivo cujo comentário eu tinha
+acabado de escrever). Nenhum foi suavizado, e os três estão perto dos acertos
+que produziram.
+
+---
+
 # 📐 EM QUE UNIDADE A PROTEÇÃO SERIALIZA, E EM QUE UNIDADE O PROBLEMA ACONTECE?
 
 > **Formulação do dono, 17/08/2026**, ao fechar a investigação do cron. É a
@@ -8806,6 +8850,35 @@ uma sessão que já entregou cinco frentes — é a regra das duas tentativas.
 | a inconsistência REAL | 🔑 **`auto-fit` × `auto-fill`**, não o `minmax`: `CriativosScreen` usa `auto-fill` nos cards e as outras usam `auto-fit`, então com poucos itens os cards esticam numa tela e não na outra |
 | grades medidas | `AnunciosView` `minmax(200px,1fr)` · `WebhooksScreen` `auto-fit minmax(150px,1fr)` + mestre/detalhe · `PixelScreen` mestre/detalhe (sem grade de card) · `CriativosScreen` `auto-fit` nos KPIs e **`auto-fill`** nos cards |
 
-⚠️ E ela herda a **dupla restrição do artefato**: o painel de Anúncios entrega
-conta e perfil, então vale a pergunta de sempre — *trocar de área muda o
-CONTEÚDO ou a LISTA?*
+### 🔬 A DUPLA RESTRIÇÃO — MEDIDA em 17/08/2026, e a forma NÃO é a do Pixel
+
+A hipótese era que Anúncios repetiria o Pixel: área muda a LISTA, perfil muda o
+CONTEÚDO. A primeira metade está certa; **o mecanismo é outro, e ele cria um
+caso que o Pixel não tem.**
+
+| | Pixel | Anúncios |
+|---|---|---|
+| a entidade listada tem `workspaceId`? | ✅ `PixelConfig.workspaceId` | 🔴 **`AdProfile` NÃO TEM** |
+| onde o `escopoDeConfig` entra | direto na entidade | **na conta**: `adAccounts: { where: escopo.where }` |
+| como o perfil some da lista | — | `.filter((p) => p.adAccounts.length > 0)` |
+
+> ## O recorte por área é INDIRETO: ele filtra as CONTAS, e o perfil desaparece por consequência de ficar sem nenhuma.
+
+🔴 **E daí sai o caso que o Pixel não tem:** um perfil com contas em **duas
+áreas** aparece nas **duas**, com **listas de contas diferentes**. Não é "está
+ou não está" — é o mesmo item mudando de conteúdo conforme a área.
+
+### ⛔ A FIXTURE PRECISA DE QUATRO FORMAS, não três
+
+| # | | por quê |
+|---|---|---|
+| 1 | conta na área A | o caso simples |
+| 2 | conta na área B | idem |
+| 3 | conta **órfã** (`workspaceId` NULO) | o catch-all da Principal — `escopoDeConfig` **não é simétrico**, e sem órfão a asserção passa sem exercer o recorte |
+| 4 | 🆕 **perfil com contas em A e em B** | só existe aqui. Sem ele, "trocar de área muda a lista" passa sem tocar no caso em que o perfil FICA e o conteúdo dele muda |
+
+⚠️ **Com um perfil só, ou com três formas, a asserção passa por acidente** — é a
+mesma armadilha registrada no Pixel, agravada pelo grau a mais de indireção.
+
+⚠️ E a segunda metade — *trocar de PERFIL muda o conteúdo* — **não foi medida**:
+ela depende do que o painel novo desenhar, e o painel ainda não existe.
