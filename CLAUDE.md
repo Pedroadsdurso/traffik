@@ -1389,7 +1389,7 @@ qualquer resize, leia `innerWidth` e compare.
 | SHELL | 18 | — | 2 |
 | DASHBOARD | 29 | — | 9 |
 | INTEGRAÇÕES | 24 | — | 17 |
-| ANÚNCIOS | 0 | 22 | — |
+| ANÚNCIOS | 0 | 23 | — |
 | REGRAS | 0 | 21 | — |
 | CAMPANHAS / GERENCIADOR | 18 | 1 | 4 |
 | UTM & SNIPPETS | 22 | — | 10 |

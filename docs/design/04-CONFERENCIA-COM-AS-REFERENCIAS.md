@@ -503,6 +503,26 @@ e entram **pelo webhook cadastrado**, não por um catálogo fixo.
 > ninguém sabe que existem. A vitrine de perfis é o que torna a ausência
 > declarável — e é o segundo motivo de ela ser a forma certa.
 
+> ### 🔑 O ESTADO DO TOKEN É PRIMEIRO PLANO — é ele que diz QUANDO reconectar
+>
+> Reconectar é a ação mais importante da tela. **A tela só sabe quando
+> reconectar se disser o estado do token no card do perfil** — escondê-lo numa
+> aba faz a ação principal existir sem o gatilho dela.
+>
+> ⛔ **Nada de conta nova aqui:** `lib/integracoes/token.ts` é puro, já tem os
+> três estados e o limiar, e é o **mesmo** que alimenta o alerta do Dashboard
+> (`token-<id>`) e o painel de Saúde da Visão geral. Uma segunda implementação
+> faria duas telas discordarem sobre o mesmo token.
+>
+> ⚠️ **`data desconhecida` é o mais perigoso dos três**, e a tela precisa
+> tratá-lo assim: são os perfis conectados **antes de a coluna existir** — os
+> mais antigos, logo os mais prováveis de já estarem vencidos. É a distinção
+> central deste projeto: *não sabemos* não é *está tudo bem*.
+>
+> 🔴 E a falha que ele previne é **muda**: o token vence, a sincronização para,
+> o gasto congela — e o ROAS passa a mentir por omissão enquanto o motor de
+> regras decide com dado velho.
+
 ### Vitrine — a lista de perfis conectados
 
 | Elemento | Status |
@@ -511,7 +531,8 @@ e entram **pelo webhook cadastrado**, não por um catálogo fixo.
 | **`N de M contas nesta área`** — o recorte declarado no próprio card | ❌ |
 | Aviso quando um perfil conectado **não aparece** por não ter conta nesta área | ❌ |
 | Contagem de contas com rastreamento ligado (`trackedCount` / `accountCount`) | ❌ |
-| Selo de estado do TOKEN (válido · expira em N dias · vencido · desconhecido) | ❌ |
+| 🔑 **Estado do TOKEN em PRIMEIRO PLANO, junto do nome** — não numa aba | ❌ |
+| ⚠️ **`data desconhecida`** tratada como o mais perigoso dos três | ❌ |
 | `Reconectar` — a ação principal da tela, no PERFIL | ❌ |
 | `Desconectar`, com confirmação que nomeia o que se perde e o que NÃO se perde | ❌ |
 | `Sincronizar` do perfil, e o estado `jaSincronizando` quando a reserva é negada | ❌ |

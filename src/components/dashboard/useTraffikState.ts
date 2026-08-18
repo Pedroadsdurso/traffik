@@ -930,6 +930,13 @@ export function useTraffikState(
     email: p.email,
     pictureUrl: p.pictureUrl,
     accountCount: p.accounts.length,
+    /* 🔑 ADITIVOS para a vitrine de Anúncios (18/08/2026). `accountCount` é o
+       RECORTE da área; `contasNoTotal` é o total, e a diferença entre os dois é
+       o que a tela declara em `N de M contas nesta área`.
+       ⚠️ `tokenExpiresAt` vinha só no `perfisCrus`: o selo do token é o gatilho
+       do botão Reconectar, e sem ele a ação principal existe sem o motivo. */
+    contasNoTotal: p.contasNoTotal,
+    tokenExpiresAt: p.tokenExpiresAt,
     trackedCount: p.accounts.filter((a) => a.trackingEnabled).length,
     allTracked: p.accounts.length > 0 && p.accounts.every((a) => a.trackingEnabled),
     expanded: s.expandedProfiles[p.id] ?? false,

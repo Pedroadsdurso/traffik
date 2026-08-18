@@ -3,7 +3,7 @@
 import { auth } from "@/auth";
 import { getLastWorkspaceId } from "@/lib/actions/workspaces";
 import { escopoDeConfig } from "@/lib/areas/escopoConfig";
-import { perfisNoEscopo } from "@/lib/facebook/perfis";
+import { perfisEOcultos, perfisNoEscopo, type PerfisDaArea } from "@/lib/facebook/perfis";
 import { prisma } from "@/lib/prisma";
 
 export interface AdAccountDTO {
@@ -36,6 +36,11 @@ export interface AdProfileDTO {
   name: string;
   email: string | null;
   pictureUrl: string | null;
+  /**
+   * 🔑 Contas do perfil em TODAS as áreas — o denominador de `N de M contas
+   * nesta área`. ⚠️ `accounts.length` é o recorte; este é o total.
+   */
+  contasNoTotal: number;
   /** Erro CRU da descoberta de contas. Explica `accountStatus` nulo em massa. */
   lastDiscoveryError: string | null;
   /** `true` enquanto o perfil nunca completou uma sincronizacao. */
@@ -88,6 +93,22 @@ export async function listAdProfiles(workspaceId?: string | null): Promise<AdPro
 
      ⚠️ MOVE: nem uma vírgula do que se calcula mudou. */
   return perfisNoEscopo(userId, escopo.where);
+}
+
+/**
+ * A vitrine de Anúncios: os perfis DA ÁREA **e quantos ficaram de fora**.
+ *
+ * ⛔ Não é uma segunda fonte do `listAdProfiles`: as duas chamam o MESMO
+ * `perfisEOcultos`. O que muda é só o que cada uma expõe — e o `ocultos` existe
+ * porque a tela precisa DIZER que há perfis conectados que não aparecem ali.
+ *
+ * ⚠️ Sem essa frase, quem conectou um perfil cujas contas estão todas em outra
+ * área procura um bug que não existe.
+ */
+export async function listAdProfilesDaArea(workspaceId?: string | null): Promise<PerfisDaArea> {
+  const userId = await requireUserId();
+  const escopo = await escopoDeConfig(userId, workspaceId ?? (await getLastWorkspaceId()));
+  return perfisEOcultos(userId, escopo.where);
 }
 
 export async function toggleAccountTracking(accountId: string): Promise<AdAccountDTO> {

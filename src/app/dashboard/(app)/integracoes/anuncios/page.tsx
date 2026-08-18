@@ -1,8 +1,8 @@
 "use client";
 
 import { useTraffik } from "@/components/dashboard/TraffikContext";
-import { AnunciosView } from "@/components/dashboard/views/integracoes/AnunciosView";
+import { AnunciosScreen } from "@/components/dashboard/views/anuncios/AnunciosScreen";
 
 export default function AnunciosPage() {
-  return <AnunciosView v={useTraffik()} />;
+  return <AnunciosScreen v={useTraffik()} />;
 }
