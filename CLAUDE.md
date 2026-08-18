@@ -3939,6 +3939,74 @@ isso que não faz nada" quanto o "desça a cadência que é de graça".
 
 ---
 
+# 🟢 A ASSERÇÃO DO CASO SAUDÁVEL É O QUE DETECTA SEGUNDA FONTE DE DECISÃO
+
+> **Formulação do dono, 18/08/2026**, sobre o defeito mais instrutivo da
+> construção de Anúncios. É a asserção que ninguém escreve porque parece
+> redundante — e é a única que pega esta família.
+
+> ## O caso RUIM passa nas duas implementações. Só o BOM diverge.
+
+### 🔎 O CASO, e ele aconteceu no commit que afirma "fonte única"
+
+`seloDoToken` precisa dizer o tom do selo. A fonte é `tokenPedeAtencao`, que
+já conhece o limiar. Eu escrevi:
+
+```ts
+const tom = e.tipo === "vencido" || e.tipo === "desconhecido" ? "perigo"
+          : e.tipo === "expira" ? "atencao" : "ok";        // ⬅ segunda fonte
+```
+
+**Um token que vence em 400 dias virava amarelo.** Era uma reimplementação da
+decisão *"é urgente?"* — escrita no mesmo arquivo que documenta, em maiúsculas,
+que a fonte é uma só.
+
+### 🔴 POR QUE OS CASOS RUINS NÃO PEGAM
+
+| caso testado | fonte real | minha cópia | diverge? |
+|---|---|---|---|
+| token **vencido** | perigo | perigo | ⛔ não |
+| token **expirando em 3 dias** | atenção | atenção | ⛔ não |
+| **data desconhecida** | perigo | perigo | ⛔ não |
+| ✅ **válido, vence em 400 dias** | **ok** | **atenção** | 🔑 **SIM** |
+
+Uma segunda implementação de limiar quase sempre **acerta os extremos** — eles
+são óbvios, e é por eles que se começa a escrever. O que ela erra é a **região
+saudável**, que é justamente onde ninguém olha porque "não tem nada acontecendo
+ali".
+
+> ### ⛔ A DISCIPLINA
+>
+> **Todo conjunto de asserções sobre uma DECISÃO precisa de uma para o estado em
+> que NADA deve acontecer** — e ela afirma que nada aconteceu.
+>
+> ```
+> ✅ dispara quando deve        ← todo mundo escreve
+> ✅ não dispara quando não deve ← quase ninguém, e é esta
+> ```
+>
+> ⚠️ Não é a mesma coisa que o "par dispara / não-dispara" já registrado neste
+> arquivo. Aquele prova que a condição é **condicional**. Este prova que a
+> decisão tem **uma fonte só** — e a diferença aparece quando a cópia e o
+> original concordam em tudo, menos no meio.
+
+### 🔎 O SINAL BARATO — um conjunto só de casos que disparam
+
+```bash
+# asserções sobre um mesmo símbolo: alguma afirma o estado NEUTRO?
+grep -n "seloDoToken\|<decisor>" scripts/teste-*.mjs
+```
+
+A pergunta binária: **existe uma asserção em que o resultado esperado é "não
+faz nada"?** Se todas esperam alguma coisa, o conjunto não distingue a fonte
+verdadeira de uma cópia que só acerta os extremos.
+
+⚠️ **É prima de *uma asserção precisa poder FALHAR pelo motivo que alega
+medir***, com o alvo invertido: lá se pergunta *que valor o caso errado
+produziria*; aqui, **que valor o caso CERTO produziria — e a cópia produz outro?**
+
+---
+
 # 🪤 "CATCH-ALL" É UM TERMO QUE PROMETE MAIS DO QUE O CÓDIGO FAZ
 
 > **Definição, não nota de tela.** Medida em 17/08/2026, e escrita aqui porque o
@@ -8954,10 +9022,44 @@ camada** da distinção central (microcópia).
 | **"terminar o mapa das razões"** | li de três cópias que diziam pendente; a que MEDIU dizia fechado desde 06/08 |
 | **guarda medindo prosa** | 7ª ocorrência, num arquivo cujo comentário eu tinha acabado de escrever |
 
-## ➡️ PRÓXIMA SESSÃO: Integrações › Anúncios
+## ⏳ ANÚNCIOS — CONSTRUÍDA, e a conferência de tela está PENDENTE
 
-⛔ **Não começou de propósito.** Sétima reescrita de tela não se emenda no fim de
-uma sessão que já entregou cinco frentes — é a regra das duas tentativas.
+> ⛔ **Os 23 itens do `04` seguem ❌ e não devem ser marcados por asserção
+> verde.** A tela nunca foi aberta — o instrumento de janela segue indisponível
+> nesta máquina, e é o dono quem faz a passada.
+
+**A lista do que conferir, na ordem, quando a tela for aberta:**
+
+| # | | |
+|---|---|---|
+| 1 | os **23 itens** do `04`, um a um | ✅ = eu vi na tela; linha em branco = construído e não visto |
+| 2 | os **dois temas** | com número medido, não só "visto" |
+| 3 | **perfil sem conta na área** | a frase do rodapé aparece? é o caso 4 medido em `test:perfis-area` |
+| 4 | **token nos TRÊS estados** | ⚠️ `desconhecido` é o que mais importa: ele é PERIGO, e o dev pode não ter nenhum |
+| 5 | **erro por conta** e o **backoff** | o `mesmoErroDoPerfil` (uma linha, não seis blocos) e o `esperaLabel` |
+| 6 | **teste do cinza** | e se o quadro for dominado por tela que não toquei, recortar a parte tocada |
+
+⚠️ **O que o dev provavelmente não produz** (medir antes de concluir que a tela
+está errada): perfil com contas em duas áreas, token com data desconhecida, e
+conta em backoff. Se faltarem, é o seed — não a tela.
+
+## ➡️ DEPOIS DELA: REGRAS
+
+**21 ❌ no `04`, o canvas de nós, e a única tela do projeto que nunca foi
+tocada** — nem no re-skin de 05/08. É a maior dívida isolada que resta.
+
+⚠️ E ela é a última que ainda usa o `.tk-tema`: com Regras reescrita e o
+`ui/Icone`/`ui/Modal` migrados, a ponte pode morrer.
+
+## ✅ O QUE A REESCRITA ENTREGOU — 18/08/2026
+
+`AnunciosView` (322 linhas) **deletada** — era a ÚLTIMA legada servindo rota.
+No lugar: `views/anuncios/AnunciosScreen.tsx`, `lib/facebook/apresentacao.ts`
+(puro) e `test:anuncios-tela` (**37 asserções**, no `npm test` no mesmo commit).
+
+⚠️ **O `04` ganhou a seção que faltava ANTES da construção** — 23 itens, e ela
+era o bloqueio: o documento tem precedência sobre todos, e uma tela sem
+inventário ali seria especificação escrita por quem constrói.
 
 **O que já está medido, para não remedir:**
 
