@@ -2087,24 +2087,43 @@ caminhos. Conferido para os seis, a resposta se divide:
 | o que é escrito | como | concorrência |
 |---|---|---|
 | **`DailyAdMetric`** (as métricas) | `INSERT … ON CONFLICT DO UPDATE` **cru**, em lote | ✅ **seguro por construção** — o último vence, sem erro e sem linha perdida |
-| **`Campaign` · `AdSet` · `Ad`** (a estrutura) | `prisma.*.upsert` — **3 ocorrências** | ⚠️ **NÃO MEDIDO** |
+| **`Campaign` · `AdSet` · `Ad`** (a estrutura) | `prisma.*.upsert` — **3 ocorrências** | ✅ **MEDIDO em 17/08 — não colide** |
 
 ✅ **As métricas são o caso comum e são seguras**: o SQL está à vista, e dois
 sincronizadores buscando o mesmo dia na mesma conta recebem o mesmo valor da
 Meta — a janela diferente (2 d × 30 d) muda **quais** dias, nunca o valor de um
 dia.
 
-⛔ **A estrutura eu não medi.** `prisma.upsert` é *find-then-write* na semântica
-do cliente; se ele não compilar para um `ON CONFLICT` atômico, duas criações
-simultâneas do mesmo `Ad` colidem no índice único e uma lança. **Isso é a
-família *"nunca `create` + `catch`"* deste arquivo, e eu não sei de que lado ela
-cai aqui** — depende do Prisma 7 com `@prisma/adapter-pg`, e responder exige
-exercitar, não ler.
-
-⚠️ **Se lançar, não corrompe**: o `catch` do laço por conta registra o erro e
-incrementa o backoff — ou seja, **uma colisão vira "conta com erro de
-sincronização" na tela**, sem defeito de configuração nenhum. É o mesmo modo de
-falha do rate limit, e igualmente disfarçado.
+> ### ✅ A ESTRUTURA FOI MEDIDA — `npm run sonda:upsert`, 17/08/2026
+>
+> A dúvida era real: `prisma.upsert` é *find-then-write* na semântica do
+> cliente, e se não compilasse para um `ON CONFLICT` atômico, duas criações
+> simultâneas do mesmo `Ad` colidiriam no índice único. Exercitado contra o dev:
+>
+> | rodada | ok | falhas | linhas no banco |
+> |---|---|---|---|
+> | 2 simultâneos (**o caso real**) | 2/2 | **0** | 1 |
+> | 5 simultâneos | 5/5 | **0** | 1 |
+> | 10 simultâneos | 10/10 | **0** | 1 |
+> | 10 UPDATES sobre linha existente | 10/10 | **0** | — |
+>
+> ✅ **Não colide e nunca duplicou.** O Prisma 7 com `@prisma/adapter-pg` resolve
+> o `upsert` de unique composto atomicamente.
+>
+> ⚠️ **Os três `n` existem para o zero valer:** com 2 apenas, um "0 falhas"
+> poderia ser sorte de temporização. Se a janela de corrida existisse, 10
+> a exporiam.
+>
+> ⛔ **O que isto NÃO diz**, escrito para não virar promessa: exercitei `Ad`.
+> `Campaign` e `AdSet` usam a **mesma forma** (`upsert` de unique composto, sem
+> escrita aninhada), então o mecanismo é o mesmo — mas não foram exercitados. E
+> a propriedade é do Prisma + Postgres, não do dado: vale enquanto a versão e o
+> adapter forem estes.
+>
+> 🔑 **E isto NÃO torna o lock dispensável.** Ele nunca foi proteção contra
+> corrida de escrita — é proteção contra **desperdício de quota da Graph**. O
+> que a sonda fecha é o modo de falha DISFARÇADO: não há colisão virando "conta
+> com erro de sincronização" sem defeito de configuração.
 
 **O que dobra, em todo caso:** quota da Graph e pressão de rate limit, no minuto
 mais carregado do dia.
@@ -2181,15 +2200,79 @@ reservar", **isso é informação verdadeira e útil**:
 respondendo alguma coisa, e o que ele responde é o estado real. Hoje, dois
 cliques em sequência disparam dois syncs de 30 dias e o usuário não sabe.
 
-⚠️ **O que este desenho NÃO resolve, e vai escrito para não parecer que
-resolve:** ele serializa por PERFIL, que é o que o lock já faz. Dois usuários
-diferentes continuam concorrendo na Graph, e o rate limit **não é** o problema
-que ele endereça.
+#### ⛔ RESERVA E DEBOUNCE NÃO SÃO A MESMA COISA — e só uma está no desenho
 
-🔜 **Não implementado**, por ordem do dono. Quando for: `syncSingleAccount` entra
-na mesma assinatura, e a asserção que vale é a que conta os chamadores — *toda
-chamada de sync passa `reserva` explicitamente*, medida no código, não na
-lembrança.
+| | impede |
+|---|---|
+| **reserva** (o lock) | **concorrência** — dois processos sobre o mesmo perfil ao mesmo tempo |
+| **debounce** | **repetição** — a MESMA pessoa disparando dez vezes seguidas |
+
+⚠️ Com o parâmetro implementado, o segundo clique do usuário vira *"já está
+sincronizando"* e o problema **parece** resolvido. **Está resolvido por acaso**:
+o que o segurou foi a reserva ainda estar tomada. Cliques espaçados — o usuário
+clica, vê terminar, clica de novo — passam todos, e cada um é um sync de **30
+dias**.
+
+🔴 **`api/sync/facebook` é o pior dos seis** e merece a nota separada: 30 dias
+por clique, sem reserva, sem teto, sem debounce — enquanto o cabeçalho do
+`?full=1`, que faz a mesma coisa, diz *"use no máximo 1×/dia"*.
+
+⛔ **Não confunda o desfecho com a cobertura.** Se um dia alguém remover a
+reserva daquele caminho por achar redundante, o debounce que nunca existiu não
+segura nada.
+
+#### ⛔ E ELE SERIALIZA POR PERFIL, NÃO POR TOKEN
+
+> ## O lock não resolve rate limit, e ninguém deve concluir que resolve.
+
+`syncLockedAt` é coluna de `AdProfile`. Duas contas do **mesmo token**, ou dois
+usuários diferentes, continuam batendo na Graph ao mesmo tempo — e o limite da
+Meta é **por token**, não por perfil.
+
+⚠️ É a distinção que separa os dois riscos já registrados: a fila é por
+USUÁRIO e o custo é por CONTA; a reserva é por PERFIL e o limite é por TOKEN.
+**Nenhuma das duas granularidades bate com a do problema que ela parece
+proteger.**
+
+### ✅ IMPLEMENTADO EM 17/08/2026 — e o compilador cobrou os seis na hora
+
+`lib/facebook/reserva.ts` (novo) tem o CAS e o tipo `Reserva`. As três funções
+públicas ganharam o terceiro parâmetro **obrigatório**, e o `tsc` reprovou
+**exatamente as 6 chamadas** — que é a prova de que o mecanismo funciona:
+
+```
+callback/route.ts(150)         Expected 3 arguments, but got 2
+cron/sync-facebook/route.ts(90) Expected 3 arguments, but got 2
+sync/facebook/route.ts(17)      Expected 4 arguments, but got 2
+sync/facebook/route.ts(18)      Expected 3 arguments, but got 1
+autoSync.ts(148)                Expected 3 arguments, but got 2
+autoSync.ts(157)                Expected 3 arguments, but got 2
+```
+
+| chamador | política | motivo escrito na chamada |
+|---|---|---|
+| `cron?full=1` | **exigir** | 30 d às 04:00, junto da manutenção — era o mais pesado sem lock |
+| painel (`syncUser`) | **exigir** | era o pior dos seis: 30 d por clique |
+| painel (`syncSingleAccount`) | **exigir** | idem |
+| `autoSync` ×2 | ignorar | **já reservou** — pedir de novo falharia contra o próprio lock |
+| callback do OAuth | ignorar | **primeira conexão**: o perfil nasceu neste request |
+
+🔑 **A janela do painel virou explícita (`30`).** Ela vinha do default, e foi o
+default que escondeu de quem lia a chamada que aquele botão fazia a mesma coisa
+que o sync profundo diário.
+
+✅ **`reservaNegada` não é erro**: o painel devolve `jaSincronizando: true`, e a
+tela pode dizer *"já está sincronizando"* — informação verdadeira, e a única
+resposta honesta para um segundo clique.
+
+⛔ **E o CAS não ficou duplicado.** Ele saiu do `autoSync` (onde morava, e por
+isso só ele reservava) e o `autoSync` passou a **delegar** — inclusive o
+`LOCK_EXPIRA_MS`, que decide o mesmo `where`. Extrair e deixar a cópia lá
+recriaria a duplicata no commit que a desfaz.
+
+✅ `test:reserva-sync`, **21 asserções**, no `npm test` no mesmo commit. Provado
+pelo lado negativo duas vezes: um `= "exigir"` na assinatura e um `"ignorar"` no
+`?full=1` reprovam nomeando.
 
 ---
 

@@ -87,7 +87,12 @@ async function executar(req: NextRequest) {
     const t0 = Date.now();
     try {
       if (full) {
-        const s = await syncUser(u.userId, 30);
+        /* 🔴 `"exigir"`: este é o ciclo mais caro que existe (30 dias) e
+           roda às 04:00, junto da `manutencao`. Até 17/08/2026 ele passava
+           POR FORA do lock — podia sincronizar as mesmas contas ao mesmo
+           tempo que o chamador de minuto, dobrando quota da Graph no minuto
+           mais carregado do dia. */
+        const s = await syncUser(u.userId, 30, "exigir");
         totalMetrics += s.metrics;
         results.push({ userId: u.userId, ms: Date.now() - t0, accounts: s.accounts, metrics: s.metrics, errors: s.errors.length });
       } else {

@@ -1,5 +1,6 @@
 import { syncUser, syncUserMetrics, type SyncSummary } from "@/lib/facebook/sync";
 import { prisma } from "@/lib/prisma";
+import { LOCK_EXPIRA_MS as LOCK_RESERVA_MS, liberarReserva, tentarReservar } from "@/lib/facebook/reserva";
 
 /**
  * Sincronização automática do Facebook, disparada pelo próprio polling da UI.
@@ -55,7 +56,9 @@ const METRICAS_MS = 20_000;
 const COMPLETO_MS = 180_000;
 
 /** Reserva órfã (instância morta no meio) é liberada depois disto. */
-const LOCK_EXPIRA_MS = 10 * 60_000;
+/* ⛔ O limiar de abandono vem de `reserva.ts` — ele decide o mesmo `where`
+   que o `tentarReservar` usa, e duas cópias divergiriam no primeiro ajuste. */
+const LOCK_EXPIRA_MS = LOCK_RESERVA_MS;
 
 /**
  * Janela de dias nas sincronizações automáticas: só o dia corrente e o anterior
@@ -116,18 +119,16 @@ async function reservar(userId: string): Promise<{ perfis: string[]; modo: Modo 
   );
   if (!precisaCompleto && !precisaMetricas) return null;
 
-  const reservados: string[] = [];
-  for (const c of candidatos) {
-    // Repete a condição do lock: entre o `findMany` e este update outra
-    // instância pode ter reservado. `count: 0` = perdemos a corrida, e perder é
-    // o resultado correto, não um erro.
-    const r = await prisma.adProfile.updateMany({
-      where: { id: c.id, OR: [{ syncLockedAt: null }, { syncLockedAt: c.syncLockedAt }] },
-      data: { syncLockedAt: agora },
-    });
-    if (r.count > 0) reservados.push(c.id);
-  }
-  if (reservados.length === 0) return null;
+  /* ⛔ O COMPARE-AND-SWAP É DE `reserva.ts`, não uma cópia daqui.
+     Ele morava neste arquivo, e por isso só o `autoSync` reservava — medido em
+     17/08/2026: 6 chamadas de sync, 2 reservavam. Manter uma segunda
+     implementação aqui recriaria a duplicata no mesmo commit que a desfaz.
+
+     ⚠️ A leitura acima continua sendo daqui: quem decide o MODO (completo ×
+     métricas) é este módulo, e ela roda ANTES — no caminho comum (`pulado`) o
+     `tentarReservar` nem é chamado. */
+  const reservados = await tentarReservar(userId, agora);
+  if (!reservados) return null;
   return { perfis: reservados, modo: precisaCompleto ? "completo" : "metricas" };
 }
 
@@ -145,7 +146,10 @@ export async function autoSyncSeNecessario(userId: string): Promise<ResultadoAut
 
     try {
       if (reserva.modo === "completo") {
-        const summary = await syncUser(userId, DIAS_AUTO);
+        /* ⛔ `"ignorar"`: a reserva JÁ foi tomada por `reservar()` acima.
+           Pedir de novo falharia contra o próprio lock — `tentarReservar`
+           não acharia candidato livre e o ciclo não rodaria. */
+        const summary = await syncUser(userId, DIAS_AUTO, "ignorar");
         // O completo também traz métricas, então zera os dois relógios.
         await prisma.adProfile.updateMany({
           where: { id: { in: reserva.perfis } },
@@ -154,7 +158,8 @@ export async function autoSyncSeNecessario(userId: string): Promise<ResultadoAut
         return { modo: "completo", summary };
       }
 
-      const summary = await syncUserMetrics(userId, DIAS_AUTO);
+      /* ⛔ `"ignorar"` pelo mesmo motivo do ramo completo: já reservado. */
+      const summary = await syncUserMetrics(userId, DIAS_AUTO, "ignorar");
       // `lastSyncedAt` NÃO avança aqui: a estrutura não foi revisada, e marcar
       // como completa adiaria a descoberta de contas novas.
       await prisma.adProfile.updateMany({
@@ -164,10 +169,7 @@ export async function autoSyncSeNecessario(userId: string): Promise<ResultadoAut
       return { modo: "metricas", summary };
     } catch (e) {
       // Libera a reserva para a próxima tentativa não esperar o lock expirar.
-      await prisma.adProfile.updateMany({
-        where: { id: { in: reserva.perfis } },
-        data: { syncLockedAt: null },
-      });
+      await liberarReserva(reserva.perfis);
       return { modo: "erro", erro: e instanceof Error ? e.message : String(e) };
     }
   } catch (e) {

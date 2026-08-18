@@ -147,7 +147,11 @@ export async function GET(req: NextRequest) {
      */
     after(async () => {
       try {
-        await syncUser(userId, 30);
+        /* ⛔ `"ignorar"`, e o motivo é o único que autoriza: é a PRIMEIRA
+           conexão. O perfil acabou de nascer neste request, nenhum cron o
+           conhece ainda, e não há o que disputar. Exigir reserva aqui só
+           acrescentaria uma ida ao banco que sempre vence. */
+        await syncUser(userId, 30, "ignorar");
       } catch (e) {
         console.error("[facebook/callback] primeira sincronização:", e);
       }

@@ -1,6 +1,7 @@
 import { getUserTimezone } from "@/lib/userTimezone";
 import { GRAPH_URL, getAdAccounts, mapAccountStatus } from "@/lib/facebook/graph";
 import { prisma } from "@/lib/prisma";
+import { liberarReserva, tentarReservar, type Reserva } from "@/lib/facebook/reserva";
 import { addDaysToKey, todayKey } from "@/lib/timezone";
 import { deveTentar } from "@/lib/facebook/backoff";
 import { Prisma } from "@/generated/prisma/client";
@@ -229,6 +230,14 @@ async function registrarErro(adAccountId: string, mensagem: string): Promise<voi
 }
 
 export interface SyncSummary {
+  /**
+   * 🔴 A reserva foi NEGADA e o ciclo não rodou.
+   *
+   * ⚠️ Não é falha: é *"já está sincronizando"*, que é informação verdadeira e
+   * a única resposta honesta para um segundo clique. Quem apresenta decide o
+   * texto; o que não pode é tratar como erro nem como sucesso vazio.
+   */
+  reservaNegada?: true;
   accounts: number;
   campaigns: number;
   adSets: number;
@@ -566,7 +575,7 @@ export async function syncAccountMetrics(
 }
 
 /** Atualiza só as métricas de todas as contas rastreadas de um usuário. */
-export async function syncUserMetrics(userId: string, days = 2): Promise<SyncSummary> {
+async function syncUserMetricsInterno(userId: string, days: number): Promise<SyncSummary> {
   const summary: SyncSummary = { accounts: 0, campaigns: 0, adSets: 0, ads: 0, metrics: 0, errors: [] };
   const accounts = await prisma.adAccount.findMany({
     where: { userId, trackingEnabled: true, adProfile: { isNot: null } },
@@ -720,7 +729,7 @@ async function podar(
 }
 
 /** Sincroniza uma única conta de anúncio pelo id interno. */
-export async function syncSingleAccount(userId: string, accountId: string, days = 30): Promise<SyncSummary> {
+async function syncSingleAccountInterno(userId: string, accountId: string, days: number): Promise<SyncSummary> {
   const summary: SyncSummary = { accounts: 0, campaigns: 0, adSets: 0, ads: 0, metrics: 0, errors: [] };
   const acc = await prisma.adAccount.findFirst({
     where: { id: accountId, userId },
@@ -828,7 +837,7 @@ export async function descobrirContas(userId: string, summary: SyncSummary): Pro
 }
 
 /** Sincroniza todas as contas rastreadas de um usuário. */
-export async function syncUser(userId: string, days = 30): Promise<SyncSummary> {
+async function syncUserInterno(userId: string, days: number): Promise<SyncSummary> {
   const summary: SyncSummary = { accounts: 0, campaigns: 0, adSets: 0, ads: 0, metrics: 0, errors: [] };
 
   // Antes de sincronizar, descobre contas novas — senão uma conta criada hoje
@@ -875,4 +884,70 @@ export async function syncUser(userId: string, days = 30): Promise<SyncSummary> 
     }
   }
   return summary;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   🔒 A RESERVA, NA FRONTEIRA PÚBLICA — e o parâmetro é OBRIGATÓRIO
+
+   Medido em 17/08/2026: estas três funções tinham **6 chamadas e só 2
+   reservavam** o lock, e as duas eram do `autoSync`. As outras quatro — o
+   `?full=1` do cron, o botão do painel, o sync de uma conta e o callback do
+   OAuth — passavam por fora sem que nada acusasse.
+
+   > ## A regra dependia de alguém lembrar, e 4 de 6 esqueceram. Agora o COMPILADOR cobra: sem o terceiro argumento, não compila.
+
+   ⛔ As duas saídas óbvias foram recusadas, e o motivo fica aqui para não serem
+   retentadas: reservar SEMPRE por dentro faria o botão do painel não fazer nada
+   em silêncio (controle inerte com outro nome); e "cada chamador reserva antes"
+   é exatamente o que produziu os 4 de 6.
+
+   ⚠️ Os invólucros ficam no FIM do arquivo de propósito: as internas estão
+   declaradas acima, e `no-use-before-define` está ligada nesta base.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Roda `corpo` sob a política de reserva pedida.
+ *
+ * ⛔ `finally` libera SEMPRE. Sem isso, um erro de um segundo deixaria o perfil
+ * travado até o limiar de abandono — 10 minutos sem sincronizar por causa de
+ * uma falha que já passou.
+ */
+async function comReserva(
+  userId: string,
+  reserva: Reserva,
+  corpo: () => Promise<SyncSummary>,
+): Promise<SyncSummary> {
+  if (reserva === "ignorar") return corpo();
+
+  const perfis = await tentarReservar(userId);
+  if (!perfis) {
+    /* ⚠️ NÃO é erro. É "já está sincronizando" — informação verdadeira, e a
+       única resposta honesta para um segundo clique. */
+    return { reservaNegada: true, accounts: 0, campaigns: 0, adSets: 0, ads: 0, metrics: 0, errors: [] };
+  }
+  try {
+    return await corpo();
+  } finally {
+    await liberarReserva(perfis);
+  }
+}
+
+/** Sincroniza todas as contas rastreadas de um usuário. */
+export async function syncUser(userId: string, days: number, reserva: Reserva): Promise<SyncSummary> {
+  return comReserva(userId, reserva, () => syncUserInterno(userId, days));
+}
+
+/** Atualiza só as métricas de todas as contas rastreadas de um usuário. */
+export async function syncUserMetrics(userId: string, days: number, reserva: Reserva): Promise<SyncSummary> {
+  return comReserva(userId, reserva, () => syncUserMetricsInterno(userId, days));
+}
+
+/** Sincroniza UMA conta de anúncio. */
+export async function syncSingleAccount(
+  userId: string,
+  accountId: string,
+  days: number,
+  reserva: Reserva,
+): Promise<SyncSummary> {
+  return comReserva(userId, reserva, () => syncSingleAccountInterno(userId, accountId, days));
 }
