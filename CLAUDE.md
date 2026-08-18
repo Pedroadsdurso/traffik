@@ -1662,7 +1662,50 @@ campanha, e **o motor de regras** — PAUSAR (por acidente) e `AJUSTAR_ORCAMENTO
 com o clamp travando no teto, os dois em produção em 31/07.
 → inventário completo em `docs/temas/gerenciador-e-graph-api.md`
 
-### 🪜 AS ESCADAS DE INTERVALO DO SYNC SÃO DECORAÇÃO A `*/15` — e nasceram assim
+### 🪜 AS ESCADAS DE INTERVALO ESTÃO VALENDO — e o registro anterior estava ERRADO
+
+> ## ⛔ ESTA SEÇÃO AFIRMOU O CONTRÁRIO POR UM DIA. A correção é o que ela ensina.
+>
+> Em 17/08/2026 eu registrei aqui que as escadas eram **decoração**, porque o
+> agendador rodava `*/15` e a 15 minutos todo usuário está sempre vencido. A
+> medição estava certa e **a conclusão estava errada**: o `cron.yml` não é o
+> chamador real.
+>
+> **Painel do cron-job.org, trazido pelo dono:**
+>
+> | job | cadência |
+> |---|---|
+> | `sync-facebook` | 🔴 **a cada 1 MINUTO** (21:26, 21:27, 21:28, 21:29 — todos 200) |
+> | `run-rules` | ~5 min |
+> | `reports` | de hora em hora |
+> | `manutencao` | 04:00 |
+> | **Sync profundo `?full=1`** | 04:00 |
+>
+> ✅ **A 1 minuto as escadas fazem exatamente o que foram escritas para fazer.**
+> Os 20s das métricas e os 3 min do completo são o que impede a chamada por
+> minuto de virar sync por minuto — sem elas seriam ~21 idas à Graph **por
+> minuto**, com elas são 5.
+>
+> ### 🔴 A CAUSA DO MEU ERRO, e ela é a lição
+>
+> ## Eu medi a condição no `cron.yml` porque é a condição que o REPOSITÓRIO enxerga. O chamador real é um serviço de terceiro cuja configuração não está em arquivo nenhum daqui.
+>
+> ⛔ **Condição que vive fora do repositório é invisível para QUALQUER varredura
+> de código** — inclusive para a que eu propus na família *MECANISMO DORMENTE*,
+> que mandava comparar a frase com o `cron.yml`. O `grep` estava certo e o alvo
+> era o errado.
+>
+> ⚠️ **O `cron.yml` não é a única fonte da cadência, é a fonte VERSIONADA.** A
+> outra está num painel, atrás de um login, e nada no repositório a menciona.
+> Quem herdar este projeto sem o painel vai concluir `*/15` — como eu concluí.
+>
+> ✅ **E a inferência por assinatura de pontualidade estava certa:** o `:00:11`
+> é o cron-job.org.
+
+<details>
+<summary>⛔ O registro ERRADO de 17/08, preservado — porque a forma dele é o alerta</summary>
+
+### (revogado) AS ESCADAS SERIAM DECORAÇÃO A `*/15`
 
 > **Medido em 17/08/2026**, ao responder "quantos usuários cabem no cron".
 > ⛔ **MEDIDO · REGISTRADO · NÃO CORRIGIDO** — anterior a `4e6aa9e`.
@@ -1705,31 +1748,37 @@ completo roda em toda execução: **o mecanismo de alívio nunca alivia nada.**
 > frase (afirmação condicional cuja condição não está no arquivo), e o motivo de
 > o conserto **não** ser apagar.
 
-### ⛔ AS DUAS CONDIÇÕES, escritas juntas porque separadas enganam
+</details>
+
+### ✅ AS DUAS CONDIÇÕES, com o valor de HOJE medido
 
 | cadência | o que as escadas fazem |
 |---|---|
-| **`*/15` (hoje)** | 🔴 **nada.** Decoração: todos vencidos, todos no ciclo completo, toda vez |
-| **1 min** | ✅ valem inteiras — a maioria sai em `pulado`, e a carga na Graph passa a ser ditada pelos intervalos |
+| **1 min (é a de hoje)** | ✅ **valem inteiras** — a maioria das chamadas sai em `pulado`, e a carga na Graph é ditada pelos intervalos, não pela frequência |
+| `*/15` | 🔴 seriam decoração: todos vencidos, todos no ciclo completo, toda vez |
 
-⛔ **Não "conserte" apagando as escadas**, e não conclua que elas estão erradas:
-elas são o que permitiria descer a cadência sem multiplicar a carga. E **não
-desça a cadência** achando que é de graça — a 1 min o `pulado` ainda custa 3
-idas ao banco por usuário (a reserva + as duas contagens da rota).
+⛔ **Não apague as escadas** — elas são o que segura a chamada por minuto. E
+saiba o preço do `pulado`, que é o caminho da maioria: **3 idas ao banco por
+usuário** (a reserva + as duas contagens da rota), **60 vezes por hora**.
 
 > ### 🔎 O SINAL BARATO, e ele generaliza
 >
 > ## Todo comentário que afirma uma propriedade CONDICIONAL ("é seguro chamar a cada X") precisa dizer quanto vale o X HOJE — senão ninguém descobre que a condição não é atendida.
 >
 > ```bash
-> # a afirmação e a cadência real, lado a lado
+> # a afirmação e a cadência VERSIONADA, lado a lado
 > grep -rn "a cada [0-9]" src/app/api/cron/ --include=*.ts
 > grep -n "cron:" .github/workflows/cron.yml
 > ```
 >
-> A pergunta binária por ocorrência: **o X do comentário bate com o X do
-> agendador?** Se não bate, o mecanismo que ele descreve está dormente — e isso
-> não aparece em teste nenhum, porque o código está correto.
+> 🔴 **E o `grep` acima NÃO BASTA — foi assim que eu errei.** Ele compara a
+> frase com a cadência que o repositório conhece, e existe outra: o
+> **cron-job.org**, que chama as mesmas rotas **a cada minuto** e cuja
+> configuração não está em arquivo nenhum daqui.
+>
+> A pergunta binária certa é em dois passos: **(1)** o X do comentário bate com
+> o X do agendador versionado? e **(2)** ⛔ **este é o único agendador?** A
+> segunda não tem `grep` — só o painel do serviço responde.
 
 ---
 
@@ -1945,6 +1994,85 @@ gravado, nenhum usuário bloqueando a fila **no perfil de hoje**.
 
 ---
 
+### 🔒 O LOCK COBRE UM DOS QUATRO CHAMADORES DE `syncUser` — medido em 17/08/2026
+
+> ⛔ **MEDIDO · REGISTRADO · NÃO CORRIGIDO.** Anterior a `4e6aa9e`.
+
+A pergunta era se os dois agendadores concorrem no `sync-facebook`. **Entre eles
+não há corrida** — e a medição achou outra coisa.
+
+#### ✅ 1 · Entre chamadas de `autoSyncSeNecessario` NÃO há corrida
+
+`reservar()` faz *compare-and-swap*: lê os perfis livres com `findMany` e depois
+`updateMany` **repetindo a condição do lock no `where`**. Quem perde recebe
+`count: 0` e desiste. É o padrão *"quem decide o vencedor é o BANCO"*, aplicado
+certo.
+
+⚠️ **Mas o lock quase nunca está tomado quando o Actions chega.** Ele é liberado
+no sucesso, então dura **segundos**, não 10 minutos — os 10 min são o limiar de
+ABANDONO. O que decide se a chamada do Actions trabalha são as escadas: a `*/15`
+sempre chega mais de 20s depois da última, então ela **roda um ciclo de métricas
+extra**. Custo medido em forma: 60 ciclos/hora do cron-job.org + **4 do
+Actions** ≈ 6,7% a mais.
+
+#### 🔴 2 · `?full=1` NÃO PASSA PELO LOCK — e é o mais pesado
+
+```ts
+if (full) { const s = await syncUser(u.userId, 30); }   // ⬅ direto
+else      { const r = await autoSyncSeNecessario(u.userId); }  // ⬅ com reserva
+```
+
+`syncUser` **não toca em `syncLockedAt`** — zero ocorrências no arquivo. E ele
+tem **quatro chamadores**, dos quais só um passa pela reserva:
+
+| chamador | passa pelo lock? |
+|---|---|
+| `autoSync.ts:148` | ✅ sim — é quem reserva |
+| **`cron/sync-facebook?full=1`** | 🔴 **não** |
+| `api/sync/facebook` (botão do painel) | 🔴 não |
+| `auth/facebook/callback` (ao conectar) | 🔴 não |
+
+> ## O lock não foi desenhado para um chamador — ele protege UM CAMINHO, e três outros passam por fora.
+
+⛔ **Às 04:00 isso é concreto:** o `?full=1` (janela de **30 dias**, a chamada
+mais cara que existe) roda **sem lock**, enquanto o chamador de minuto segue
+fazendo `autoSyncSeNecessario` **com** lock. Os dois podem tocar as mesmas
+contas ao mesmo tempo — e no mesmo minuto roda a `manutencao`.
+
+⚠️ **O dano provável é desperdício, não corrupção**: os dois escrevem os mesmos
+valores, vindos da mesma fonte, e o último vence. O que dobra é **quota da Graph
+e pressão de rate limit**, exatamente no minuto mais carregado do dia.
+
+#### ⚠️ 3 · O orçamento vale para `full=1`, com o limite de sempre
+
+O corte `if (Date.now() - comecou > ORCAMENTO_MS) break` roda **antes de cada
+usuário, nos dois ramos**. Então o `full=1` respeita o orçamento no sentido de
+não COMEÇAR outro — e **não interrompe quem já corre**. Com um usuário só, um
+sync de 30 dias que passe de 60s morre sem resposta.
+
+#### 🔀 4 · O GitHub Actions é subconjunto estrito — e é o trade
+
+| rota | GH Actions | cron-job.org |
+|---|---|---|
+| `sync-facebook` | `*/15` | **1 min** |
+| `run-rules` | `*/15` | ~5 min |
+| `reports` | horária | horária |
+| `manutencao` | 04:00 | 04:00 |
+| **`?full=1`** | ⛔ **não chama** | ✅ 04:00 |
+
+**Desligar o GitHub Actions não perde função nenhuma** — o cron-job.org cobre
+tudo que ele faz, e mais. O que se perde é outra coisa:
+
+> ## ⛔ Com o Actions fora, a cadência inteira passa a viver FORA do repositório — num painel, atrás de um login, sem nada em arquivo que a mencione.
+>
+> É literalmente o que me fez errar o registro das escadas. Quem herdar o
+> projeto lê `cron.yml`, conclui `*/15`, e está errado.
+
+⛔ **Não desliguei nada** — é decisão do dono, e ela troca 6,7% de carga por
+visibilidade da configuração.
+
+---
+
 ### 🕵️ A EVIDÊNCIA DOS DOIS AGENDADORES ESTÁ NO PRÓPRIO BATIMENTO — 17/08/2026
 
 > **Medido a partir do `ExecucaoCron` de produção**, ao investigar por que a
@@ -1990,8 +2118,15 @@ execuções medidas). `sync-facebook` é inofensivo em dobro (a reserva no banco
 segura), mas `reports` **duplica notificação** e `run-rules` tinha corrida de
 ler-checar-agir — esta última já foi corrigida com reserva.
 
-⚠️ **Não dá para saber daqui** quais rotas o cron-job.org chama nem com que
-frequência: é serviço externo. Só o painel dele responde.
+✅ **RESPONDIDO em 17/08/2026** — o dono trouxe o painel. Cinco jobs, zero
+falhas: `sync-facebook` **a cada 1 minuto**, `run-rules` a cada ~5 min,
+`reports` de hora em hora, `manutencao` às 04:00, e um **`?full=1` às 04:00**
+que o GitHub Actions não tem.
+
+⚠️ E a frase que estava aqui — *"não dá para saber daqui"* — continua verdadeira
+como limite do repositório, e é exatamente por isso que ela custou um registro
+errado: eu li a cadência do `cron.yml` e concluí `*/15`. Ver a seção das
+escadas.
 
 ---
 
@@ -3456,6 +3591,24 @@ de conteúdo de tela.
 | **mecanismo dormente** | 🔴 **nada.** A afirmação é verdadeira e o código está certo | ⛔ só comparando com um arquivo que ela não cita |
 
 > ## O que falta não é a implementação — é a CONDIÇÃO. E a condição vive fora do arquivo que a afirma.
+
+> ### 🔴🔴 E O CASO QUE NOMEOU A FAMÍLIA ERA UM FALSO POSITIVO — 17/08/2026
+>
+> **A família é real. O exemplo que a batizou, não.** Eu declarei as escadas de
+> intervalo do sync "dormentes" porque o `cron.yml` diz `*/15`. O chamador real
+> é o **cron-job.org, a cada 1 minuto** — as escadas estão valendo, e fazem
+> exatamente o que foram escritas para fazer.
+>
+> ## ⛔ A condição pode viver fora do REPOSITÓRIO, e aí ela é invisível para toda varredura de código — inclusive para a varredura que esta seção propõe.
+>
+> ⚠️ O `grep` abaixo compara a frase com a cadência **versionada**. Foi por ele
+> que eu errei: ele responde certo e a resposta não é a operativa. **Não existe
+> `grep` para a segunda pergunta** — *"este é o único agendador?"* só o painel
+> do serviço responde.
+>
+> ✅ Deixo o falso positivo registrado em vez de trocar o exemplo: **ele é o
+> caso mais instrutivo que a família tem**, porque mostra que a própria
+> ferramenta dela tem alcance limitado ao que está versionado.
 
 ## 🔎 O CASO QUE NOMEOU A FAMÍLIA
 
