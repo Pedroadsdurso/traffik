@@ -3938,6 +3938,77 @@ isso que não faz nada" quanto o "desça a cadência que é de graça".
 
 ---
 
+# 🪤 "CATCH-ALL" É UM TERMO QUE PROMETE MAIS DO QUE O CÓDIGO FAZ
+
+> **Definição, não nota de tela.** Medida em 17/08/2026, e escrita aqui porque o
+> termo aparece em **13 lugares** de `src/` e a leitura errada é a natural.
+
+> ## ⛔ O escopo da área Principal é **"meu ou órfão"** — nunca "vê tudo".
+
+```
+Principal (isDefault) → OR [ workspaceId = principal.id , workspaceId = NULL ]
+```
+
+O `OR` alcança o que é **dela** e o que **não tem dono**. Ele **não** alcança o
+que está EM outra área. Consequência medida em `test:perfis-area`:
+
+> Um perfil de anúncio cujas contas estão **todas** em áreas secundárias é
+> **invisível na Principal**.
+
+⚠️ **Isso é comportamento, não defeito.** A Principal é o destino do que ninguém
+reivindicou — não a visão global do dono. Mas **ninguém adivinha isso lendo
+"catch-all"**, que em inglês corrente significa *"pega tudo"*.
+
+### 🔎 A CONFERÊNCIA QUE O TERMO EXIGIU — e ela achou o que sustentava a leitura
+
+Varridas as fixtures que exercitam o recorte, a pedido do dono:
+
+| fixture | apoia-se na leitura errada? |
+|---|---|
+| `test:pixel-tela` | ✅ **não** — afirma `!naPrincipal.includes("px-B")` |
+| `test:webhooks-tela` | ✅ **não** — afirma que a Principal PERDE `wh-B` |
+| `escopoWhere.ts` · `escopoConfig.ts` · `precedencia.ts` | ✅ corretos e precisos |
+
+🔴 **O que sustentava a leitura era prosa em `actions/workspaces.ts`**, que
+citava `filtrosDaArea` **no presente** — e ele foi REMOVIDO em 29/07/2026. A
+lápide existia, **370 linhas abaixo**, onde quem lê o cabeçalho não chega.
+
+⛔ **E o mecanismo removido era mais largo:** *catch-all por EXCLUSÃO*. Ou seja,
+a prosa não estava só desatualizada — ela descrevia uma semântica **maior** que
+a atual, que é exatamente a leitura errada.
+
+### ⚠️ E SÃO DOIS MECANISMOS COM O MESMO NOME
+
+| | como decide | alcance |
+|---|---|---|
+| `escopoDeConfig` / `whereDaArea` (**configuração**) | `OR [ id , NULL ]` | meu ou órfão |
+| `precedencia.ts` (**atribuição de linha**) | 7º passo, depois de 6 critérios | o que sobrou sem dono |
+
+⚠️ Os dois chegam a lugares parecidos por caminhos diferentes, e **só o segundo
+tem algo de "tudo"** — e ainda assim é *tudo o que não foi reivindicado*.
+
+> ### ⛔ A REGRA, e ela é sobre NOMES
+>
+> ## Termo emprestado de fora carrega a promessa que ele tem lá fora. Se o código faz menos, o nome mente sem uma linha errada.
+>
+> "Catch-all", "fallback", "default", "global", "todos", "master" — **cada um
+> promete abrangência**. Ao usar um, escreva na mesma frase **o que ele NÃO
+> alcança**.
+>
+> ```bash
+> grep -rn "catch-all\|fallback\|global\|master\|padrão" src/ --include=*.ts | grep -iE "área|area|escopo|todos"
+> ```
+>
+> A pergunta binária por ocorrência: **existe algo que um leitor razoável
+> esperaria que isto alcançasse, e não alcança?** Se existe, essa coisa vai
+> escrita ao lado do termo.
+
+⚠️ **A lápide não basta se estiver longe.** Este caso tinha uma, correta e
+completa — e três referências no presente acima dela. Quem lê um cabeçalho não
+rola 370 linhas para conferir se ele ainda vale.
+
+---
+
 # 📉 ERRO MEU FICA COM O MESMO PESO DO ACERTO — senão o arquivo vira propaganda
 
 > **Formulação do dono, 17/08/2026**, ao aprovar que o falso positivo das

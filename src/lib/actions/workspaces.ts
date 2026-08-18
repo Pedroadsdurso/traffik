@@ -58,11 +58,28 @@ const dto = (w: WorkspaceDTO): WorkspaceDTO => ({ ...w });
 /**
  * Garante que o usuário tenha uma área PRINCIPAL. Idempotente.
  *
- * A principal é o **catch-all**: mostra tudo o que nenhuma outra área
- * reivindicou, inclusive o que não é atribuível a conta nenhuma (clique sem
- * `utm_campaign`, venda sem clique). Por isso ela nasce **sem listas**: o
- * escopo dela é DERIVADO das outras áreas em `filtrosDaArea`, e assim nunca
- * fica desatualizado quando uma área nova aparece.
+ * ## ⛔ "CATCH-ALL" AQUI NÃO É "VÊ TUDO" — e a distinção custou uma medição
+ *
+ * A Principal recolhe o que **nenhuma outra área reivindicou** — clique sem
+ * `utm_campaign`, venda sem clique, integração de `workspaceId` NULO. Ela
+ * **não** alcança o que está EM outra área.
+ *
+ * ⚠️ E existem DOIS mecanismos com esse nome nesta base, com alcances
+ * diferentes:
+ *
+ * | | como decide | alcance |
+ * |---|---|---|
+ * | `escopoDeConfig`/`whereDaArea` (configuração) | `OR [ id , NULL ]` | **meu ou órfão** — não vê secundárias |
+ * | `precedencia.ts` (atribuição de linha) | último passo, depois de 6 critérios | o que sobrou sem dono |
+ *
+ * 🔴 **Medido em 17/08/2026**: um perfil de anúncio cujas contas estão todas em
+ * áreas secundárias é **invisível na Principal** (`test:perfis-area`). Isso é
+ * comportamento, não defeito — mas ninguém adivinha lendo "catch-all".
+ *
+ * ⛔ **`filtrosDaArea` NÃO EXISTE.** Ele foi removido em 29/07/2026 (a lápide
+ * está no fim deste arquivo), e ele era *catch-all por EXCLUSÃO* — semântica
+ * mais larga que a de hoje. Esta prosa o citava no presente, e era ela que
+ * sustentava a leitura de "visão global".
  *
  * ⚠️ Ela já nasceu com todas as contas numa lista de INCLUSÃO, e isso **zerou o
  * dashboard em produção** — inclusão descarta o não atribuível. Não voltar
@@ -89,7 +106,7 @@ export async function garantirAreaPrincipal(userIdParam?: string): Promise<Works
   // ⚠️ `createMany({ skipDuplicates: true })` e NÃO `create` dentro de try/catch.
   //
   // O layout dispara ~12 leituras em `Promise.all`, e várias passam por
-  // `filtrosDaArea` → aqui. Todas correm ao mesmo tempo para o MESMO usuário.
+  // Todas correm ao mesmo tempo para o MESMO usuário.
   // Com `create`, a perdedora estourava no índice parcial único e caía no
   // `catch` — que então lia a linha da vencedora e **não encontrava nada**,
   // porque a transação dela ainda não tinha commitado. O erro real era
@@ -108,7 +125,9 @@ export async function garantirAreaPrincipal(userIdParam?: string): Promise<Works
         description: "Operação padrão. Esta área não pode ser excluída.",
         isDefault: true,
         // Listas VAZIAS: o escopo da principal é derivado das outras áreas em
-        // `filtrosDaArea` (catch-all por exclusão), não gravado aqui. Preenchê-la
+        // derivado por PRECEDÊNCIA (`lib/areas/precedencia.ts`), não gravado aqui.
+        // ⛔ Não era `filtrosDaArea`: aquilo foi removido em 29/07/2026 e era
+        // catch-all por EXCLUSÃO — alcance maior que o de hoje. Preenchê-la
         // com todas as contas foi o que zerou o dashboard em produção.
       },
     ],
